@@ -1,6 +1,12 @@
 import { type FormEvent, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getAdminPassword, isAdminAuthenticated, setAdminAuthenticated } from '../lib/auth'
+import {
+  checkAvailability,
+  createOrder,
+  getOrderStatus,
+  type OrderStatusResponse,
+} from '../lib/tokenu'
 import { initialOrders } from '../data/orders'
 import type { OrderRecord, ServiceType } from '../types'
 
@@ -13,13 +19,23 @@ const serviceOptions: ServiceType[] = [
   'OAUTH-NFT',
 ]
 
+function makeFallbackId() {
+  return `TOK-${Math.random().toString(36).slice(2, 7).toUpperCase()}-${Math.random()
+    .toString(36)
+    .slice(2, 7)
+    .toUpperCase()}`
+}
+
 export function ManagePage() {
   const [authenticated, setAuthenticatedState] = useState(isAdminAuthenticated)
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [activeTab, setActiveTab] = useState<PanelTab>('create')
   const [orders, setOrders] = useState<OrderRecord[]>(initialOrders)
   const [lookupId, setLookupId] = useState(initialOrders[0]?.uniqid ?? '')
+  const [loading, setLoading] = useState(false)
+  const [statusResult, setStatusResult] = useState<OrderStatusResponse | null>(null)
   const [newOrder, setNewOrder] = useState({
     service: 'OAUTH-ONLINE' as ServiceType,
     id: '',
@@ -43,39 +59,72 @@ export function ManagePage() {
       return
     }
 
-    setError('Şifre hatalı.')
+    setError('Password is incorrect.')
   }
 
-  const handleCreateOrder = (event: FormEvent) => {
+  const handleCreateOrder = async (event: FormEvent) => {
     event.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
 
-    const createdOrder: OrderRecord = {
-      uniqid: `TOK-${Math.random().toString(36).slice(2, 7).toUpperCase()}-${Math.random()
-        .toString(36)
-        .slice(2, 7)
-        .toUpperCase()}`,
-      service: newOrder.service,
-      serverId: newOrder.id,
-      serverName: 'New server',
-      amount: newOrder.amount,
-      added: 0,
-      delay: newOrder.delay,
-      status: 'NEW',
-      details: 'Order prepared locally. API hook will be connected next.',
-      cost: Number((newOrder.amount * 0.025).toFixed(2)),
-      botInvite: 'https://discord.com/oauth2/authorize',
+    try {
+      await checkAvailability(newOrder.service, newOrder.id)
+      const created = await createOrder({
+        service: newOrder.service,
+        id: newOrder.id,
+        amount: newOrder.amount,
+        delay: newOrder.delay,
+        billingCycle: newOrder.billingCycle,
+      })
+
+      const nextOrder: OrderRecord = {
+        uniqid: created.uniqid || makeFallbackId(),
+        service: newOrder.service,
+        serverId: newOrder.id,
+        serverName: 'Live order',
+        amount: newOrder.amount,
+        added: 0,
+        delay: newOrder.delay,
+        status: 'NEW',
+        details: 'Order created through live API.',
+        cost: created.cost,
+        botInvite: created.bot_invite,
+      }
+
+      setOrders((current) => [nextOrder, ...current])
+      setLookupId(nextOrder.uniqid)
+      setStatusResult(null)
+      setActiveTab('status')
+      setSuccess(`Order created: ${nextOrder.uniqid}`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to create order.')
+    } finally {
+      setLoading(false)
     }
+  }
 
-    setOrders((current) => [createdOrder, ...current])
-    setLookupId(createdOrder.uniqid)
-    setActiveTab('status')
+  const handleLookupStatus = async (event: FormEvent) => {
+    event.preventDefault()
+    setLoading(true)
+    setError('')
+    setSuccess('')
+
+    try {
+      const result = await getOrderStatus(lookupId)
+      setStatusResult(result)
+      setSuccess(`Status loaded for ${lookupId}`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Failed to load status.')
+      setStatusResult(null)
+    } finally {
+      setLoading(false)
+    }
   }
 
   const updateDelay = (uniqid: string, delay: number) => {
     setOrders((current) =>
-      current.map((order) =>
-        order.uniqid === uniqid ? { ...order, delay } : order,
-      ),
+      current.map((order) => (order.uniqid === uniqid ? { ...order, delay } : order)),
     )
   }
 
@@ -86,22 +135,20 @@ export function ManagePage() {
           onSubmit={handleLogin}
           className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl shadow-black/30 backdrop-blur-xl"
         >
-          <p className="text-xs uppercase tracking-[0.32em] text-amber-300/80">
-            /manage
-          </p>
-          <h1 className="mt-3 text-3xl font-semibold text-white">Admin giriş</h1>
+          <p className="text-xs uppercase tracking-[0.32em] text-amber-300/80">/manage</p>
+          <h1 className="mt-3 text-3xl font-semibold text-white">Admin login</h1>
           <p className="mt-2 text-sm leading-6 text-slate-300">
-            Yönetim paneline erişmek için sadece şifre yeterli.
+            Enter the panel password to manage orders.
           </p>
 
           <label className="mt-6 block text-sm text-slate-300">
-            Şifre
+            Password
             <input
               type="password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-amber-300/40"
-              placeholder="Admin şifresi"
+              placeholder="Admin password"
             />
           </label>
 
@@ -115,11 +162,11 @@ export function ManagePage() {
             type="submit"
             className="mt-6 w-full rounded-2xl bg-amber-300 px-4 py-3 font-medium text-slate-950 transition hover:bg-amber-200"
           >
-            Paneli aç
+            Open panel
           </button>
 
           <p className="mt-4 text-xs leading-6 text-slate-500">
-            Varsayılan şifre `VITE_ADMIN_PASSWORD` ile belirlenir.
+            Password is read from `VITE_ADMIN_PASSWORD` at runtime.
           </p>
         </form>
       </main>
@@ -180,6 +227,21 @@ export function ManagePage() {
           </div>
         </header>
 
+        {(error || success) ? (
+          <div className="mt-6 space-y-3">
+            {error ? (
+              <p className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                {error}
+              </p>
+            ) : null}
+            {success ? (
+              <p className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">
+                {success}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+
         <section className="grid gap-6 py-8 lg:grid-cols-[1.1fr_0.9fr]">
           <div className="space-y-6">
             <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
@@ -188,14 +250,14 @@ export function ManagePage() {
                   <p className="text-sm text-slate-400">Dashboard</p>
                   <h2 className="mt-1 text-2xl font-semibold text-white">
                     {activeTab === 'create'
-                      ? 'Sipariş oluştur'
+                      ? 'Create order'
                       : activeTab === 'status'
-                        ? 'Sipariş durumu'
-                        : 'Mevcut siparişler'}
+                        ? 'Order status'
+                        : 'Existing orders'}
                   </h2>
                 </div>
                 <p className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-3 py-1 text-xs uppercase tracking-[0.28em] text-emerald-200">
-                  live scaffold
+                  live api
                 </p>
               </div>
 
@@ -292,26 +354,55 @@ export function ManagePage() {
 
                   <button
                     type="submit"
-                    className="rounded-2xl bg-amber-300 px-4 py-3 font-medium text-slate-950 transition hover:bg-amber-200"
+                    disabled={loading}
+                    className="rounded-2xl bg-amber-300 px-4 py-3 font-medium text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    Create order draft
+                    {loading ? 'Creating...' : 'Create order'}
                   </button>
                 </form>
               ) : null}
 
               {activeTab === 'status' ? (
                 <div className="mt-6 space-y-4">
-                  <label className="block text-sm text-slate-300">
-                    Order ID
-                    <input
-                      value={lookupId}
-                      onChange={(event) => setLookupId(event.target.value)}
-                      className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
-                      placeholder="TOK-..."
-                    />
-                  </label>
+                  <form onSubmit={handleLookupStatus} className="space-y-4">
+                    <label className="block text-sm text-slate-300">
+                      Order ID
+                      <input
+                        value={lookupId}
+                        onChange={(event) => setLookupId(event.target.value)}
+                        className="mt-2 w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-white outline-none"
+                        placeholder="TOK-..."
+                      />
+                    </label>
 
-                  {activeOrder ? (
+                    <button
+                      type="submit"
+                      disabled={loading || !lookupId}
+                      className="rounded-2xl bg-amber-300 px-4 py-3 font-medium text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {loading ? 'Loading...' : 'Fetch live status'}
+                    </button>
+                  </form>
+
+                  {statusResult ? (
+                    <article className="rounded-3xl border border-white/10 bg-slate-950/50 p-5">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-slate-400">Live response</p>
+                          <h3 className="mt-1 text-xl font-semibold text-white">
+                            {lookupId}
+                          </h3>
+                        </div>
+                        <span className="rounded-full bg-emerald-400/15 px-3 py-1 text-xs text-emerald-200">
+                          API
+                        </span>
+                      </div>
+
+                      <pre className="mt-5 overflow-auto rounded-2xl bg-slate-950/80 p-4 text-xs leading-6 text-slate-200">
+{JSON.stringify(statusResult, null, 2)}
+                      </pre>
+                    </article>
+                  ) : activeOrder ? (
                     <article className="rounded-3xl border border-white/10 bg-slate-950/50 p-5">
                       <div className="flex items-center justify-between">
                         <div>
@@ -324,37 +415,10 @@ export function ManagePage() {
                           {activeOrder.status}
                         </span>
                       </div>
-
-                      <dl className="mt-5 grid gap-4 sm:grid-cols-2">
-                        <div>
-                          <dt className="text-sm text-slate-400">Server</dt>
-                          <dd className="mt-1 text-slate-100">
-                            {activeOrder.serverName}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm text-slate-400">Delay</dt>
-                          <dd className="mt-1 text-slate-100">
-                            {activeOrder.delay} sec
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm text-slate-400">Added</dt>
-                          <dd className="mt-1 text-slate-100">
-                            {activeOrder.added} / {activeOrder.amount}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-sm text-slate-400">Details</dt>
-                          <dd className="mt-1 text-slate-100">
-                            {activeOrder.details}
-                          </dd>
-                        </div>
-                      </dl>
                     </article>
                   ) : (
                     <p className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-slate-300">
-                      Sipariş bulunamadı.
+                      Search an order ID to fetch live status.
                     </p>
                   )}
                 </div>
@@ -421,8 +485,8 @@ export function ManagePage() {
                 Manage scaffold ready
               </h3>
               <p className="mt-3 text-sm leading-6 text-slate-300">
-                Bu alan sonra gerçek API endpoint’lerine bağlanacak. Şu an panel
-                akışı, route yapısı ve delay düzenleme yüzeyi hazır.
+                This panel now talks to the live reseller API through the nginx proxy.
+                Delay editing is still local until the update endpoint is confirmed.
               </p>
             </article>
 

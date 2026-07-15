@@ -1,6 +1,7 @@
-import { type FormEvent, useMemo, useState } from 'react'
+import { type FormEvent, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { initialOrders } from '../data/orders'
+import { getOrderStatus, type OrderStatusResponse } from '../lib/tokenu'
 
 export function OrderPage() {
   const { orderId } = useParams()
@@ -8,15 +9,52 @@ export function OrderPage() {
     const found = initialOrders.find((order) => order.uniqid === orderId)
     return found?.delay ?? 1
   })
+  const [status, setStatus] = useState<OrderStatusResponse | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
   const order = useMemo(
     () => initialOrders.find((item) => item.uniqid === orderId) ?? null,
     [orderId],
   )
 
+  useEffect(() => {
+    let active = true
+
+    async function load() {
+      if (!orderId) {
+        return
+      }
+
+      setLoading(true)
+      setError('')
+
+      try {
+        const result = await getOrderStatus(orderId)
+        if (active) {
+          setStatus(result)
+        }
+      } catch (cause) {
+        if (active) {
+          setError(cause instanceof Error ? cause.message : 'Failed to load order.')
+        }
+      } finally {
+        if (active) {
+          setLoading(false)
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      active = false
+    }
+  }, [orderId])
+
   const handleSave = (event: FormEvent) => {
     event.preventDefault()
-    // API update hook will be connected here.
+    // Delay update endpoint will be connected when the API exposes one.
   }
 
   return (
@@ -79,13 +117,20 @@ export function OrderPage() {
               </article>
 
               <article className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-                <p className="text-sm text-slate-400">Workflow</p>
-                <ul className="mt-4 space-y-3 text-sm leading-6 text-slate-200">
-                  <li>1. Sipariş bilgileri görüntülenir.</li>
-                  <li>2. Delay değeri düzenlenir.</li>
-                  <li>3. Kaydedildiğinde API update hook’u çalıştırılır.</li>
-                  <li>4. Sonraki sürümde gerçek status sync bağlanır.</li>
-                </ul>
+                <p className="text-sm text-slate-400">Live API status</p>
+                {loading ? (
+                  <p className="mt-4 text-sm text-slate-300">Loading...</p>
+                ) : error ? (
+                  <p className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                    {error}
+                  </p>
+                ) : status ? (
+                  <pre className="mt-4 overflow-auto rounded-2xl bg-slate-950/80 p-4 text-xs leading-6 text-slate-200">
+{JSON.stringify(status, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-300">No status loaded.</p>
+                )}
               </article>
             </section>
 
@@ -99,8 +144,8 @@ export function OrderPage() {
                   Editable delay
                 </h3>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Bu ekran üzerinden delay değeri yönetilebilir olacak. API
-                  tarafındaki update endpoint’i hazır olduğunda buraya bağlanacak.
+                  This control is ready. It will be wired to the real update endpoint
+                  once it is confirmed by the API provider.
                 </p>
 
                 <label className="mt-6 block text-sm text-slate-300">
@@ -129,8 +174,8 @@ export function OrderPage() {
                   Public page: /{order.uniqid}
                 </p>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Bu rota dış link ile doğrudan açılacak. Şimdilik mock veri ile
-                  çalışıyor, sonra API’den sipariş çekilecek.
+                  This route uses the live API for status, while delay editing is
+                  still waiting for the update endpoint.
                 </p>
               </article>
             </aside>
@@ -139,8 +184,7 @@ export function OrderPage() {
           <article className="rounded-3xl border border-white/10 bg-white/5 p-8 text-center backdrop-blur">
             <h2 className="text-2xl font-semibold text-white">Order not found</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Bu order ID için kayıt bulunamadı. Yönetim panelinden sipariş
-              oluşturduktan sonra buraya erişilebilir.
+              There is no local record for this order ID yet.
             </p>
           </article>
         )}
