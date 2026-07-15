@@ -1,0 +1,3 @@
+window.__ENV = {
+  VITE_ADMIN_PASSWORD: '${VITE_ADMIN_PASSWORD}',
+}

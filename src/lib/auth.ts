@@ -1,7 +1,21 @@
 const AUTH_KEY = 'plcp-admin-auth'
 
+type RuntimeEnv = {
+  VITE_ADMIN_PASSWORD?: string
+}
+
+declare global {
+  interface Window {
+    __ENV?: RuntimeEnv
+  }
+}
+
 export function getAdminPassword() {
-  return import.meta.env.VITE_ADMIN_PASSWORD?.trim() || 'change-me'
+  return (
+    window.__ENV?.VITE_ADMIN_PASSWORD?.trim() ||
+    import.meta.env.VITE_ADMIN_PASSWORD?.trim() ||
+    'change-me'
+  )
 }
 
 export function isAdminAuthenticated() {
