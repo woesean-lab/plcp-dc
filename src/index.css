@@ -28,6 +28,7 @@ body {
   min-width: 320px;
   min-height: 100vh;
   background: #0b1020;
+  font-family: var(--font-sans);
 }
 
 #root {
