@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
@@ -9,22 +9,22 @@ const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string; description: s
   {
     value: "OAUTH-OFFLINE",
     title: "OAuth Offline",
-    description: "Fastest entry point for standard member supply."
+    description: "Fast-start supply for standard member drops."
   },
   {
     value: "OAUTH-ONLINE",
     title: "OAuth Online",
-    description: "Membership with billing cycle support."
+    description: "Best for campaigns that need billing-cycle control."
   },
   {
     value: "OAUTH-PREMIUM",
     title: "OAuth Premium",
-    description: "Higher tier member delivery flow."
+    description: "Premium delivery lane for higher-tier runs."
   },
   {
     value: "OAUTH-NFT",
     title: "OAuth NFT",
-    description: "Specialized member type for NFT audiences."
+    description: "Specialized lane for NFT-focused communities."
   }
 ];
 
@@ -40,6 +40,7 @@ function formatNumber(value?: number) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "-";
   }
+
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 
@@ -63,14 +64,17 @@ export default function HomePage() {
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [activeTab, setActiveTab] = useState<"create" | "manage">("create");
 
-  const savedApiKey = useMemo(() => getApiKey(), [apiKey]);
-  const activeOrders = orders.filter((order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase()));
+  const storedApiKey = getApiKey();
+  const activeOrders = orders.filter(
+    (order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())
+  );
 
   useEffect(() => {
-    if (savedApiKey) {
+    if (storedApiKey) {
       void refreshBalance();
     }
-  }, [savedApiKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storedApiKey]);
 
   useEffect(() => {
     if (!form.serverId.trim()) {
@@ -80,9 +84,10 @@ export default function HomePage() {
 
     const handle = window.setTimeout(() => {
       void refreshAvailability();
-    }, 400);
+    }, 350);
 
     return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.service, form.serverId]);
 
   async function refreshBalance() {
@@ -114,10 +119,11 @@ export default function HomePage() {
   async function handleSaveApiKey(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
+
     try {
-      setApiKey(apiKey);
       const trimmed = apiKey.trim();
       if (trimmed) {
+        setApiKey(trimmed);
         setApiKeyValue(trimmed);
         setMessage("API key saved locally.");
         await refreshBalance();
@@ -133,9 +139,10 @@ export default function HomePage() {
     }
   }
 
-  async function handleCreateOrder(event: React.FormEvent) {
+  async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+
     try {
       const created = await createOrder({
         service: form.service,
@@ -193,54 +200,91 @@ export default function HomePage() {
   }
 
   return (
-    <div className="content-stack">
-      <section className="hero-grid">
-        <div className="panel panel-pad hero-copy">
-          <span className="eyebrow">Admin area</span>
-          <h2>Siparis olustur ve aktif siparisleri ayni panelde takip et</h2>
-          <p>
-            Bu panel, Tokenu reseller API ile members satisi icin gerekli temel akisi tek yerden
-            yonetir. API anahtari localde saklanir; public sayfa sadece order ID ile sorgu yapar.
+    <div className="dashboard-stack">
+      <section className="dashboard-grid">
+        <div className="panel intro-panel">
+          <span className="intro-kicker">Admin workspace</span>
+          <h2>One panel for order creation, monitoring, and service control.</h2>
+          <p className="intro-copy">
+            Members flowunu Tokenu reseller API ile tek ekrandan yonetin. API key localde kalir,
+            public tracker ise sadece order ID ile calisir.
           </p>
 
-          <div className="metrics">
-            <div className="metric-card">
+          <div className="intro-actions">
+            <button className="primary-button" type="button" onClick={() => setActiveTab("create")}>
+              Create order
+            </button>
+            <button className="ghost-button" type="button" onClick={() => setActiveTab("manage")}>
+              Open management
+            </button>
+            <span className="surface-note">Live panel / local storage</span>
+          </div>
+
+          <div className="summary-row">
+            <div className="summary-card">
               <span className="label">Balance</span>
               <strong>{loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}</strong>
+              <p>Checked against the reseller API when a valid key is saved.</p>
             </div>
-            <div className="metric-card">
+            <div className="summary-card">
               <span className="label">Tracked orders</span>
               <strong>{orders.length}</strong>
+              <p>Stored locally in this browser for fast admin follow-up.</p>
             </div>
-            <div className="metric-card">
+            <div className="summary-card">
               <span className="label">Active</span>
               <strong>{activeOrders.length}</strong>
-            </div>
-            <div className="metric-card">
-              <span className="label">Public tracker</span>
-              <strong>/orders</strong>
+              <p>Orders that are still in flight and need attention.</p>
             </div>
           </div>
         </div>
 
-        <div className="panel panel-pad">
-          <div className="toolbar" style={{ justifyContent: "space-between" }}>
-            <span className="status-pill">
-              <span className="status-dot" />
-              {apiKey ? "API key ready" : "API key missing"}
-            </span>
-            <Link className="ghost-button" to="/orders">
-              Open public tracker
-            </Link>
+        <aside className="panel sidebar-panel">
+          <div className="status-pill">
+            <span className="status-dot" />
+            {storedApiKey ? "API key ready" : "API key missing"}
           </div>
-          <div style={{ marginTop: 16 }}>
-            <p className="muted">
-              {apiKey
-                ? "Key is stored locally only. You can refresh balance, create orders, and inspect order status."
-                : "Paste your Tokenu API key once, then use the panel normally."}
-            </p>
+
+          <div className="mini-stack">
+            <div className="mini-card">
+              <h3 className="title">Key vault</h3>
+              <p>{storedApiKey ? "Stored locally only. You can refresh balance and create orders." : "Paste your Tokenu API key to enable live actions."}</p>
+            </div>
+
+            <div className="mini-card">
+              <h3 className="title">Public route</h3>
+              <p>
+                `/orders` works without admin auth. Share order IDs with users to let them check
+                progress.
+              </p>
+            </div>
+
+            <div className="mini-card">
+              <h3 className="title">Quick links</h3>
+              <div className="inline-actions" style={{ marginTop: 10 }}>
+                <Link className="ghost-button" to="/orders">
+                  Open tracker
+                </Link>
+                <button className="ghost-button" type="button" onClick={refreshBalance}>
+                  Refresh balance
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+
+          <div className="stat-strip">
+            <div className="stat-item">
+              <span>Default service</span>
+              <strong>OAUTH-ONLINE</strong>
+              <p>Billing-cycle aware service preset for members runs.</p>
+            </div>
+            <div className="stat-item">
+              <span>Tracking mode</span>
+              <strong>Local-first</strong>
+              <p>Orders are mirrored in localStorage for quick management.</p>
+            </div>
+          </div>
+        </aside>
       </section>
 
       <div className="tabs">
@@ -255,10 +299,19 @@ export default function HomePage() {
       {message ? <div className="notice">{message}</div> : null}
 
       {activeTab === "create" ? (
-        <div className="workspace">
-          <section className="panel section">
-            <h3 className="section-title">Create order</h3>
-            <p className="muted">Members service selection is aligned with the reseller API docs.</p>
+        <section className="content-grid">
+          <div className="panel section">
+            <div className="section-head">
+              <div>
+                <span className="eyebrow">Order composer</span>
+                <h3 className="section-title">Create a reseller order with intent.</h3>
+                <p>
+                  Choose the service lane, paste the Discord server ID, and tune the delivery pace.
+                </p>
+              </div>
+              <div className="status-pill">Tokenu API connected</div>
+            </div>
+
             <form onSubmit={handleCreateOrder}>
               <div className="form-grid">
                 <label className="field">
@@ -329,7 +382,7 @@ export default function HomePage() {
                 </label>
               </div>
 
-              <div className="inline-actions" style={{ marginTop: 16 }}>
+              <div className="inline-actions" style={{ marginTop: 18 }}>
                 <button className="primary-button" type="submit">
                   Create order
                 </button>
@@ -340,22 +393,16 @@ export default function HomePage() {
             </form>
 
             {availability ? <div className="warning" style={{ marginTop: 16 }}>{availability}</div> : null}
+          </div>
 
-            <div style={{ marginTop: 18 }}>
-              <h4 style={{ margin: "0 0 10px" }}>Service map</h4>
-              <div className="inline-actions">
-                {SERVICE_OPTIONS.map((service) => (
-                  <span key={service.value} className="status-pill">
-                    {service.title}
-                  </span>
-                ))}
+          <div className="panel section">
+            <div className="section-head">
+              <div>
+                <span className="eyebrow">Control rail</span>
+                <h3 className="section-title">Settings and tracking shortcuts.</h3>
+                <p>Save the API key, add existing orders, and keep the local queue tidy.</p>
               </div>
             </div>
-          </section>
-
-          <section className="panel section">
-            <h3 className="section-title">Ayarlar</h3>
-            <p className="muted">API key and quick tracking tools.</p>
 
             <form onSubmit={handleSaveApiKey}>
               <label className="field">
@@ -387,30 +434,53 @@ export default function HomePage() {
               </div>
             </form>
 
-            <div style={{ marginTop: 18 }}>
-              <label className="field">
-                <span>Track order ID</span>
-                <input
-                  value={orderIdToTrack}
-                  onChange={(event) => setOrderIdToTrack(event.target.value)}
-                  placeholder="Enter an existing order ID"
-                />
-              </label>
-              <div className="inline-actions" style={{ marginTop: 14 }}>
-                <button className="primary-button" type="button" onClick={trackOrderManually}>
-                  Add to tracking
-                </button>
-                <Link className="ghost-button" to="/orders">
-                  Public lookup
-                </Link>
+            <div style={{ marginTop: 18 }} className="mini-stack">
+              <div className="mini-card">
+                <h3 className="title">Track existing order</h3>
+                <label className="field" style={{ marginTop: 10 }}>
+                  <span>Order ID</span>
+                  <input
+                    value={orderIdToTrack}
+                    onChange={(event) => setOrderIdToTrack(event.target.value)}
+                    placeholder="Enter an existing order ID"
+                  />
+                </label>
+                <div className="inline-actions" style={{ marginTop: 12 }}>
+                  <button className="primary-button" type="button" onClick={trackOrderManually}>
+                    Add to tracking
+                  </button>
+                  <Link className="ghost-button" to="/orders">
+                    Public lookup
+                  </Link>
+                </div>
+              </div>
+
+              <div className="mini-card">
+                <h3 className="title">Service map</h3>
+                <div className="inline-actions" style={{ marginTop: 10 }}>
+                  {SERVICE_OPTIONS.map((service) => (
+                    <span key={service.value} className="mini-badge">
+                      {service.title}
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
-          </section>
-        </div>
+          </div>
+        </section>
       ) : (
         <section className="panel section">
-          <h3 className="section-title">Siparis listesi</h3>
-          <p className="muted">Tracked orders are stored in this browser. Refresh status to keep them current.</p>
+          <div className="section-head">
+            <div>
+              <span className="eyebrow">Management table</span>
+              <h3 className="section-title">Track the queue and jump into public lookup.</h3>
+              <p>
+                Orders are stored in this browser. Use the row actions to open, copy, or remove a
+                record.
+              </p>
+            </div>
+          </div>
+
           <div className="table-wrap">
             <table>
               <thead>
@@ -435,7 +505,9 @@ export default function HomePage() {
                       <td>{order.amount}</td>
                       <td>
                         <span className={badgeClass(order.status)}>{order.status ?? "NEW"}</span>
-                        <div className="muted">{order.details ?? ""}</div>
+                        <div className="muted" style={{ marginTop: 8 }}>
+                          {order.details ?? ""}
+                        </div>
                       </td>
                       <td>{typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "-"}</td>
                       <td>
@@ -443,11 +515,7 @@ export default function HomePage() {
                           <Link className="action-button" to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
                             Open
                           </Link>
-                          <button
-                            className="action-button"
-                            type="button"
-                            onClick={() => navigator.clipboard.writeText(order.uniqid)}
-                          >
+                          <button className="action-button" type="button" onClick={() => navigator.clipboard.writeText(order.uniqid)}>
                             Copy
                           </button>
                           <button
@@ -464,7 +532,7 @@ export default function HomePage() {
                 ) : (
                   <tr>
                     <td colSpan={6}>
-                      <div className="muted">No tracked orders yet.</div>
+                      <div className="empty-state">No tracked orders yet. Switch back to Create order to start a queue.</div>
                     </td>
                   </tr>
                 )}
