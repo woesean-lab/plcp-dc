@@ -1,32 +1,13 @@
-const AUTH_KEY = 'plcp-admin-auth'
+const STORAGE_KEY = "tokenu.apiKey";
 
-type RuntimeEnv = {
-  VITE_ADMIN_PASSWORD?: string
+export function getApiKey() {
+  return localStorage.getItem(STORAGE_KEY) ?? "";
 }
 
-declare global {
-  interface Window {
-    __ENV?: RuntimeEnv
-  }
+export function setApiKey(value: string) {
+  localStorage.setItem(STORAGE_KEY, value.trim());
 }
 
-export function getAdminPassword() {
-  return (
-    window.__ENV?.VITE_ADMIN_PASSWORD?.trim() ||
-    import.meta.env.VITE_ADMIN_PASSWORD?.trim() ||
-    'change-me'
-  )
-}
-
-export function isAdminAuthenticated() {
-  return sessionStorage.getItem(AUTH_KEY) === 'true'
-}
-
-export function setAdminAuthenticated(value: boolean) {
-  if (value) {
-    sessionStorage.setItem(AUTH_KEY, 'true')
-    return
-  }
-
-  sessionStorage.removeItem(AUTH_KEY)
+export function clearApiKey() {
+  localStorage.removeItem(STORAGE_KEY);
 }

@@ -1,78 +1,64 @@
-import type { OrderStatus, ServiceType } from '../types'
+import type { BalanceResponse, CreateOrderPayload, CreateOrderResponse, OrderStatusResponse } from "../types";
+import { getApiKey } from "./auth";
 
-const API_PREFIX = '/api/v1/reseller'
+const API_BASE = "https://dev.tokenu.net/api/v1/reseller";
 
-async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_PREFIX}${path}`, {
-    ...init,
-    headers: {
-      ...(init?.headers ?? {}),
-      ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-  })
-
-  if (!response.ok) {
-    const message = await response.text()
-    throw new Error(message || `Request failed with status ${response.status}`)
+async function requestJson<T>(path: string, init: RequestInit = {}) {
+  const apiKey = getApiKey();
+  if (!apiKey && !path.includes("/status")) {
+    throw new Error("API key missing. Open Admin settings and save your Tokenu key.");
   }
 
-  return response.json() as Promise<T>
-}
+  const response = await fetch(`${API_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: apiKey,
+      ...(init.headers ?? {})
+    }
+  });
 
-export interface OrderCreatePayload {
-  service: ServiceType
-  id: string
-  amount: number
-  delay?: number
-  billingCycle?: number
-}
+  const text = await response.text();
+  let payload: unknown = text;
 
-export interface OrderCreateResponse {
-  uniqid: string
-  bot_invite: string
-  cost: number
-}
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    payload = text;
+  }
 
-export interface OrderStatusResponse {
-  uniqid: string
-  status?: OrderStatus | string
-  details?: string
-  type?: string
-  serverId?: string
-  serverName?: string
-  added?: number
-  amount?: number
-  delay?: number | string
-  createdAt?: number
-  expiredAt?: number
-}
+  if (!response.ok) {
+    const message =
+      typeof payload === "object" && payload && "message" in payload
+        ? String((payload as { message?: unknown }).message)
+        : typeof payload === "string"
+          ? payload
+          : `Request failed with ${response.status}`;
+    throw new Error(message);
+  }
 
-export interface CheckAvailabilityResponse {
-  available: number
-  maximum: number
-}
-
-export interface BalanceResponse {
-  balance: number
+  return payload as T;
 }
 
 export async function getBalance() {
-  return requestJson<BalanceResponse>('/balance')
+  return requestJson<BalanceResponse>("/balance");
 }
 
-export async function checkAvailability(service: ServiceType, id: string) {
-  const query = new URLSearchParams({ service, id })
-  return requestJson<CheckAvailabilityResponse>(`/check?${query.toString()}`)
-}
-
-export async function createOrder(payload: OrderCreatePayload) {
-  return requestJson<OrderCreateResponse>('/order', {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
+export async function createOrder(payload: CreateOrderPayload) {
+  return requestJson<CreateOrderResponse>("/order", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function getOrderStatus(uniqid: string) {
-  const query = new URLSearchParams({ uniqid })
-  return requestJson<OrderStatusResponse>(`/status?${query.toString()}`)
+  return requestJson<OrderStatusResponse>(`/status?uniqid=${encodeURIComponent(uniqid)}`);
+}
+
+export async function checkAvailableAmount(service: string, id: string) {
+  return requestJson<{ available: number; maximum: number }>(
+    `/check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
+  );
 }
