@@ -81,8 +81,8 @@ export default function OrderPage() {
     <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
       <div className={`${card} p-5`}>
         <p className={labelClass}>Public tracker</p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Sipariş sorgulama</h2>
-        <p className="mt-2 text-sm leading-6 text-slate-400">Order ID ile durum ve payload açılır.</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Order lookup</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">Open status and payload with an order ID.</p>
 
         <div className="mt-5 space-y-4">
           <label className="space-y-2">

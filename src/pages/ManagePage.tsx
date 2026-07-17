@@ -10,7 +10,7 @@ export default function ManagePage() {
     <section className={`${card} p-5`}>
       <p className={labelClass}>Management lane</p>
       <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Shortcuts</h2>
-      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Kısa giriş noktası. Ana işlemler header’da.</p>
+      <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Short entry point. Main actions live in the header.</p>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-3">
         <div className="border border-slate-700 bg-slate-950/60 p-4">

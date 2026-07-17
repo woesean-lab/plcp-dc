@@ -36,14 +36,14 @@ function Shell() {
                 className={navButton(isAdmin && tab === "create")}
                 onClick={() => navigate("/admin?tab=create")}
               >
-                Sipariş oluştur
+                Create Order
               </button>
               <button
                 type="button"
                 className={navButton(isAdmin && tab === "manage")}
                 onClick={() => navigate("/admin?tab=manage")}
               >
-                Siparişleri yönet
+                Manage Orders
               </button>
               <button
                 type="button"
