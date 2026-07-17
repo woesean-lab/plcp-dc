@@ -351,6 +351,8 @@
 
   .app-nav-cluster {
     display: flex;
+    min-width: 0;
+    max-width: 100%;
     align-items: center;
     gap: 0.25rem;
     margin-inline: auto;
@@ -363,6 +365,7 @@
 
   .app-nav {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: 0.25rem;
   }
@@ -512,50 +515,6 @@
     box-shadow: inset 0 1px 12px rgba(0, 0, 0, 0.32);
   }
 
-  .hero-panel {
-    overflow: hidden;
-    background: var(--app-surface);
-    box-shadow: inset 0 1px 0 var(--app-inset-line), var(--app-shadow-lg);
-  }
-
-  .hero-panel::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 8%;
-    width: 38%;
-    height: 1px;
-    background: var(--app-accent-border);
-  }
-
-  .hero-copy {
-    max-width: 38rem;
-  }
-
-  .hero-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.55rem;
-    border: 1px solid var(--app-accent-border);
-    border-radius: 999px;
-    background: var(--app-accent-soft);
-    padding: 0.4rem 0.65rem;
-    font-size: 11px;
-    font-weight: 650;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--app-accent);
-  }
-
-  .hero-status::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 999px;
-    background: var(--app-success);
-    box-shadow: 0 0 10px var(--app-success);
-  }
-
   .app-kicker {
     margin: 0;
     font-size: 11px;
@@ -571,16 +530,40 @@
     color: var(--app-text);
   }
 
-  .hero-title {
-    max-width: 13ch;
-    font-size: clamp(1.9rem, 3.6vw, 3.1rem);
-    font-weight: 630;
-    letter-spacing: -0.052em;
-    line-height: 1.02;
-  }
-
   .app-copy {
     color: var(--app-muted);
+  }
+
+  .page-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1.25rem;
+    padding: 0.25rem 0.25rem 0;
+  }
+
+  .page-title {
+    margin: 0.35rem 0 0;
+    font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+    font-weight: 650;
+    letter-spacing: -0.045em;
+    line-height: 1.05;
+    color: var(--app-text);
+  }
+
+  .page-copy {
+    max-width: 42rem;
+    margin-top: 0.55rem;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .page-heading-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    flex-wrap: wrap;
   }
 
   .field-label {
@@ -957,6 +940,32 @@
     box-shadow: 0 0 11px var(--app-accent-border);
   }
 
+  .settings-status-row {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.8rem;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-soft);
+    padding: 0.85rem;
+  }
+
+  .settings-status-row strong {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 13px;
+    color: var(--app-text);
+  }
+
+  .settings-status-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--app-subtle);
+  }
+
   .app-overlay {
     position: fixed;
     inset: 0;
@@ -1107,7 +1116,7 @@
   }
 }
 
-@media (max-width: 1023px) {
+@media (max-width: 1179px) {
   .app-header-inner {
     flex-wrap: wrap;
   }
@@ -1124,14 +1133,17 @@
   .app-nav-cluster {
     order: 3;
     width: 100%;
+    margin-inline: 0;
   }
 
   .app-nav {
-    flex: 1 1 auto;
+    flex: 1 1 0;
   }
 
   .app-nav-button {
     flex: 1 1 0;
+    min-width: 0;
+    padding-inline: 0.7rem;
   }
 }
 
@@ -1162,15 +1174,25 @@
   }
 
   .app-nav-cluster {
-    overflow-x: auto;
+    overflow: visible;
     border-radius: 12px;
   }
 
   .app-nav-button {
     min-width: 0;
     height: 38px;
-    padding-inline: 0.55rem;
+    padding-inline: 0.45rem;
     font-size: 12px;
+  }
+
+  .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+
+  .page-heading-meta {
+    justify-content: flex-start;
   }
 
   .theme-toggle {
@@ -1191,10 +1213,6 @@
     border-radius: 15px;
   }
 
-  .hero-title {
-    font-size: clamp(1.8rem, 9vw, 2.5rem);
-  }
-
   .app-stat {
     min-height: 96px;
     border-radius: 15px;
@@ -1209,6 +1227,23 @@
     flex-wrap: wrap;
     gap: 0.45rem;
     text-align: center;
+  }
+}
+
+@media (max-width: 459px) {
+  .app-nav-button {
+    gap: 0;
+    padding-inline: 0;
+  }
+
+  .app-nav-button > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    clip-path: inset(50%);
   }
 }
 

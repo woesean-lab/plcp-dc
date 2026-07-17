@@ -48,9 +48,9 @@ export interface OrderStatusResponse {
 
 export interface TrackedOrder {
   uniqid: string;
-  service: ServiceType;
-  serverId: string;
-  amount: number;
+  service?: ServiceType;
+  serverId?: string;
+  amount?: number;
   delay?: number;
   billingCycle?: number;
   cost?: number;

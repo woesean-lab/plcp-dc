@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ListChecks, Moon, Plus, Search, ShieldCheck, Sun } from "lucide-react";
+import { ListChecks, Moon, Plus, Search, Settings2, ShieldCheck, Sun } from "lucide-react";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
-import ManagePage from "./pages/ManagePage";
+import { normalizeAdminTab } from "./lib/navigation";
 
 type Theme = "dark" | "light";
 
@@ -19,7 +19,7 @@ function Shell() {
   const navigate = useNavigate();
 
   const search = new URLSearchParams(location.search);
-  const tab = search.get("tab") ?? "create";
+  const tab = normalizeAdminTab(search.get("tab"));
   const isOrders = location.pathname.startsWith("/orders");
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname === "/";
 
@@ -86,6 +86,8 @@ function Shell() {
               <nav className="app-nav" aria-label="Primary navigation">
                 <button
                   type="button"
+                  aria-label="Create order"
+                  title="Create order"
                   className={`app-nav-button ${isAdmin && tab === "create" ? "is-active" : ""}`}
                   aria-current={isAdmin && tab === "create" ? "page" : undefined}
                   onClick={() => navigate("/admin?tab=create")}
@@ -95,6 +97,8 @@ function Shell() {
                 </button>
                 <button
                   type="button"
+                  aria-label="Manage orders"
+                  title="Manage orders"
                   className={`app-nav-button ${isAdmin && tab === "manage" ? "is-active" : ""}`}
                   aria-current={isAdmin && tab === "manage" ? "page" : undefined}
                   onClick={() => navigate("/admin?tab=manage")}
@@ -104,12 +108,25 @@ function Shell() {
                 </button>
                 <button
                   type="button"
+                  aria-label="Order lookup"
+                  title="Order lookup"
                   className={`app-nav-button ${isOrders ? "is-active" : ""}`}
                   aria-current={isOrders ? "page" : undefined}
                   onClick={() => navigate("/orders")}
                 >
                   <Search className="h-4 w-4" aria-hidden="true" />
                   <span>Lookup</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Settings"
+                  title="Settings"
+                  className={`app-nav-button ${isAdmin && tab === "settings" ? "is-active" : ""}`}
+                  aria-current={isAdmin && tab === "settings" ? "page" : undefined}
+                  onClick={() => navigate("/admin?tab=settings")}
+                >
+                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                  <span>Settings</span>
                 </button>
               </nav>
 
@@ -145,7 +162,7 @@ function Shell() {
             <Route path="/" element={<Navigate to="/admin?tab=create" replace />} />
             <Route path="/admin" element={<HomePage />} />
             <Route path="/orders" element={<OrderPage />} />
-            <Route path="/manage" element={<ManagePage />} />
+            <Route path="/manage" element={<Navigate to="/admin?tab=manage" replace />} />
             <Route path="*" element={<Navigate to="/admin?tab=create" replace />} />
           </Routes>
         </main>
