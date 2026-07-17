@@ -157,7 +157,7 @@ const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] t
 export default function HomePage() {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") === "manage" ? "manage" : "create";
-  const [tabSkeletonReady, setTabSkeletonReady] = useState(false);
+  const [tabSkeletonVisible, setTabSkeletonVisible] = useState(false);
 
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
@@ -181,12 +181,18 @@ export default function HomePage() {
   }, [storedApiKey]);
 
   useEffect(() => {
-    setTabSkeletonReady(false);
-    const timer = window.setTimeout(() => {
-      setTabSkeletonReady(true);
+    setTabSkeletonVisible(false);
+    const showTimer = window.setTimeout(() => {
+      setTabSkeletonVisible(true);
     }, 180);
+    const hideTimer = window.setTimeout(() => {
+      setTabSkeletonVisible(false);
+    }, 540);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      window.clearTimeout(showTimer);
+      window.clearTimeout(hideTimer);
+    };
   }, [activeTab]);
 
   useEffect(() => {
@@ -318,7 +324,7 @@ export default function HomePage() {
   const shell = "app-panel";
   const showOverlay = saving || loadingBalance;
   const balanceLoading = loadingBalance && balance === null;
-  const showCardSkeletons = (showOverlay || loadingBalance || saving) && tabSkeletonReady;
+  const showCardSkeletons = tabSkeletonVisible || showOverlay || loadingBalance || saving;
   const showManageSkeleton = activeTab === "manage" && showCardSkeletons;
 
   return (
@@ -349,9 +355,9 @@ export default function HomePage() {
             <div className="app-stat">
               <span className={labelClass}>Balance</span>
               {showCardSkeletons ? (
-                <div className="mt-3 space-y-3">
-                  <div className="app-skeleton app-skeleton-line h-5 w-24" />
-                  <div className="app-skeleton app-skeleton-line h-4 w-16" />
+                <div className="mt-2 space-y-2">
+                  <div className="app-skeleton app-skeleton-line w-24" style={{ height: "1.15rem" }} />
+                  <div className="app-skeleton app-skeleton-line w-16" />
                 </div>
               ) : (
                 <strong className="mt-2 block text-lg text-slate-50">
