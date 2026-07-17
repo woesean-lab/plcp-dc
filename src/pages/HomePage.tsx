@@ -318,8 +318,8 @@ export default function HomePage() {
   const shell = "app-panel";
   const showOverlay = saving || loadingBalance;
   const balanceLoading = loadingBalance && balance === null;
-  const showCardSkeletons = showOverlay || loadingBalance || saving || tabSkeletonReady;
-  const showManageSkeleton = activeTab === "manage" && (showCardSkeletons || orders.length === 0);
+  const showCardSkeletons = (showOverlay || loadingBalance || saving) && tabSkeletonReady;
+  const showManageSkeleton = activeTab === "manage" && showCardSkeletons;
 
   return (
     <div className="relative space-y-5">
@@ -349,9 +349,9 @@ export default function HomePage() {
             <div className="app-stat">
               <span className={labelClass}>Balance</span>
               {showCardSkeletons ? (
-                <div className="mt-2 space-y-2">
-                  <div className="app-skeleton app-skeleton-line w-24" />
-                  <div className="app-skeleton app-skeleton-line w-16" />
+                <div className="mt-3 space-y-3">
+                  <div className="app-skeleton app-skeleton-line h-5 w-24" />
+                  <div className="app-skeleton app-skeleton-line h-4 w-16" />
                 </div>
               ) : (
                 <strong className="mt-2 block text-lg text-slate-50">
@@ -640,7 +640,7 @@ export default function HomePage() {
                 ))}
               </div>
             </div>
-          ) : (
+          ) : orders.length ? (
             <div className="overflow-auto">
               <table className="min-w-[860px] w-full border-collapse">
                 <thead className="bg-white/5">
@@ -699,6 +699,8 @@ export default function HomePage() {
                 </tbody>
               </table>
             </div>
+          ) : (
+            <div className="px-5 py-10 text-sm text-slate-400">No tracked orders yet.</div>
           )}
         </section>
         ) : null}
