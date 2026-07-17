@@ -50,6 +50,7 @@ export default function HomePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [message, setMessage] = useState("");
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
@@ -69,6 +70,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!form.serverId.trim()) {
       setAvailability("");
+      setCheckingAvailability(false);
       return;
     }
 
@@ -94,10 +96,13 @@ export default function HomePage() {
 
   async function refreshAvailability() {
     try {
+      setCheckingAvailability(true);
       const data = await checkAvailableAmount(form.service, form.serverId);
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
     } catch {
       setAvailability("");
+    } finally {
+      setCheckingAvailability(false);
     }
   }
 
@@ -189,9 +194,20 @@ export default function HomePage() {
   }
 
   const shell = "app-panel";
+  const showOverlay = saving || loadingBalance;
+  const balanceLoading = loadingBalance && balance === null;
 
   return (
-    <div className="space-y-5">
+    <div className="relative space-y-5">
+      {showOverlay ? (
+        <div className="app-overlay">
+          <div className="app-preloader">
+            <div className="app-spinner" />
+            <p className="app-kicker">Loading</p>
+          </div>
+        </div>
+      ) : null}
+
       <section className={`${shell} p-5`}>
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
           <div className="flex min-h-[170px] flex-col justify-between">
@@ -218,9 +234,16 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="app-stat">
               <span className={labelClass}>Balance</span>
-              <strong className="mt-2 block text-lg text-slate-50">
-                {loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}
-              </strong>
+              {balanceLoading ? (
+                <div className="mt-2 space-y-2">
+                  <div className="app-skeleton app-skeleton-line w-20" />
+                  <div className="app-skeleton app-skeleton-line w-14" />
+                </div>
+              ) : (
+                <strong className="mt-2 block text-lg text-slate-50">
+                  {balance === null ? "-" : `$${formatNumber(balance)}`}
+                </strong>
+              )}
             </div>
             <div className="app-stat">
               <span className={labelClass}>Tracked</span>
@@ -246,7 +269,7 @@ export default function HomePage() {
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <p className={labelClass}>Order</p>
-                <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
+              <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
               </div>
               <span className="app-chip py-2">
                 Live
@@ -347,6 +370,10 @@ export default function HomePage() {
               {availability ? (
                 <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">
                   {availability}
+                </div>
+              ) : checkingAvailability ? (
+                <div className="app-panel-soft px-4 py-3">
+                  <div className="app-skeleton app-skeleton-line w-32" />
                 </div>
               ) : null}
             </form>

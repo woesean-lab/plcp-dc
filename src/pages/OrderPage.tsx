@@ -11,6 +11,9 @@ const labelClass = "app-kicker";
 const buttonClass =
   "app-button app-button-ghost";
 
+const primaryButtonClass =
+  "app-button app-button-primary";
+
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
@@ -76,9 +79,19 @@ export default function OrderPage() {
   }
 
   const shell = "app-panel";
+  const showOverlay = loading;
 
   return (
-    <section className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+    <section className="relative grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+      {showOverlay ? (
+        <div className="app-overlay">
+          <div className="app-preloader">
+            <div className="app-spinner" />
+            <p className="app-kicker">Loading</p>
+          </div>
+        </div>
+      ) : null}
+
       <div className={`${shell} p-5`}>
         <p className={labelClass}>Public tracker</p>
         <h2 className="app-title mt-2 text-[2rem] font-semibold">Order lookup</h2>
@@ -96,7 +109,7 @@ export default function OrderPage() {
           </label>
 
           <div className="mt-4 flex flex-wrap gap-4">
-            <button className={buttonClass} type="button" onClick={() => lookup()} disabled={loading}>
+            <button className={primaryButtonClass} type="button" onClick={() => lookup()} disabled={loading}>
               {loading ? "Loading..." : "Check"}
             </button>
             <button
@@ -134,7 +147,35 @@ export default function OrderPage() {
         <p className={labelClass}>Order payload</p>
         <h3 className="app-title mt-2 text-xl font-semibold">Summary and payload</h3>
 
-        {result ? (
+        {loading && !result ? (
+          <div className="mt-5 space-y-5">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="app-panel-soft p-4">
+                <div className="app-skeleton app-skeleton-line w-16" />
+                <div className="app-skeleton app-skeleton-line mt-3 w-20" />
+              </div>
+              <div className="app-panel-soft p-4">
+                <div className="app-skeleton app-skeleton-line w-16" />
+                <div className="app-skeleton app-skeleton-line mt-3 w-14" />
+              </div>
+              <div className="app-panel-soft p-4">
+                <div className="app-skeleton app-skeleton-line w-16" />
+                <div className="app-skeleton app-skeleton-line mt-3 w-14" />
+              </div>
+            </div>
+            <div className="app-panel-soft p-4">
+              <div className="app-skeleton app-skeleton-line w-32" />
+              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+              <div className="app-skeleton app-skeleton-line mt-2 w-5/6" />
+            </div>
+            <div className="app-panel-soft p-4">
+              <div className="app-skeleton app-skeleton-line w-24" />
+              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+              <div className="app-skeleton app-skeleton-line mt-2 w-11/12" />
+              <div className="app-skeleton app-skeleton-line mt-2 w-4/5" />
+            </div>
+          </div>
+        ) : result ? (
           <div className="mt-5 space-y-5">
             <div className="grid gap-3 sm:grid-cols-3">
               {summary.map((item) => (
