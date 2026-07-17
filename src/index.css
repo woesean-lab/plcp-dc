@@ -66,8 +66,13 @@
 @layer components {
   .app-panel {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: linear-gradient(180deg, rgba(20, 25, 39, 0.98), rgba(10, 14, 26, 0.98));
+    background: #ffffff0d;
     box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  }
+
+  .app-header {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0b0f19cc;
   }
 
   .app-panel-soft {
@@ -95,7 +100,7 @@
   .app-input {
     width: 100%;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: #0b1120;
+    background: #121621;
     padding: 0.8rem 0.9rem;
     font-size: 0.95rem;
     color: #f8fafc;
@@ -144,7 +149,7 @@
   }
 
   .app-button-ghost {
-    background: #151b29;
+    background: #121621;
     color: #cbd5e1;
   }
 
@@ -164,7 +169,7 @@
 
   .app-stat {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(11, 15, 27, 0.98);
+    background: #121621;
     padding: 1rem 1rem 1.1rem;
     min-height: 172px;
   }
