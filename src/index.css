@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @layer base {
@@ -10,7 +9,7 @@
   *::before,
   *::after {
     box-sizing: border-box;
-    border-radius: 4px !important;
+    border-radius: 3px !important;
   }
 
   html,
@@ -21,13 +20,11 @@
 
   body {
     margin: 0;
-    font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+    font-family: Aptos, "Segoe UI Variable", "Segoe UI", sans-serif;
     color: #f8fafc;
     background:
-      radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 24%),
-      radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 22%),
-      radial-gradient(circle at bottom center, rgba(15, 23, 42, 0.72), transparent 38%),
-      linear-gradient(180deg, #020617 0%, #070d19 54%, #050816 100%);
+      radial-gradient(circle at top, rgba(51, 65, 85, 0.16), transparent 38%),
+      #0b0f1d;
     overflow-x: hidden;
   }
 
@@ -36,11 +33,12 @@
     position: fixed;
     inset: 0;
     pointer-events: none;
-    background: linear-gradient(rgba(255, 255, 255, 0.015) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.015) 1px, transparent 1px);
-    background-size: 92px 92px, 92px 92px;
-    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 92%);
-    opacity: 0.08;
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
+    background-size: 96px 96px, 96px 96px;
+    mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.7), transparent 92%);
+    opacity: 0.045;
   }
 
   button,
@@ -60,6 +58,114 @@
   }
 
   ::selection {
-    background: rgba(96, 165, 250, 0.28);
+    background: rgba(100, 116, 139, 0.3);
+  }
+}
+
+@layer components {
+  .app-panel {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(8, 11, 23, 0.96);
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+  }
+
+  .app-panel-soft {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(10, 14, 26, 0.92);
+  }
+
+  .app-kicker {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #667085;
+  }
+
+  .app-title {
+    letter-spacing: -0.03em;
+    color: #f8fafc;
+  }
+
+  .app-copy {
+    color: #94a3b8;
+  }
+
+  .app-input {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0a1020;
+    padding: 0.8rem 0.9rem;
+    font-size: 0.95rem;
+    color: #f8fafc;
+    outline: none;
+    transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+  }
+
+  .app-input::placeholder {
+    color: #64748b;
+  }
+
+  .app-input:focus {
+    border-color: rgba(148, 163, 184, 0.4);
+    box-shadow: 0 0 0 4px rgba(148, 163, 184, 0.08);
+  }
+
+  .app-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0c1322;
+    padding: 0.7rem 1rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #e2e8f0;
+    transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  }
+
+  .app-button:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+    background: #111b2f;
+  }
+
+  .app-button:active {
+    transform: translateY(1px);
+  }
+
+  .app-button-primary {
+    border-color: rgba(125, 163, 214, 0.35);
+    background: #23344f;
+    color: #f8fafc;
+  }
+
+  .app-button-primary:hover {
+    border-color: rgba(148, 180, 226, 0.4);
+    background: #2a4062;
+  }
+
+  .app-button-ghost {
+    background: #0b1020;
+    color: #cbd5e1;
+  }
+
+  .app-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(12, 18, 33, 0.9);
+    padding: 0.65rem 0.85rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #94a3b8;
+  }
+
+  .app-stat {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: #0b1020;
+    padding: 0.95rem 1rem;
   }
 }

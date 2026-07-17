@@ -28,19 +28,19 @@ function formatNumber(value?: number) {
 
 function badgeClass(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
-  if (["completed", "success"].includes(normalized)) return "inline-flex rounded-[4px] border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200";
-  if (["process", "processing", "new"].includes(normalized)) return "inline-flex rounded-[4px] border border-slate-500/25 bg-slate-700/40 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
-  if (["error", "invalid", "terminated"].includes(normalized)) return "inline-flex rounded-[4px] border border-rose-500/25 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-200";
-  return "inline-flex rounded-[4px] border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
+  if (["completed", "success"].includes(normalized)) return "inline-flex rounded-[3px] border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200";
+  if (["process", "processing", "new"].includes(normalized)) return "inline-flex rounded-[3px] border border-slate-500/20 bg-slate-700/30 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
+  if (["error", "invalid", "terminated"].includes(normalized)) return "inline-flex rounded-[3px] border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-200";
+  return "inline-flex rounded-[3px] border border-slate-700/80 bg-slate-900/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
 }
 
 const inputClass =
-  "w-full rounded-[4px] border border-slate-800 bg-[#090f1d] px-3 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-slate-500/60 focus:ring-4 focus:ring-slate-500/10";
+  "app-input";
 
-const labelClass = "text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500";
+const labelClass = "app-kicker";
 
 const actionButtonBase =
-  "inline-flex items-center justify-center rounded-[4px] border px-3 py-2 text-sm font-medium transition";
+  "app-button";
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
@@ -188,7 +188,7 @@ export default function HomePage() {
     setMessage("Order added.");
   }
 
-  const shell = "border border-slate-800/90 bg-[linear-gradient(180deg,rgba(9,12,24,0.96),rgba(7,10,20,0.96))] shadow-[0_18px_60px_rgba(0,0,0,0.28)]";
+  const shell = "app-panel";
 
   return (
     <div className="space-y-5">
@@ -197,18 +197,18 @@ export default function HomePage() {
           <div className="flex min-h-[170px] flex-col justify-between">
             <div>
               <p className={labelClass}>Dashboard</p>
-              <h2 className="mt-3 text-[2.1rem] font-semibold tracking-tight text-slate-50">Orders and settings</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-400">
+              <h2 className="app-title mt-3 text-[2.1rem] font-semibold">Orders and settings</h2>
+              <p className="app-copy mt-3 max-w-2xl text-sm leading-6">
                 Create orders, sync balance, and keep the queue visible from one clean control surface.
               </p>
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-2 rounded-[4px] border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                <span className="h-2 w-2 rounded-full bg-cyan-400" />
+              <span className="app-chip">
+                <span className="h-2 w-2 rounded-full bg-slate-400" />
                 Live
               </span>
-              <span className="inline-flex items-center gap-2 rounded-[4px] border border-slate-700 bg-slate-900/60 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
+              <span className="app-chip">
                 <span className="h-2 w-2 rounded-full bg-slate-400" />
                 Minimal
               </span>
@@ -216,21 +216,21 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-[4px] border border-slate-800 bg-[#0b1020] px-4 py-3">
+            <div className="app-stat">
               <span className={labelClass}>Balance</span>
               <strong className="mt-2 block text-lg text-slate-50">
                 {loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}
               </strong>
             </div>
-            <div className="rounded-[4px] border border-slate-800 bg-[#0b1020] px-4 py-3">
+            <div className="app-stat">
               <span className={labelClass}>Tracked</span>
               <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
             </div>
-            <div className="rounded-[4px] border border-slate-800 bg-[#0b1020] px-4 py-3">
+            <div className="app-stat">
               <span className={labelClass}>Active</span>
               <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
             </div>
-            <div className="rounded-[4px] border border-slate-800 bg-[#0b1020] px-4 py-3">
+            <div className="app-stat">
               <span className={labelClass}>API key</span>
               <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
             </div>
@@ -238,7 +238,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {message ? <div className="border border-slate-800 bg-[#090f1d] px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+      {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
 
       {activeTab === "create" ? (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -246,9 +246,9 @@ export default function HomePage() {
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <p className={labelClass}>Order</p>
-                <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-50">Create</h3>
+                <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
               </div>
-              <span className="rounded-[4px] border border-slate-800 bg-[#0b1020] px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-400">
+              <span className="app-chip py-2">
                 Live
               </span>
             </div>
@@ -328,15 +328,15 @@ export default function HomePage() {
                 </label>
               </div>
 
-              <div className="mt-5 flex flex-wrap gap-4">
+              <div className="mt-6 flex flex-wrap gap-4">
                 <button
-                  className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
+                  className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
                   type="submit"
                 >
                   Create order
                 </button>
                 <button
-                  className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-4 py-2.5 text-slate-200 hover:bg-slate-800`}
+                  className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
                   type="button"
                   onClick={refreshBalance}
                 >
@@ -345,7 +345,7 @@ export default function HomePage() {
               </div>
 
               {availability ? (
-                <div className="border border-slate-800 bg-[#0b1020] px-4 py-3 text-sm text-slate-300">
+                <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">
                   {availability}
                 </div>
               ) : null}
@@ -355,7 +355,7 @@ export default function HomePage() {
           <div className="space-y-4">
             <div className={shell + " p-5"}>
               <p className={labelClass}>Key</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-50">Tokenu API</h3>
+              <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
               <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
@@ -371,14 +371,14 @@ export default function HomePage() {
 
                 <div className="mt-4 flex flex-wrap gap-4">
                   <button
-                    className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
+                    className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
                     type="submit"
                     disabled={saving}
                   >
                     {saving ? "Saving..." : "Save"}
                   </button>
                   <button
-                    className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-4 py-2.5 text-slate-200 hover:bg-slate-800`}
+                    className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
                     type="button"
                     onClick={() => {
                       clearApiKey();
@@ -395,7 +395,7 @@ export default function HomePage() {
 
             <div className={shell + " p-5"}>
               <p className={labelClass}>Track</p>
-              <h3 className="mt-2 text-lg font-semibold text-slate-50">Order ID</h3>
+              <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
               <div className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Manual add</span>
@@ -408,14 +408,14 @@ export default function HomePage() {
                 </label>
                 <div className="mt-4 flex flex-wrap gap-4">
                   <button
-                    className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
+                    className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
                     type="button"
                     onClick={trackOrderManually}
                   >
                     Add
                   </button>
                   <Link
-                    className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-4 py-2.5 text-slate-200 hover:bg-slate-800`}
+                    className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
                     to="/orders"
                   >
                     Lookup
@@ -424,31 +424,18 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className={shell + " p-5"}>
-              <p className={labelClass}>Services</p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {SERVICE_OPTIONS.map((service) => (
-                  <span
-                    key={service.value}
-                    className="inline-flex rounded-[4px] border border-slate-800 bg-[#0b1020] px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-400"
-                  >
-                    {service.title}
-                  </span>
-                ))}
-              </div>
-            </div>
           </div>
         </section>
       ) : (
         <section className={shell + " overflow-hidden"}>
-          <div className="border-b border-slate-800 px-5 py-4">
+          <div className="border-b border-white/8 px-5 py-4">
             <p className={labelClass}>Management</p>
-            <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-50">Queue</h3>
+            <h3 className="app-title mt-2 text-xl font-semibold">Queue</h3>
           </div>
 
           <div className="overflow-auto">
             <table className="min-w-[860px] w-full border-collapse">
-              <thead className="bg-[#090f1d]">
+              <thead className="bg-[#0b1020]">
                 <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
                   <th className="px-5 py-4 font-semibold">Order</th>
                   <th className="px-5 py-4 font-semibold">Service</th>
@@ -461,7 +448,7 @@ export default function HomePage() {
               <tbody>
                 {orders.length ? (
                   orders.map((order) => (
-                    <tr key={order.uniqid} className="border-t border-slate-800/80">
+                    <tr key={order.uniqid} className="border-t border-white/8">
                       <td className="px-5 py-4 align-top">
                         <strong className="block text-sm font-semibold text-slate-50">{order.uniqid}</strong>
                         <span className="mt-1 block text-sm text-slate-500">{order.serverId || "No server ID"}</span>
@@ -478,20 +465,20 @@ export default function HomePage() {
                       <td className="px-5 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
                           <Link
-                            className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-200 hover:bg-slate-800`}
+                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
                             to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
                           >
                             Open
                           </Link>
                           <button
-                            className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-200 hover:bg-slate-800`}
+                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
                             type="button"
                             onClick={() => navigator.clipboard.writeText(order.uniqid)}
                           >
                             Copy
                           </button>
                           <button
-                            className={`${actionButtonBase} border-slate-800 bg-[#0b1020] px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-200 hover:bg-slate-800`}
+                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
