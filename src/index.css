@@ -20,6 +20,11 @@
     --app-hover: rgba(255, 255, 255, 0.04);
     --app-hover-strong: rgba(255, 255, 255, 0.075);
     --app-control-bg: rgba(255, 255, 255, 0.045);
+    --app-button-neutral-bg: #e6ebf2;
+    --app-button-neutral-hover: #f8fafc;
+    --app-button-neutral-active: #d7dee8;
+    --app-button-neutral-border: rgba(255, 255, 255, 0.72);
+    --app-button-neutral-ink: #111827;
     --app-border: rgba(255, 255, 255, 0.085);
     --app-border-strong: rgba(255, 255, 255, 0.14);
     --app-text: #f7f5ef;
@@ -37,8 +42,9 @@
     --app-success-soft: rgba(16, 185, 129, 0.1);
     --app-danger: #ff8796;
     --app-danger-soft: rgba(244, 63, 94, 0.12);
-    --app-danger-hover-soft: rgba(244, 63, 94, 0.22);
-    --app-danger-active-soft: rgba(244, 63, 94, 0.3);
+    --app-button-danger-hover: #ff9aa8;
+    --app-button-danger-active: #eb7484;
+    --app-button-danger-ink: #24070c;
     --app-indigo: #c7d2fe;
     --app-indigo-soft: rgba(129, 140, 248, 0.1);
     --app-skeleton: rgba(29, 36, 49, 0.96);
@@ -70,6 +76,11 @@
     --app-hover: rgba(15, 23, 42, 0.045);
     --app-hover-strong: rgba(15, 23, 42, 0.075);
     --app-control-bg: #f3f6fa;
+    --app-button-neutral-bg: #edf1f5;
+    --app-button-neutral-hover: #e1e7ee;
+    --app-button-neutral-active: #d5dde6;
+    --app-button-neutral-border: rgba(15, 23, 42, 0.16);
+    --app-button-neutral-ink: #1e293b;
     --app-border: rgba(15, 23, 42, 0.12);
     --app-border-strong: rgba(15, 23, 42, 0.2);
     --app-text: #0f172a;
@@ -87,8 +98,9 @@
     --app-success-soft: rgba(22, 128, 93, 0.1);
     --app-danger: #b8324a;
     --app-danger-soft: rgba(184, 50, 74, 0.1);
-    --app-danger-hover-soft: rgba(184, 50, 74, 0.17);
-    --app-danger-active-soft: rgba(184, 50, 74, 0.24);
+    --app-button-danger-hover: #a92d44;
+    --app-button-danger-active: #98263c;
+    --app-button-danger-ink: #ffffff;
     --app-indigo: #4f46a5;
     --app-indigo-soft: rgba(79, 70, 229, 0.08);
     --app-skeleton: #dfe7f0;
@@ -732,68 +744,44 @@
 
   .ui-button-destructive {
     border-color: var(--app-danger);
-    color: var(--app-danger);
-    background: var(--app-danger-soft);
-    box-shadow: inset 0 1px 0 var(--app-inset-line);
+    color: var(--app-button-danger-ink);
+    background: var(--app-danger);
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 8px 20px rgba(184, 50, 74, 0.16);
   }
 
   .ui-button-destructive:not(:disabled):hover {
     border-color: var(--app-danger);
-    color: var(--app-danger);
-    background: var(--app-danger-hover-soft);
-    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 8px 20px rgba(184, 50, 74, 0.18);
+    color: var(--app-button-danger-ink);
+    background: var(--app-button-danger-hover);
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 10px 24px rgba(184, 50, 74, 0.22);
     transform: translateY(-1px);
   }
 
   .ui-button-destructive:not(:disabled):active {
-    background: var(--app-danger-active-soft);
+    background: var(--app-button-danger-active);
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.16);
     transform: translateY(1px);
   }
 
-  .ui-button-outline {
-    background: transparent;
-  }
-
   .ui-button-secondary {
-    background: var(--app-control-bg);
+    border-color: var(--app-button-neutral-border);
+    color: var(--app-button-neutral-ink);
+    background: var(--app-button-neutral-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 6px 16px rgba(0, 0, 0, 0.08);
   }
 
-  .ui-button-ghost {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+  .ui-button-secondary:not(:disabled):hover {
+    border-color: var(--app-button-neutral-border);
+    color: var(--app-button-neutral-ink);
+    background: var(--app-button-neutral-hover);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62), 0 9px 20px rgba(0, 0, 0, 0.1);
+    transform: translateY(-1px);
   }
 
-  .ui-button-ghost:not(:disabled):hover {
-    border-color: transparent;
-    color: var(--app-accent);
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .ui-button-ghost:not(:disabled):active {
-    border-color: transparent;
-    color: var(--app-accent-hover);
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .ui-button-ghost.quiet-action-danger:not(:disabled):hover,
-  .ui-button-ghost.quiet-action-danger:not(:disabled):active {
-    color: var(--app-danger);
-  }
-
-  .ui-button-link {
-    border-color: transparent;
-    color: var(--app-accent);
-    background: transparent;
-  }
-
-  .ui-button-link:hover {
-    color: var(--app-accent-hover);
-    background: transparent;
-    text-decoration: underline;
+  .ui-button-secondary:not(:disabled):active {
+    background: var(--app-button-neutral-active);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+    transform: translateY(1px);
   }
 
   .ui-input {
@@ -893,11 +881,6 @@
     border-color: var(--app-accent-border);
     color: var(--app-accent-ink);
     background: var(--app-accent-hover);
-  }
-
-  .app-button-ghost {
-    background: var(--app-control-bg);
-    color: var(--app-muted);
   }
 
   .app-chip {

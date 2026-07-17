@@ -11,10 +11,7 @@ const buttonVariants = cva(
       variant: {
         default: "ui-button-primary",
         destructive: "ui-button-destructive",
-        outline: "ui-button-outline",
-        secondary: "ui-button-secondary",
-        ghost: "ui-button-ghost",
-        link: "ui-button-link underline-offset-4"
+        secondary: "ui-button-secondary"
       },
       size: {
         default: "h-11 px-4 py-2.5",

@@ -261,7 +261,7 @@ export default function OrderPage() {
           </div>
           {result ? (
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               type="button"
               onClick={() => {

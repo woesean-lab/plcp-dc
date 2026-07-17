@@ -593,7 +593,7 @@ export default function HomePage() {
                                   </Link>
                                 </Button>
                                 <Button
-                                  variant="ghost"
+                                  variant="secondary"
                                   size="xs"
                                   className="px-3 text-[10px] uppercase tracking-[0.12em]"
                                   type="button"
@@ -659,7 +659,7 @@ export default function HomePage() {
                     <Plus className="h-4 w-4" aria-hidden="true" />
                     Add to queue
                   </Button>
-                  <Button asChild variant="ghost" className="w-full">
+                  <Button asChild variant="secondary" className="w-full">
                     <Link to="/orders">
                       <Search className="h-4 w-4" aria-hidden="true" />
                       Open public lookup
@@ -717,8 +717,8 @@ export default function HomePage() {
                       {saving ? "Saving..." : "Save key"}
                     </Button>
                     <Button
-                      className="quiet-action-danger min-w-[132px] max-sm:w-full"
-                      variant="ghost"
+                      className="min-w-[132px] max-sm:w-full"
+                      variant="destructive"
                       type="button"
                       onClick={() => {
                         clearApiKey();
