@@ -82,37 +82,38 @@ function Shell() {
               </span>
             </button>
 
-            <nav className="app-nav" aria-label="Primary navigation">
-              <button
-                type="button"
-                className={`app-nav-button ${isAdmin && tab === "create" ? "is-active" : ""}`}
-                aria-current={isAdmin && tab === "create" ? "page" : undefined}
-                onClick={() => navigate("/admin?tab=create")}
-              >
-                <Plus className="h-4 w-4" aria-hidden="true" />
-                <span>Create</span>
-              </button>
-              <button
-                type="button"
-                className={`app-nav-button ${isAdmin && tab === "manage" ? "is-active" : ""}`}
-                aria-current={isAdmin && tab === "manage" ? "page" : undefined}
-                onClick={() => navigate("/admin?tab=manage")}
-              >
-                <ListChecks className="h-4 w-4" aria-hidden="true" />
-                <span>Manage</span>
-              </button>
-              <button
-                type="button"
-                className={`app-nav-button ${isOrders ? "is-active" : ""}`}
-                aria-current={isOrders ? "page" : undefined}
-                onClick={() => navigate("/orders")}
-              >
-                <Search className="h-4 w-4" aria-hidden="true" />
-                <span>Lookup</span>
-              </button>
-            </nav>
+            <div className="app-nav-cluster">
+              <nav className="app-nav" aria-label="Primary navigation">
+                <button
+                  type="button"
+                  className={`app-nav-button ${isAdmin && tab === "create" ? "is-active" : ""}`}
+                  aria-current={isAdmin && tab === "create" ? "page" : undefined}
+                  onClick={() => navigate("/admin?tab=create")}
+                >
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  <span>Create</span>
+                </button>
+                <button
+                  type="button"
+                  className={`app-nav-button ${isAdmin && tab === "manage" ? "is-active" : ""}`}
+                  aria-current={isAdmin && tab === "manage" ? "page" : undefined}
+                  onClick={() => navigate("/admin?tab=manage")}
+                >
+                  <ListChecks className="h-4 w-4" aria-hidden="true" />
+                  <span>Manage</span>
+                </button>
+                <button
+                  type="button"
+                  className={`app-nav-button ${isOrders ? "is-active" : ""}`}
+                  aria-current={isOrders ? "page" : undefined}
+                  onClick={() => navigate("/orders")}
+                >
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                  <span>Lookup</span>
+                </button>
+              </nav>
 
-            <div className="app-header-actions">
+              <span className="app-nav-divider" aria-hidden="true" />
               <button
                 className="theme-toggle"
                 type="button"
@@ -124,17 +125,17 @@ function Shell() {
                 {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
                 <span>{theme === "dark" ? "Light" : "Dark"}</span>
               </button>
+            </div>
 
-              <div className="app-security" aria-label="Security status: local vault protected">
-                <span className="status-indicator" aria-hidden="true">
-                  <span />
-                </span>
-                <span className="min-w-0">
-                  <span className="brand-eyebrow">Local vault</span>
-                  <strong>Protected session</strong>
-                </span>
-                <ShieldCheck className="h-[18px] w-[18px] text-[var(--app-success)]" aria-hidden="true" />
-              </div>
+            <div className="app-security" aria-label="Security status: local vault protected">
+              <span className="status-indicator" aria-hidden="true">
+                <span />
+              </span>
+              <span className="min-w-0">
+                <span className="brand-eyebrow">Local vault</span>
+                <strong>Protected session</strong>
+              </span>
+              <ShieldCheck className="h-[18px] w-[18px] text-[var(--app-success)]" aria-hidden="true" />
             </div>
           </div>
         </header>
