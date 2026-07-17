@@ -7,6 +7,8 @@ function Shell() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const search = new URLSearchParams(location.search);
+  const activeTab = search.get("tab") ?? "create";
   const isOrders = location.pathname.startsWith("/orders");
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname === "/";
 
@@ -18,8 +20,11 @@ function Shell() {
             <div className="route-title">Tokenu panel</div>
 
             <nav className="topnav" aria-label="Primary">
-              <button className={isAdmin ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin")}>
-                Sipariş oluştur ve yönet
+              <button className={isAdmin && activeTab === "create" ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin?tab=create")}>
+                Sipariş oluştur
+              </button>
+              <button className={isAdmin && activeTab === "manage" ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin?tab=manage")}>
+                Siparişleri yönet
               </button>
               <button className={isOrders ? "nav-link active" : "nav-link"} onClick={() => navigate("/orders")}>
                 Orders

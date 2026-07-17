@@ -44,7 +44,7 @@ export default function HomePage() {
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
-  const [activeTab, setActiveTab] = useState<"create" | "manage">("create");
+  const activeTab = new URLSearchParams(window.location.search).get("tab") === "manage" ? "manage" : "create";
 
   const storedApiKey = getApiKey();
   const activeOrders = orders.filter(
@@ -188,17 +188,6 @@ export default function HomePage() {
             <span className="eyebrow">Admin</span>
             <h2>Orders and settings</h2>
           </div>
-          <div className="intro-actions">
-            <button className="primary-button" type="button" onClick={() => setActiveTab("create")}>
-              Create
-            </button>
-            <button className="ghost-button" type="button" onClick={() => setActiveTab("manage")}>
-              Manage
-            </button>
-            <Link className="ghost-button" to="/orders">
-              Orders
-            </Link>
-          </div>
         </div>
 
         <div className="overview-grid">
@@ -220,15 +209,6 @@ export default function HomePage() {
           </div>
         </div>
       </section>
-
-      <div className="tabs">
-        <button className={activeTab === "create" ? "tab-button active" : "tab-button"} onClick={() => setActiveTab("create")}>
-          Siparis olustur
-        </button>
-        <button className={activeTab === "manage" ? "tab-button active" : "tab-button"} onClick={() => setActiveTab("manage")}>
-          Siparisleri yonet
-        </button>
-      </div>
 
       {message ? <div className="notice">{message}</div> : null}
 

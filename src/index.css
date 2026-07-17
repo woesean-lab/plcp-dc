@@ -2,18 +2,18 @@
 
 :root {
   color-scheme: dark;
-  --page-bg: #020617;
-  --page-fg: #e2e8f0;
+  --page-bg: #0b1120;
+  --page-fg: #f1f5f9;
   --page-muted: #94a3b8;
-  --page-border: rgba(255, 255, 255, 0.1);
-  --page-surface: rgba(15, 23, 42, 0.82);
-  --page-surface-strong: rgba(2, 6, 23, 0.92);
+  --page-border: rgba(148, 163, 184, 0.16);
+  --page-surface: rgba(15, 23, 42, 0.72);
+  --page-surface-strong: rgba(15, 23, 42, 0.9);
   --page-accent: #fbbf24;
   --page-accent-strong: #fde68a;
-  --page-accent-soft: rgba(251, 191, 36, 0.14);
+  --page-accent-soft: rgba(251, 191, 36, 0.1);
   --page-danger: #fca5a5;
   --page-selection: rgba(251, 191, 36, 0.24);
-  --page-shadow: 0 32px 80px rgba(2, 6, 23, 0.72);
+  --page-shadow: 0 30px 70px rgba(2, 6, 23, 0.48);
 }
 
 *,
@@ -36,7 +36,7 @@ html {
 body {
   margin: 0;
   font-family: "Space Grotesk", Aptos, "Segoe UI Variable", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
-  background: linear-gradient(180deg, #020617, #050b14 54%, #020617);
+  background: linear-gradient(180deg, #0b1120, #111827 54%, #0b1120);
   color: var(--page-fg);
   overflow-x: hidden;
 }
@@ -47,11 +47,11 @@ body::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.024) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.024) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
   background-size: 72px 72px, 72px 72px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 92%);
-  opacity: 0.22;
+  opacity: 0.14;
 }
 
 ::selection {
@@ -95,7 +95,7 @@ button {
   margin-bottom: 16px;
   padding: 14px 16px;
   border: 1px solid var(--page-border);
-  background: rgba(255, 255, 255, 0.015);
+  background: rgba(15, 23, 42, 0.66);
 }
 
 .route-badge {
@@ -118,11 +118,11 @@ button {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.016) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.016) 1px, transparent 1px);
   background-size: 72px 72px, 72px 72px;
   mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.72), transparent 92%);
-  opacity: 0.2;
+  opacity: 0.12;
 }
 
 .topbar {
@@ -244,8 +244,8 @@ button {
 
 .panel {
   border: 1px solid var(--page-border);
-  background: rgba(2, 6, 23, 0.9);
-  box-shadow: 0 18px 40px rgba(2, 6, 23, 0.32);
+  background: rgba(15, 23, 42, 0.8);
+  box-shadow: 0 18px 34px rgba(2, 6, 23, 0.22);
 }
 
 .panel-strong {
@@ -367,7 +367,7 @@ button {
 .stat-item,
 .detail-card {
   border: 1px solid var(--page-border);
-  background: rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .summary-card {
@@ -492,7 +492,7 @@ button {
   min-height: 46px;
   padding: 12px 13px;
   border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(2, 6, 23, 0.72);
+  background: rgba(15, 23, 42, 0.72);
   color: var(--page-fg);
   outline: none;
   transition:
@@ -516,7 +516,7 @@ button {
 .field textarea:focus {
   border-color: rgba(251, 191, 36, 0.48);
   box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.12);
-  background: rgba(2, 6, 23, 0.9);
+  background: rgba(15, 23, 42, 0.92);
 }
 
 .field input:disabled,
@@ -603,7 +603,7 @@ table {
   width: 100%;
   min-width: 820px;
   border-collapse: collapse;
-  background: rgba(2, 6, 23, 0.28);
+  background: rgba(15, 23, 42, 0.36);
 }
 
 th,
@@ -652,7 +652,7 @@ td strong {
   overflow: auto;
   padding: 16px;
   border: 1px solid var(--page-border);
-  background: rgba(2, 6, 23, 0.9);
+  background: rgba(15, 23, 42, 0.9);
 }
 
 pre {
