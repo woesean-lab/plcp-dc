@@ -1,9 +1,27 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#070910" />
+    <meta id="theme-color" name="theme-color" content="#070910" />
+    <script>
+      (() => {
+        try {
+          const savedTheme = localStorage.getItem("pulcip.theme");
+          const theme = savedTheme === "light" || savedTheme === "dark"
+            ? savedTheme
+            : window.matchMedia("(prefers-color-scheme: light)").matches
+              ? "light"
+              : "dark";
+
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          document.getElementById("theme-color")?.setAttribute("content", theme === "light" ? "#f3f6fa" : "#070910");
+        } catch {
+          document.documentElement.dataset.theme = "dark";
+        }
+      })();
+    </script>
     <title>Pulcip Members — Operations Console</title>
     <meta
       name="description"

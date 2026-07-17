@@ -1,12 +1,20 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ListChecks, Plus, Search, ShieldCheck } from "lucide-react";
+import { ListChecks, Moon, Plus, Search, ShieldCheck, Sun } from "lucide-react";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import ManagePage from "./pages/ManagePage";
 
+type Theme = "dark" | "light";
+
+function getInitialTheme(): Theme {
+  if (typeof document === "undefined") return "dark";
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
 function Shell() {
   const [booting, setBooting] = useState(true);
+  const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -23,8 +31,20 @@ function Shell() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.documentElement.style.colorScheme = theme;
+    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f3f6fa" : "#070910");
+
+    try {
+      window.localStorage.setItem("pulcip.theme", theme);
+    } catch {
+      // The visual preference still works when storage is unavailable.
+    }
+  }, [theme]);
+
   return (
-    <div className="app-shell min-h-screen text-slate-100">
+    <div className="app-shell min-h-screen text-[var(--app-text)]">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -40,7 +60,7 @@ function Shell() {
             </span>
             <div>
               <p className="app-kicker">Pulcip Members</p>
-              <p className="mt-2 text-sm text-slate-300">Preparing your workspace</p>
+              <p className="mt-2 text-sm text-[var(--app-muted)]">Preparing your workspace</p>
             </div>
             <div className="app-progress" aria-hidden="true">
               <span />
@@ -92,15 +112,29 @@ function Shell() {
               </button>
             </nav>
 
-            <div className="app-security" aria-label="Security status: local vault protected">
-              <span className="status-indicator" aria-hidden="true">
-                <span />
-              </span>
-              <span className="min-w-0">
-                <span className="brand-eyebrow">Local vault</span>
-                <strong>Protected session</strong>
-              </span>
-              <ShieldCheck className="h-[18px] w-[18px] text-emerald-300" aria-hidden="true" />
+            <div className="app-header-actions">
+              <button
+                className="theme-toggle"
+                type="button"
+                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+                aria-pressed={theme === "light"}
+                title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
+                onClick={() => setTheme((current) => (current === "dark" ? "light" : "dark"))}
+              >
+                {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+                <span>{theme === "dark" ? "Light" : "Dark"}</span>
+              </button>
+
+              <div className="app-security" aria-label="Security status: local vault protected">
+                <span className="status-indicator" aria-hidden="true">
+                  <span />
+                </span>
+                <span className="min-w-0">
+                  <span className="brand-eyebrow">Local vault</span>
+                  <strong>Protected session</strong>
+                </span>
+                <ShieldCheck className="h-[18px] w-[18px] text-[var(--app-success)]" aria-hidden="true" />
+              </div>
             </div>
           </div>
         </header>

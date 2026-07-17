@@ -24,17 +24,17 @@ export default function ManagePage() {
 
       <div className="mt-8 grid gap-3 sm:grid-cols-3">
         <div className="app-panel-soft p-5">
-          <LayoutDashboard className="h-5 w-5 text-[#7cc9ff]" aria-hidden="true" />
+          <LayoutDashboard className="h-5 w-5 text-[var(--app-accent)]" aria-hidden="true" />
           <p className={`${labelClass} mt-5`}>Admin</p>
           <p className="app-copy mt-2 text-sm">Orders and settings</p>
         </div>
         <div className="app-panel-soft p-5">
-          <Search className="h-5 w-5 text-[#7cc9ff]" aria-hidden="true" />
+          <Search className="h-5 w-5 text-[var(--app-accent)]" aria-hidden="true" />
           <p className={`${labelClass} mt-5`}>Orders</p>
           <p className="app-copy mt-2 text-sm">Public lookup</p>
         </div>
         <div className="app-panel-soft p-5">
-          <ShieldCheck className="h-5 w-5 text-emerald-300" aria-hidden="true" />
+          <ShieldCheck className="h-5 w-5 text-[var(--app-success)]" aria-hidden="true" />
           <p className={`${labelClass} mt-5`}>Mode</p>
           <p className="app-copy mt-2 text-sm">Local-first security</p>
         </div>

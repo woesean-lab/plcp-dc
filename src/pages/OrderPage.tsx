@@ -169,7 +169,7 @@ export default function OrderPage() {
             <div className="app-spinner" />
             <div>
               <p className="app-kicker">Order lookup</p>
-              <p className="mt-2 text-sm text-slate-300">Retrieving the latest status</p>
+              <p className="mt-2 text-sm text-[var(--app-muted)]">Retrieving the latest status</p>
             </div>
             <div className="app-progress" aria-hidden="true"><span /></div>
           </div>
@@ -226,21 +226,21 @@ export default function OrderPage() {
             </Button>
           </div>
 
-          {message ? <div className="app-panel-soft app-notice px-4 py-3 text-sm text-slate-300" role="status" aria-live="polite">{message}</div> : null}
+          {message ? <div className="app-panel-soft app-notice px-4 py-3 text-sm text-[var(--app-text-secondary)]" role="status" aria-live="polite">{message}</div> : null}
         </form>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="app-panel-soft p-4">
             <div className="flex items-center justify-between gap-3">
               <p className={labelClass}>Protected</p>
-              <ShieldCheck className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+              <ShieldCheck className="h-4 w-4 text-[var(--app-success)]" aria-hidden="true" />
             </div>
             <p className="app-copy mt-2 text-sm">Status, details, payload.</p>
           </div>
           <div className="app-panel-soft p-4">
             <div className="flex items-center justify-between gap-3">
               <p className={labelClass}>Created</p>
-              <Clock3 className="h-4 w-4 text-[#7cc9ff]" aria-hidden="true" />
+              <Clock3 className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
             </div>
             <p className="app-copy mt-2 text-sm">
               {result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}
@@ -308,21 +308,21 @@ export default function OrderPage() {
               {summary.map((item) => (
                 <div key={item.label} className="app-panel-soft p-4">
                   <span className={labelClass}>{item.label}</span>
-                  <strong className="mt-2 block text-lg font-semibold text-[#f7f5ef]">{item.value}</strong>
+                  <strong className="mt-2 block text-lg font-semibold text-[var(--app-text)]">{item.value}</strong>
                 </div>
               ))}
             </div>
 
             <div className="app-panel-soft p-4">
-              <div className="flex items-center gap-2 text-[#f7f5ef]">
-                <Hash className="h-4 w-4 text-[#7cc9ff]" aria-hidden="true" />
+              <div className="flex items-center gap-2 text-[var(--app-text)]">
+                <Hash className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
                 <strong className="block font-mono text-sm font-semibold">{result.uniqid}</strong>
               </div>
               <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
             </div>
 
             <div className="payload-panel overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-6 text-slate-300">{formatJson(result)}</pre>
+              <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
             </div>
           </div>
         ) : (
@@ -331,7 +331,7 @@ export default function OrderPage() {
               <span className="stat-icon mx-auto" aria-hidden="true">
                 <FileJson className="h-4 w-4" />
               </span>
-              <p className="mt-4 text-sm font-medium text-slate-300">No payload loaded</p>
+              <p className="mt-4 text-sm font-medium text-[var(--app-text-secondary)]">No payload loaded</p>
               <p className="app-copy mt-1 text-sm">Search an order to reveal its summary and JSON response.</p>
             </div>
           </div>
