@@ -356,7 +356,7 @@ export default function HomePage() {
             <div className={shell + " p-5"}>
               <p className={labelClass}>Key</p>
               <h3 className="mt-2 text-lg font-semibold text-slate-50">Tokenu API</h3>
-              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-4">
+              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
                   <input
@@ -369,7 +369,7 @@ export default function HomePage() {
                   />
                 </label>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="mt-1 flex flex-wrap gap-2">
                   <button
                     className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                     type="submit"
