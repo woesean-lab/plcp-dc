@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ListChecks, Plus, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { ListChecks, Plus, Search, ShieldCheck } from "lucide-react";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import ManagePage from "./pages/ManagePage";
@@ -36,7 +36,7 @@ function Shell() {
         <div className="app-overlay" role="status" aria-live="polite">
           <div className="app-preloader">
             <span className="brand-mark brand-mark-loader" aria-hidden="true">
-              <Sparkles className="h-5 w-5" />
+              <span className="brand-letter">P</span>
             </span>
             <div>
               <p className="app-kicker">Pulcip Members</p>
@@ -54,7 +54,7 @@ function Shell() {
           <div className="app-header-inner">
             <button className="app-brand" type="button" onClick={() => navigate("/admin?tab=create")} aria-label="Pulcip Members home">
               <span className="brand-mark" aria-hidden="true">
-                <Sparkles className="h-[18px] w-[18px]" />
+                <span className="brand-letter">P</span>
               </span>
               <span className="min-w-0 text-left">
                 <span className="brand-eyebrow">Pulcip</span>
