@@ -191,7 +191,7 @@ export default function HomePage() {
   const shell = "border border-slate-800/90 bg-[linear-gradient(180deg,rgba(9,12,24,0.96),rgba(7,10,20,0.96))] shadow-[0_18px_60px_rgba(0,0,0,0.28)]";
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <section className={`${shell} p-5`}>
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
           <div className="flex min-h-[170px] flex-col justify-between">
@@ -253,7 +253,7 @@ export default function HomePage() {
               </span>
             </div>
 
-            <form onSubmit={handleCreateOrder} className="space-y-4">
+            <form onSubmit={handleCreateOrder} className="space-y-6">
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="space-y-2">
                   <span className={labelClass}>Service</span>
@@ -328,7 +328,7 @@ export default function HomePage() {
                 </label>
               </div>
 
-              <div className="flex flex-wrap gap-3 pt-2">
+              <div className="mt-5 flex flex-wrap gap-4">
                 <button
                   className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                   type="submit"
@@ -356,7 +356,7 @@ export default function HomePage() {
             <div className={shell + " p-5"}>
               <p className={labelClass}>Key</p>
               <h3 className="mt-2 text-lg font-semibold text-slate-50">Tokenu API</h3>
-              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-5">
+              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
                   <input
@@ -369,7 +369,7 @@ export default function HomePage() {
                   />
                 </label>
 
-                <div className="mt-2 flex flex-wrap gap-3">
+                <div className="mt-4 flex flex-wrap gap-4">
                   <button
                     className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                     type="submit"
@@ -396,7 +396,7 @@ export default function HomePage() {
             <div className={shell + " p-5"}>
               <p className={labelClass}>Track</p>
               <h3 className="mt-2 text-lg font-semibold text-slate-50">Order ID</h3>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Manual add</span>
                   <input
@@ -406,7 +406,7 @@ export default function HomePage() {
                     placeholder="Enter order ID"
                   />
                 </label>
-                <div className="flex flex-wrap gap-3">
+                <div className="mt-4 flex flex-wrap gap-4">
                   <button
                     className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                     type="button"

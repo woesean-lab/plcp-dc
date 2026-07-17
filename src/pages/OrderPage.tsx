@@ -84,7 +84,7 @@ export default function OrderPage() {
         <h2 className="mt-2 text-[2rem] font-semibold tracking-tight text-slate-50">Order lookup</h2>
         <p className="mt-2 text-sm leading-6 text-slate-400">Open status and payload with an order ID.</p>
 
-        <div className="mt-5 space-y-4">
+        <div className="mt-5 space-y-5">
           <label className="space-y-2">
             <span className={labelClass}>Order ID</span>
             <input
@@ -95,7 +95,7 @@ export default function OrderPage() {
             />
           </label>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="mt-4 flex flex-wrap gap-4">
             <button className={buttonClass} type="button" onClick={() => lookup()} disabled={loading}>
               {loading ? "Loading..." : "Check"}
             </button>
@@ -135,7 +135,7 @@ export default function OrderPage() {
         <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-50">Summary and payload</h3>
 
         {result ? (
-          <div className="mt-5 space-y-4">
+          <div className="mt-5 space-y-5">
             <div className="grid gap-3 sm:grid-cols-3">
               {summary.map((item) => (
                 <div key={item.label} className="border border-slate-800 bg-[#0b1020] p-4">
