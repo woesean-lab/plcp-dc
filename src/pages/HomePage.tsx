@@ -317,13 +317,13 @@ export default function HomePage() {
 
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
-                  className={`${actionButtonBase} border-slate-700 bg-slate-100 px-4 py-2.5 font-semibold text-slate-950 hover:bg-slate-200`}
+                  className={`${actionButtonBase} border-slate-800 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-800`}
                   type="submit"
                 >
                   Create order
                 </button>
                 <button
-                  className={`${actionButtonBase} border-slate-800 bg-slate-950/70 px-4 py-2.5 text-slate-200 hover:border-slate-500/50 hover:bg-slate-900`}
+                  className={`${actionButtonBase} border-slate-800 bg-[#0b0f19] px-4 py-2.5 text-slate-200 hover:border-slate-600 hover:bg-slate-800`}
                   type="button"
                   onClick={refreshBalance}
                 >
@@ -358,14 +358,14 @@ export default function HomePage() {
 
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className={`${actionButtonBase} border-slate-700 bg-slate-100 px-4 py-2.5 font-semibold text-slate-950 hover:bg-slate-200`}
+                    className={`${actionButtonBase} border-slate-800 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-800`}
                     type="submit"
                     disabled={saving}
                   >
                     {saving ? "Saving..." : "Save"}
                   </button>
                   <button
-                    className={`${actionButtonBase} border-slate-800 bg-slate-950/70 px-4 py-2.5 text-slate-200 hover:border-slate-500/50 hover:bg-slate-900`}
+                    className={`${actionButtonBase} border-slate-800 bg-[#0b0f19] px-4 py-2.5 text-slate-200 hover:border-slate-600 hover:bg-slate-800`}
                     type="button"
                     onClick={() => {
                       clearApiKey();
@@ -395,14 +395,14 @@ export default function HomePage() {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    className={`${actionButtonBase} border-slate-700 bg-slate-100 px-4 py-2.5 font-semibold text-slate-950 hover:bg-slate-200`}
+                    className={`${actionButtonBase} border-slate-800 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-800`}
                     type="button"
                     onClick={trackOrderManually}
                   >
                     Add
                   </button>
                   <Link
-                    className={`${actionButtonBase} border-slate-800 bg-slate-950/70 px-4 py-2.5 text-slate-200 hover:border-slate-500/50 hover:bg-slate-900`}
+                    className={`${actionButtonBase} border-slate-800 bg-[#0b0f19] px-4 py-2.5 text-slate-200 hover:border-slate-600 hover:bg-slate-800`}
                     to="/orders"
                   >
                     Lookup
