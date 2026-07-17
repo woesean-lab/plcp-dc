@@ -4,6 +4,7 @@ import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import type { ServiceType, TrackedOrder } from "../types";
+import { CopyIcon, LinkIcon, PlusIcon, RefreshIcon, SearchIcon, SettingsIcon, SparkIcon, ShieldIcon } from "../components/Icons";
 
 const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string }> = [
   { value: "OAUTH-OFFLINE", title: "OAuth Offline" },
@@ -40,7 +41,7 @@ const inputClass =
 const labelClass = "text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500";
 
 const actionButtonBase =
-  "inline-flex items-center justify-center rounded-[3px] border px-3 py-2 text-sm font-medium transition";
+  "inline-flex items-center justify-center gap-2 rounded-[3px] border px-3 py-2 text-sm font-medium transition";
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
@@ -191,37 +192,46 @@ export default function HomePage() {
   }
 
   const card = "border border-slate-700/70 bg-slate-900/70 shadow-2xl shadow-slate-950/30";
+  const accentCard =
+    "border border-amber-300/20 bg-[linear-gradient(180deg,rgba(251,191,36,0.11),rgba(15,23,42,0.82))] shadow-2xl shadow-slate-950/30";
 
   return (
     <div className="space-y-4">
-      <section className={`${card} p-5`}>
+      <section className={`${accentCard} relative overflow-hidden p-5`}>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,0.14),transparent_28%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.10),transparent_24%)]" />
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className={labelClass}>Admin</p>
+          <div className="relative">
+            <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+              <ShieldIcon className="h-3.5 w-3.5 text-amber-300" />
+              Admin
+            </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Orders and settings</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
               Create orders, sync balance, and keep track of the queue.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="relative grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
-              <span className={labelClass}>Balance</span>
-              <strong className="mt-2 block text-lg text-slate-100">
+              <span className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                <SparkIcon className="h-3.5 w-3.5 text-amber-300" />
+                Balance
+              </span>
+              <strong className="mt-2 block text-lg text-slate-50">
                 {loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}
               </strong>
             </div>
             <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
               <span className={labelClass}>Tracked</span>
-              <strong className="mt-2 block text-lg text-slate-100">{orders.length}</strong>
+              <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
             </div>
             <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
               <span className={labelClass}>Active</span>
-              <strong className="mt-2 block text-lg text-slate-100">{activeOrders.length}</strong>
+              <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
             </div>
             <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
               <span className={labelClass}>API key</span>
-              <strong className="mt-2 block text-lg text-slate-100">{storedApiKey ? "Ready" : "Missing"}</strong>
+              <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
             </div>
           </div>
         </div>
@@ -236,10 +246,16 @@ export default function HomePage() {
           <div className={`${card} p-5`}>
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
-                <p className={labelClass}>Order</p>
+                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                  <PlusIcon className="h-3.5 w-3.5 text-amber-300" />
+                  Order
+                </p>
                 <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">Create</h3>
               </div>
-              <span className="text-xs uppercase tracking-[0.28em] text-slate-500">Tailwind</span>
+              <span className="inline-flex items-center gap-2 rounded-[3px] border border-amber-300/20 bg-amber-400/10 px-3 py-2 text-xs uppercase tracking-[0.28em] text-amber-100">
+                <SparkIcon className="h-3.5 w-3.5" />
+                Live
+              </span>
             </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-4">
@@ -322,6 +338,7 @@ export default function HomePage() {
                   className={`${actionButtonBase} border-amber-300/60 bg-amber-400 px-4 py-2.5 font-semibold text-slate-950 hover:bg-amber-300`}
                   type="submit"
                 >
+                  <PlusIcon className="h-4 w-4" />
                   Create order
                 </button>
                 <button
@@ -329,6 +346,7 @@ export default function HomePage() {
                   type="button"
                   onClick={refreshBalance}
                 >
+                  <RefreshIcon className="h-4 w-4" />
                   Refresh balance
                 </button>
               </div>
@@ -364,6 +382,7 @@ export default function HomePage() {
                     type="submit"
                     disabled={saving}
                   >
+                    <ShieldIcon className="h-4 w-4" />
                     {saving ? "Saving..." : "Save"}
                   </button>
                   <button
@@ -376,6 +395,7 @@ export default function HomePage() {
                       setMessage("API key cleared.");
                     }}
                   >
+                    <SettingsIcon className="h-4 w-4" />
                     Clear
                   </button>
                 </div>
@@ -401,12 +421,14 @@ export default function HomePage() {
                     type="button"
                     onClick={trackOrderManually}
                   >
+                    <PlusIcon className="h-4 w-4" />
                     Add
                   </button>
                   <Link
                     className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-4 py-2.5 text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
                     to="/orders"
                   >
+                    <SearchIcon className="h-4 w-4" />
                     Lookup
                   </Link>
                 </div>
@@ -470,6 +492,7 @@ export default function HomePage() {
                             className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
                             to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
                           >
+                            <LinkIcon className="h-3.5 w-3.5" />
                             Open
                           </Link>
                           <button
@@ -477,6 +500,7 @@ export default function HomePage() {
                             type="button"
                             onClick={() => navigator.clipboard.writeText(order.uniqid)}
                           >
+                            <CopyIcon className="h-3.5 w-3.5" />
                             Copy
                           </button>
                           <button
@@ -484,6 +508,7 @@ export default function HomePage() {
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
+                            <PlusIcon className="h-3.5 w-3.5 rotate-45" />
                             Remove
                           </button>
                         </div>
