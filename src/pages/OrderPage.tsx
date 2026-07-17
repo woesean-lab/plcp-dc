@@ -31,6 +31,7 @@ export default function OrderPage() {
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pageLoading, setPageLoading] = useState(true);
   const [message, setMessage] = useState("Enter an order ID.");
 
   const summary = useMemo(() => {
@@ -53,6 +54,14 @@ export default function OrderPage() {
       void lookup(incoming);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setPageLoading(false);
+    }, 450);
+
+    return () => window.clearTimeout(timer);
   }, []);
 
   async function lookup(customId?: string) {
@@ -92,6 +101,16 @@ export default function OrderPage() {
         </div>
       ) : null}
 
+      {pageLoading ? (
+        <div className={`${shell} p-5`}>
+          <div className="space-y-4">
+            <div className="app-skeleton app-skeleton-line w-24" />
+            <div className="app-skeleton app-skeleton-line w-2/3" style={{ height: "2.1rem" }} />
+            <div className="app-skeleton app-skeleton-line w-full" style={{ height: "1rem" }} />
+            <div className="app-skeleton app-skeleton-line w-4/5" style={{ height: "3rem" }} />
+          </div>
+        </div>
+      ) : (
       <div className={`${shell} p-5`}>
         <p className={labelClass}>Public tracker</p>
         <h2 className="app-title mt-2 text-[2rem] font-semibold">Order lookup</h2>
@@ -142,7 +161,29 @@ export default function OrderPage() {
           </div>
         </div>
       </div>
+      )}
 
+      {pageLoading ? (
+        <div className={`${shell} p-5`}>
+          <div className="space-y-4">
+            <div className="app-skeleton app-skeleton-line w-28" />
+            <div className="app-skeleton app-skeleton-line w-1/2" style={{ height: "2rem" }} />
+            <div className="grid gap-3 sm:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="app-panel-soft p-4">
+                  <div className="app-skeleton app-skeleton-line w-16" />
+                  <div className="app-skeleton app-skeleton-line mt-3 w-20" />
+                </div>
+              ))}
+            </div>
+            <div className="app-panel-soft p-4">
+              <div className="app-skeleton app-skeleton-line w-32" />
+              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+              <div className="app-skeleton app-skeleton-line mt-2 w-4/5" />
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className={`${shell} p-5`}>
         <p className={labelClass}>Order payload</p>
         <h3 className="app-title mt-2 text-xl font-semibold">Summary and payload</h3>
@@ -201,6 +242,7 @@ export default function OrderPage() {
           </div>
         )}
       </div>
+      )}
     </section>
   );
 }

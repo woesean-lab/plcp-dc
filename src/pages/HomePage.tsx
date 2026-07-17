@@ -45,6 +45,7 @@ const actionButtonBase =
 export default function HomePage() {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") === "manage" ? "manage" : "create";
+  const [tabLoading, setTabLoading] = useState(true);
 
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
@@ -66,6 +67,15 @@ export default function HomePage() {
     if (storedApiKey) void refreshBalance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedApiKey]);
+
+  useEffect(() => {
+    setTabLoading(true);
+    const timer = window.setTimeout(() => {
+      setTabLoading(false);
+    }, 450);
+
+    return () => window.clearTimeout(timer);
+  }, [activeTab]);
 
   useEffect(() => {
     if (!form.serverId.trim()) {
@@ -209,7 +219,29 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      <section className={`${shell} p-5`}>
+      {tabLoading ? (
+        <section className={`${shell} p-5`}>
+          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
+            <div className="space-y-4">
+              <div className="app-skeleton app-skeleton-line w-24" />
+              <div className="app-skeleton app-skeleton-line w-2/3" style={{ height: "2.2rem" }} />
+              <div className="app-skeleton app-skeleton-line w-full" style={{ height: "3.4rem" }} />
+              <div className="app-skeleton app-skeleton-line w-4/5" style={{ height: "1rem" }} />
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="app-stat space-y-3">
+                  <div className="app-skeleton app-skeleton-line w-16" />
+                  <div className="app-skeleton app-skeleton-line h-7 w-14" />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {!tabLoading ? (
+        <section className={`${shell} p-5`}>
         <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
           <div className="flex min-h-[170px] flex-col justify-between">
             <div>
@@ -218,17 +250,6 @@ export default function HomePage() {
               <p className="app-copy mt-3 max-w-2xl text-sm leading-6">
                 Create orders, sync balance, and keep the queue visible from one clean control surface.
               </p>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <span className="app-chip">
-                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                Live
-              </span>
-              <span className="app-chip">
-                <span className="h-2 w-2 rounded-full bg-slate-400" />
-                Minimal
-              </span>
             </div>
           </div>
 
@@ -275,21 +296,20 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </section>
+        </section>
+      ) : null}
 
-      {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+      {!tabLoading && message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
 
-      {activeTab === "create" ? (
+      {!tabLoading && activeTab === "create" ? (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className={`${shell} p-5`}>
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
                 <p className={labelClass}>Order</p>
-              <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
+                <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
               </div>
-              <span className="app-chip py-2">
-                Live
-              </span>
+              <span className="app-chip py-2">Ready</span>
             </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-6">
@@ -368,10 +388,7 @@ export default function HomePage() {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-4">
-                <button
-                  className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
-                  type="submit"
-                >
+                <button className={`${actionButtonBase} app-button-primary px-4 py-2.5`} type="submit">
                   Create order
                 </button>
                 <button
@@ -384,9 +401,7 @@ export default function HomePage() {
               </div>
 
               {availability ? (
-                <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">
-                  {availability}
-                </div>
+                <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{availability}</div>
               ) : checkingAvailability ? (
                 <div className="app-panel-soft px-4 py-3">
                   <div className="app-skeleton app-skeleton-line w-32" />
@@ -396,18 +411,18 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-4">
-          <div className={shell + " p-5"}>
-            <p className={labelClass}>Key</p>
-            <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
-            {showCardSkeletons ? (
-              <div className="mt-4 space-y-3">
-                <div className="app-panel-soft p-4">
-                  <div className="app-skeleton app-skeleton-line w-24" />
-                  <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+            <div className={`${shell} p-5`}>
+              <p className={labelClass}>Key</p>
+              <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
+              {showCardSkeletons ? (
+                <div className="mt-4 space-y-3">
+                  <div className="app-panel-soft p-4">
+                    <div className="app-skeleton app-skeleton-line w-24" />
+                    <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
+              ) : null}
+              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
                   <input
@@ -444,18 +459,18 @@ export default function HomePage() {
               </form>
             </div>
 
-          <div className={shell + " p-5"}>
-            <p className={labelClass}>Track</p>
-            <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
-            {showCardSkeletons ? (
-              <div className="mt-4 space-y-3">
-                <div className="app-panel-soft p-4">
-                  <div className="app-skeleton app-skeleton-line w-24" />
-                  <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+            <div className={`${shell} p-5`}>
+              <p className={labelClass}>Track</p>
+              <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
+              {showCardSkeletons ? (
+                <div className="mt-4 space-y-3">
+                  <div className="app-panel-soft p-4">
+                    <div className="app-skeleton app-skeleton-line w-24" />
+                    <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                  </div>
                 </div>
-              </div>
-            ) : null}
-            <div className="mt-4 space-y-5">
+              ) : null}
+              <div className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Manual add</span>
                   <input
@@ -473,19 +488,17 @@ export default function HomePage() {
                   >
                     Add
                   </button>
-                  <Link
-                    className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
-                    to="/orders"
-                  >
+                  <Link className={`${actionButtonBase} app-button-ghost px-4 py-2.5`} to="/orders">
                     Lookup
                   </Link>
                 </div>
               </div>
             </div>
-
           </div>
         </section>
-      ) : (
+      ) : null}
+
+      {!tabLoading && activeTab === "manage" ? (
         <section className={shell + " overflow-hidden"}>
           <div className="border-b border-white/8 px-5 py-4">
             <p className={labelClass}>Management</p>
@@ -558,7 +571,7 @@ export default function HomePage() {
             </table>
           </div>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }
