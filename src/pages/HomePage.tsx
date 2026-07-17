@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
@@ -26,21 +29,9 @@ function formatNumber(value?: number) {
     : "-";
 }
 
-function badgeClass(status?: string) {
-  const normalized = String(status ?? "").toLowerCase();
-  if (["completed", "success"].includes(normalized)) return "inline-flex rounded-[3px] border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-200";
-  if (["process", "processing", "new"].includes(normalized)) return "inline-flex rounded-[3px] border border-slate-500/20 bg-slate-700/30 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
-  if (["error", "invalid", "terminated"].includes(normalized)) return "inline-flex rounded-[3px] border border-rose-500/20 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-rose-200";
-  return "inline-flex rounded-[3px] border border-slate-700/80 bg-slate-900/60 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-200";
-}
-
-const inputClass =
-  "app-input";
+const inputClass = "app-input";
 
 const labelClass = "app-kicker";
-
-const actionButtonBase =
-  "app-button";
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
@@ -336,8 +327,7 @@ export default function HomePage() {
 
                 <label className="space-y-2">
                   <span className={labelClass}>Server ID</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={form.serverId}
                     onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
                     placeholder="Discord server ID"
@@ -346,8 +336,7 @@ export default function HomePage() {
 
                 <label className="space-y-2">
                   <span className={labelClass}>Amount</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     type="number"
                     min={1}
                     value={form.amount}
@@ -359,8 +348,7 @@ export default function HomePage() {
 
                 <label className="space-y-2">
                   <span className={labelClass}>Delay</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     type="number"
                     min={1}
                     max={1200}
@@ -373,8 +361,7 @@ export default function HomePage() {
 
                 <label className="space-y-2 md:col-span-2">
                   <span className={labelClass}>Billing cycle</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     type="number"
                     min={1}
                     max={12}
@@ -388,16 +375,17 @@ export default function HomePage() {
               </div>
 
               <div className="mt-6 flex flex-wrap gap-4">
-                <button className={`${actionButtonBase} app-button-primary px-4 py-2.5`} type="submit">
+                <Button className="px-4 py-2.5" type="submit">
                   Create order
-                </button>
-                <button
-                  className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
                   type="button"
                   onClick={refreshBalance}
                 >
                   Refresh balance
-                </button>
+                </Button>
               </div>
 
               {availability ? (
@@ -425,8 +413,7 @@ export default function HomePage() {
               <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     type="password"
                     value={apiKey}
                     onChange={(event) => setApiKeyValue(event.target.value)}
@@ -436,15 +423,12 @@ export default function HomePage() {
                 </label>
 
                 <div className="mt-4 flex flex-wrap gap-4">
-                  <button
-                    className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
-                    type="submit"
-                    disabled={saving}
-                  >
+                  <Button className="px-4 py-2.5" type="submit" disabled={saving}>
                     {saving ? "Saving..." : "Save"}
-                  </button>
-                  <button
-                    className={`${actionButtonBase} app-button-ghost px-4 py-2.5`}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
                     type="button"
                     onClick={() => {
                       clearApiKey();
@@ -454,7 +438,7 @@ export default function HomePage() {
                     }}
                   >
                     Clear
-                  </button>
+                  </Button>
                 </div>
               </form>
             </div>
@@ -473,24 +457,21 @@ export default function HomePage() {
               <div className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Manual add</span>
-                  <input
-                    className={inputClass}
+                  <Input
                     value={orderIdToTrack}
                     onChange={(event) => setOrderIdToTrack(event.target.value)}
                     placeholder="Enter order ID"
                   />
                 </label>
                 <div className="mt-4 flex flex-wrap gap-4">
-                  <button
-                    className={`${actionButtonBase} app-button-primary px-4 py-2.5`}
-                    type="button"
-                    onClick={trackOrderManually}
-                  >
+                  <Button className="px-4 py-2.5" type="button" onClick={trackOrderManually}>
                     Add
-                  </button>
-                  <Link className={`${actionButtonBase} app-button-ghost px-4 py-2.5`} to="/orders">
+                  </Button>
+                  <Button asChild variant="secondary" className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100">
+                    <Link to="/orders">
                     Lookup
-                  </Link>
+                    </Link>
+                  </Button>
                 </div>
               </div>
             </div>
@@ -528,7 +509,9 @@ export default function HomePage() {
                       <td className="px-5 py-4 align-top text-sm text-slate-200">{order.service}</td>
                       <td className="px-5 py-4 align-top text-sm text-slate-200">{order.amount}</td>
                       <td className="px-5 py-4 align-top">
-                        <span className={badgeClass(order.status)}>{order.status ?? "NEW"}</span>
+                        <Badge variant={String(order.status ?? "").toLowerCase().includes("completed") ? "success" : String(order.status ?? "").toLowerCase().includes("error") ? "destructive" : "secondary"}>
+                          {order.status ?? "NEW"}
+                        </Badge>
                         {order.details ? <div className="mt-2 text-sm text-slate-500">{order.details}</div> : null}
                       </td>
                       <td className="px-5 py-4 align-top text-sm text-slate-200">
@@ -536,26 +519,25 @@ export default function HomePage() {
                       </td>
                       <td className="px-5 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
-                          <Link
-                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
-                            to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
-                          >
-                            Open
-                          </Link>
-                          <button
-                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
+                          <Button asChild variant="secondary" className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100">
+                            <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>Open</Link>
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100"
                             type="button"
                             onClick={() => navigator.clipboard.writeText(order.uniqid)}
                           >
                             Copy
-                          </button>
-                          <button
-                            className={`${actionButtonBase} app-button-ghost px-3 py-2 text-xs uppercase tracking-[0.16em]`}
+                          </Button>
+                          <Button
+                            variant="secondary"
+                            className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100"
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
                             Remove
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>

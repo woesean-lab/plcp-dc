@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import ManagePage from "./pages/ManagePage";
@@ -22,12 +23,6 @@ function Shell() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  const navButton = (active: boolean) =>
-    [
-      "inline-flex items-center rounded-[3px] px-4 py-2.5 text-[14px] font-medium tracking-tight transition",
-      active ? "bg-slate-700 text-slate-50" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
-    ].join(" ");
-
   return (
     <div className="min-h-screen text-slate-100">
       {booting ? (
@@ -48,27 +43,30 @@ function Shell() {
             </div>
 
             <nav className="flex flex-wrap items-center gap-2">
-              <button
+              <Button
                 type="button"
-                className={navButton(isAdmin && tab === "create")}
+                variant="secondary"
+                className={`rounded-[3px] bg-slate-700 text-slate-50 hover:bg-slate-700 ${isAdmin && tab === "create" ? "" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
                 onClick={() => navigate("/admin?tab=create")}
               >
                 Create Order
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={navButton(isAdmin && tab === "manage")}
+                variant="secondary"
+                className={`rounded-[3px] ${isAdmin && tab === "manage" ? "bg-slate-700 text-slate-50 hover:bg-slate-700" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
                 onClick={() => navigate("/admin?tab=manage")}
               >
                 Manage Orders
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={navButton(isOrders)}
+                variant="secondary"
+                className={`rounded-[3px] ${isOrders ? "bg-slate-700 text-slate-50 hover:bg-slate-700" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
                 onClick={() => navigate("/orders")}
               >
                 Orders
-              </button>
+              </Button>
             </nav>
           </div>
         </header>

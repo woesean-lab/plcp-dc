@@ -1,18 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
-const inputClass =
-  "app-input";
-
 const labelClass = "app-kicker";
-
-const buttonClass =
-  "app-button app-button-ghost";
-
-const primaryButtonClass =
-  "app-button app-button-primary";
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -104,10 +98,10 @@ export default function OrderPage() {
       {pageLoading ? (
         <div className={`${shell} p-5`}>
           <div className="space-y-4">
-            <div className="app-skeleton app-skeleton-line w-24" />
-            <div className="app-skeleton app-skeleton-line w-2/3" style={{ height: "2.1rem" }} />
-            <div className="app-skeleton app-skeleton-line w-full" style={{ height: "1rem" }} />
-            <div className="app-skeleton app-skeleton-line w-4/5" style={{ height: "3rem" }} />
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-12 w-4/5" />
           </div>
         </div>
       ) : (
@@ -119,8 +113,7 @@ export default function OrderPage() {
         <div className="mt-5 space-y-5">
           <label className="space-y-2">
             <span className={labelClass}>Order ID</span>
-            <input
-              className={inputClass}
+            <Input
               value={uniqid}
               onChange={(event) => setUniqid(event.target.value)}
               placeholder="XXX-XXXXX-XXX"
@@ -128,11 +121,12 @@ export default function OrderPage() {
           </label>
 
           <div className="mt-4 flex flex-wrap gap-4">
-            <button className={primaryButtonClass} type="button" onClick={() => lookup()} disabled={loading}>
+            <Button type="button" onClick={() => lookup()} disabled={loading}>
               {loading ? "Loading..." : "Check"}
-            </button>
-            <button
-              className={buttonClass}
+            </Button>
+            <Button
+              variant="secondary"
+              className="rounded-[3px] bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
               type="button"
               onClick={() => {
                 setUniqid("");
@@ -142,7 +136,7 @@ export default function OrderPage() {
               }}
             >
               Clear
-            </button>
+            </Button>
           </div>
 
           {message ? <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{message}</div> : null}
@@ -192,28 +186,28 @@ export default function OrderPage() {
           <div className="mt-5 space-y-5">
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="app-panel-soft p-4">
-                <div className="app-skeleton app-skeleton-line w-16" />
-                <div className="app-skeleton app-skeleton-line mt-3 w-20" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="mt-3 h-4 w-20" />
               </div>
               <div className="app-panel-soft p-4">
-                <div className="app-skeleton app-skeleton-line w-16" />
-                <div className="app-skeleton app-skeleton-line mt-3 w-14" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="mt-3 h-4 w-14" />
               </div>
               <div className="app-panel-soft p-4">
-                <div className="app-skeleton app-skeleton-line w-16" />
-                <div className="app-skeleton app-skeleton-line mt-3 w-14" />
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="mt-3 h-4 w-14" />
               </div>
             </div>
             <div className="app-panel-soft p-4">
-              <div className="app-skeleton app-skeleton-line w-32" />
-              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
-              <div className="app-skeleton app-skeleton-line mt-2 w-5/6" />
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="mt-3 h-4 w-full" />
+              <Skeleton className="mt-2 h-4 w-5/6" />
             </div>
             <div className="app-panel-soft p-4">
-              <div className="app-skeleton app-skeleton-line w-24" />
-              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
-              <div className="app-skeleton app-skeleton-line mt-2 w-11/12" />
-              <div className="app-skeleton app-skeleton-line mt-2 w-4/5" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="mt-3 h-4 w-full" />
+              <Skeleton className="mt-2 h-4 w-11/12" />
+              <Skeleton className="mt-2 h-4 w-4/5" />
             </div>
           </div>
         ) : result ? (
