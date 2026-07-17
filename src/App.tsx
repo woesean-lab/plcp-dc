@@ -17,23 +17,23 @@ function Shell() {
     [
       "inline-flex items-center gap-2 rounded-[3px] border px-4 py-2.5 text-sm font-medium tracking-tight transition",
       active
-        ? "border-amber-300 bg-gradient-to-r from-amber-300 via-amber-400 to-orange-300 text-slate-950 shadow-lg shadow-amber-500/20"
-        : "border-slate-700/80 bg-slate-900/70 text-slate-200 hover:border-amber-300/50 hover:bg-slate-800/90"
+        ? "border-sky-400/50 bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow-lg shadow-sky-500/15"
+        : "border-slate-700/80 bg-slate-900/80 text-slate-200 hover:border-sky-400/30 hover:bg-slate-800"
     ].join(" ");
 
   return (
     <div className="min-h-screen text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <header className="relative overflow-hidden border border-slate-700/70 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 py-4 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(251,191,36,0.16),transparent_28%),radial-gradient(circle_at_top_right,rgba(59,130,246,0.14),transparent_26%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.12),transparent_26%)]" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center border border-amber-300/40 bg-gradient-to-br from-amber-300 to-amber-500 text-slate-950 shadow-lg shadow-amber-500/20">
+              <div className="flex h-12 w-12 items-center justify-center border border-sky-400/35 bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-lg shadow-sky-500/15">
                 <ShieldIcon className="h-5 w-5" />
               </div>
               <div>
                 <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">
-                  <SparkIcon className="h-3.5 w-3.5 text-amber-300" />
+                  <SparkIcon className="h-3.5 w-3.5 text-sky-300" />
                   Tokenu panel
                 </p>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50">Orders workspace</h1>
