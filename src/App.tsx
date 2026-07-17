@@ -1,23 +1,12 @@
 import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { ListChecks, Moon, Plus, Search, Settings2, ShieldCheck, Sun } from "lucide-react";
+import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
 
-type Theme = "dark" | "light";
-const THEME_APPLY_DELAY = 140;
-const THEME_PRELOADER_DURATION = 480;
-
-function getInitialTheme(): Theme {
-  if (typeof document === "undefined") return "dark";
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
-}
-
 function Shell() {
   const [booting, setBooting] = useState(true);
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [pendingTheme, setPendingTheme] = useState<Theme | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -34,39 +23,6 @@ function Shell() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    document.documentElement.style.colorScheme = theme;
-    document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#f3f6fa" : "#070910");
-
-    try {
-      window.localStorage.setItem("pulcip.theme", theme);
-    } catch {
-      // The visual preference still works when storage is unavailable.
-    }
-  }, [theme]);
-
-  useEffect(() => {
-    if (!pendingTheme) return;
-
-    const applyTimer = window.setTimeout(() => {
-      setTheme(pendingTheme);
-    }, THEME_APPLY_DELAY);
-    const finishTimer = window.setTimeout(() => {
-      setPendingTheme(null);
-    }, THEME_PRELOADER_DURATION);
-
-    return () => {
-      window.clearTimeout(applyTimer);
-      window.clearTimeout(finishTimer);
-    };
-  }, [pendingTheme]);
-
-  function handleThemeToggle() {
-    if (pendingTheme) return;
-    setPendingTheme(theme === "dark" ? "light" : "dark");
-  }
-
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
       <a className="skip-link" href="#main-content">
@@ -76,17 +32,15 @@ function Shell() {
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      {booting || pendingTheme ? (
+      {booting ? (
         <div className="app-overlay" role="status" aria-live="polite" aria-atomic="true">
           <div className="app-preloader">
             <span className="brand-mark brand-mark-loader" aria-hidden="true">
               <span className="brand-letter">P</span>
             </span>
             <div>
-              <p className="app-kicker">{booting ? "Pulcip Members" : "Theme update"}</p>
-              <p className="mt-2 text-sm text-[var(--app-muted)]">
-                {booting ? "Preparing your workspace" : `Switching to ${pendingTheme} mode`}
-              </p>
+              <p className="app-kicker">Pulcip Members</p>
+              <p className="mt-2 text-sm text-[var(--app-muted)]">Preparing your workspace</p>
             </div>
             <div className="app-progress" aria-hidden="true">
               <span />
@@ -156,19 +110,6 @@ function Shell() {
                 </button>
               </nav>
 
-              <span className="app-nav-divider" aria-hidden="true" />
-              <button
-                className="theme-toggle"
-                type="button"
-                aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-                aria-busy={pendingTheme !== null}
-                aria-disabled={pendingTheme !== null}
-                title={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
-                onClick={handleThemeToggle}
-              >
-                {theme === "dark" ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-                <span>{theme === "dark" ? "Light" : "Dark"}</span>
-              </button>
             </div>
 
             <div className="app-security" aria-label="Security status: local vault protected">

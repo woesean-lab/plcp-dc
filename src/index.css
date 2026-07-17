@@ -35,10 +35,16 @@
     --app-accent-ink: #06131d;
     --app-success: #75d9ae;
     --app-success-soft: rgba(16, 185, 129, 0.1);
-    --app-danger: #ff8796;
-    --app-danger-soft: rgba(244, 63, 94, 0.12);
-    --app-danger-hover-soft: rgba(244, 63, 94, 0.22);
-    --app-danger-active-soft: rgba(244, 63, 94, 0.3);
+    --app-danger: #ff7588;
+    --app-danger-soft: #2a1017;
+    --app-danger-hover-soft: #3a151f;
+    --app-danger-active-soft: #481a26;
+    --app-danger-button-bg: #3a1019;
+    --app-danger-button-bg-hover: #541825;
+    --app-danger-button-bg-active: #2b0b12;
+    --app-danger-button-border: #a94a60;
+    --app-danger-button-border-hover: #c15d73;
+    --app-danger-button-text: #ffe1e6;
     --app-indigo: #c7d2fe;
     --app-indigo-soft: rgba(129, 140, 248, 0.1);
     --app-skeleton: rgba(29, 36, 49, 0.96);
@@ -50,53 +56,6 @@
     --app-radius-md: 3px;
     --app-shadow-lg: 0 30px 80px rgba(0, 0, 0, 0.38);
     --app-shadow-md: 0 18px 48px rgba(0, 0, 0, 0.24);
-  }
-
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --app-bg: #f3f6fa;
-    --app-bg-deep: #e8eef5;
-    --app-surface: #ffffff;
-    --app-surface-raised: #edf3f8;
-    --app-surface-soft: #f6f8fb;
-    --app-header-bg: rgba(255, 255, 255, 0.94);
-    --app-nav-bg: #eef3f8;
-    --app-input-bg: #ffffff;
-    --app-input-focus-bg: #ffffff;
-    --app-code-bg: #eef3f8;
-    --app-overlay-bg: rgba(226, 232, 240, 0.74);
-    --app-preloader-bg: #ffffff;
-    --app-table-head: rgba(241, 245, 249, 0.96);
-    --app-hover: rgba(15, 23, 42, 0.045);
-    --app-hover-strong: rgba(15, 23, 42, 0.075);
-    --app-control-bg: #f3f6fa;
-    --app-border: rgba(15, 23, 42, 0.12);
-    --app-border-strong: rgba(15, 23, 42, 0.2);
-    --app-text: #0f172a;
-    --app-text-secondary: #334155;
-    --app-muted: #526077;
-    --app-subtle: #64748b;
-    --app-placeholder: #94a3b8;
-    --app-accent: #1677b8;
-    --app-accent-bright: #0f659e;
-    --app-accent-hover: #0f659e;
-    --app-accent-soft: rgba(22, 119, 184, 0.1);
-    --app-accent-border: rgba(22, 119, 184, 0.28);
-    --app-accent-ink: #ffffff;
-    --app-success: #16805d;
-    --app-success-soft: rgba(22, 128, 93, 0.1);
-    --app-danger: #b8324a;
-    --app-danger-soft: rgba(184, 50, 74, 0.1);
-    --app-danger-hover-soft: rgba(184, 50, 74, 0.17);
-    --app-danger-active-soft: rgba(184, 50, 74, 0.24);
-    --app-indigo: #4f46a5;
-    --app-indigo-soft: rgba(79, 70, 229, 0.08);
-    --app-skeleton: #dfe7f0;
-    --app-divider: rgba(15, 23, 42, 0.1);
-    --app-inset-line: rgba(255, 255, 255, 0.72);
-    --app-scroll-track: rgba(15, 23, 42, 0.05);
-    --app-shadow-lg: 0 24px 60px rgba(33, 53, 73, 0.13);
-    --app-shadow-md: 0 14px 36px rgba(33, 53, 73, 0.1);
   }
 
   *,
@@ -374,14 +333,6 @@
     gap: 0.25rem;
   }
 
-  .app-nav-divider {
-    width: 1px;
-    height: 22px;
-    flex: 0 0 auto;
-    margin-inline: 0.2rem;
-    background: var(--app-divider);
-  }
-
   .app-nav-button {
     position: relative;
     display: inline-flex;
@@ -425,27 +376,6 @@
     border-radius: 999px;
     background: var(--app-accent);
     box-shadow: 0 0 12px var(--app-accent-border);
-  }
-
-  .theme-toggle {
-    display: inline-flex;
-    height: 40px;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    border: 1px solid transparent;
-    background: transparent;
-    padding: 0 0.75rem;
-    font-size: 12px;
-    font-weight: 650;
-    color: var(--app-muted);
-    transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease;
-  }
-
-  .theme-toggle:hover {
-    border-color: transparent;
-    background: var(--app-hover);
-    color: var(--app-text);
   }
 
   .app-security {
@@ -731,23 +661,24 @@
   }
 
   .ui-button-destructive {
-    border-color: var(--app-danger);
-    color: var(--app-danger);
-    background: var(--app-danger-soft);
-    box-shadow: inset 0 1px 0 var(--app-inset-line);
+    border-color: var(--app-danger-button-border);
+    color: var(--app-danger-button-text);
+    background: var(--app-danger-button-bg);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045), 0 6px 18px rgba(45, 7, 17, 0.28);
   }
 
   .ui-button-destructive:not(:disabled):hover {
-    border-color: var(--app-danger);
-    color: var(--app-danger);
-    background: var(--app-danger-hover-soft);
-    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 8px 20px rgba(184, 50, 74, 0.18);
+    border-color: var(--app-danger-button-border-hover);
+    color: var(--app-danger-button-text);
+    background: var(--app-danger-button-bg-hover);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.055), 0 9px 22px rgba(84, 14, 30, 0.34);
     transform: translateY(-1px);
   }
 
   .ui-button-destructive:not(:disabled):active {
-    background: var(--app-danger-active-soft);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.16);
+    border-color: var(--app-danger-button-border);
+    background: var(--app-danger-button-bg-active);
+    box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.38);
     transform: translateY(1px);
   }
 
@@ -1220,16 +1151,6 @@
     justify-content: flex-start;
   }
 
-  .theme-toggle {
-    width: 38px;
-    flex: 0 0 38px;
-    padding-inline: 0;
-  }
-
-  .theme-toggle span {
-    display: none;
-  }
-
   .app-panel {
     border-radius: 19px;
   }
@@ -1270,10 +1191,6 @@
     white-space: nowrap;
     clip-path: inset(50%);
   }
-}
-
-:root[data-theme="light"] .app-ambient {
-  opacity: 0.035;
 }
 
 @media (prefers-reduced-motion: reduce) {

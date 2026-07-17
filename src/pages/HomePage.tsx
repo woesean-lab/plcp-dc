@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   CircleDollarSign,
   CloudOff,
-  Copy,
   ExternalLink,
   Hexagon,
   KeyRound,
@@ -591,18 +590,6 @@ export default function HomePage() {
                                     <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                                     Open
                                   </Link>
-                                </Button>
-                                <Button
-                                  variant="default"
-                                  size="xs"
-                                  className="px-3 text-[10px] uppercase tracking-[0.12em]"
-                                  type="button"
-                                  onClick={() => {
-                                    void navigator.clipboard.writeText(order.uniqid).then(() => setMessage("Order ID copied."));
-                                  }}
-                                >
-                                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                                  Copy
                                 </Button>
                                 <Button
                                   variant="destructive"

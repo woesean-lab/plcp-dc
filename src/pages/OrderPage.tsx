@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock3, Copy, FileJson, Hash, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { Clock3, FileJson, Hash, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
@@ -259,19 +259,6 @@ export default function OrderPage() {
               <h2 className="app-title mt-1 text-xl font-semibold">Summary and details</h2>
             </div>
           </div>
-          {result ? (
-            <Button
-              variant="secondary"
-              size="sm"
-              type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(formatJson(result)).then(() => setMessage("Payload copied."));
-              }}
-            >
-              <Copy className="h-4 w-4" aria-hidden="true" />
-              Copy JSON
-            </Button>
-          ) : null}
         </div>
 
         {loading && !result ? (
