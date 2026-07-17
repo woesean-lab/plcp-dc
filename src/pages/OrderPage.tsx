@@ -20,7 +20,7 @@ export default function OrderPage() {
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("Enter an order ID to inspect status.");
+  const [message, setMessage] = useState("Enter an order ID.");
 
   const summary = useMemo(() => {
     if (!result) return [];
@@ -57,7 +57,7 @@ export default function OrderPage() {
     try {
       const data = await getOrderStatus(target);
       setResult(data);
-      setMessage(`Loaded order ${target}.`);
+      setMessage(`Loaded ${target}.`);
       setParams({ uniqid: target });
     } catch (error) {
       setResult(null);
@@ -71,15 +71,12 @@ export default function OrderPage() {
     <section className="lookup-shell">
       <div className="panel lookup-hero">
         <span className="eyebrow">Public tracker</span>
-        <h2>Siparis sorgulama</h2>
-        <p className="intro-copy">
-          Bu sayfa admin key gerektirmez. Order ID girip status, details ve raw payload bilgisini
-          gorebilirsin.
-        </p>
+        <h2>Sipariş sorgulama</h2>
+        <p className="intro-copy">Order ID ile durum ve detayları aç.</p>
 
         <div className="intro-actions" style={{ marginTop: 18 }}>
           <button className="primary-button" type="button" onClick={() => lookup()} disabled={loading}>
-            {loading ? "Loading..." : "Check status"}
+            {loading ? "Loading..." : "Check"}
           </button>
           <button
             className="ghost-button"
@@ -87,7 +84,7 @@ export default function OrderPage() {
             onClick={() => {
               setUniqid("");
               setResult(null);
-              setMessage("Enter an order ID to inspect status.");
+              setMessage("Enter an order ID.");
               setParams({});
             }}
           >
@@ -106,11 +103,11 @@ export default function OrderPage() {
 
         <div className="mini-stack" style={{ marginTop: 18 }}>
           <div className="mini-card">
-            <h3 className="title">What users see</h3>
-            <p>Order status, progress, and the raw API payload if support needs to inspect it.</p>
+            <h3 className="title">Shown</h3>
+            <p>Status, details, payload.</p>
           </div>
           <div className="mini-card">
-            <h3 className="title">Created at</h3>
+            <h3 className="title">Created</h3>
             <p>{result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}</p>
           </div>
         </div>
@@ -120,8 +117,7 @@ export default function OrderPage() {
         <div className="section-head">
           <div>
             <span className="eyebrow">Order payload</span>
-            <h3 className="section-title">Status summary and API response.</h3>
-            <p>The UI highlights the important bits first, then keeps the full object below.</p>
+            <h3 className="section-title">Summary and payload</h3>
           </div>
         </div>
 
@@ -138,7 +134,7 @@ export default function OrderPage() {
 
             <div className="info-box">
               <strong style={{ display: "block", marginBottom: 8 }}>{result.uniqid}</strong>
-              <div className="muted">{result.details ?? result.error ?? "No additional details returned."}</div>
+              <div className="muted">{result.details ?? result.error ?? "No details."}</div>
             </div>
 
             <div className="json-box">
@@ -146,7 +142,7 @@ export default function OrderPage() {
             </div>
           </>
         ) : (
-          <div className="empty-state">Search an order to populate the summary and raw payload here.</div>
+          <div className="empty-state">Search an order to load summary and payload.</div>
         )}
       </div>
     </section>

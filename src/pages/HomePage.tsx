@@ -5,27 +5,11 @@ import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import type { ServiceType, TrackedOrder } from "../types";
 
-const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string; description: string }> = [
-  {
-    value: "OAUTH-OFFLINE",
-    title: "OAuth Offline",
-    description: "Fast-start supply for standard member drops."
-  },
-  {
-    value: "OAUTH-ONLINE",
-    title: "OAuth Online",
-    description: "Best for campaigns that need billing-cycle control."
-  },
-  {
-    value: "OAUTH-PREMIUM",
-    title: "OAuth Premium",
-    description: "Premium delivery lane for higher-tier runs."
-  },
-  {
-    value: "OAUTH-NFT",
-    title: "OAuth NFT",
-    description: "Specialized lane for NFT-focused communities."
-  }
+const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string }> = [
+  { value: "OAUTH-OFFLINE", title: "OAuth Offline" },
+  { value: "OAUTH-ONLINE", title: "OAuth Online" },
+  { value: "OAUTH-PREMIUM", title: "OAuth Premium" },
+  { value: "OAUTH-NFT", title: "OAuth NFT" }
 ];
 
 const EMPTY_FORM = {
@@ -37,11 +21,9 @@ const EMPTY_FORM = {
 };
 
 function formatNumber(value?: number) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "-";
-  }
-
-  return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
+  return typeof value === "number" && !Number.isNaN(value)
+    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
+    : "-";
 }
 
 function badgeClass(status?: string) {
@@ -57,8 +39,8 @@ export default function HomePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  const [message, setMessage] = useState<string>("");
-  const [availability, setAvailability] = useState<string>("");
+  const [message, setMessage] = useState("");
+  const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
@@ -125,7 +107,7 @@ export default function HomePage() {
       if (trimmed) {
         setApiKey(trimmed);
         setApiKeyValue(trimmed);
-        setMessage("API key saved locally.");
+        setMessage("API key saved.");
         await refreshBalance();
       } else {
         clearApiKey();
@@ -177,8 +159,7 @@ export default function HomePage() {
     const uniqid = orderIdToTrack.trim();
     if (!uniqid) return;
 
-    const exists = orders.some((order) => order.uniqid === uniqid);
-    if (exists) {
+    if (orders.some((order) => order.uniqid === uniqid)) {
       setMessage("Order is already tracked.");
       return;
     }
@@ -196,7 +177,7 @@ export default function HomePage() {
       },
       ...orders
     ]);
-    setMessage("Order added to tracking list.");
+    setMessage("Order added.");
   }
 
   return (
@@ -204,22 +185,18 @@ export default function HomePage() {
       <section className="overview-panel panel">
         <div className="overview-head">
           <div>
-            <span className="eyebrow">Admin workspace</span>
-            <h2>Siparişleri oluştur, takip et ve yönet.</h2>
-            <p className="intro-copy">
-              Önemli metrikler üstte, işlemler altta. Alanlar aynı kaldı, ilk görünüm daha sıkı ve
-              daha okunur.
-            </p>
+            <span className="eyebrow">Admin</span>
+            <h2>Orders and settings</h2>
           </div>
           <div className="intro-actions">
             <button className="primary-button" type="button" onClick={() => setActiveTab("create")}>
-              Create order
+              Create
             </button>
             <button className="ghost-button" type="button" onClick={() => setActiveTab("manage")}>
-              Open management
+              Manage
             </button>
             <Link className="ghost-button" to="/orders">
-              Public tracker
+              Orders
             </Link>
           </div>
         </div>
@@ -228,22 +205,18 @@ export default function HomePage() {
           <div className="summary-card">
             <span className="label">Balance</span>
             <strong>{loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}</strong>
-            <p>Saved API key ile anlık bakiye kontrolü.</p>
           </div>
           <div className="summary-card">
-            <span className="label">Tracked orders</span>
+            <span className="label">Tracked</span>
             <strong>{orders.length}</strong>
-            <p>Tarayıcı içinde saklanan aktif takip listesi.</p>
           </div>
           <div className="summary-card">
             <span className="label">Active</span>
             <strong>{activeOrders.length}</strong>
-            <p>Hâlâ ilerleyen siparişler.</p>
           </div>
           <div className="summary-card">
             <span className="label">API key</span>
             <strong>{storedApiKey ? "Ready" : "Missing"}</strong>
-            <p>{storedApiKey ? "Kayıtlı ve kullanılabilir." : "Admin ayarlarından eklenmeli."}</p>
           </div>
         </div>
       </section>
@@ -264,9 +237,8 @@ export default function HomePage() {
           <div className="panel section">
             <div className="section-head">
               <div>
-                <span className="eyebrow">Order composer</span>
-                <h3 className="section-title">Sipariş alanları</h3>
-                <p>Service, server ID, amount, delay ve billing cycle alanları aynı kaldı.</p>
+                <span className="eyebrow">Order</span>
+                <h3 className="section-title">Fields</h3>
               </div>
             </div>
 
@@ -356,9 +328,8 @@ export default function HomePage() {
           <div className="panel section">
             <div className="section-head">
               <div>
-                <span className="eyebrow">Control rail</span>
-                <h3 className="section-title">Ayarlar ve kısa yol</h3>
-                <p>API key, order ID takibi ve public lookup bu kartta toplandı.</p>
+                <span className="eyebrow">Control</span>
+                <h3 className="section-title">Tools</h3>
               </div>
             </div>
 
@@ -396,27 +367,27 @@ export default function HomePage() {
               </div>
 
               <div className="mini-card">
-                <h3 className="title">Track existing order</h3>
+                <h3 className="title">Track order</h3>
                 <label className="field" style={{ marginTop: 10 }}>
                   <span>Order ID</span>
                   <input
                     value={orderIdToTrack}
                     onChange={(event) => setOrderIdToTrack(event.target.value)}
-                    placeholder="Enter an existing order ID"
+                    placeholder="Enter order ID"
                   />
                 </label>
                 <div className="inline-actions" style={{ marginTop: 12 }}>
                   <button className="primary-button" type="button" onClick={trackOrderManually}>
-                    Add to tracking
+                    Add
                   </button>
                   <Link className="ghost-button" to="/orders">
-                    Public lookup
+                    Lookup
                   </Link>
                 </div>
               </div>
 
               <div className="mini-card">
-                <h3 className="title">Service map</h3>
+                <h3 className="title">Services</h3>
                 <div className="inline-actions" style={{ marginTop: 10 }}>
                   {SERVICE_OPTIONS.map((service) => (
                     <span key={service.value} className="mini-badge">
@@ -433,11 +404,7 @@ export default function HomePage() {
           <div className="section-head">
             <div>
               <span className="eyebrow">Management table</span>
-              <h3 className="section-title">Track the queue and jump into public lookup.</h3>
-              <p>
-                Orders are stored in this browser. Use the row actions to open, copy, or remove a
-                record.
-              </p>
+              <h3 className="section-title">Queue</h3>
             </div>
           </div>
 
@@ -492,7 +459,7 @@ export default function HomePage() {
                 ) : (
                   <tr>
                     <td colSpan={6}>
-                      <div className="empty-state">No tracked orders yet. Switch back to Create order to start a queue.</div>
+                      <div className="empty-state">No tracked orders yet.</div>
                     </td>
                   </tr>
                 )}

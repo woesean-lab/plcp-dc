@@ -15,17 +15,7 @@ function Shell() {
       <div className="shell-frame">
         <main className="page-frame">
           <div className="route-tabs" aria-label="Primary">
-            <div className="route-badge">
-              <span className="brand-mark" aria-hidden="true">
-                TC
-              </span>
-              <div>
-                <div className="eyebrow" style={{ marginBottom: 4 }}>
-                  Tokenu reseller panel
-                </div>
-                <div className="route-title">Members workflow</div>
-              </div>
-            </div>
+            <div className="route-title">Tokenu panel</div>
 
             <nav className="topnav" aria-label="Primary">
               <button className={isAdmin ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin")}>
