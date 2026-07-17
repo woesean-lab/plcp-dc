@@ -196,6 +196,7 @@ export default function HomePage() {
   const shell = "app-panel";
   const showOverlay = saving || loadingBalance;
   const balanceLoading = loadingBalance && balance === null;
+  const showCardSkeletons = showOverlay || loadingBalance || saving;
 
   return (
     <div className="relative space-y-5">
@@ -234,10 +235,10 @@ export default function HomePage() {
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="app-stat">
               <span className={labelClass}>Balance</span>
-              {balanceLoading ? (
+              {showCardSkeletons ? (
                 <div className="mt-2 space-y-2">
-                  <div className="app-skeleton app-skeleton-line w-20" />
-                  <div className="app-skeleton app-skeleton-line w-14" />
+                  <div className="app-skeleton app-skeleton-line w-24" />
+                  <div className="app-skeleton app-skeleton-line w-16" />
                 </div>
               ) : (
                 <strong className="mt-2 block text-lg text-slate-50">
@@ -247,15 +248,30 @@ export default function HomePage() {
             </div>
             <div className="app-stat">
               <span className={labelClass}>Tracked</span>
-              <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
+              {showCardSkeletons ? (
+                <div className="mt-2 h-7 w-12 app-skeleton app-skeleton-line" />
+              ) : (
+                <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
+              )}
             </div>
             <div className="app-stat">
               <span className={labelClass}>Active</span>
-              <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
+              {showCardSkeletons ? (
+                <div className="mt-2 h-7 w-12 app-skeleton app-skeleton-line" />
+              ) : (
+                <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
+              )}
             </div>
             <div className="app-stat">
               <span className={labelClass}>API key</span>
-              <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
+              {showCardSkeletons ? (
+                <div className="mt-2 space-y-2">
+                  <div className="app-skeleton app-skeleton-line w-20" />
+                  <div className="app-skeleton app-skeleton-line w-14" />
+                </div>
+              ) : (
+                <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
+              )}
             </div>
           </div>
         </div>
@@ -380,10 +396,18 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-4">
-            <div className={shell + " p-5"}>
-              <p className={labelClass}>Key</p>
-              <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
-              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
+          <div className={shell + " p-5"}>
+            <p className={labelClass}>Key</p>
+            <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
+            {showCardSkeletons ? (
+              <div className="mt-4 space-y-3">
+                <div className="app-panel-soft p-4">
+                  <div className="app-skeleton app-skeleton-line w-24" />
+                  <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                </div>
+              </div>
+            ) : null}
+            <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                 <label className="space-y-2">
                   <span className={labelClass}>Local key</span>
                   <input
@@ -420,10 +444,18 @@ export default function HomePage() {
               </form>
             </div>
 
-            <div className={shell + " p-5"}>
-              <p className={labelClass}>Track</p>
-              <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
-              <div className="mt-4 space-y-5">
+          <div className={shell + " p-5"}>
+            <p className={labelClass}>Track</p>
+            <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
+            {showCardSkeletons ? (
+              <div className="mt-4 space-y-3">
+                <div className="app-panel-soft p-4">
+                  <div className="app-skeleton app-skeleton-line w-24" />
+                  <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                </div>
+              </div>
+            ) : null}
+            <div className="mt-4 space-y-5">
                 <label className="space-y-2">
                   <span className={labelClass}>Manual add</span>
                   <input
