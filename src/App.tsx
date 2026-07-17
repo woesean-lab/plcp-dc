@@ -8,36 +8,61 @@ function Shell() {
   const navigate = useNavigate();
 
   const search = new URLSearchParams(location.search);
-  const activeTab = search.get("tab") ?? "create";
+  const tab = search.get("tab") ?? "create";
   const isOrders = location.pathname.startsWith("/orders");
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname === "/";
 
-  return (
-    <div className="app-shell">
-      <div className="shell-frame">
-        <main className="page-frame">
-          <div className="route-tabs" aria-label="Primary">
-            <div className="route-title">Tokenu panel</div>
+  const navButton = (active: boolean) =>
+    [
+      "rounded-[3px] border px-3 py-2 text-sm font-medium tracking-tight transition",
+      active
+        ? "border-amber-300 bg-amber-400 text-slate-950 shadow-lg shadow-amber-500/15"
+        : "border-slate-700 bg-slate-900/60 text-slate-200 hover:border-amber-300/40 hover:bg-slate-800"
+    ].join(" ");
 
-            <nav className="topnav" aria-label="Primary">
-              <button className={isAdmin && activeTab === "create" ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin?tab=create")}>
+  return (
+    <div className="min-h-screen text-slate-100">
+      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+        <header className="border border-slate-700/70 bg-slate-900/70 px-4 py-3 shadow-2xl shadow-slate-950/30 backdrop-blur">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">Tokenu panel</p>
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">Orders workspace</h1>
+            </div>
+
+            <nav className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={navButton(isAdmin && tab === "create")}
+                onClick={() => navigate("/admin?tab=create")}
+              >
                 Sipariş oluştur
               </button>
-              <button className={isAdmin && activeTab === "manage" ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin?tab=manage")}>
+              <button
+                type="button"
+                className={navButton(isAdmin && tab === "manage")}
+                onClick={() => navigate("/admin?tab=manage")}
+              >
                 Siparişleri yönet
               </button>
-              <button className={isOrders ? "nav-link active" : "nav-link"} onClick={() => navigate("/orders")}>
+              <button
+                type="button"
+                className={navButton(isOrders)}
+                onClick={() => navigate("/orders")}
+              >
                 Orders
               </button>
             </nav>
           </div>
+        </header>
 
+        <main className="flex-1">
           <Routes>
-            <Route path="/" element={<Navigate to="/admin" replace />} />
+            <Route path="/" element={<Navigate to="/admin?tab=create" replace />} />
             <Route path="/admin" element={<HomePage />} />
             <Route path="/orders" element={<OrderPage />} />
             <Route path="/manage" element={<ManagePage />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
+            <Route path="*" element={<Navigate to="/admin?tab=create" replace />} />
           </Routes>
         </main>
       </div>

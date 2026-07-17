@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
@@ -28,13 +28,24 @@ function formatNumber(value?: number) {
 
 function badgeClass(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
-  if (["completed", "success"].includes(normalized)) return "mini-badge completed";
-  if (["process", "processing", "new"].includes(normalized)) return "mini-badge process";
-  if (["error", "invalid", "terminated"].includes(normalized)) return "mini-badge error";
-  return "mini-badge";
+  if (["completed", "success"].includes(normalized)) return "inline-flex rounded-[3px] border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-200";
+  if (["process", "processing", "new"].includes(normalized)) return "inline-flex rounded-[3px] border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200";
+  if (["error", "invalid", "terminated"].includes(normalized)) return "inline-flex rounded-[3px] border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-200";
+  return "inline-flex rounded-[3px] border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-200";
 }
 
+const inputClass =
+  "w-full rounded-[3px] border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-amber-300/60 focus:ring-4 focus:ring-amber-400/10";
+
+const labelClass = "text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500";
+
+const actionButtonBase =
+  "inline-flex items-center justify-center rounded-[3px] border px-3 py-2 text-sm font-medium transition";
+
 export default function HomePage() {
+  const [searchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") === "manage" ? "manage" : "create";
+
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
@@ -44,7 +55,6 @@ export default function HomePage() {
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
-  const activeTab = new URLSearchParams(window.location.search).get("tab") === "manage" ? "manage" : "create";
 
   const storedApiKey = getApiKey();
   const activeOrders = orders.filter(
@@ -180,53 +190,64 @@ export default function HomePage() {
     setMessage("Order added.");
   }
 
-  return (
-    <div className="dashboard-stack">
-      <section className="overview-panel panel">
-        <div className="overview-head">
-          <div>
-            <span className="eyebrow">Admin</span>
-            <h2>Orders and settings</h2>
-          </div>
-        </div>
+  const card = "border border-slate-700/70 bg-slate-900/70 shadow-2xl shadow-slate-950/30";
 
-        <div className="overview-grid">
-          <div className="summary-card">
-            <span className="label">Balance</span>
-            <strong>{loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}</strong>
+  return (
+    <div className="space-y-4">
+      <section className={`${card} p-5`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className={labelClass}>Admin</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Orders and settings</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Create orders, sync balance, and keep track of the queue.
+            </p>
           </div>
-          <div className="summary-card">
-            <span className="label">Tracked</span>
-            <strong>{orders.length}</strong>
-          </div>
-          <div className="summary-card">
-            <span className="label">Active</span>
-            <strong>{activeOrders.length}</strong>
-          </div>
-          <div className="summary-card">
-            <span className="label">API key</span>
-            <strong>{storedApiKey ? "Ready" : "Missing"}</strong>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
+              <span className={labelClass}>Balance</span>
+              <strong className="mt-2 block text-lg text-slate-100">
+                {loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}
+              </strong>
+            </div>
+            <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
+              <span className={labelClass}>Tracked</span>
+              <strong className="mt-2 block text-lg text-slate-100">{orders.length}</strong>
+            </div>
+            <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
+              <span className={labelClass}>Active</span>
+              <strong className="mt-2 block text-lg text-slate-100">{activeOrders.length}</strong>
+            </div>
+            <div className="border border-slate-700 bg-slate-950/60 px-4 py-3">
+              <span className={labelClass}>API key</span>
+              <strong className="mt-2 block text-lg text-slate-100">{storedApiKey ? "Ready" : "Missing"}</strong>
+            </div>
           </div>
         </div>
       </section>
 
-      {message ? <div className="notice">{message}</div> : null}
+      {message ? (
+        <div className="border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">{message}</div>
+      ) : null}
 
       {activeTab === "create" ? (
-        <section className="content-grid">
-          <div className="panel section">
-            <div className="section-head">
+        <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className={`${card} p-5`}>
+            <div className="mb-5 flex items-end justify-between gap-4">
               <div>
-                <span className="eyebrow">Order</span>
-                <h3 className="section-title">Fields</h3>
+                <p className={labelClass}>Order</p>
+                <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">Create</h3>
               </div>
+              <span className="text-xs uppercase tracking-[0.28em] text-slate-500">Tailwind</span>
             </div>
 
-            <form onSubmit={handleCreateOrder}>
-              <div className="form-grid">
-                <label className="field">
-                  <span>Service</span>
+            <form onSubmit={handleCreateOrder} className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="space-y-2">
+                  <span className={labelClass}>Service</span>
                   <select
+                    className={inputClass}
                     value={form.service}
                     onChange={(event) =>
                       setForm((current) => ({
@@ -243,18 +264,20 @@ export default function HomePage() {
                   </select>
                 </label>
 
-                <label className="field">
-                  <span>Server ID</span>
+                <label className="space-y-2">
+                  <span className={labelClass}>Server ID</span>
                   <input
+                    className={inputClass}
                     value={form.serverId}
                     onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
                     placeholder="Discord server ID"
                   />
                 </label>
 
-                <label className="field">
-                  <span>Amount</span>
+                <label className="space-y-2">
+                  <span className={labelClass}>Amount</span>
                   <input
+                    className={inputClass}
                     type="number"
                     min={1}
                     value={form.amount}
@@ -264,9 +287,10 @@ export default function HomePage() {
                   />
                 </label>
 
-                <label className="field">
-                  <span>Delay (sec)</span>
+                <label className="space-y-2">
+                  <span className={labelClass}>Delay</span>
                   <input
+                    className={inputClass}
                     type="number"
                     min={1}
                     max={1200}
@@ -277,9 +301,10 @@ export default function HomePage() {
                   />
                 </label>
 
-                <label className="field span-2">
-                  <span>Billing cycle</span>
+                <label className="space-y-2 md:col-span-2">
+                  <span className={labelClass}>Billing cycle</span>
                   <input
+                    className={inputClass}
                     type="number"
                     min={1}
                     max={12}
@@ -292,141 +317,170 @@ export default function HomePage() {
                 </label>
               </div>
 
-              <div className="inline-actions" style={{ marginTop: 18 }}>
-                <button className="primary-button" type="submit">
+              <div className="flex flex-wrap gap-2 pt-1">
+                <button
+                  className={`${actionButtonBase} border-amber-300/60 bg-amber-400 px-4 py-2.5 font-semibold text-slate-950 hover:bg-amber-300`}
+                  type="submit"
+                >
                   Create order
                 </button>
-                <button className="ghost-button" type="button" onClick={refreshBalance}>
+                <button
+                  className={`${actionButtonBase} border-slate-700 bg-slate-950/60 text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
+                  type="button"
+                  onClick={refreshBalance}
+                >
                   Refresh balance
                 </button>
               </div>
-            </form>
 
-            {availability ? <div className="warning" style={{ marginTop: 16 }}>{availability}</div> : null}
+              {availability ? (
+                <div className="border border-amber-300/20 bg-amber-400/8 px-4 py-3 text-sm text-amber-100">
+                  {availability}
+                </div>
+              ) : null}
+            </form>
           </div>
 
-          <div className="panel section">
-            <div className="section-head">
-              <div>
-                <span className="eyebrow">Control</span>
-                <h3 className="section-title">Tools</h3>
-              </div>
+          <div className="space-y-4">
+            <div className={`${card} p-5`}>
+              <p className={labelClass}>Key</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-100">Tokenu API</h3>
+              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-4">
+                <label className="space-y-2">
+                  <span className={labelClass}>Local key</span>
+                  <input
+                    className={inputClass}
+                    type="password"
+                    value={apiKey}
+                    onChange={(event) => setApiKeyValue(event.target.value)}
+                    placeholder="Paste API key"
+                    autoComplete="off"
+                  />
+                </label>
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={`${actionButtonBase} border-amber-300/60 bg-amber-400 px-4 py-2.5 font-semibold text-slate-950 hover:bg-amber-300`}
+                    type="submit"
+                    disabled={saving}
+                  >
+                    {saving ? "Saving..." : "Save"}
+                  </button>
+                  <button
+                    className={`${actionButtonBase} border-slate-700 bg-slate-950/60 text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
+                    type="button"
+                    onClick={() => {
+                      clearApiKey();
+                      setApiKeyValue("");
+                      setBalance(null);
+                      setMessage("API key cleared.");
+                    }}
+                  >
+                    Clear
+                  </button>
+                </div>
+              </form>
             </div>
 
-            <div className="mini-stack">
-              <div className="mini-card">
-                <form onSubmit={handleSaveApiKey}>
-                  <label className="field">
-                    <span>Tokenu API key</span>
-                    <input
-                      type="password"
-                      value={apiKey}
-                      onChange={(event) => setApiKeyValue(event.target.value)}
-                      placeholder="Paste API key"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <div className="inline-actions" style={{ marginTop: 14 }}>
-                    <button className="primary-button" type="submit" disabled={saving}>
-                      {saving ? "Saving..." : "Save locally"}
-                    </button>
-                    <button
-                      className="ghost-button"
-                      type="button"
-                      onClick={() => {
-                        clearApiKey();
-                        setApiKeyValue("");
-                        setBalance(null);
-                        setMessage("API key cleared.");
-                      }}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <div className="mini-card">
-                <h3 className="title">Track order</h3>
-                <label className="field" style={{ marginTop: 10 }}>
-                  <span>Order ID</span>
+            <div className={`${card} p-5`}>
+              <p className={labelClass}>Track</p>
+              <h3 className="mt-2 text-lg font-semibold text-slate-100">Order ID</h3>
+              <div className="mt-4 space-y-4">
+                <label className="space-y-2">
+                  <span className={labelClass}>Manual add</span>
                   <input
+                    className={inputClass}
                     value={orderIdToTrack}
                     onChange={(event) => setOrderIdToTrack(event.target.value)}
                     placeholder="Enter order ID"
                   />
                 </label>
-                <div className="inline-actions" style={{ marginTop: 12 }}>
-                  <button className="primary-button" type="button" onClick={trackOrderManually}>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    className={`${actionButtonBase} border-amber-300/60 bg-amber-400 px-4 py-2.5 font-semibold text-slate-950 hover:bg-amber-300`}
+                    type="button"
+                    onClick={trackOrderManually}
+                  >
                     Add
                   </button>
-                  <Link className="ghost-button" to="/orders">
+                  <Link
+                    className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-4 py-2.5 text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
+                    to="/orders"
+                  >
                     Lookup
                   </Link>
                 </div>
               </div>
+            </div>
 
-              <div className="mini-card">
-                <h3 className="title">Services</h3>
-                <div className="inline-actions" style={{ marginTop: 10 }}>
-                  {SERVICE_OPTIONS.map((service) => (
-                    <span key={service.value} className="mini-badge">
-                      {service.title}
-                    </span>
-                  ))}
-                </div>
+            <div className={`${card} p-5`}>
+              <p className={labelClass}>Services</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {SERVICE_OPTIONS.map((service) => (
+                  <span
+                    key={service.value}
+                    className="inline-flex rounded-[3px] border border-slate-700 bg-slate-950/60 px-3 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-300"
+                  >
+                    {service.title}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
         </section>
       ) : (
-        <section className="panel section">
-          <div className="section-head">
-            <div>
-              <span className="eyebrow">Management table</span>
-              <h3 className="section-title">Queue</h3>
-            </div>
+        <section className={`${card} overflow-hidden`}>
+          <div className="border-b border-slate-700/70 px-5 py-4">
+            <p className={labelClass}>Management</p>
+            <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">Queue</h3>
           </div>
 
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Service</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th>Cost</th>
-                  <th>Actions</th>
+          <div className="overflow-auto">
+            <table className="min-w-[860px] w-full border-collapse">
+              <thead className="bg-slate-950/40">
+                <tr className="text-left text-[11px] uppercase tracking-[0.22em] text-slate-500">
+                  <th className="px-5 py-4 font-semibold">Order</th>
+                  <th className="px-5 py-4 font-semibold">Service</th>
+                  <th className="px-5 py-4 font-semibold">Amount</th>
+                  <th className="px-5 py-4 font-semibold">Status</th>
+                  <th className="px-5 py-4 font-semibold">Cost</th>
+                  <th className="px-5 py-4 font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {orders.length ? (
                   orders.map((order) => (
-                    <tr key={order.uniqid}>
-                      <td>
-                        <strong>{order.uniqid}</strong>
-                        <div className="muted">{order.serverId || "No server ID"}</div>
+                    <tr key={order.uniqid} className="border-t border-slate-800/80">
+                      <td className="px-5 py-4 align-top">
+                        <strong className="block text-sm font-semibold text-slate-100">{order.uniqid}</strong>
+                        <span className="mt-1 block text-sm text-slate-500">{order.serverId || "No server ID"}</span>
                       </td>
-                      <td>{order.service}</td>
-                      <td>{order.amount}</td>
-                      <td>
+                      <td className="px-5 py-4 align-top text-sm text-slate-200">{order.service}</td>
+                      <td className="px-5 py-4 align-top text-sm text-slate-200">{order.amount}</td>
+                      <td className="px-5 py-4 align-top">
                         <span className={badgeClass(order.status)}>{order.status ?? "NEW"}</span>
-                        <div className="muted" style={{ marginTop: 8 }}>
-                          {order.details ?? ""}
-                        </div>
+                        {order.details ? <div className="mt-2 text-sm text-slate-500">{order.details}</div> : null}
                       </td>
-                      <td>{typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "-"}</td>
-                      <td>
-                        <div className="row-actions">
-                          <Link className="action-button" to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
+                      <td className="px-5 py-4 align-top text-sm text-slate-200">
+                        {typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "-"}
+                      </td>
+                      <td className="px-5 py-4 align-top">
+                        <div className="flex flex-wrap gap-2">
+                          <Link
+                            className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
+                            to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
+                          >
                             Open
                           </Link>
-                          <button className="action-button" type="button" onClick={() => navigator.clipboard.writeText(order.uniqid)}>
+                          <button
+                            className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
+                            type="button"
+                            onClick={() => navigator.clipboard.writeText(order.uniqid)}
+                          >
                             Copy
                           </button>
                           <button
-                            className="action-button"
+                            className={`${actionButtonBase} border-slate-700 bg-slate-950/60 px-3 py-2 text-xs uppercase tracking-[0.18em] text-slate-200 hover:border-amber-300/40 hover:bg-slate-800`}
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
@@ -438,8 +492,8 @@ export default function HomePage() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={6}>
-                      <div className="empty-state">No tracked orders yet.</div>
+                    <td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-500">
+                      No tracked orders yet.
                     </td>
                   </tr>
                 )}
