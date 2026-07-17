@@ -37,6 +37,8 @@
     --app-success-soft: rgba(16, 185, 129, 0.1);
     --app-danger: #ff8796;
     --app-danger-soft: rgba(244, 63, 94, 0.12);
+    --app-danger-hover-soft: rgba(244, 63, 94, 0.22);
+    --app-danger-active-soft: rgba(244, 63, 94, 0.3);
     --app-indigo: #c7d2fe;
     --app-indigo-soft: rgba(129, 140, 248, 0.1);
     --app-skeleton: rgba(29, 36, 49, 0.96);
@@ -83,8 +85,10 @@
     --app-accent-ink: #ffffff;
     --app-success: #16805d;
     --app-success-soft: rgba(22, 128, 93, 0.1);
-    --app-danger: #c24155;
-    --app-danger-soft: rgba(194, 65, 85, 0.1);
+    --app-danger: #b8324a;
+    --app-danger-soft: rgba(184, 50, 74, 0.1);
+    --app-danger-hover-soft: rgba(184, 50, 74, 0.17);
+    --app-danger-active-soft: rgba(184, 50, 74, 0.24);
     --app-indigo: #4f46a5;
     --app-indigo-soft: rgba(79, 70, 229, 0.08);
     --app-skeleton: #dfe7f0;
@@ -730,12 +734,21 @@
     border-color: var(--app-danger);
     color: var(--app-danger);
     background: var(--app-danger-soft);
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
   }
 
-  .ui-button-destructive:hover {
+  .ui-button-destructive:not(:disabled):hover {
     border-color: var(--app-danger);
     color: var(--app-danger);
-    background: var(--app-danger-soft);
+    background: var(--app-danger-hover-soft);
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 8px 20px rgba(184, 50, 74, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .ui-button-destructive:not(:disabled):active {
+    background: var(--app-danger-active-soft);
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.16);
+    transform: translateY(1px);
   }
 
   .ui-button-outline {

@@ -1,8 +1,9 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   CircleDollarSign,
   CloudOff,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
-import { normalizeAdminTab } from "../lib/navigation";
+import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import type { ServiceType, TrackedOrder } from "../types";
 
@@ -46,11 +47,151 @@ const EMPTY_FORM = {
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
 const shell = "app-panel";
+const PAGE_SKELETON_DELAY = 300;
 
 function formatNumber(value?: number) {
   return typeof value === "number" && !Number.isNaN(value)
     ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
     : "—";
+}
+
+function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY }: { children: ReactNode; fallback: ReactNode; delay?: number }) {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setReady(true), delay);
+    return () => window.clearTimeout(timer);
+  }, [delay]);
+
+  return ready ? children : fallback;
+}
+
+function SkeletonHeading({ withMeta = true }: { withMeta?: boolean }) {
+  return (
+    <header className="page-heading" aria-hidden="true">
+      <div className="w-full max-w-2xl">
+        <Skeleton className="h-3 w-16" />
+        <Skeleton className="mt-3 h-9 w-52 max-w-[70%]" />
+        <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+      </div>
+      {withMeta ? <Skeleton className="h-6 w-28 shrink-0" /> : null}
+    </header>
+  );
+}
+
+function SkeletonField({ className = "" }: { className?: string }) {
+  return (
+    <div className={className} aria-hidden="true">
+      <Skeleton className="h-3 w-20" />
+      <Skeleton className="mt-2 h-11 w-full" />
+    </div>
+  );
+}
+
+function HomePageSkeleton({ tab }: { tab: AdminTab }) {
+  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : "settings";
+
+  return (
+    <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
+      <span className="sr-only">Loading {loadingLabel}</span>
+      <SkeletonHeading />
+
+      {tab === "create" ? (
+        <div className={`${shell} p-5 sm:p-6`} aria-hidden="true">
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-8 w-8 shrink-0" />
+            <div className="w-full max-w-52">
+              <Skeleton className="h-3 w-20" />
+              <Skeleton className="mt-2 h-5 w-36" />
+            </div>
+          </div>
+          <div className="mt-6 grid gap-6">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="app-panel-soft p-4">
+                  <Skeleton className="h-8 w-8" />
+                  <Skeleton className="mt-3 h-4 w-24 max-w-full" />
+                  <Skeleton className="mt-2 h-3 w-32 max-w-full" />
+                </div>
+              ))}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SkeletonField className="md:col-span-2" />
+              <SkeletonField />
+              <SkeletonField />
+              <SkeletonField className="md:col-span-2" />
+            </div>
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "manage" ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start" aria-hidden="true">
+          <div className={`${shell} overflow-hidden`}>
+            <div className="flex items-center gap-3 border-b border-[var(--app-divider)] p-5 sm:px-6">
+              <Skeleton className="h-8 w-8 shrink-0" />
+              <div className="w-44 max-w-full">
+                <Skeleton className="h-3 w-20" />
+                <Skeleton className="mt-2 h-5 w-36" />
+              </div>
+            </div>
+            <div className="space-y-4 p-5 sm:px-6">
+              {Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="grid grid-cols-[1.5fr_1fr_0.7fr_0.8fr] items-center gap-4 border-b border-[var(--app-divider)] pb-4 last:border-0 last:pb-0">
+                  <div>
+                    <Skeleton className="h-4 w-32 max-w-full" />
+                    <Skeleton className="mt-2 h-3 w-24 max-w-full" />
+                  </div>
+                  <Skeleton className="h-4 w-20 max-w-full" />
+                  <Skeleton className="h-4 w-12 max-w-full" />
+                  <Skeleton className="h-7 w-20 max-w-full" />
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className={`${shell} p-5 sm:p-6`}>
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-6 w-36" />
+            <SkeletonField className="mt-6" />
+            <Skeleton className="mt-4 h-10 w-full" />
+            <Skeleton className="mt-4 h-10 w-full" />
+          </div>
+        </div>
+      ) : null}
+
+      {tab === "settings" ? (
+        <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start" aria-hidden="true">
+          <div className={`${shell} p-5 sm:p-6`}>
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-6 w-40" />
+            <Skeleton className="mt-4 h-4 w-full max-w-lg" />
+            <SkeletonField className="mt-6" />
+            <div className="mt-5 flex gap-3">
+              <Skeleton className="h-10 w-32" />
+              <Skeleton className="h-10 w-32" />
+            </div>
+          </div>
+          <div className={`${shell} p-5 sm:p-6`}>
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-6 w-28" />
+            <div className="mt-5 space-y-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="app-panel-soft flex items-center gap-3 p-3">
+                  <Skeleton className="h-8 w-8 shrink-0" />
+                  <div className="w-full">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="mt-2 h-4 w-28" />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Skeleton className="mt-5 h-10 w-full" />
+          </div>
+        </div>
+      ) : null}
+    </section>
+  );
 }
 
 export default function HomePage() {
@@ -213,7 +354,7 @@ export default function HomePage() {
     setMessage("Order added.");
   }
 
-  const showOverlay = saving || loadingBalance;
+  const showOverlay = saving;
   const feedback = message ? (
     <div className="app-panel-soft app-notice px-4 py-3 text-sm text-[var(--app-text-secondary)]" role="status" aria-live="polite">
       {message}
@@ -237,7 +378,8 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      <div key={activeTab} className="space-y-5 tab-slide-in">
+      <TimedReveal key={activeTab} fallback={<HomePageSkeleton tab={activeTab} />}>
+        <div className="space-y-5 tab-slide-in">
         {activeTab === "create" ? (
           <>
             <header className="page-heading">
@@ -265,7 +407,7 @@ export default function HomePage() {
                 <Badge variant="default">Primary action</Badge>
               </div>
 
-              <form onSubmit={handleCreateOrder} className="space-y-6">
+              <form onSubmit={handleCreateOrder} className="grid gap-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <fieldset className="md:col-span-2">
                     <legend className={`${fieldLabelClass} mb-2`}>Service</legend>
@@ -298,7 +440,7 @@ export default function HomePage() {
                     </div>
                   </fieldset>
 
-                  <label className="space-y-2 md:col-span-2">
+                  <label className="grid gap-2 md:col-span-2">
                     <span className={fieldLabelClass}>Server ID</span>
                     <Input
                       value={form.serverId}
@@ -308,7 +450,7 @@ export default function HomePage() {
                     />
                   </label>
 
-                  <label className="space-y-2">
+                  <label className="grid gap-2">
                     <span className={fieldLabelClass}>Amount</span>
                     <Input
                       type="number"
@@ -318,7 +460,7 @@ export default function HomePage() {
                     />
                   </label>
 
-                  <label className="space-y-2">
+                  <label className="grid gap-2">
                     <span className={fieldLabelClass}>Delay</span>
                     <Input
                       type="number"
@@ -329,7 +471,7 @@ export default function HomePage() {
                     />
                   </label>
 
-                  <label className="space-y-2 md:col-span-2">
+                  <label className="grid gap-2 md:col-span-2">
                     <span className={fieldLabelClass}>Billing cycle</span>
                     <Input
                       type="number"
@@ -503,8 +645,8 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-4">
-                  <label className="space-y-2">
+                <div className="mt-5 grid gap-4">
+                  <label className="grid gap-2">
                     <span className={fieldLabelClass}>Order ID</span>
                     <Input
                       value={orderIdToTrack}
@@ -557,8 +699,8 @@ export default function HomePage() {
                   The key is stored locally in this browser and is never included in the application source.
                 </p>
 
-                <form onSubmit={handleSaveApiKey} className="mt-6 space-y-5">
-                  <label className="space-y-2">
+                <form onSubmit={handleSaveApiKey} className="mt-6 grid gap-5">
+                  <label className="grid gap-2">
                     <span className={fieldLabelClass}>Local API key</span>
                     <Input
                       type="password"
@@ -618,7 +760,11 @@ export default function HomePage() {
                     </span>
                     <span>
                       <span className="settings-status-label">Balance</span>
-                      <strong>{balance === null ? "Not synced" : `$${formatNumber(balance)}`}</strong>
+                      {loadingBalance ? (
+                        <Skeleton className="mt-2 h-4 w-24" aria-label="Loading balance" />
+                      ) : (
+                        <strong>{balance === null ? "Not synced" : `$${formatNumber(balance)}`}</strong>
+                      )}
                     </span>
                   </div>
                   <div className="settings-status-row">
@@ -640,7 +786,8 @@ export default function HomePage() {
             </div>
           </>
         ) : null}
-      </div>
+        </div>
+      </TimedReveal>
     </div>
   );
 }

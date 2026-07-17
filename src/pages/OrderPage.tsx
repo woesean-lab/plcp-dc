@@ -189,13 +189,13 @@ export default function OrderPage() {
         <p className="app-copy mt-4 max-w-md text-sm leading-6">Enter an order ID to open its latest status, delivery details, and raw payload.</p>
 
         <form
-          className="mt-6 space-y-5"
+          className="mt-6 grid gap-5"
           onSubmit={(event) => {
             event.preventDefault();
             void lookup();
           }}
         >
-          <label className="space-y-2">
+          <label className="grid gap-2">
             <span className={fieldLabelClass}>Order ID</span>
             <Input
               value={uniqid}
@@ -205,14 +205,14 @@ export default function OrderPage() {
             />
           </label>
 
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Button className="min-w-[132px] px-4 py-2.5" type="submit" disabled={loading}>
+          <div className="flex flex-wrap gap-3">
+            <Button className="min-w-[132px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={loading}>
               <Search className="h-4 w-4" aria-hidden="true" />
               {loading ? "Loading..." : "Check"}
             </Button>
             <Button
               variant="secondary"
-              className="min-w-[132px] px-4 py-2.5"
+              className="min-w-[132px] px-4 py-2.5 max-sm:w-full"
               type="button"
               onClick={() => {
                 setUniqid("");
