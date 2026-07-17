@@ -352,46 +352,53 @@ export default function HomePage() {
             </div>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="app-stat">
-              <span className={labelClass}>Balance</span>
-              {showCardSkeletons ? (
-                <div className="mt-2 space-y-2">
-                  <div className="app-skeleton app-skeleton-line w-24" style={{ height: "1.15rem" }} />
-                  <div className="app-skeleton app-skeleton-line w-16" />
-                </div>
-              ) : (
-                <strong className="mt-2 block text-lg text-slate-50">
-                  {balance === null ? "-" : `$${formatNumber(balance)}`}
-                </strong>
-              )}
-            </div>
-            <div className="app-stat">
-              <span className={labelClass}>Tracked</span>
-              {showCardSkeletons ? (
-                <div className="mt-2 h-7 w-12 app-skeleton app-skeleton-line" />
-              ) : (
-                <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
-              )}
-            </div>
-            <div className="app-stat">
-              <span className={labelClass}>Active</span>
-              {showCardSkeletons ? (
-                <div className="mt-2 h-7 w-12 app-skeleton app-skeleton-line" />
-              ) : (
-                <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
-              )}
-            </div>
-            <div className="app-stat">
-              <span className={labelClass}>API key</span>
-              {showCardSkeletons ? (
-                <div className="mt-2 space-y-2">
-                  <div className="app-skeleton app-skeleton-line w-20" />
-                  <div className="app-skeleton app-skeleton-line w-14" />
-                </div>
-              ) : (
-                <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
-              )}
-            </div>
+              <div className="app-stat">
+                <span className={labelClass}>Balance</span>
+                {showCardSkeletons ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="app-skeleton app-skeleton-block h-8 w-24" />
+                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
+                    <div className="app-skeleton app-skeleton-block h-4 w-20" />
+                  </div>
+                ) : (
+                  <strong className="mt-2 block text-lg text-slate-50">
+                    {balance === null ? "-" : `$${formatNumber(balance)}`}
+                  </strong>
+                )}
+              </div>
+              <div className="app-stat">
+                <span className={labelClass}>Tracked</span>
+                {showCardSkeletons ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="app-skeleton app-skeleton-block h-8 w-12" />
+                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
+                  </div>
+                ) : (
+                  <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
+                )}
+              </div>
+              <div className="app-stat">
+                <span className={labelClass}>Active</span>
+                {showCardSkeletons ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="app-skeleton app-skeleton-block h-8 w-12" />
+                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
+                  </div>
+                ) : (
+                  <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
+                )}
+              </div>
+              <div className="app-stat">
+                <span className={labelClass}>API key</span>
+                {showCardSkeletons ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="app-skeleton app-skeleton-block h-8 w-20" />
+                    <div className="app-skeleton app-skeleton-block h-4 w-14" />
+                  </div>
+                ) : (
+                  <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
+                )}
+              </div>
             </div>
           </div>
         </section>
@@ -413,28 +420,28 @@ export default function HomePage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <Skeleton className="h-3 w-32" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-4">
-                  <Skeleton className="h-10 w-36" />
-                  <Skeleton className="h-10 w-40" />
+                  <Skeleton className="h-11 w-36" />
+                  <Skeleton className="h-11 w-40" />
                 </div>
                 <Skeleton className="h-12 w-full" />
               </div>
@@ -538,11 +545,11 @@ export default function HomePage() {
                 <div className="mt-4 space-y-6">
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-10 w-24" />
-                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-11 w-24" />
+                    <Skeleton className="h-11 w-24" />
                   </div>
                 </div>
               ) : (
@@ -587,11 +594,11 @@ export default function HomePage() {
                 <div className="mt-4 space-y-6">
                   <div className="space-y-2">
                     <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-12 w-full" />
                   </div>
                   <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-10 w-24" />
-                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-11 w-24" />
+                    <Skeleton className="h-11 w-24" />
                   </div>
                 </div>
               ) : (
@@ -629,6 +636,10 @@ export default function HomePage() {
           {showManageSkeleton ? (
             <div className="overflow-auto px-5 py-5">
               <div className="min-w-[860px] space-y-4">
+                <div className="app-panel-soft p-4">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="mt-3 h-8 w-36" />
+                </div>
                 <div className="grid grid-cols-6 gap-3">
                   {Array.from({ length: 6 }).map((_, index) => (
                     <Skeleton key={index} className="h-4 w-full" />
@@ -641,7 +652,7 @@ export default function HomePage() {
                     <Skeleton className="h-4 w-14" />
                     <Skeleton className="h-4 w-20" />
                     <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-4 w-40" />
+                    <Skeleton className="h-9 w-full" />
                   </div>
                 ))}
               </div>
