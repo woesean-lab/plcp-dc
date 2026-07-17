@@ -2,15 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
-import { RefreshIcon, SearchIcon, SparkIcon } from "../components/Icons";
 
 const inputClass =
-  "w-full rounded-[3px] border border-slate-700 bg-slate-950/60 px-3 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-sky-400/60 focus:ring-4 focus:ring-sky-400/10";
+  "w-full rounded-[3px] border border-slate-800 bg-slate-950/70 px-3 py-3 text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-slate-500/60 focus:ring-4 focus:ring-slate-500/10";
 
-const labelClass = "text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500";
+const labelClass = "text-[11px] font-semibold uppercase tracking-[0.22em] text-slate-500";
 
 const buttonClass =
-  "inline-flex items-center justify-center gap-2 rounded-[3px] border px-4 py-2.5 text-sm font-medium transition border-slate-700 bg-slate-950/60 text-slate-200 hover:border-sky-400/40 hover:bg-slate-800";
+  "inline-flex items-center justify-center rounded-[3px] border border-slate-800 bg-slate-950/70 px-4 py-2.5 text-sm font-medium text-slate-200 transition hover:border-slate-500/50 hover:bg-slate-900";
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -76,18 +75,14 @@ export default function OrderPage() {
     }
   }
 
-  const card = "border border-slate-700/70 bg-slate-900/70 shadow-2xl shadow-slate-950/30";
+  const card = "border border-slate-800 bg-slate-950/80";
 
   return (
     <section className="grid gap-4 lg:grid-cols-[0.95fr_1.05fr]">
-      <div className={`${card} relative overflow-hidden p-5`}>
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.12),transparent_26%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.12),transparent_24%)]" />
-        <p className="relative flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-          <SparkIcon className="h-3.5 w-3.5 text-sky-300" />
-          Public tracker
-        </p>
-        <h2 className="relative mt-2 text-2xl font-semibold tracking-tight text-slate-50">Order lookup</h2>
-        <p className="relative mt-2 text-sm leading-6 text-slate-400">Open status and payload with an order ID.</p>
+      <div className={`${card} p-5`}>
+        <p className={labelClass}>Public tracker</p>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100">Order lookup</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-400">Open status and payload with an order ID.</p>
 
         <div className="mt-5 space-y-4">
           <label className="space-y-2">
@@ -102,7 +97,6 @@ export default function OrderPage() {
 
           <div className="flex flex-wrap gap-2">
             <button className={buttonClass} type="button" onClick={() => lookup()} disabled={loading}>
-              <SearchIcon className="h-4 w-4" />
               {loading ? "Loading..." : "Check"}
             </button>
             <button
@@ -115,20 +109,19 @@ export default function OrderPage() {
                 setParams({});
               }}
             >
-              <RefreshIcon className="h-4 w-4" />
               Clear
             </button>
           </div>
 
-          {message ? <div className="border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+          {message ? <div className="border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">{message}</div> : null}
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="border border-slate-700 bg-slate-950/60 p-4">
+          <div className="border border-slate-800 bg-slate-900/60 p-4">
             <p className={labelClass}>Shown</p>
             <p className="mt-2 text-sm text-slate-300">Status, details, payload.</p>
           </div>
-          <div className="border border-slate-700 bg-slate-950/60 p-4">
+          <div className="border border-slate-800 bg-slate-900/60 p-4">
             <p className={labelClass}>Created</p>
             <p className="mt-2 text-sm text-slate-300">
               {result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}
@@ -137,36 +130,32 @@ export default function OrderPage() {
         </div>
       </div>
 
-      <div className={`${card} relative overflow-hidden p-5`}>
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(56,189,248,0.12),transparent_24%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.08),transparent_22%)]" />
-        <p className="relative flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">
-          <SparkIcon className="h-3.5 w-3.5 text-sky-300" />
-          Order payload
-        </p>
-        <h3 className="relative mt-2 text-xl font-semibold tracking-tight text-slate-50">Summary and payload</h3>
+      <div className={`${card} p-5`}>
+        <p className={labelClass}>Order payload</p>
+        <h3 className="mt-2 text-xl font-semibold tracking-tight text-slate-100">Summary and payload</h3>
 
         {result ? (
           <div className="mt-5 space-y-4">
             <div className="grid gap-3 sm:grid-cols-3">
               {summary.map((item) => (
-                <div key={item.label} className="border border-slate-700 bg-slate-950/60 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]">
+                <div key={item.label} className="border border-slate-800 bg-slate-900/60 p-4">
                   <span className={labelClass}>{item.label}</span>
-                  <strong className="mt-2 block text-lg font-semibold text-slate-50">{item.value}</strong>
+                  <strong className="mt-2 block text-lg font-semibold text-slate-100">{item.value}</strong>
                 </div>
               ))}
             </div>
 
-            <div className="border border-slate-700 bg-slate-950/60 p-4">
-              <strong className="block text-sm font-semibold text-slate-50">{result.uniqid}</strong>
+            <div className="border border-slate-800 bg-slate-900/60 p-4">
+              <strong className="block text-sm font-semibold text-slate-100">{result.uniqid}</strong>
               <p className="mt-2 text-sm leading-6 text-slate-400">{result.details ?? result.error ?? "No details."}</p>
             </div>
 
-            <div className="overflow-auto border border-slate-700 bg-slate-950 p-4">
+            <div className="overflow-auto border border-slate-800 bg-slate-950 p-4">
               <pre className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{formatJson(result)}</pre>
             </div>
           </div>
         ) : (
-          <div className="mt-5 border border-slate-700 bg-slate-950/60 px-4 py-5 text-sm text-slate-400">
+          <div className="mt-5 border border-slate-800 bg-slate-900/60 px-4 py-5 text-sm text-slate-400">
             Search an order to load summary and payload.
           </div>
         )}

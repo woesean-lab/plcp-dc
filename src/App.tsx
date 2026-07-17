@@ -16,16 +16,16 @@ function Shell() {
     [
       "inline-flex items-center rounded-[3px] border px-4 py-2.5 text-sm font-medium tracking-tight transition",
       active
-        ? "border-slate-500/70 bg-slate-700/80 text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-        : "border-slate-700/80 bg-slate-900/70 text-slate-300 hover:border-slate-500/60 hover:bg-slate-800/80"
+        ? "border-slate-500/70 bg-slate-700/70 text-slate-50"
+        : "border-slate-700/80 bg-slate-900/60 text-slate-300 hover:border-slate-500/60 hover:bg-slate-800/70"
     ].join(" ");
 
   return (
     <div className="min-h-screen text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <header className="border border-slate-700/70 bg-slate-950/90 px-4 py-3 shadow-[0_18px_60px_rgba(2,6,23,0.36)] backdrop-blur">
+        <header className="border border-slate-800 bg-slate-950/80 px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="text-sm font-semibold tracking-[0.28em] text-slate-100 uppercase">
+            <div className="text-sm font-semibold tracking-[0.2em] text-slate-100 uppercase">
               Pulcip Members
             </div>
 
