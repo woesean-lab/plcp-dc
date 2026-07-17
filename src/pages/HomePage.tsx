@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
@@ -27,6 +28,125 @@ function formatNumber(value?: number) {
   return typeof value === "number" && !Number.isNaN(value)
     ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
     : "-";
+}
+
+function PageSkeleton({ activeTab }: { activeTab: "create" | "manage" }) {
+  return (
+    <div className="space-y-5">
+      <section className="app-panel p-6">
+        <div className="grid gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
+          <div className="flex min-h-[192px] flex-col justify-between gap-5">
+            <div className="space-y-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-12 w-2/3 max-w-[24rem]" />
+              <Skeleton className="h-4 w-full max-w-[34rem]" />
+              <Skeleton className="h-4 w-4/5 max-w-[28rem]" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="app-stat space-y-3">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-8 w-14" />
+                <Skeleton className="h-4 w-20" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {activeTab === "create" ? (
+        <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="app-panel p-5">
+            <div className="space-y-4">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-7 w-32" />
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-16" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-14" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-3 w-14" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Skeleton className="h-3 w-32" />
+                  <Skeleton className="h-11 w-full" />
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-4">
+                <Skeleton className="h-10 w-36" />
+                <Skeleton className="h-10 w-40" />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="app-panel p-5">
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-7 w-28" />
+                <div className="space-y-3">
+                  <Skeleton className="h-11 w-full" />
+                  <div className="flex flex-wrap gap-4">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-10 w-24" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="app-panel p-5">
+              <div className="space-y-4">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-7 w-28" />
+                <div className="space-y-3">
+                  <Skeleton className="h-11 w-full" />
+                  <div className="flex flex-wrap gap-4">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-10 w-24" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <section className="app-panel overflow-hidden">
+          <div className="border-b border-white/8 px-5 py-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="mt-3 h-7 w-32" />
+          </div>
+          <div className="overflow-auto px-5 py-4">
+            <div className="min-w-[860px] space-y-3">
+              <div className="grid grid-cols-6 gap-3">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <Skeleton key={index} className="h-4 w-full" />
+                ))}
+              </div>
+              {Array.from({ length: 5 }).map((_, row) => (
+                <div key={row} className="grid grid-cols-6 gap-3 border-t border-white/8 pt-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className={`h-4 ${index === 0 ? "w-32" : "w-full"}`} />
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+    </div>
+  );
 }
 
 const inputClass = "app-input";
@@ -198,6 +318,11 @@ export default function HomePage() {
   const showOverlay = saving || loadingBalance;
   const balanceLoading = loadingBalance && balance === null;
   const showCardSkeletons = showOverlay || loadingBalance || saving;
+  const showManageSkeleton = activeTab === "manage" && (showCardSkeletons || orders.length === 0);
+
+  if (tabLoading) {
+    return <PageSkeleton activeTab={activeTab} />;
+  }
 
   return (
     <div className="relative space-y-5">
@@ -210,28 +335,6 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {tabLoading ? (
-        <section className={`${shell} p-5`}>
-          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
-            <div className="space-y-4">
-              <div className="app-skeleton app-skeleton-line w-24" />
-              <div className="app-skeleton app-skeleton-line w-2/3" style={{ height: "2.2rem" }} />
-              <div className="app-skeleton app-skeleton-line w-full" style={{ height: "3.4rem" }} />
-              <div className="app-skeleton app-skeleton-line w-4/5" style={{ height: "1rem" }} />
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="app-stat space-y-3">
-                  <div className="app-skeleton app-skeleton-line w-16" />
-                  <div className="app-skeleton app-skeleton-line h-7 w-14" />
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
-
-      {!tabLoading ? (
         <section className={`${shell} p-6`}>
           <div className="grid min-h-[192px] gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
             <div className="flex min-h-[192px] flex-col justify-between">
@@ -288,11 +391,11 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-      ) : null}
+      
 
-      {!tabLoading && message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+      {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
 
-      {!tabLoading && activeTab === "create" ? (
+      {activeTab === "create" ? (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className={`${shell} p-5`}>
             <div className="mb-5 flex items-end justify-between gap-4">
@@ -302,98 +405,126 @@ export default function HomePage() {
               </div>
             </div>
 
-            <form onSubmit={handleCreateOrder} className="space-y-6">
-              <div className="grid gap-4 md:grid-cols-2">
-                <label className="space-y-2">
-                  <span className={labelClass}>Service</span>
-                  <select
-                    className={inputClass}
-                    value={form.service}
-                    onChange={(event) =>
-                      setForm((current) => ({
-                        ...current,
-                        service: event.target.value as ServiceType
-                      }))
-                    }
-                  >
-                    {SERVICE_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-
-                <label className="space-y-2">
-                  <span className={labelClass}>Server ID</span>
-                  <Input
-                    value={form.serverId}
-                    onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                    placeholder="Discord server ID"
-                  />
-                </label>
-
-                <label className="space-y-2">
-                  <span className={labelClass}>Amount</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    value={form.amount}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, amount: Number(event.target.value) || 0 }))
-                    }
-                  />
-                </label>
-
-                <label className="space-y-2">
-                  <span className={labelClass}>Delay</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={1200}
-                    value={form.delay}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))
-                    }
-                  />
-                </label>
-
-                <label className="space-y-2 md:col-span-2">
-                  <span className={labelClass}>Billing cycle</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={12}
-                    disabled={form.service !== "OAUTH-ONLINE"}
-                    value={form.billingCycle}
-                    onChange={(event) =>
-                      setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))
-                    }
-                  />
-                </label>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-4">
-                <Button className="px-4 py-2.5" type="submit">
-                  Create order
-                </Button>
-                <Button
-                  variant="ghost"
-                  type="button"
-                  onClick={refreshBalance}
-                >
-                  Refresh balance
-                </Button>
-              </div>
-
-              {availability ? (
-                <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{availability}</div>
-              ) : checkingAvailability ? (
-                <div className="app-panel-soft px-4 py-3">
-                  <div className="app-skeleton app-skeleton-line w-32" />
+            {showCardSkeletons ? (
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-16" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-14" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
                 </div>
-              ) : null}
-            </form>
+                <div className="flex flex-wrap gap-4">
+                  <Skeleton className="h-10 w-36" />
+                  <Skeleton className="h-10 w-40" />
+                </div>
+                <Skeleton className="h-12 w-full" />
+              </div>
+            ) : (
+              <form onSubmit={handleCreateOrder} className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className={labelClass}>Service</span>
+                    <select
+                      className={inputClass}
+                      value={form.service}
+                      onChange={(event) =>
+                        setForm((current) => ({
+                          ...current,
+                          service: event.target.value as ServiceType
+                        }))
+                      }
+                    >
+                      {SERVICE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className={labelClass}>Server ID</span>
+                    <Input
+                      value={form.serverId}
+                      onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
+                      placeholder="Discord server ID"
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className={labelClass}>Amount</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={form.amount}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, amount: Number(event.target.value) || 0 }))
+                      }
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className={labelClass}>Delay</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={1200}
+                      value={form.delay}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))
+                      }
+                    />
+                  </label>
+
+                  <label className="space-y-2 md:col-span-2">
+                    <span className={labelClass}>Billing cycle</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={12}
+                      disabled={form.service !== "OAUTH-ONLINE"}
+                      value={form.billingCycle}
+                      onChange={(event) =>
+                        setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))
+                      }
+                    />
+                  </label>
+                </div>
+
+                <div className="mt-6 flex flex-wrap gap-4">
+                  <Button className="px-4 py-2.5" type="submit">
+                    Create order
+                  </Button>
+                  <Button variant="ghost" type="button" onClick={refreshBalance}>
+                    Refresh balance
+                  </Button>
+                </div>
+
+                {availability ? (
+                  <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{availability}</div>
+                ) : checkingAvailability ? (
+                  <div className="app-panel-soft px-4 py-3">
+                    <div className="app-skeleton app-skeleton-line w-32" />
+                  </div>
+                ) : null}
+              </form>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -401,103 +532,131 @@ export default function HomePage() {
               <p className={labelClass}>Key</p>
               <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
               {showCardSkeletons ? (
-                <div className="mt-4 space-y-3">
-                  <div className="app-panel-soft p-4">
-                    <div className="app-skeleton app-skeleton-line w-24" />
-                    <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                <div className="mt-4 space-y-6">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-10 w-24" />
                   </div>
                 </div>
-              ) : null}
-              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
-                <label className="space-y-2">
-                  <span className={labelClass}>Local key</span>
-                  <Input
-                    type="password"
-                    value={apiKey}
-                    onChange={(event) => setApiKeyValue(event.target.value)}
-                    placeholder="Paste API key"
-                    autoComplete="off"
-                  />
-                </label>
+              ) : (
+                <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
+                  <label className="space-y-2">
+                    <span className={labelClass}>Local key</span>
+                    <Input
+                      type="password"
+                      value={apiKey}
+                      onChange={(event) => setApiKeyValue(event.target.value)}
+                      placeholder="Paste API key"
+                      autoComplete="off"
+                    />
+                  </label>
 
-                <div className="mt-4 flex flex-wrap gap-4">
-                  <Button className="px-4 py-2.5" type="submit" disabled={saving}>
-                    {saving ? "Saving..." : "Save"}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    type="button"
-                    onClick={() => {
-                      clearApiKey();
-                      setApiKeyValue("");
-                      setBalance(null);
-                      setMessage("API key cleared.");
-                    }}
-                  >
-                    Clear
-                  </Button>
-                </div>
-              </form>
+                  <div className="mt-4 flex flex-wrap gap-4">
+                    <Button className="px-4 py-2.5" type="submit" disabled={saving}>
+                      {saving ? "Saving..." : "Save"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      type="button"
+                      onClick={() => {
+                        clearApiKey();
+                        setApiKeyValue("");
+                        setBalance(null);
+                        setMessage("API key cleared.");
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
 
             <div className={`${shell} p-5`}>
               <p className={labelClass}>Track</p>
               <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
               {showCardSkeletons ? (
-                <div className="mt-4 space-y-3">
-                  <div className="app-panel-soft p-4">
-                    <div className="app-skeleton app-skeleton-line w-24" />
-                    <div className="app-skeleton app-skeleton-line mt-3 w-full" />
+                <div className="mt-4 space-y-6">
+                  <div className="space-y-2">
+                    <Skeleton className="h-3 w-24" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
+                  <div className="flex flex-wrap gap-4">
+                    <Skeleton className="h-10 w-24" />
+                    <Skeleton className="h-10 w-24" />
                   </div>
                 </div>
-              ) : null}
-              <div className="mt-4 space-y-5">
-                <label className="space-y-2">
-                  <span className={labelClass}>Manual add</span>
-                  <Input
-                    value={orderIdToTrack}
-                    onChange={(event) => setOrderIdToTrack(event.target.value)}
-                    placeholder="Enter order ID"
-                  />
-                </label>
-                <div className="mt-4 flex flex-wrap gap-4">
-                  <Button className="px-4 py-2.5" type="button" onClick={trackOrderManually}>
-                    Add
-                  </Button>
-                  <Button asChild variant="ghost" className="px-4 py-2.5">
-                    <Link to="/orders">
-                      Lookup
-                    </Link>
-                  </Button>
+              ) : (
+                <div className="mt-4 space-y-5">
+                  <label className="space-y-2">
+                    <span className={labelClass}>Manual add</span>
+                    <Input
+                      value={orderIdToTrack}
+                      onChange={(event) => setOrderIdToTrack(event.target.value)}
+                      placeholder="Enter order ID"
+                    />
+                  </label>
+                  <div className="mt-4 flex flex-wrap gap-4">
+                    <Button className="px-4 py-2.5" type="button" onClick={trackOrderManually}>
+                      Add
+                    </Button>
+                    <Button asChild variant="ghost" className="px-4 py-2.5">
+                      <Link to="/orders">Lookup</Link>
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
         </section>
       ) : null}
 
-      {!tabLoading && activeTab === "manage" ? (
+      {activeTab === "manage" ? (
         <section className={shell + " overflow-hidden"}>
           <div className="border-b border-white/8 px-5 py-4">
             <p className={labelClass}>Management</p>
             <h3 className="app-title mt-2 text-xl font-semibold">Queue</h3>
           </div>
 
-          <div className="overflow-auto">
-            <table className="min-w-[860px] w-full border-collapse">
-              <thead className="bg-[#0b1020]">
-                <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
-                  <th className="px-5 py-4 font-semibold">Order</th>
-                  <th className="px-5 py-4 font-semibold">Service</th>
-                  <th className="px-5 py-4 font-semibold">Amount</th>
-                  <th className="px-5 py-4 font-semibold">Status</th>
-                  <th className="px-5 py-4 font-semibold">Cost</th>
-                  <th className="px-5 py-4 font-semibold">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {orders.length ? (
-                  orders.map((order) => (
+          {showManageSkeleton ? (
+            <div className="overflow-auto px-5 py-5">
+              <div className="min-w-[860px] space-y-4">
+                <div className="grid grid-cols-6 gap-3">
+                  {Array.from({ length: 6 }).map((_, index) => (
+                    <Skeleton key={index} className="h-4 w-full" />
+                  ))}
+                </div>
+                {Array.from({ length: 5 }).map((_, row) => (
+                  <div key={row} className="grid grid-cols-6 gap-3 border-t border-white/8 pt-4">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-14" />
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-40" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="overflow-auto">
+              <table className="min-w-[860px] w-full border-collapse">
+                <thead className="bg-white/5">
+                  <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
+                    <th className="px-5 py-4 font-semibold">Order</th>
+                    <th className="px-5 py-4 font-semibold">Service</th>
+                    <th className="px-5 py-4 font-semibold">Amount</th>
+                    <th className="px-5 py-4 font-semibold">Status</th>
+                    <th className="px-5 py-4 font-semibold">Cost</th>
+                    <th className="px-5 py-4 font-semibold">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => (
                     <tr key={order.uniqid} className="border-t border-white/8">
                       <td className="px-5 py-4 align-top">
                         <strong className="block text-sm font-semibold text-slate-50">{order.uniqid}</strong>
@@ -538,17 +697,11 @@ export default function HomePage() {
                         </div>
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-sm text-slate-500">
-                      No tracked orders yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       ) : null}
     </div>

@@ -20,6 +20,65 @@ function formatTime(value?: number) {
   }).format(new Date(value));
 }
 
+function PageSkeleton() {
+  return (
+    <section className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+      <div className="app-panel p-5">
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-2/3" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-11 w-4/5" />
+          <div className="space-y-2">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-11 w-full" />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-24" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="app-panel-soft p-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-3 h-4 w-full" />
+            </div>
+            <div className="app-panel-soft p-4">
+              <Skeleton className="h-3 w-24" />
+              <Skeleton className="mt-3 h-4 w-2/3" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="app-panel p-5">
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-8 w-2/3" />
+          <div className="grid gap-3 sm:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div key={index} className="app-panel-soft p-4">
+                <Skeleton className="h-3 w-16" />
+                <Skeleton className="mt-3 h-4 w-20" />
+              </div>
+            ))}
+          </div>
+          <div className="app-panel-soft p-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="mt-3 h-4 w-full" />
+            <Skeleton className="mt-2 h-4 w-5/6" />
+          </div>
+          <div className="app-panel-soft p-4">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="mt-3 h-4 w-full" />
+            <Skeleton className="mt-2 h-4 w-11/12" />
+            <Skeleton className="mt-2 h-4 w-4/5" />
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
@@ -84,6 +143,22 @@ export default function OrderPage() {
   const shell = "app-panel";
   const showOverlay = loading;
 
+  if (pageLoading) {
+    return (
+      <section className="relative">
+        {showOverlay ? (
+          <div className="app-overlay">
+            <div className="app-preloader">
+              <div className="app-spinner" />
+              <p className="app-kicker">Loading</p>
+            </div>
+          </div>
+        ) : null}
+        <PageSkeleton />
+      </section>
+    );
+  }
+
   return (
     <section className="relative grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
       {showOverlay ? (
@@ -95,16 +170,6 @@ export default function OrderPage() {
         </div>
       ) : null}
 
-      {pageLoading ? (
-        <div className={`${shell} p-5`}>
-          <div className="space-y-4">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-8 w-2/3" />
-            <Skeleton className="h-4 w-full" />
-            <Skeleton className="h-12 w-4/5" />
-          </div>
-        </div>
-      ) : (
       <div className={`${shell} p-5`}>
         <p className={labelClass}>Public tracker</p>
         <h2 className="app-title mt-2 text-[2rem] font-semibold">Order lookup</h2>
@@ -155,29 +220,6 @@ export default function OrderPage() {
           </div>
         </div>
       </div>
-      )}
-
-      {pageLoading ? (
-        <div className={`${shell} p-5`}>
-          <div className="space-y-4">
-            <div className="app-skeleton app-skeleton-line w-28" />
-            <div className="app-skeleton app-skeleton-line w-1/2" style={{ height: "2rem" }} />
-            <div className="grid gap-3 sm:grid-cols-3">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="app-panel-soft p-4">
-                  <div className="app-skeleton app-skeleton-line w-16" />
-                  <div className="app-skeleton app-skeleton-line mt-3 w-20" />
-                </div>
-              ))}
-            </div>
-            <div className="app-panel-soft p-4">
-              <div className="app-skeleton app-skeleton-line w-32" />
-              <div className="app-skeleton app-skeleton-line mt-3 w-full" />
-              <div className="app-skeleton app-skeleton-line mt-2 w-4/5" />
-            </div>
-          </div>
-        </div>
-      ) : (
       <div className={`${shell} p-5`}>
         <p className={labelClass}>Order payload</p>
         <h3 className="app-title mt-2 text-xl font-semibold">Summary and payload</h3>
@@ -236,7 +278,6 @@ export default function OrderPage() {
           </div>
         )}
       </div>
-      )}
     </section>
   );
 }

@@ -35,10 +35,10 @@ function Shell() {
       ) : null}
 
       <div className="mx-auto flex min-h-screen w-full max-w-[1280px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <header className="app-header sticky top-4 z-30 rounded-3xl border border-white/10 px-3 py-2 backdrop-blur">
+        <header className="app-header shadow-card sticky top-4 z-30 rounded-3xl border border-white/10 px-3 py-2 backdrop-blur">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="inline-flex items-center gap-3 text-[15px] font-semibold tracking-tight text-slate-50">
-              <span className="h-6 w-1 rounded-full bg-gradient-to-b from-slate-200 to-sky-400" />
+              <span className="h-6 w-1 rounded-full bg-gradient-to-b from-slate-200 to-slate-400" />
               Pulcip Members
             </div>
 
@@ -48,7 +48,7 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isAdmin && tab === "create"
-                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    ? "bg-[#ffffff14] text-white hover:bg-[#ffffff1b]"
                     : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/admin?tab=create")}
@@ -60,7 +60,7 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isAdmin && tab === "manage"
-                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    ? "bg-[#ffffff14] text-white hover:bg-[#ffffff1b]"
                     : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/admin?tab=manage")}
@@ -72,7 +72,7 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isOrders
-                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    ? "bg-[#ffffff14] text-white hover:bg-[#ffffff1b]"
                     : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/orders")}
