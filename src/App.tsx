@@ -48,8 +48,8 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isAdmin && tab === "create"
-                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
-                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/admin?tab=create")}
               >
@@ -60,8 +60,8 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isAdmin && tab === "manage"
-                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
-                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/admin?tab=manage")}
               >
@@ -72,8 +72,8 @@ function Shell() {
                 variant="secondary"
                 className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
                   isOrders
-                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
-                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                    ? "bg-[#2b9fff33] text-white hover:bg-[#2b9fff44]"
+                    : "bg-[#ffffff0d] text-slate-200 hover:bg-[#ffffff14] hover:text-slate-100"
                 }`}
                 onClick={() => navigate("/orders")}
               >

@@ -126,7 +126,7 @@ export default function OrderPage() {
             </Button>
             <Button
               variant="secondary"
-              className="rounded-[3px] bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+              className="rounded-[3px] bg-[#121621] text-slate-300 hover:bg-[#181d2a] hover:text-slate-100"
               type="button"
               onClick={() => {
                 setUniqid("");

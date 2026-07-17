@@ -378,8 +378,7 @@ export default function HomePage() {
                   Create order
                 </Button>
                 <Button
-                  variant="secondary"
-                  className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                  variant="ghost"
                   type="button"
                   onClick={refreshBalance}
                 >
@@ -426,8 +425,7 @@ export default function HomePage() {
                     {saving ? "Saving..." : "Save"}
                   </Button>
                   <Button
-                    variant="secondary"
-                    className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                    variant="ghost"
                     type="button"
                     onClick={() => {
                       clearApiKey();
@@ -466,9 +464,9 @@ export default function HomePage() {
                   <Button className="px-4 py-2.5" type="button" onClick={trackOrderManually}>
                     Add
                   </Button>
-                  <Button asChild variant="secondary" className="rounded-[3px] bg-slate-800 px-4 py-2.5 text-slate-300 hover:bg-slate-700 hover:text-slate-100">
+                  <Button asChild variant="ghost" className="px-4 py-2.5">
                     <Link to="/orders">
-                    Lookup
+                      Lookup
                     </Link>
                   </Button>
                 </div>
@@ -518,20 +516,20 @@ export default function HomePage() {
                       </td>
                       <td className="px-5 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
-                          <Button asChild variant="secondary" className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100">
+                          <Button asChild variant="ghost" className="px-3 py-2 text-xs uppercase tracking-[0.16em]">
                             <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>Open</Link>
                           </Button>
                           <Button
-                            variant="secondary"
-                            className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                            variant="ghost"
+                            className="px-3 py-2 text-xs uppercase tracking-[0.16em]"
                             type="button"
                             onClick={() => navigator.clipboard.writeText(order.uniqid)}
                           >
                             Copy
                           </Button>
                           <Button
-                            variant="secondary"
-                            className="rounded-[3px] bg-slate-800 px-3 py-2 text-xs uppercase tracking-[0.16em] text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+                            variant="ghost"
+                            className="px-3 py-2 text-xs uppercase tracking-[0.16em]"
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
