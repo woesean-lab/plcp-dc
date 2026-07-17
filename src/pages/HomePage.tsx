@@ -3,7 +3,6 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
@@ -30,125 +29,6 @@ function formatNumber(value?: number) {
     : "-";
 }
 
-function PageSkeleton({ activeTab }: { activeTab: "create" | "manage" }) {
-  return (
-    <div className="space-y-5">
-      <section className="app-panel p-6">
-        <div className="grid gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
-          <div className="flex min-h-[192px] flex-col justify-between gap-5">
-            <div className="space-y-4">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-12 w-2/3 max-w-[24rem]" />
-              <Skeleton className="h-4 w-full max-w-[34rem]" />
-              <Skeleton className="h-4 w-4/5 max-w-[28rem]" />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="app-stat space-y-3">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="h-8 w-14" />
-                <Skeleton className="h-4 w-20" />
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {activeTab === "create" ? (
-        <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="app-panel p-5">
-            <div className="space-y-4">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-7 w-32" />
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-16" />
-                  <Skeleton className="h-11 w-full" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-20" />
-                  <Skeleton className="h-11 w-full" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-14" />
-                  <Skeleton className="h-11 w-full" />
-                </div>
-                <div className="space-y-2">
-                  <Skeleton className="h-3 w-14" />
-                  <Skeleton className="h-11 w-full" />
-                </div>
-                <div className="space-y-2 md:col-span-2">
-                  <Skeleton className="h-3 w-32" />
-                  <Skeleton className="h-11 w-full" />
-                </div>
-              </div>
-              <div className="mt-2 flex flex-wrap gap-4">
-                <Skeleton className="h-10 w-36" />
-                <Skeleton className="h-10 w-40" />
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <div className="app-panel p-5">
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-7 w-28" />
-                <div className="space-y-3">
-                  <Skeleton className="h-11 w-full" />
-                  <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-10 w-24" />
-                    <Skeleton className="h-10 w-24" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="app-panel p-5">
-              <div className="space-y-4">
-                <Skeleton className="h-4 w-24" />
-                <Skeleton className="h-7 w-28" />
-                <div className="space-y-3">
-                  <Skeleton className="h-11 w-full" />
-                  <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-10 w-24" />
-                    <Skeleton className="h-10 w-24" />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : (
-        <section className="app-panel overflow-hidden">
-          <div className="border-b border-white/8 px-5 py-4">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="mt-3 h-7 w-32" />
-          </div>
-          <div className="overflow-auto px-5 py-4">
-            <div className="min-w-[860px] space-y-3">
-              <div className="grid grid-cols-6 gap-3">
-                {Array.from({ length: 6 }).map((_, index) => (
-                  <Skeleton key={index} className="h-4 w-full" />
-                ))}
-              </div>
-              {Array.from({ length: 5 }).map((_, row) => (
-                <div key={row} className="grid grid-cols-6 gap-3 border-t border-white/8 pt-3">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className={`h-4 ${index === 0 ? "w-32" : "w-full"}`} />
-                  ))}
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-      )}
-    </div>
-  );
-}
-
 const inputClass = "app-input";
 
 const labelClass = "app-kicker";
@@ -157,7 +37,6 @@ const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] t
 export default function HomePage() {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") === "manage" ? "manage" : "create";
-  const [tabSkeletonVisible, setTabSkeletonVisible] = useState(false);
 
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
@@ -179,21 +58,6 @@ export default function HomePage() {
     if (storedApiKey) void refreshBalance();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storedApiKey]);
-
-  useEffect(() => {
-    setTabSkeletonVisible(false);
-    const showTimer = window.setTimeout(() => {
-      setTabSkeletonVisible(true);
-    }, 180);
-    const hideTimer = window.setTimeout(() => {
-      setTabSkeletonVisible(false);
-    }, 540);
-
-    return () => {
-      window.clearTimeout(showTimer);
-      window.clearTimeout(hideTimer);
-    };
-  }, [activeTab]);
 
   useEffect(() => {
     if (!form.serverId.trim()) {
@@ -323,9 +187,6 @@ export default function HomePage() {
 
   const shell = "app-panel";
   const showOverlay = saving || loadingBalance;
-  const balanceLoading = loadingBalance && balance === null;
-  const showCardSkeletons = tabSkeletonVisible || showOverlay || loadingBalance || saving;
-  const showManageSkeleton = activeTab === "manage" && showCardSkeletons;
 
   return (
     <div className="relative space-y-5">
@@ -354,50 +215,21 @@ export default function HomePage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div className="app-stat">
                 <span className={labelClass}>Balance</span>
-                {showCardSkeletons ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="app-skeleton app-skeleton-block h-8 w-24" />
-                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
-                    <div className="app-skeleton app-skeleton-block h-4 w-20" />
-                  </div>
-                ) : (
-                  <strong className="mt-2 block text-lg text-slate-50">
-                    {balance === null ? "-" : `$${formatNumber(balance)}`}
-                  </strong>
-                )}
+                <strong className="mt-2 block text-lg text-slate-50">
+                  {balance === null ? "-" : `$${formatNumber(balance)}`}
+                </strong>
               </div>
               <div className="app-stat">
                 <span className={labelClass}>Tracked</span>
-                {showCardSkeletons ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="app-skeleton app-skeleton-block h-8 w-12" />
-                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
-                  </div>
-                ) : (
-                  <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
-                )}
+                <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
               </div>
               <div className="app-stat">
                 <span className={labelClass}>Active</span>
-                {showCardSkeletons ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="app-skeleton app-skeleton-block h-8 w-12" />
-                    <div className="app-skeleton app-skeleton-block h-4 w-16" />
-                  </div>
-                ) : (
-                  <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
-                )}
+                <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
               </div>
               <div className="app-stat">
                 <span className={labelClass}>API key</span>
-                {showCardSkeletons ? (
-                  <div className="mt-3 space-y-3">
-                    <div className="app-skeleton app-skeleton-block h-8 w-20" />
-                    <div className="app-skeleton app-skeleton-block h-4 w-14" />
-                  </div>
-                ) : (
-                  <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
-                )}
+                <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
               </div>
             </div>
           </div>
@@ -407,46 +239,15 @@ export default function HomePage() {
 
         {activeTab === "create" ? (
         <section className="tab-slide-in grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className={`${shell} p-5`}>
-            <div className="mb-5 flex items-end justify-between gap-4">
-              <div>
-                <p className={labelClass}>Order</p>
-                <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
+            <div className={`${shell} p-5`}>
+              <div className="mb-5 flex items-end justify-between gap-4">
+                <div>
+                  <p className={labelClass}>Order</p>
+                  <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
+                </div>
               </div>
-            </div>
 
-            {showCardSkeletons ? (
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-16" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-14" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Skeleton className="h-3 w-32" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-4">
-                  <Skeleton className="h-11 w-36" />
-                  <Skeleton className="h-11 w-40" />
-                </div>
-                <Skeleton className="h-12 w-full" />
-              </div>
-            ) : (
-              <form onSubmit={handleCreateOrder} className="space-y-6">
+            <form onSubmit={handleCreateOrder} className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2">
                     <span className={fieldLabelClass}>Service</span>
@@ -534,26 +335,13 @@ export default function HomePage() {
                   </div>
                 ) : null}
               </form>
-            )}
           </div>
 
           <div className="space-y-4">
             <div className={`${shell} p-5`}>
               <p className={labelClass}>Key</p>
               <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
-              {showCardSkeletons ? (
-                <div className="mt-4 space-y-6">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-11 w-24" />
-                    <Skeleton className="h-11 w-24" />
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
+              <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                   <label className="space-y-2">
                     <span className={fieldLabelClass}>Local key</span>
                     <Input
@@ -584,25 +372,12 @@ export default function HomePage() {
                     </Button>
                   </div>
                 </form>
-              )}
             </div>
 
             <div className={`${shell} p-5`}>
               <p className={labelClass}>Track</p>
               <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
-              {showCardSkeletons ? (
-                <div className="mt-4 space-y-6">
-                  <div className="space-y-2">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="h-12 w-full" />
-                  </div>
-                  <div className="flex flex-wrap gap-4">
-                    <Skeleton className="h-11 w-24" />
-                    <Skeleton className="h-11 w-24" />
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-5">
+              <div className="mt-4 space-y-5">
                   <label className="space-y-2">
                     <span className={fieldLabelClass}>Manual add</span>
                     <Input
@@ -620,7 +395,6 @@ export default function HomePage() {
                     </Button>
                   </div>
                 </div>
-              )}
             </div>
           </div>
         </section>
@@ -633,31 +407,7 @@ export default function HomePage() {
             <h3 className="app-title mt-2 text-xl font-semibold">Queue</h3>
           </div>
 
-          {showManageSkeleton ? (
-            <div className="overflow-auto px-5 py-5">
-              <div className="min-w-[860px] space-y-4">
-                <div className="app-panel-soft p-4">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="mt-3 h-8 w-36" />
-                </div>
-                <div className="grid grid-cols-6 gap-3">
-                  {Array.from({ length: 6 }).map((_, index) => (
-                    <Skeleton key={index} className="h-4 w-full" />
-                  ))}
-                </div>
-                {Array.from({ length: 5 }).map((_, row) => (
-                  <div key={row} className="grid grid-cols-6 gap-3 border-t border-white/8 pt-4">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-14" />
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-9 w-full" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : orders.length ? (
+          {orders.length ? (
             <div className="overflow-auto">
               <table className="min-w-[860px] w-full border-collapse">
                 <thead className="bg-white/5">
