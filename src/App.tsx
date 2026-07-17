@@ -2,7 +2,6 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import ManagePage from "./pages/ManagePage";
-import { GridIcon, SearchIcon, SettingsIcon } from "./components/Icons";
 
 function Shell() {
   const location = useLocation();
@@ -15,25 +14,19 @@ function Shell() {
 
   const navButton = (active: boolean) =>
     [
-      "inline-flex items-center gap-2 rounded-[3px] border px-4 py-2.5 text-sm font-medium tracking-tight transition",
+      "inline-flex items-center rounded-[3px] border px-4 py-2.5 text-sm font-medium tracking-tight transition",
       active
-        ? "border-sky-400/50 bg-gradient-to-r from-sky-600 to-blue-700 text-white shadow-lg shadow-sky-500/15"
-        : "border-slate-700/80 bg-slate-900/80 text-slate-200 hover:border-sky-400/30 hover:bg-slate-800"
+        ? "border-slate-500/70 bg-slate-700/80 text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+        : "border-slate-700/80 bg-slate-900/70 text-slate-300 hover:border-slate-500/60 hover:bg-slate-800/80"
     ].join(" ");
 
   return (
     <div className="min-h-screen text-slate-100">
       <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
-        <header className="relative overflow-hidden border border-slate-700/70 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 px-4 py-4 shadow-[0_24px_80px_rgba(2,6,23,0.42)] backdrop-blur">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.12),transparent_26%)]" />
-          <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-4">
-              <div>
-                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50">Orders workspace</h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-                  Create, monitor, and inspect orders in one focused control surface.
-                </p>
-              </div>
+        <header className="border border-slate-700/70 bg-slate-950/90 px-4 py-3 shadow-[0_18px_60px_rgba(2,6,23,0.36)] backdrop-blur">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="text-sm font-semibold tracking-[0.28em] text-slate-100 uppercase">
+              Pulcip Members
             </div>
 
             <nav className="flex flex-wrap items-center gap-2">
@@ -42,7 +35,6 @@ function Shell() {
                 className={navButton(isAdmin && tab === "create")}
                 onClick={() => navigate("/admin?tab=create")}
               >
-                <GridIcon className="h-4 w-4" />
                 Create Order
               </button>
               <button
@@ -50,7 +42,6 @@ function Shell() {
                 className={navButton(isAdmin && tab === "manage")}
                 onClick={() => navigate("/admin?tab=manage")}
               >
-                <SettingsIcon className="h-4 w-4" />
                 Manage Orders
               </button>
               <button
@@ -58,7 +49,6 @@ function Shell() {
                 className={navButton(isOrders)}
                 onClick={() => navigate("/orders")}
               >
-                <SearchIcon className="h-4 w-4" />
                 Orders
               </button>
             </nav>
