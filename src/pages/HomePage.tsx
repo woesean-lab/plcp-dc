@@ -201,15 +201,16 @@ export default function HomePage() {
 
   return (
     <div className="dashboard-stack">
-      <section className="dashboard-grid">
-        <div className="panel intro-panel">
-          <span className="intro-kicker">Admin workspace</span>
-          <h2>One panel for order creation, monitoring, and service control.</h2>
-          <p className="intro-copy">
-            Members flowunu Tokenu reseller API ile tek ekrandan yonetin. API key localde kalir,
-            public tracker ise sadece order ID ile calisir.
-          </p>
-
+      <section className="overview-panel panel">
+        <div className="overview-head">
+          <div>
+            <span className="eyebrow">Admin workspace</span>
+            <h2>Siparişleri oluştur, takip et ve yönet.</h2>
+            <p className="intro-copy">
+              Önemli metrikler üstte, işlemler altta. Alanlar aynı kaldı, ilk görünüm daha sıkı ve
+              daha okunur.
+            </p>
+          </div>
           <div className="intro-actions">
             <button className="primary-button" type="button" onClick={() => setActiveTab("create")}>
               Create order
@@ -217,74 +218,34 @@ export default function HomePage() {
             <button className="ghost-button" type="button" onClick={() => setActiveTab("manage")}>
               Open management
             </button>
-            <span className="surface-note">Live panel / local storage</span>
-          </div>
-
-          <div className="summary-row">
-            <div className="summary-card">
-              <span className="label">Balance</span>
-              <strong>{loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}</strong>
-              <p>Checked against the reseller API when a valid key is saved.</p>
-            </div>
-            <div className="summary-card">
-              <span className="label">Tracked orders</span>
-              <strong>{orders.length}</strong>
-              <p>Stored locally in this browser for fast admin follow-up.</p>
-            </div>
-            <div className="summary-card">
-              <span className="label">Active</span>
-              <strong>{activeOrders.length}</strong>
-              <p>Orders that are still in flight and need attention.</p>
-            </div>
+            <Link className="ghost-button" to="/orders">
+              Public tracker
+            </Link>
           </div>
         </div>
 
-        <aside className="panel sidebar-panel">
-          <div className="status-pill">
-            <span className="status-dot" />
-            {storedApiKey ? "API key ready" : "API key missing"}
+        <div className="overview-grid">
+          <div className="summary-card">
+            <span className="label">Balance</span>
+            <strong>{loadingBalance ? "Syncing..." : balance === null ? "-" : `$${formatNumber(balance)}`}</strong>
+            <p>Saved API key ile anlık bakiye kontrolü.</p>
           </div>
-
-          <div className="mini-stack">
-            <div className="mini-card">
-              <h3 className="title">Key vault</h3>
-              <p>{storedApiKey ? "Stored locally only. You can refresh balance and create orders." : "Paste your Tokenu API key to enable live actions."}</p>
-            </div>
-
-            <div className="mini-card">
-              <h3 className="title">Public route</h3>
-              <p>
-                `/orders` works without admin auth. Share order IDs with users to let them check
-                progress.
-              </p>
-            </div>
-
-            <div className="mini-card">
-              <h3 className="title">Quick links</h3>
-              <div className="inline-actions" style={{ marginTop: 10 }}>
-                <Link className="ghost-button" to="/orders">
-                  Open tracker
-                </Link>
-                <button className="ghost-button" type="button" onClick={refreshBalance}>
-                  Refresh balance
-                </button>
-              </div>
-            </div>
+          <div className="summary-card">
+            <span className="label">Tracked orders</span>
+            <strong>{orders.length}</strong>
+            <p>Tarayıcı içinde saklanan aktif takip listesi.</p>
           </div>
-
-          <div className="stat-strip">
-            <div className="stat-item">
-              <span>Default service</span>
-              <strong>OAUTH-ONLINE</strong>
-              <p>Billing-cycle aware service preset for members runs.</p>
-            </div>
-            <div className="stat-item">
-              <span>Tracking mode</span>
-              <strong>Local-first</strong>
-              <p>Orders are mirrored in localStorage for quick management.</p>
-            </div>
+          <div className="summary-card">
+            <span className="label">Active</span>
+            <strong>{activeOrders.length}</strong>
+            <p>Hâlâ ilerleyen siparişler.</p>
           </div>
-        </aside>
+          <div className="summary-card">
+            <span className="label">API key</span>
+            <strong>{storedApiKey ? "Ready" : "Missing"}</strong>
+            <p>{storedApiKey ? "Kayıtlı ve kullanılabilir." : "Admin ayarlarından eklenmeli."}</p>
+          </div>
+        </div>
       </section>
 
       <div className="tabs">
@@ -304,12 +265,9 @@ export default function HomePage() {
             <div className="section-head">
               <div>
                 <span className="eyebrow">Order composer</span>
-                <h3 className="section-title">Create a reseller order with intent.</h3>
-                <p>
-                  Choose the service lane, paste the Discord server ID, and tune the delivery pace.
-                </p>
+                <h3 className="section-title">Sipariş alanları</h3>
+                <p>Service, server ID, amount, delay ve billing cycle alanları aynı kaldı.</p>
               </div>
-              <div className="status-pill">Tokenu API connected</div>
             </div>
 
             <form onSubmit={handleCreateOrder}>
@@ -399,42 +357,44 @@ export default function HomePage() {
             <div className="section-head">
               <div>
                 <span className="eyebrow">Control rail</span>
-                <h3 className="section-title">Settings and tracking shortcuts.</h3>
-                <p>Save the API key, add existing orders, and keep the local queue tidy.</p>
+                <h3 className="section-title">Ayarlar ve kısa yol</h3>
+                <p>API key, order ID takibi ve public lookup bu kartta toplandı.</p>
               </div>
             </div>
 
-            <form onSubmit={handleSaveApiKey}>
-              <label className="field">
-                <span>Tokenu API key</span>
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(event) => setApiKeyValue(event.target.value)}
-                  placeholder="Paste API key"
-                  autoComplete="off"
-                />
-              </label>
-              <div className="inline-actions" style={{ marginTop: 14 }}>
-                <button className="primary-button" type="submit" disabled={saving}>
-                  {saving ? "Saving..." : "Save locally"}
-                </button>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => {
-                    clearApiKey();
-                    setApiKeyValue("");
-                    setBalance(null);
-                    setMessage("API key cleared.");
-                  }}
-                >
-                  Clear
-                </button>
+            <div className="mini-stack">
+              <div className="mini-card">
+                <form onSubmit={handleSaveApiKey}>
+                  <label className="field">
+                    <span>Tokenu API key</span>
+                    <input
+                      type="password"
+                      value={apiKey}
+                      onChange={(event) => setApiKeyValue(event.target.value)}
+                      placeholder="Paste API key"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <div className="inline-actions" style={{ marginTop: 14 }}>
+                    <button className="primary-button" type="submit" disabled={saving}>
+                      {saving ? "Saving..." : "Save locally"}
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => {
+                        clearApiKey();
+                        setApiKeyValue("");
+                        setBalance(null);
+                        setMessage("API key cleared.");
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
 
-            <div style={{ marginTop: 18 }} className="mini-stack">
               <div className="mini-card">
                 <h3 className="title">Track existing order</h3>
                 <label className="field" style={{ marginTop: 10 }}>

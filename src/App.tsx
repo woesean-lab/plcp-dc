@@ -13,29 +13,30 @@ function Shell() {
   return (
     <div className="app-shell">
       <div className="shell-frame">
-        <header className="topbar">
-          <div className="brand-block">
-            <div className="brand-mark" aria-hidden="true">
-              TC
+        <main className="page-frame">
+          <div className="route-tabs" aria-label="Primary">
+            <div className="route-badge">
+              <span className="brand-mark" aria-hidden="true">
+                TC
+              </span>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 4 }}>
+                  Tokenu reseller panel
+                </div>
+                <div className="route-title">Members workflow</div>
+              </div>
             </div>
-            <div>
-              <span className="eyebrow">Tokenu reseller panel</span>
-              <h1>Members command center</h1>
-              <p className="topline">Orders, balance, and public lookups in one controlled workspace.</p>
-            </div>
+
+            <nav className="topnav" aria-label="Primary">
+              <button className={isAdmin ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin")}>
+                Sipariş oluştur ve yönet
+              </button>
+              <button className={isOrders ? "nav-link active" : "nav-link"} onClick={() => navigate("/orders")}>
+                Orders
+              </button>
+            </nav>
           </div>
 
-          <nav className="topnav" aria-label="Primary">
-            <button className={isAdmin ? "nav-link active" : "nav-link"} onClick={() => navigate("/admin")}>
-              Admin
-            </button>
-            <button className={isOrders ? "nav-link active" : "nav-link"} onClick={() => navigate("/orders")}>
-              Orders
-            </button>
-          </nav>
-        </header>
-
-        <main className="page-frame">
           <Routes>
             <Route path="/" element={<Navigate to="/admin" replace />} />
             <Route path="/admin" element={<HomePage />} />

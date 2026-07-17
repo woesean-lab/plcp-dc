@@ -91,6 +91,31 @@ button {
   padding: 24px;
 }
 
+.route-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--page-border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.route-badge {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.route-title {
+  color: var(--page-fg);
+  font-size: 0.94rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
 .app-shell::before {
   content: "";
   position: absolute;
@@ -232,6 +257,32 @@ button {
 
 .panel-strong {
   background: var(--page-surface-strong);
+}
+
+.overview-panel {
+  display: grid;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.overview-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.overview-head h2 {
+  margin: 6px 0 10px;
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  line-height: 1.05;
+  letter-spacing: -0.05em;
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
 }
 
 .intro-panel,
@@ -636,6 +687,16 @@ pre {
 }
 
 @media (max-width: 1080px) {
+  .route-tabs,
+  .overview-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .overview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-grid,
   .content-grid,
   .lookup-shell {
@@ -658,6 +719,7 @@ pre {
   }
 
   .summary-row,
+  .overview-grid,
   .form-grid,
   .detail-grid {
     grid-template-columns: 1fr;
