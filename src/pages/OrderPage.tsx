@@ -3,11 +3,12 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Clock3, Copy, FileJson, Hash, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
-const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500";
+const fieldLabelClass = "field-label";
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -113,7 +114,7 @@ export default function OrderPage() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setPageLoading(false);
-    }, 450);
+    }, 300);
 
     return () => window.clearTimeout(timer);
   }, []);
@@ -161,38 +162,57 @@ export default function OrderPage() {
   }
 
   return (
-    <section className="tab-slide-in relative grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+    <section className="tab-slide-in relative grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
       {showOverlay ? (
-        <div className="app-overlay">
+        <div className="app-overlay" role="status" aria-live="polite">
           <div className="app-preloader">
             <div className="app-spinner" />
-            <p className="app-kicker">Loading</p>
+            <div>
+              <p className="app-kicker">Order lookup</p>
+              <p className="mt-2 text-sm text-slate-300">Retrieving the latest status</p>
+            </div>
+            <div className="app-progress" aria-hidden="true"><span /></div>
           </div>
         </div>
       ) : null}
 
-      <div className={`${shell} p-5`}>
-        <p className={labelClass}>Public tracker</p>
-        <h2 className="app-title mt-2 text-[2rem] font-semibold">Order lookup</h2>
-        <p className="app-copy mt-2 text-sm leading-6">Open status and payload with an order ID.</p>
+      <div className={`${shell} p-5 sm:p-6`}>
+        <div className="flex items-center gap-3">
+          <span className="stat-icon" aria-hidden="true">
+            <Search className="h-4 w-4" />
+          </span>
+          <div>
+            <p className={labelClass}>Public tracker</p>
+            <h1 className="app-title mt-1 text-[2rem] font-semibold">Order lookup</h1>
+          </div>
+        </div>
+        <p className="app-copy mt-4 max-w-md text-sm leading-6">Enter an order ID to open its latest status, delivery details, and raw payload.</p>
 
-        <div className="mt-5 space-y-5">
+        <form
+          className="mt-6 space-y-5"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void lookup();
+          }}
+        >
           <label className="space-y-2">
             <span className={fieldLabelClass}>Order ID</span>
             <Input
               value={uniqid}
               onChange={(event) => setUniqid(event.target.value)}
               placeholder="XXX-XXXXX-XXX"
+              className="font-mono"
             />
           </label>
 
-          <div className="mt-4 flex flex-wrap gap-4">
-            <Button className="min-w-[132px] px-4 py-2.5" type="button" onClick={() => lookup()} disabled={loading}>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button className="min-w-[132px] px-4 py-2.5" type="submit" disabled={loading}>
+              <Search className="h-4 w-4" aria-hidden="true" />
               {loading ? "Loading..." : "Check"}
             </Button>
             <Button
               variant="secondary"
-              className="min-w-[132px] rounded-[3px] bg-[#121621] px-4 py-2.5 text-slate-300 hover:bg-[#181d2a] hover:text-slate-100"
+              className="min-w-[132px] px-4 py-2.5"
               type="button"
               onClick={() => {
                 setUniqid("");
@@ -201,29 +221,58 @@ export default function OrderPage() {
                 setParams({});
               }}
             >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
               Clear
             </Button>
           </div>
 
-          {message ? <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{message}</div> : null}
-        </div>
+          {message ? <div className="app-panel-soft app-notice px-4 py-3 text-sm text-slate-300" role="status" aria-live="polite">{message}</div> : null}
+        </form>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
           <div className="app-panel-soft p-4">
-            <p className={labelClass}>Shown</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className={labelClass}>Protected</p>
+              <ShieldCheck className="h-4 w-4 text-emerald-300" aria-hidden="true" />
+            </div>
             <p className="app-copy mt-2 text-sm">Status, details, payload.</p>
           </div>
           <div className="app-panel-soft p-4">
-            <p className={labelClass}>Created</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className={labelClass}>Created</p>
+              <Clock3 className="h-4 w-4 text-[#d8bd86]" aria-hidden="true" />
+            </div>
             <p className="app-copy mt-2 text-sm">
               {result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}
             </p>
           </div>
         </div>
       </div>
-      <div className={`${shell} p-5`}>
-        <p className={labelClass}>Order payload</p>
-        <h3 className="app-title mt-2 text-xl font-semibold">Summary and payload</h3>
+      <div className={`${shell} p-5 sm:p-6`}>
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="stat-icon" aria-hidden="true">
+              <FileJson className="h-4 w-4" />
+            </span>
+            <div>
+              <p className={labelClass}>Order payload</p>
+              <h2 className="app-title mt-1 text-xl font-semibold">Summary and details</h2>
+            </div>
+          </div>
+          {result ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(formatJson(result)).then(() => setMessage("Payload copied."));
+              }}
+            >
+              <Copy className="h-4 w-4" aria-hidden="true" />
+              Copy JSON
+            </Button>
+          ) : null}
+        </div>
 
         {loading && !result ? (
           <div className="mt-5 space-y-5">
@@ -259,23 +308,32 @@ export default function OrderPage() {
               {summary.map((item) => (
                 <div key={item.label} className="app-panel-soft p-4">
                   <span className={labelClass}>{item.label}</span>
-                  <strong className="mt-2 block text-lg font-semibold text-slate-50">{item.value}</strong>
+                  <strong className="mt-2 block text-lg font-semibold text-[#f7f5ef]">{item.value}</strong>
                 </div>
               ))}
             </div>
 
             <div className="app-panel-soft p-4">
-              <strong className="block text-sm font-semibold text-slate-50">{result.uniqid}</strong>
+              <div className="flex items-center gap-2 text-[#f7f5ef]">
+                <Hash className="h-4 w-4 text-[#d8bd86]" aria-hidden="true" />
+                <strong className="block font-mono text-sm font-semibold">{result.uniqid}</strong>
+              </div>
               <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
             </div>
 
-            <div className="app-panel-soft overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{formatJson(result)}</pre>
+            <div className="payload-panel overflow-auto p-4">
+              <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-6 text-slate-300">{formatJson(result)}</pre>
             </div>
           </div>
         ) : (
-          <div className="app-panel-soft mt-5 px-4 py-5 text-sm text-slate-400">
-            Search an order to load summary and payload.
+          <div className="app-panel-soft mt-5 grid min-h-64 place-items-center px-6 py-10 text-center">
+            <div>
+              <span className="stat-icon mx-auto" aria-hidden="true">
+                <FileJson className="h-4 w-4" />
+              </span>
+              <p className="mt-4 text-sm font-medium text-slate-300">No payload loaded</p>
+              <p className="app-copy mt-1 text-sm">Search an order to reveal its summary and JSON response.</p>
+            </div>
           </div>
         )}
       </div>

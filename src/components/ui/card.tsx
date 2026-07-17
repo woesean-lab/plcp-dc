@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 const Card = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("rounded-[3px] border border-white/8 bg-[#080b17] text-slate-50 shadow-[0_18px_50px_rgba(0,0,0,0.24)]", className)}
+    className={cn("rounded-3xl border border-white/[0.085] bg-[#0f141ed1] text-[#f7f5ef] shadow-[inset_0_1px_0_rgba(255,255,255,0.035),0_18px_50px_rgba(0,0,0,0.2)] backdrop-blur-xl", className)}
     {...props}
   />
 ));
@@ -17,12 +17,12 @@ const CardHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDiv
 CardHeader.displayName = "CardHeader";
 
 const CardTitle = React.forwardRef<HTMLHeadingElement, React.HTMLAttributes<HTMLHeadingElement>>(
-  ({ className, ...props }, ref) => <h3 ref={ref} className={cn("text-lg font-semibold tracking-tight text-slate-50", className)} {...props} />
+  ({ className, ...props }, ref) => <h3 ref={ref} className={cn("text-lg font-semibold tracking-[-0.02em] text-[#f7f5ef]", className)} {...props} />
 );
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = React.forwardRef<HTMLParagraphElement, React.HTMLAttributes<HTMLParagraphElement>>(
-  ({ className, ...props }, ref) => <p ref={ref} className={cn("text-sm leading-6 text-slate-400", className)} {...props} />
+  ({ className, ...props }, ref) => <p ref={ref} className={cn("text-sm leading-6 text-[#9ba4b4]", className)} {...props} />
 );
 CardDescription.displayName = "CardDescription";
 

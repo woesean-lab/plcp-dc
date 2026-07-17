@@ -3,6 +3,21 @@ import { Link, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  Activity,
+  CircleDollarSign,
+  Copy,
+  ExternalLink,
+  KeyRound,
+  Layers3,
+  ListChecks,
+  LoaderCircle,
+  Plus,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Trash2
+} from "lucide-react";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
@@ -32,7 +47,7 @@ function formatNumber(value?: number) {
 const inputClass = "app-input";
 
 const labelClass = "app-kicker";
-const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500";
+const fieldLabelClass = "field-label";
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
@@ -41,6 +56,7 @@ export default function HomePage() {
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [message, setMessage] = useState("");
@@ -129,6 +145,7 @@ export default function HomePage() {
   async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
     setMessage("");
+    setCreating(true);
 
     try {
       const created = await createOrder({
@@ -157,6 +174,8 @@ export default function HomePage() {
       setMessage(`Order created: ${created.uniqid}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Order could not be created.");
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -191,60 +210,117 @@ export default function HomePage() {
   return (
     <div className="relative space-y-5">
       {showOverlay ? (
-        <div className="app-overlay">
+        <div className="app-overlay" role="status" aria-live="polite">
           <div className="app-preloader">
             <div className="app-spinner" />
-            <p className="app-kicker">Loading</p>
+            <div>
+              <p className="app-kicker">Secure sync</p>
+              <p className="mt-2 text-sm text-slate-300">Refreshing your private workspace</p>
+            </div>
+            <div className="app-progress" aria-hidden="true"><span /></div>
           </div>
         </div>
       ) : null}
 
       <div key={activeTab} className="space-y-5 tab-slide-in">
-        <section className={`${shell} tab-slide-in p-6`}>
-          <div className="grid min-h-[192px] gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
-            <div className="flex min-h-[192px] flex-col justify-between">
-            <div>
-              <p className={labelClass}>Dashboard</p>
-              <h2 className="app-title mt-3 text-[2.9rem] font-semibold leading-[1.01]">Orders and settings</h2>
-              <p className="app-copy mt-3 max-w-2xl text-sm leading-6">
-                Create orders, sync balance, and keep the queue visible from one clean control surface.
-              </p>
-            </div>
+        <section className={`${shell} hero-panel tab-slide-in p-5 sm:p-7 lg:p-8`}>
+          <div className="grid gap-8 xl:grid-cols-[1.08fr_0.92fr] xl:items-stretch">
+            <div className="hero-copy flex min-h-[280px] flex-col justify-between">
+              <div>
+                <span className="hero-status">System online</span>
+                <p className={`${labelClass} mt-7`}>Member operations</p>
+                <h1 className="app-title hero-title mt-3">Orders, refined.</h1>
+                <p className="app-copy mt-5 max-w-xl text-[15px] leading-7">
+                  Create, organize, and monitor every order from one private workspace designed for focused operations.
+                </p>
+              </div>
+
+              <div className="mt-7 flex flex-wrap items-center gap-3">
+                <span className="app-chip">
+                  <ShieldCheck className="h-3.5 w-3.5 text-emerald-300" aria-hidden="true" />
+                  Local-first security
+                </span>
+                <span className="text-xs font-medium text-slate-500">Your API key stays in this browser.</span>
+              </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="app-stat">
-                <span className={labelClass}>Balance</span>
-                <strong className="mt-2 block text-lg text-slate-50">
-                  {balance === null ? "-" : `$${formatNumber(balance)}`}
-                </strong>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="app-stat flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-3">
+                  <span className={labelClass}>Balance</span>
+                  <span className="stat-icon" aria-hidden="true">
+                    <CircleDollarSign className="h-4 w-4" />
+                  </span>
+                </div>
+                <div>
+                  <strong className="block text-[1.65rem] font-semibold tracking-[-0.04em] text-[#f7f5ef]">
+                    {balance === null ? "—" : `$${formatNumber(balance)}`}
+                  </strong>
+                  <span className="mt-1 block text-xs text-slate-500">Available credit</span>
+                </div>
               </div>
-              <div className="app-stat">
-                <span className={labelClass}>Tracked</span>
-                <strong className="mt-2 block text-lg text-slate-50">{orders.length}</strong>
+              <div className="app-stat flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-3">
+                  <span className={labelClass}>Tracked</span>
+                  <span className="stat-icon" aria-hidden="true">
+                    <Layers3 className="h-4 w-4" />
+                  </span>
+                </div>
+                <div>
+                  <strong className="block text-[1.65rem] font-semibold tracking-[-0.04em] text-[#f7f5ef]">{orders.length}</strong>
+                  <span className="mt-1 block text-xs text-slate-500">Saved orders</span>
+                </div>
               </div>
-              <div className="app-stat">
-                <span className={labelClass}>Active</span>
-                <strong className="mt-2 block text-lg text-slate-50">{activeOrders.length}</strong>
+              <div className="app-stat flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-3">
+                  <span className={labelClass}>Active</span>
+                  <span className="stat-icon" aria-hidden="true">
+                    <Activity className="h-4 w-4" />
+                  </span>
+                </div>
+                <div>
+                  <strong className="block text-[1.65rem] font-semibold tracking-[-0.04em] text-[#f7f5ef]">{activeOrders.length}</strong>
+                  <span className="mt-1 block text-xs text-slate-500">In progress</span>
+                </div>
               </div>
-              <div className="app-stat">
-                <span className={labelClass}>API key</span>
-                <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
+              <div className="app-stat flex flex-col justify-between">
+                <div className="flex items-start justify-between gap-3">
+                  <span className={labelClass}>API key</span>
+                  <span className="stat-icon" aria-hidden="true">
+                    <KeyRound className="h-4 w-4" />
+                  </span>
+                </div>
+                <div>
+                  <strong className="block text-[1.35rem] font-semibold tracking-[-0.03em] text-[#f7f5ef]">
+                    {storedApiKey ? "Connected" : "Missing"}
+                  </strong>
+                  <span className="mt-1 block text-xs text-slate-500">Local vault</span>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+        {message ? (
+          <div className="app-panel-soft app-notice px-4 py-3 text-sm text-slate-300" role="status" aria-live="polite">
+            {message}
+          </div>
+        ) : null}
 
         {activeTab === "create" ? (
-        <section className="tab-slide-in grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className={`${shell} p-5`}>
-              <div className="mb-5 flex items-end justify-between gap-4">
-                <div>
-                  <p className={labelClass}>Order</p>
-                  <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
+        <section className="tab-slide-in grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+            <div id="create-order" className={`${shell} p-5 sm:p-6`}>
+              <div className="mb-6 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true">
+                    <Plus className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Order setup</p>
+                    <h2 className="app-title mt-1 text-xl font-semibold">Create a new order</h2>
+                  </div>
                 </div>
+                <Badge variant="default">Primary</Badge>
               </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-6">
@@ -275,6 +351,7 @@ export default function HomePage() {
                       value={form.serverId}
                       onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
                       placeholder="Discord server ID"
+                      required
                     />
                   </label>
 
@@ -318,17 +395,19 @@ export default function HomePage() {
                   </label>
                 </div>
 
-                <div className="mt-6 flex flex-wrap gap-4">
-                  <Button className="min-w-[132px] px-4 py-2.5" type="submit">
-                    Create order
+                <div className="mt-6 flex flex-wrap gap-3">
+                  <Button className="min-w-[150px] px-4 py-2.5" type="submit" disabled={creating}>
+                    {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                    {creating ? "Creating..." : "Create order"}
                   </Button>
-                  <Button className="min-w-[132px] px-4 py-2.5" variant="ghost" type="button" onClick={refreshBalance}>
+                  <Button className="min-w-[150px] px-4 py-2.5" variant="secondary" type="button" onClick={refreshBalance}>
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
                     Refresh balance
                   </Button>
                 </div>
 
                 {availability ? (
-                  <div className="app-panel-soft px-4 py-3 text-sm text-slate-300">{availability}</div>
+                  <div className="app-panel-soft px-4 py-3 text-sm text-slate-300" role="status" aria-live="polite">{availability}</div>
                 ) : checkingAvailability ? (
                   <div className="app-panel-soft px-4 py-3">
                     <div className="app-skeleton app-skeleton-line w-32" />
@@ -338,9 +417,16 @@ export default function HomePage() {
           </div>
 
           <div className="space-y-4">
-            <div className={`${shell} p-5`}>
-              <p className={labelClass}>Key</p>
-              <h3 className="app-title mt-2 text-lg font-semibold">Tokenu API</h3>
+            <div className={`${shell} p-5 sm:p-6`}>
+              <div className="flex items-center gap-3">
+                <span className="stat-icon" aria-hidden="true">
+                  <KeyRound className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className={labelClass}>Secure access</p>
+                  <h2 className="app-title mt-1 text-lg font-semibold">Tokenu API</h2>
+                </div>
+              </div>
               <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                   <label className="space-y-2">
                     <span className={fieldLabelClass}>Local key</span>
@@ -353,8 +439,9 @@ export default function HomePage() {
                     />
                   </label>
 
-                  <div className="mt-4 flex flex-wrap gap-4">
+                  <div className="mt-4 flex flex-wrap gap-3">
                     <Button className="min-w-[132px] px-4 py-2.5" type="submit" disabled={saving}>
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
                       {saving ? "Saving..." : "Save"}
                     </Button>
                     <Button
@@ -374,9 +461,16 @@ export default function HomePage() {
                 </form>
             </div>
 
-            <div className={`${shell} p-5`}>
-              <p className={labelClass}>Track</p>
-              <h3 className="app-title mt-2 text-lg font-semibold">Order ID</h3>
+            <div className={`${shell} p-5 sm:p-6`}>
+              <div className="flex items-center gap-3">
+                <span className="stat-icon" aria-hidden="true">
+                  <Search className="h-4 w-4" />
+                </span>
+                <div>
+                  <p className={labelClass}>Quick access</p>
+                  <h2 className="app-title mt-1 text-lg font-semibold">Track an order</h2>
+                </div>
+              </div>
               <div className="mt-4 space-y-5">
                   <label className="space-y-2">
                     <span className={fieldLabelClass}>Manual add</span>
@@ -386,12 +480,16 @@ export default function HomePage() {
                       placeholder="Enter order ID"
                     />
                   </label>
-                  <div className="mt-4 flex flex-wrap gap-4">
+                  <div className="mt-4 flex flex-wrap gap-3">
                     <Button className="min-w-[132px] px-4 py-2.5" type="button" onClick={trackOrderManually}>
+                      <Plus className="h-4 w-4" aria-hidden="true" />
                       Add
                     </Button>
                     <Button asChild variant="ghost" className="min-w-[132px] px-4 py-2.5">
-                      <Link to="/orders">Lookup</Link>
+                      <Link to="/orders">
+                        <Search className="h-4 w-4" aria-hidden="true" />
+                        Lookup
+                      </Link>
                     </Button>
                   </div>
                 </div>
@@ -402,15 +500,23 @@ export default function HomePage() {
 
         {activeTab === "manage" ? (
         <section className={shell + " tab-slide-in overflow-hidden"}>
-          <div className="border-b border-white/8 px-5 py-4">
-            <p className={labelClass}>Management</p>
-            <h3 className="app-title mt-2 text-xl font-semibold">Queue</h3>
+          <div className="flex items-center justify-between gap-4 border-b border-white/[0.07] px-5 py-5 sm:px-6">
+            <div className="flex items-center gap-3">
+              <span className="stat-icon" aria-hidden="true">
+                <ListChecks className="h-4 w-4" />
+              </span>
+              <div>
+                <p className={labelClass}>Management</p>
+                <h2 className="app-title mt-1 text-xl font-semibold">Order queue</h2>
+              </div>
+            </div>
+            <Badge variant="outline">{orders.length} tracked</Badge>
           </div>
 
           {orders.length ? (
             <div className="overflow-auto">
               <table className="min-w-[860px] w-full border-collapse">
-                <thead className="bg-white/5">
+                <thead className="sticky top-0 z-10 bg-[#101620ed]">
                   <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-slate-500">
                     <th className="px-5 py-4 font-semibold">Order</th>
                     <th className="px-5 py-4 font-semibold">Service</th>
@@ -422,15 +528,15 @@ export default function HomePage() {
                 </thead>
                 <tbody>
                   {orders.map((order) => (
-                    <tr key={order.uniqid} className="border-t border-white/8">
+                    <tr key={order.uniqid} className="border-t border-white/[0.07]">
                       <td className="px-5 py-4 align-top">
-                        <strong className="block text-sm font-semibold text-slate-50">{order.uniqid}</strong>
+                        <strong className="block font-mono text-sm font-semibold text-[#f7f5ef]">{order.uniqid}</strong>
                         <span className="mt-1 block text-sm text-slate-500">{order.serverId || "No server ID"}</span>
                       </td>
                       <td className="px-5 py-4 align-top text-sm text-slate-200">{order.service}</td>
                       <td className="px-5 py-4 align-top text-sm text-slate-200">{order.amount}</td>
                       <td className="px-5 py-4 align-top">
-                        <Badge variant={String(order.status ?? "").toLowerCase().includes("completed") ? "success" : String(order.status ?? "").toLowerCase().includes("error") ? "destructive" : "secondary"}>
+                        <Badge variant={String(order.status ?? "").toLowerCase().includes("completed") ? "success" : ["error", "invalid", "terminated"].some((value) => String(order.status ?? "").toLowerCase().includes(value)) ? "destructive" : "secondary"}>
                           {order.status ?? "NEW"}
                         </Badge>
                         {order.details ? <div className="mt-2 text-sm text-slate-500">{order.details}</div> : null}
@@ -440,23 +546,32 @@ export default function HomePage() {
                       </td>
                       <td className="px-5 py-4 align-top">
                         <div className="flex flex-wrap gap-2">
-                          <Button asChild variant="ghost" className="px-3 py-2 text-xs uppercase tracking-[0.16em]">
-                            <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>Open</Link>
+                          <Button asChild variant="secondary" size="xs" className="px-3 text-[10px] uppercase tracking-[0.12em]">
+                            <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
+                              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                              Open
+                            </Link>
                           </Button>
                           <Button
                             variant="ghost"
-                            className="px-3 py-2 text-xs uppercase tracking-[0.16em]"
+                            size="xs"
+                            className="px-3 text-[10px] uppercase tracking-[0.12em]"
                             type="button"
-                            onClick={() => navigator.clipboard.writeText(order.uniqid)}
+                            onClick={() => {
+                              void navigator.clipboard.writeText(order.uniqid).then(() => setMessage("Order ID copied."));
+                            }}
                           >
+                            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                             Copy
                           </Button>
                           <Button
-                            variant="ghost"
-                            className="px-3 py-2 text-xs uppercase tracking-[0.16em]"
+                            variant="destructive"
+                            size="xs"
+                            className="px-3 text-[10px] uppercase tracking-[0.12em]"
                             type="button"
                             onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                           >
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                             Remove
                           </Button>
                         </div>
@@ -467,7 +582,15 @@ export default function HomePage() {
               </table>
             </div>
           ) : (
-            <div className="px-5 py-10 text-sm text-slate-400">No tracked orders yet.</div>
+            <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
+              <div>
+                <span className="stat-icon mx-auto" aria-hidden="true">
+                  <ListChecks className="h-4 w-4" />
+                </span>
+                <p className="mt-4 text-sm font-medium text-slate-300">No tracked orders yet</p>
+                <p className="app-copy mt-1 text-sm">Create an order to start your private queue.</p>
+              </div>
+            </div>
           )}
         </section>
         ) : null}
