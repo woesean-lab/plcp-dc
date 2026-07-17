@@ -157,7 +157,7 @@ const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] t
 export default function HomePage() {
   const [searchParams] = useSearchParams();
   const activeTab = searchParams.get("tab") === "manage" ? "manage" : "create";
-  const [tabLoading, setTabLoading] = useState(true);
+  const [tabSkeletonReady, setTabSkeletonReady] = useState(false);
 
   const [apiKey, setApiKeyValue] = useState(getApiKey());
   const [balance, setBalance] = useState<number | null>(null);
@@ -181,10 +181,10 @@ export default function HomePage() {
   }, [storedApiKey]);
 
   useEffect(() => {
-    setTabLoading(true);
+    setTabSkeletonReady(false);
     const timer = window.setTimeout(() => {
-      setTabLoading(false);
-    }, 450);
+      setTabSkeletonReady(true);
+    }, 180);
 
     return () => window.clearTimeout(timer);
   }, [activeTab]);
@@ -318,12 +318,8 @@ export default function HomePage() {
   const shell = "app-panel";
   const showOverlay = saving || loadingBalance;
   const balanceLoading = loadingBalance && balance === null;
-  const showCardSkeletons = showOverlay || loadingBalance || saving;
+  const showCardSkeletons = showOverlay || loadingBalance || saving || tabSkeletonReady;
   const showManageSkeleton = activeTab === "manage" && (showCardSkeletons || orders.length === 0);
-
-  if (tabLoading) {
-    return <PageSkeleton activeTab={activeTab} />;
-  }
 
   return (
     <div className="relative space-y-5">
