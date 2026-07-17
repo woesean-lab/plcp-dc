@@ -95,7 +95,7 @@ export default function OrderPage() {
             />
           </label>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-3">
             <button className={buttonClass} type="button" onClick={() => lookup()} disabled={loading}>
               {loading ? "Loading..." : "Check"}
             </button>

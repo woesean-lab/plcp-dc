@@ -328,7 +328,7 @@ export default function HomePage() {
                 </label>
               </div>
 
-              <div className="flex flex-wrap gap-2 pt-1">
+              <div className="flex flex-wrap gap-3 pt-2">
                 <button
                   className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                   type="submit"
@@ -369,7 +369,7 @@ export default function HomePage() {
                   />
                 </label>
 
-                <div className="mt-1 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap gap-3">
                   <button
                     className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                     type="submit"
@@ -406,7 +406,7 @@ export default function HomePage() {
                     placeholder="Enter order ID"
                   />
                 </label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   <button
                     className={`${actionButtonBase} border-slate-700 bg-[#111827] px-4 py-2.5 font-semibold text-slate-100 hover:bg-slate-700`}
                     type="button"
