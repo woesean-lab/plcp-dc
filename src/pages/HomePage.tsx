@@ -152,6 +152,7 @@ function PageSkeleton({ activeTab }: { activeTab: "create" | "manage" }) {
 const inputClass = "app-input";
 
 const labelClass = "app-kicker";
+const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500";
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
@@ -335,6 +336,7 @@ export default function HomePage() {
         </div>
       ) : null}
 
+      <div key={activeTab} className="space-y-5 tab-slide-in">
         <section className={`${shell} p-6`}>
           <div className="grid min-h-[192px] gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
             <div className="flex min-h-[192px] flex-col justify-between">
@@ -391,11 +393,10 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-      
 
-      {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
+        {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
 
-      {activeTab === "create" ? (
+        {activeTab === "create" ? (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className={`${shell} p-5`}>
             <div className="mb-5 flex items-end justify-between gap-4">
@@ -439,7 +440,7 @@ export default function HomePage() {
               <form onSubmit={handleCreateOrder} className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <label className="space-y-2">
-                    <span className={labelClass}>Service</span>
+                    <span className={fieldLabelClass}>Service</span>
                     <select
                       className={inputClass}
                       value={form.service}
@@ -459,7 +460,7 @@ export default function HomePage() {
                   </label>
 
                   <label className="space-y-2">
-                    <span className={labelClass}>Server ID</span>
+                    <span className={fieldLabelClass}>Server ID</span>
                     <Input
                       value={form.serverId}
                       onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
@@ -468,7 +469,7 @@ export default function HomePage() {
                   </label>
 
                   <label className="space-y-2">
-                    <span className={labelClass}>Amount</span>
+                    <span className={fieldLabelClass}>Amount</span>
                     <Input
                       type="number"
                       min={1}
@@ -480,7 +481,7 @@ export default function HomePage() {
                   </label>
 
                   <label className="space-y-2">
-                    <span className={labelClass}>Delay</span>
+                    <span className={fieldLabelClass}>Delay</span>
                     <Input
                       type="number"
                       min={1}
@@ -493,7 +494,7 @@ export default function HomePage() {
                   </label>
 
                   <label className="space-y-2 md:col-span-2">
-                    <span className={labelClass}>Billing cycle</span>
+                    <span className={fieldLabelClass}>Billing cycle</span>
                     <Input
                       type="number"
                       min={1}
@@ -508,10 +509,10 @@ export default function HomePage() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-4">
-                  <Button className="px-4 py-2.5" type="submit">
+                  <Button className="min-w-[132px] px-4 py-2.5" type="submit">
                     Create order
                   </Button>
-                  <Button variant="ghost" type="button" onClick={refreshBalance}>
+                  <Button className="min-w-[132px] px-4 py-2.5" variant="ghost" type="button" onClick={refreshBalance}>
                     Refresh balance
                   </Button>
                 </div>
@@ -545,7 +546,7 @@ export default function HomePage() {
               ) : (
                 <form onSubmit={handleSaveApiKey} className="mt-4 space-y-6">
                   <label className="space-y-2">
-                    <span className={labelClass}>Local key</span>
+                    <span className={fieldLabelClass}>Local key</span>
                     <Input
                       type="password"
                       value={apiKey}
@@ -556,10 +557,11 @@ export default function HomePage() {
                   </label>
 
                   <div className="mt-4 flex flex-wrap gap-4">
-                    <Button className="px-4 py-2.5" type="submit" disabled={saving}>
+                    <Button className="min-w-[132px] px-4 py-2.5" type="submit" disabled={saving}>
                       {saving ? "Saving..." : "Save"}
                     </Button>
                     <Button
+                      className="min-w-[132px] px-4 py-2.5"
                       variant="ghost"
                       type="button"
                       onClick={() => {
@@ -593,7 +595,7 @@ export default function HomePage() {
               ) : (
                 <div className="mt-4 space-y-5">
                   <label className="space-y-2">
-                    <span className={labelClass}>Manual add</span>
+                    <span className={fieldLabelClass}>Manual add</span>
                     <Input
                       value={orderIdToTrack}
                       onChange={(event) => setOrderIdToTrack(event.target.value)}
@@ -601,10 +603,10 @@ export default function HomePage() {
                     />
                   </label>
                   <div className="mt-4 flex flex-wrap gap-4">
-                    <Button className="px-4 py-2.5" type="button" onClick={trackOrderManually}>
+                    <Button className="min-w-[132px] px-4 py-2.5" type="button" onClick={trackOrderManually}>
                       Add
                     </Button>
-                    <Button asChild variant="ghost" className="px-4 py-2.5">
+                    <Button asChild variant="ghost" className="min-w-[132px] px-4 py-2.5">
                       <Link to="/orders">Lookup</Link>
                     </Button>
                   </div>
@@ -613,9 +615,9 @@ export default function HomePage() {
             </div>
           </div>
         </section>
-      ) : null}
+        ) : null}
 
-      {activeTab === "manage" ? (
+        {activeTab === "manage" ? (
         <section className={shell + " overflow-hidden"}>
           <div className="border-b border-white/8 px-5 py-4">
             <p className={labelClass}>Management</p>
@@ -703,7 +705,8 @@ export default function HomePage() {
             </div>
           )}
         </section>
-      ) : null}
+        ) : null}
+      </div>
     </div>
   );
 }

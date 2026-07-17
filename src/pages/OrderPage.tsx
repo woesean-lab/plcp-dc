@@ -7,6 +7,7 @@ import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
+const fieldLabelClass = "text-[10px] font-semibold uppercase tracking-[0.28em] text-slate-500";
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -22,7 +23,7 @@ function formatTime(value?: number) {
 
 function PageSkeleton() {
   return (
-    <section className="grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+    <section className="tab-slide-in grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
       <div className="app-panel p-5">
         <div className="space-y-4">
           <Skeleton className="h-4 w-24" />
@@ -177,7 +178,7 @@ export default function OrderPage() {
 
         <div className="mt-5 space-y-5">
           <label className="space-y-2">
-            <span className={labelClass}>Order ID</span>
+            <span className={fieldLabelClass}>Order ID</span>
             <Input
               value={uniqid}
               onChange={(event) => setUniqid(event.target.value)}
@@ -186,12 +187,12 @@ export default function OrderPage() {
           </label>
 
           <div className="mt-4 flex flex-wrap gap-4">
-            <Button type="button" onClick={() => lookup()} disabled={loading}>
+            <Button className="min-w-[132px] px-4 py-2.5" type="button" onClick={() => lookup()} disabled={loading}>
               {loading ? "Loading..." : "Check"}
             </Button>
             <Button
               variant="secondary"
-              className="rounded-[3px] bg-[#121621] text-slate-300 hover:bg-[#181d2a] hover:text-slate-100"
+              className="min-w-[132px] rounded-[3px] bg-[#121621] px-4 py-2.5 text-slate-300 hover:bg-[#181d2a] hover:text-slate-100"
               type="button"
               onClick={() => {
                 setUniqid("");
