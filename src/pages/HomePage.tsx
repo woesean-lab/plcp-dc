@@ -337,7 +337,7 @@ export default function HomePage() {
       ) : null}
 
       <div key={activeTab} className="space-y-5 tab-slide-in">
-        <section className={`${shell} p-6`}>
+        <section className={`${shell} tab-slide-in p-6`}>
           <div className="grid min-h-[192px] gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
             <div className="flex min-h-[192px] flex-col justify-between">
             <div>
@@ -397,7 +397,7 @@ export default function HomePage() {
         {message ? <div className="app-panel px-4 py-3 text-sm text-slate-300">{message}</div> : null}
 
         {activeTab === "create" ? (
-        <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="tab-slide-in grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div className={`${shell} p-5`}>
             <div className="mb-5 flex items-end justify-between gap-4">
               <div>
@@ -618,7 +618,7 @@ export default function HomePage() {
         ) : null}
 
         {activeTab === "manage" ? (
-        <section className={shell + " overflow-hidden"}>
+        <section className={shell + " tab-slide-in overflow-hidden"}>
           <div className="border-b border-white/8 px-5 py-4">
             <p className={labelClass}>Management</p>
             <h3 className="app-title mt-2 text-xl font-semibold">Queue</h3>
