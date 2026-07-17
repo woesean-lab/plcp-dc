@@ -2,7 +2,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import ManagePage from "./pages/ManagePage";
-import { GridIcon, SearchIcon, SettingsIcon, ShieldIcon, SparkIcon } from "./components/Icons";
+import { GridIcon, SearchIcon, SettingsIcon } from "./components/Icons";
 
 function Shell() {
   const location = useLocation();
@@ -28,14 +28,7 @@ function Shell() {
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.14),transparent_28%),radial-gradient(circle_at_top_right,rgba(99,102,241,0.12),transparent_26%)]" />
           <div className="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 items-center justify-center border border-sky-400/35 bg-gradient-to-br from-sky-500 to-blue-700 text-white shadow-lg shadow-sky-500/15">
-                <ShieldIcon className="h-5 w-5" />
-              </div>
               <div>
-                <p className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.32em] text-slate-500">
-                  <SparkIcon className="h-3.5 w-3.5 text-sky-300" />
-                  Tokenu panel
-                </p>
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-50">Orders workspace</h1>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
                   Create, monitor, and inspect orders in one focused control surface.
