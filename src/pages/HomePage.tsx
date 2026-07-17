@@ -233,11 +233,11 @@ export default function HomePage() {
 
       {!tabLoading ? (
         <section className={`${shell} p-5`}>
-        <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
+          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
           <div className="flex min-h-[170px] flex-col justify-between">
             <div>
               <p className={labelClass}>Dashboard</p>
-              <h2 className="app-title mt-3 text-[2.1rem] font-semibold">Orders and settings</h2>
+              <h2 className="app-title mt-3 text-[2.75rem] font-semibold leading-[1.02]">Orders and settings</h2>
               <p className="app-copy mt-3 max-w-2xl text-sm leading-6">
                 Create orders, sync balance, and keep the queue visible from one clean control surface.
               </p>
@@ -300,7 +300,6 @@ export default function HomePage() {
                 <p className={labelClass}>Order</p>
                 <h3 className="app-title mt-2 text-xl font-semibold">Create</h3>
               </div>
-              <span className="app-chip py-2">Ready</span>
             </div>
 
             <form onSubmit={handleCreateOrder} className="space-y-6">

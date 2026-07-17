@@ -34,7 +34,7 @@ function Shell() {
         </div>
       ) : null}
 
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1260px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <header className="app-panel px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="inline-flex items-center gap-3 text-[15px] font-semibold tracking-tight text-slate-50">
@@ -46,7 +46,11 @@ function Shell() {
               <Button
                 type="button"
                 variant="secondary"
-                className={`rounded-[3px] bg-slate-700 text-slate-50 hover:bg-slate-700 ${isAdmin && tab === "create" ? "" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
+                className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
+                  isAdmin && tab === "create"
+                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
+                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                }`}
                 onClick={() => navigate("/admin?tab=create")}
               >
                 Create Order
@@ -54,7 +58,11 @@ function Shell() {
               <Button
                 type="button"
                 variant="secondary"
-                className={`rounded-[3px] ${isAdmin && tab === "manage" ? "bg-slate-700 text-slate-50 hover:bg-slate-700" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
+                className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
+                  isAdmin && tab === "manage"
+                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
+                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                }`}
                 onClick={() => navigate("/admin?tab=manage")}
               >
                 Manage Orders
@@ -62,7 +70,11 @@ function Shell() {
               <Button
                 type="button"
                 variant="secondary"
-                className={`rounded-[3px] ${isOrders ? "bg-slate-700 text-slate-50 hover:bg-slate-700" : "bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-slate-100"}`}
+                className={`h-10 rounded-[3px] border-0 px-4 text-[14px] font-semibold shadow-none ${
+                  isOrders
+                    ? "bg-[#123d61] text-white hover:bg-[#17496f]"
+                    : "bg-[#171c29] text-slate-200 hover:bg-[#212837] hover:text-slate-100"
+                }`}
                 onClick={() => navigate("/orders")}
               >
                 Orders
