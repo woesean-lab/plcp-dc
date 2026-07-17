@@ -269,7 +269,7 @@ export default function OrderPage() {
               <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
             </div>
 
-            <div className="overflow-auto border border-white/8 bg-[#070b15] p-4">
+            <div className="app-panel-soft overflow-auto p-4">
               <pre className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{formatJson(result)}</pre>
             </div>
           </div>
