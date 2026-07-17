@@ -593,7 +593,7 @@ export default function HomePage() {
                                   </Link>
                                 </Button>
                                 <Button
-                                  variant="secondary"
+                                  variant="default"
                                   size="xs"
                                   className="px-3 text-[10px] uppercase tracking-[0.12em]"
                                   type="button"
