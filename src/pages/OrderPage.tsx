@@ -142,7 +142,7 @@ export default function OrderPage() {
   }
 
   const shell = "app-panel";
-  const showOverlay = loading;
+  const showOverlay = loading && !pageLoading;
 
   if (pageLoading) {
     return (
@@ -161,7 +161,7 @@ export default function OrderPage() {
   }
 
   return (
-    <section className="relative grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+    <section className="tab-slide-in relative grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
       {showOverlay ? (
         <div className="app-overlay">
           <div className="app-preloader">
