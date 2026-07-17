@@ -232,19 +232,19 @@ export default function HomePage() {
       ) : null}
 
       {!tabLoading ? (
-        <section className={`${shell} p-5`}>
-          <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr] xl:items-stretch">
-          <div className="flex min-h-[170px] flex-col justify-between">
+        <section className={`${shell} p-6`}>
+          <div className="grid min-h-[192px] gap-5 xl:grid-cols-[1.18fr_0.82fr] xl:items-stretch">
+            <div className="flex min-h-[192px] flex-col justify-between">
             <div>
               <p className={labelClass}>Dashboard</p>
-              <h2 className="app-title mt-3 text-[2.75rem] font-semibold leading-[1.02]">Orders and settings</h2>
+              <h2 className="app-title mt-3 text-[2.9rem] font-semibold leading-[1.01]">Orders and settings</h2>
               <p className="app-copy mt-3 max-w-2xl text-sm leading-6">
                 Create orders, sync balance, and keep the queue visible from one clean control surface.
               </p>
             </div>
-          </div>
+            </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="app-stat">
               <span className={labelClass}>Balance</span>
               {showCardSkeletons ? (
@@ -285,8 +285,8 @@ export default function HomePage() {
                 <strong className="mt-2 block text-lg text-slate-50">{storedApiKey ? "Ready" : "Missing"}</strong>
               )}
             </div>
+            </div>
           </div>
-        </div>
         </section>
       ) : null}
 

@@ -34,7 +34,7 @@ function Shell() {
         </div>
       ) : null}
 
-      <div className="mx-auto flex min-h-screen w-full max-w-[1260px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex min-h-screen w-full max-w-[1280px] flex-col gap-4 px-4 py-4 sm:px-6 lg:px-8">
         <header className="app-panel px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="inline-flex items-center gap-3 text-[15px] font-semibold tracking-tight text-slate-50">
