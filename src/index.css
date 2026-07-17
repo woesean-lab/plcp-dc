@@ -762,6 +762,26 @@
   .ui-button-ghost {
     border-color: transparent;
     background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-button-ghost:not(:disabled):hover {
+    border-color: transparent;
+    color: var(--app-accent);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-button-ghost:not(:disabled):active {
+    border-color: transparent;
+    color: var(--app-accent-hover);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-button-ghost.quiet-action-danger:not(:disabled):hover,
+  .ui-button-ghost.quiet-action-danger:not(:disabled):active {
+    color: var(--app-danger);
   }
 
   .ui-button-link {

@@ -717,7 +717,7 @@ export default function HomePage() {
                       {saving ? "Saving..." : "Save key"}
                     </Button>
                     <Button
-                      className="min-w-[132px] max-sm:w-full"
+                      className="quiet-action-danger min-w-[132px] max-sm:w-full"
                       variant="ghost"
                       type="button"
                       onClick={() => {
