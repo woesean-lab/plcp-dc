@@ -240,7 +240,7 @@ export default function OrderPage() {
           <div className="app-panel-soft p-4">
             <div className="flex items-center justify-between gap-3">
               <p className={labelClass}>Created</p>
-              <Clock3 className="h-4 w-4 text-[#d8bd86]" aria-hidden="true" />
+              <Clock3 className="h-4 w-4 text-[#7cc9ff]" aria-hidden="true" />
             </div>
             <p className="app-copy mt-2 text-sm">
               {result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}
@@ -315,7 +315,7 @@ export default function OrderPage() {
 
             <div className="app-panel-soft p-4">
               <div className="flex items-center gap-2 text-[#f7f5ef]">
-                <Hash className="h-4 w-4 text-[#d8bd86]" aria-hidden="true" />
+                <Hash className="h-4 w-4 text-[#7cc9ff]" aria-hidden="true" />
                 <strong className="block font-mono text-sm font-semibold">{result.uniqid}</strong>
               </div>
               <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
