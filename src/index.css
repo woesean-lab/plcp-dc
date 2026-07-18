@@ -1071,9 +1071,9 @@
     display: grid;
     min-width: 0;
     grid-template-areas: "identity service metrics actions";
-    grid-template-columns: minmax(190px, 1.1fr) minmax(150px, 0.72fr) minmax(240px, 1fr) auto;
+    grid-template-columns: minmax(175px, 1fr) minmax(135px, .68fr) minmax(340px, 1.35fr) auto;
     align-items: center;
-    gap: 1rem;
+    gap: 1.1rem;
     overflow: hidden;
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-lg);
@@ -1232,25 +1232,31 @@
     grid-area: metrics;
     display: grid;
     min-width: 0;
-    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
-    border-left: 1px solid var(--app-divider);
+    grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+    gap: .35rem;
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    background: rgba(5, 6, 13, .34);
     margin: 0;
-    padding-left: 0.25rem;
+    padding: .4rem;
+    box-shadow: inset 0 1px 8px rgba(0,0,0,.16), inset 0 1px 0 rgba(255,255,255,.025);
   }
 
   .tracked-order-metric {
     min-width: 0;
-    padding: 0.25rem 0.7rem;
+    border-radius: 10px;
+    padding: .55rem .65rem;
+    transition: background-color 160ms ease;
   }
 
-  .tracked-order-metric + .tracked-order-metric {
-    border-left: 1px solid var(--app-divider);
+  .tracked-order-metric:hover {
+    background: rgba(255,255,255,.035);
   }
 
   .tracked-order-metric dd {
     overflow: hidden;
-    margin: 0.4rem 0 0;
-    font-size: 11.5px;
+    margin: 0.35rem 0 0;
+    font-size: 12px;
     font-weight: 700;
     line-height: 1.4;
     text-overflow: ellipsis;
@@ -1263,7 +1269,34 @@
     display: flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.4rem;
+    gap: .4rem;
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    background: rgba(255,255,255,.025);
+    padding: .35rem;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+  }
+
+  .tracked-order-actions > .ui-button {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .tracked-order-actions > .ui-button-secondary:hover {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+  }
+
+  .tracked-order-actions > .ui-button-danger-ghost:hover {
+    border-color: rgba(255,117,136,.18);
+  }
+
+  .tracked-order-delay-control {
+    border-right: 1px solid var(--app-divider);
+    margin-right: .15rem;
+    padding: .15rem .7rem .15rem .25rem;
   }
 
   .app-overlay {
@@ -2019,14 +2052,18 @@
   }
 
   .tracked-order-metrics {
-    border-top: 1px solid var(--app-divider);
-    border-left: 0;
-    padding-top: 0.85rem;
-    padding-left: 0;
+    border: 1px solid var(--app-border);
+    padding: .4rem;
   }
 
   .tracked-order-actions {
     align-self: start;
+  }
+
+  .tracked-order-delay-control {
+    border-right: 0;
+    margin-right: 0;
+    padding-right: .25rem;
   }
 }
 
@@ -2169,6 +2206,7 @@
 
   .tracked-order-actions {
     justify-content: stretch;
+    flex-wrap: wrap;
   }
 
   .tracked-order-actions .ui-button-secondary {

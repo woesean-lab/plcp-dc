@@ -922,7 +922,7 @@ export default function HomePage() {
 
                               <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
                               {!completed ? (
-                                <div className="grid gap-2">
+                                <div className="tracked-order-delay-control grid gap-2">
                                   <span className="tracked-order-label">Update delay</span>
                                   <div className="flex gap-2 max-sm:flex-col">
                                     <Input
