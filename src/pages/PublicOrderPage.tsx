@@ -245,13 +245,16 @@ export default function PublicOrderPage() {
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
+  const isTerminalStatus = ["COMPLETED", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
+    (value) => normalizedStatus.includes(value)
+  );
   const botInvite = useMemo(() => extractBotInvite(status), [status]);
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
-  const estimatedCompletion = isCompleted || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
+  const estimatedCompletion = isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -260,7 +263,7 @@ export default function PublicOrderPage() {
   }, [currentDelay]);
 
   async function handleUpdateDelay() {
-    if (isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
+    if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
 
     const nextDelay = Number.parseInt(delayDraft, 10);
 
@@ -334,7 +337,7 @@ export default function PublicOrderPage() {
     }
   }
 
-  const delayUpdatePanel = !isCompleted ? (
+  const delayUpdatePanel = !isTerminalStatus ? (
     <div className="public-delay-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
