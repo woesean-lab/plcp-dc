@@ -27,7 +27,7 @@ import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
-import { checkAvailableAmount, createOrder, getBalance, getOrderStatus } from "../lib/tokenu";
+import { checkAvailableAmount, createOrder, getBalance, getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string; description: string; icon: LucideIcon }> = [
@@ -301,11 +301,13 @@ export default function HomePage() {
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
+  const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
+  const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
 
   const storedApiKey = getApiKey();
   const activeOrders = orders.filter(
@@ -416,6 +418,11 @@ export default function HomePage() {
     saveTrackedOrders(nextOrders);
   }
 
+  function updateLocalOrder(nextOrder: TrackedOrder) {
+    const nextOrders = orders.map((order) => (order.uniqid === nextOrder.uniqid ? nextOrder : order));
+    persistOrders(nextOrders);
+  }
+
   function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
     const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
     const resolvedStatusDelay = parseDelay(status.delay) ?? order.statusDelay;
@@ -450,6 +457,34 @@ export default function HomePage() {
       a.serverId === b.serverId &&
       a.service === b.service
     );
+  }
+
+  async function handleUpdateDelay(order: TrackedOrder) {
+    const draft = delayDrafts[order.uniqid] ?? "";
+    const delay = Number.parseInt(draft, 10);
+
+    if (!Number.isFinite(delay) || delay <= 0) {
+      setMessage("Delay must be a positive number.");
+      return;
+    }
+
+    try {
+      setUpdatingDelayId(order.uniqid);
+      await updateOrderDelay(order.uniqid, delay);
+
+      const nextOrder: TrackedOrder = {
+        ...order,
+        statusDelay: delay
+      };
+
+      updateLocalOrder(nextOrder);
+      setDelayDrafts((current) => ({ ...current, [order.uniqid]: String(delay) }));
+      setMessage(`Delay updated for ${order.uniqid}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Delay could not be updated.");
+    } finally {
+      setUpdatingDelayId(null);
+    }
   }
 
   async function handleSaveApiKey(event: FormEvent) {
@@ -827,6 +862,35 @@ export default function HomePage() {
                             </dl>
 
                             <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
+                              <div className="grid gap-2">
+                                <span className="tracked-order-label">Update delay</span>
+                                <div className="flex gap-2 max-sm:flex-col">
+                                  <Input
+                                    type="number"
+                                    min={1}
+                                    max={1200}
+                                    value={delayDrafts[order.uniqid] ?? String(order.statusDelay ?? "")}
+                                    onChange={(event) =>
+                                      setDelayDrafts((current) => ({
+                                        ...current,
+                                        [order.uniqid]: event.target.value
+                                      }))
+                                    }
+                                    placeholder="Delay"
+                                    className="w-24 shrink-0"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="xs"
+                                    variant="secondary"
+                                    className="max-sm:w-full"
+                                    disabled={updatingDelayId === order.uniqid}
+                                    onClick={() => void handleUpdateDelay(order)}
+                                  >
+                                    {updatingDelayId === order.uniqid ? "Updating..." : "Update"}
+                                  </Button>
+                                </div>
+                              </div>
                               <Button asChild variant="secondary" size="sm" title="View order">
                                 <Link
                                   to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
