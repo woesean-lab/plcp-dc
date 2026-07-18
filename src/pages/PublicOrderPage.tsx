@@ -225,7 +225,6 @@ export default function PublicOrderPage() {
             30-second delay means each member will join 30 seconds after the previous one.
           </p>
         </div>
-        <Badge variant={hasApiKey ? "success" : "secondary"}>{hasApiKey ? "Key ready" : "Admin key required"}</Badge>
       </div>
 
       <div className="mt-4 flex gap-3 max-sm:flex-col">
