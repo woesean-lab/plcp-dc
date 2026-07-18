@@ -67,6 +67,18 @@ function getStatusBadgeVariant(status?: string): "success" | "destructive" | "se
   return "secondary";
 }
 
+function formatEstimatedDays(remaining?: number, delay?: number) {
+  if (typeof remaining !== "number" || typeof delay !== "number" || !Number.isFinite(remaining) || !Number.isFinite(delay)) {
+    return null;
+  }
+  if (remaining <= 0) return "Completion imminent";
+
+  const days = (remaining * delay) / 86_400;
+  if (days < 0.1) return "Less than 0.1 day remaining";
+  const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: days >= 10 ? 0 : 1 }).format(days);
+  return `~${formatted} ${days < 1.05 ? "day" : "days"} remaining`;
+}
+
 export default function PublicOrderPage() {
   const { uniqid = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -198,7 +210,7 @@ export default function PublicOrderPage() {
   const membersAdded = typeof status?.added === "number" ? status.added : undefined;
   const membersRemaining =
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
-  const currentDelay = typeof status?.delay === "number" ? status.delay : seed.delay;
+  const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
   const isCompleted = String(status?.status ?? "").toUpperCase() === "COMPLETED";
   const progress =
@@ -206,6 +218,7 @@ export default function PublicOrderPage() {
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
+  const estimatedCompletion = formatEstimatedDays(membersRemaining, currentDelay);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -410,6 +423,7 @@ export default function PublicOrderPage() {
                       {typeof currentDelay === "number" ? `${currentDelay}s` : "-"}
                     </strong>
                     <small>Current delivery interval</small>
+                    {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
                   </div>
                 ) : null}
                 </div>

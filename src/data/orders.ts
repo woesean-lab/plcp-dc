@@ -37,14 +37,3 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     })
   );
 }
-
-export async function deleteTrackedOrder(uniqid: string) {
-  const response = await fetch(`/api/orders/${encodeURIComponent(uniqid)}`, {
-    method: "DELETE",
-    credentials: "same-origin"
-  });
-  if (response.ok) return;
-
-  const payload = await response.json().catch(() => ({})) as { message?: string };
-  throw new Error(payload.message ?? `Request failed with ${response.status}`);
-}

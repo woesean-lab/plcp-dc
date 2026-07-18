@@ -19,9 +19,10 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  TriangleAlert,
   Trash2,
 } from "lucide-react";
-import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
+import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
@@ -320,7 +321,8 @@ export default function HomePage() {
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
-  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+  const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
+  const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -345,6 +347,20 @@ export default function HomePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!orderPendingDeletion) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !deletingTrackedOrder) setOrderPendingDeletion(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [orderPendingDeletion, deletingTrackedOrder]);
 
   useEffect(() => {
     void loadTokenuConnection();
@@ -623,25 +639,21 @@ export default function HomePage() {
     }
   }
 
-  async function handleDeleteOrder(order: TrackedOrder) {
-    if (deletingOrderId || syncingOrders || refreshingManage) return;
-    const confirmed = window.confirm(`Delete ${order.uniqid} from tracked orders? This cannot be undone.`);
-    if (!confirmed) return;
+  async function confirmTrackedOrderDeletion() {
+    if (!orderPendingDeletion || deletingTrackedOrder) return;
+    const target = orderPendingDeletion;
+    const nextOrders = orders.filter((item) => item.uniqid !== target.uniqid);
 
     try {
-      setDeletingOrderId(order.uniqid);
-      await deleteTrackedOrder(order.uniqid);
-      setOrders((current) => current.filter((item) => item.uniqid !== order.uniqid));
-      setDelayDrafts((current) => {
-        const next = { ...current };
-        delete next[order.uniqid];
-        return next;
-      });
-      notifySuccess(`Order ${order.uniqid} deleted.`);
+      setDeletingTrackedOrder(true);
+      await saveTrackedOrders(nextOrders);
+      setOrders(nextOrders);
+      setOrderPendingDeletion(null);
+      notifySuccess(`Order ${target.uniqid} removed from tracking.`);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Order could not be deleted.");
+      notifyError(error instanceof Error ? error.message : "Order could not be removed.");
     } finally {
-      setDeletingOrderId(null);
+      setDeletingTrackedOrder(false);
     }
   }
 
@@ -1058,10 +1070,9 @@ export default function HomePage() {
                                 type="button"
                                 title="Remove from tracked orders"
                                 aria-label={`Remove ${order.uniqid} from tracked orders`}
-                                disabled={Boolean(deletingOrderId) || syncingOrders || refreshingManage}
-                                onClick={() => void handleDeleteOrder(order)}
+                                onClick={() => setOrderPendingDeletion(order)}
                               >
-                                {deletingOrderId === order.uniqid ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                                <Trash2 className="h-4 w-4" aria-hidden="true" />
                               </Button>
                             </div>
                           </article>
@@ -1225,6 +1236,29 @@ export default function HomePage() {
         ) : null}
         </div>
       </TimedReveal>
+
+      {orderPendingDeletion ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !deletingTrackedOrder) setOrderPendingDeletion(null);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-order-title" aria-describedby="delete-order-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Remove order</p>
+            <h2 id="delete-order-title">Stop tracking this order?</h2>
+            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Manage list and tracked orders database. It does not cancel the Tokenu order.</p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={deletingTrackedOrder} onClick={() => setOrderPendingDeletion(null)}>Keep order</Button>
+              <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>
+                {deletingTrackedOrder ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                {deletingTrackedOrder ? "Removing..." : "Remove order"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

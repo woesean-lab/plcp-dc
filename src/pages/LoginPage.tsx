@@ -57,7 +57,6 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
               <span><span className="brand-eyebrow">Pulcip</span><strong>Members Suite</strong></span>
             </div>
             <div className="login-hero-icon" aria-hidden="true"><Sparkles className="h-6 w-6" /></div>
-            <p className="app-kicker">Private operations</p>
             <h1 className="login-headline">Everything in control.<br />Beautifully simple.</h1>
             <p className="login-copy">Create, monitor, and manage every delivery from one secure workspace.</p>
           </div>
