@@ -12,6 +12,7 @@ import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
+const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -77,9 +78,11 @@ export default function PublicOrderPage() {
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
+  const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
+  const delayUpdateCooldownUntilRef = useRef(0);
 
   const seed = useMemo(
     () => ({
@@ -125,6 +128,15 @@ export default function PublicOrderPage() {
       active = false;
     };
   }, [uniqid]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const remaining = Math.max(0, Math.ceil((delayUpdateCooldownUntilRef.current - Date.now()) / 1000));
+      setDelayUpdateCooldown((current) => (current === remaining ? current : remaining));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!uniqid) return;
@@ -186,7 +198,7 @@ export default function PublicOrderPage() {
   }, [currentDelay]);
 
   async function handleUpdateDelay() {
-    if (delayUpdateInFlightRef.current) return;
+    if (delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
 
     const nextDelay = Number.parseInt(delayDraft, 10);
 
@@ -215,6 +227,8 @@ export default function PublicOrderPage() {
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.
       }
+      delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
+      setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
       toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
@@ -247,9 +261,14 @@ export default function PublicOrderPage() {
           placeholder="Delay"
           className="w-36 shrink-0"
         />
-        <Button type="button" variant="secondary" onClick={() => void handleUpdateDelay()} disabled={updatingDelay || !hasApiKey}>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={() => void handleUpdateDelay()}
+          disabled={updatingDelay || delayUpdateCooldown > 0 || !hasApiKey}
+        >
           <Timer className="h-4 w-4" aria-hidden="true" />
-          {updatingDelay ? "Updating..." : "Update delay"}
+          {updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
         </Button>
       </div>
 
