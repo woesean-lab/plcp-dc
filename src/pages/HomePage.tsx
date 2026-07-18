@@ -116,8 +116,9 @@ function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
   return "active";
 }
 
-function isCompletedOrder(status?: string) {
-  return String(status ?? "").toLowerCase().includes("completed");
+function isTerminalOrder(status?: string) {
+  const normalized = String(status ?? "").toLowerCase();
+  return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
 }
 
 function getOrderProgress(order: TrackedOrder) {
@@ -845,7 +846,7 @@ export default function HomePage() {
                       const ServiceIcon = serviceOption?.icon ?? KeyRound;
                       const orderTitleId = `tracked-order-${index}`;
                       const progress = getOrderProgress(order);
-                      const completed = isCompletedOrder(order.status);
+                      const completed = isTerminalOrder(order.status);
 
                       return (
                         <li key={order.uniqid}>
