@@ -67,16 +67,25 @@ function getStatusBadgeVariant(status?: string): "success" | "destructive" | "se
   return "secondary";
 }
 
-function formatEstimatedDays(remaining?: number, delay?: number) {
+function formatEstimatedDuration(remaining?: number, delay?: number) {
   if (typeof remaining !== "number" || typeof delay !== "number" || !Number.isFinite(remaining) || !Number.isFinite(delay)) {
     return null;
   }
   if (remaining <= 0) return "Completion imminent";
 
-  const days = (remaining * delay) / 86_400;
-  if (days < 0.1) return "Less than 0.1 day remaining";
-  const formatted = new Intl.NumberFormat("en-US", { maximumFractionDigits: days >= 10 ? 0 : 1 }).format(days);
-  return `~${formatted} ${days < 1.05 ? "day" : "days"} remaining`;
+  const totalSeconds = Math.max(Math.ceil(remaining * delay), 0);
+  if (totalSeconds < 60) return "Less than 1 minute remaining";
+
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const parts: string[] = [];
+
+  if (days) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  if (hours) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+  if (minutes || parts.length === 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
+
+  return `About ${parts.join(" ")} remaining`;
 }
 
 export default function PublicOrderPage() {
@@ -218,7 +227,7 @@ export default function PublicOrderPage() {
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
-  const estimatedCompletion = formatEstimatedDays(membersRemaining, currentDelay);
+  const estimatedCompletion = isCompleted ? null : formatEstimatedDuration(membersRemaining, currentDelay);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -412,6 +421,7 @@ export default function PublicOrderPage() {
                     {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
                   </strong>
                   <small>Members left in queue</small>
+                  {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
                 </div>
                 {!isCompleted ? (
                   <div className="public-metric-card">
@@ -423,7 +433,6 @@ export default function PublicOrderPage() {
                       {typeof currentDelay === "number" ? `${currentDelay}s` : "-"}
                     </strong>
                     <small>Current delivery interval</small>
-                    {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
                   </div>
                 ) : null}
                 </div>
