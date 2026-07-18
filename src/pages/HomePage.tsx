@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
 import {
+  Bot,
   CircleDollarSign,
   Check,
   Copy,
@@ -21,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
+import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
@@ -611,6 +613,15 @@ export default function HomePage() {
     }
   }
 
+  async function copyBotInviteLink(link: string) {
+    try {
+      await navigator.clipboard.writeText(link);
+      notifySuccess("Bot invite link copied.");
+    } catch {
+      notifyError("Bot invite link could not be copied.");
+    }
+  }
+
   async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -881,6 +892,7 @@ export default function HomePage() {
                       const orderTitleId = `tracked-order-${index}`;
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
+                      const botInvite = extractBotInvite(order);
 
                       return (
                         <li key={order.uniqid}>
@@ -902,7 +914,21 @@ export default function HomePage() {
                                 {order.serverName ? <span>{order.serverName}</span> : null}
                                 <span>{order.serverId ? `ID ${order.serverId}` : "Added locally"}</span>
                               </div>
-                              {order.details ? <p className="tracked-order-detail">{order.details}</p> : null}
+                              {botInvite ? (
+                                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-2">
+                                  <span className="mr-auto inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--app-text)]">
+                                    <Bot className="h-3.5 w-3.5 text-[var(--app-accent)]" aria-hidden="true" /> Bot required to start
+                                  </span>
+                                  <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink(botInvite)}>
+                                    <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
+                                  </Button>
+                                  <Button asChild size="xs">
+                                    <a href={botInvite} target="_blank" rel="noreferrer">
+                                      <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                                    </a>
+                                  </Button>
+                                </div>
+                              ) : order.details ? <p className="tracked-order-detail">{getPlainDetails(order.details)}</p> : null}
                             </div>
 
                             <div className="tracked-order-service">

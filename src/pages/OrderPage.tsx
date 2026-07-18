@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
+import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
@@ -32,34 +33,6 @@ function formatDelay(value?: string | number) {
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
-}
-
-function normalizeDiscordInvite(value?: unknown) {
-  if (typeof value !== "string" || !value.trim()) return null;
-
-  try {
-    const url = new URL(value.trim());
-    const allowedHost = url.hostname === "discord.com" || url.hostname === "www.discord.com" || url.hostname === "discordapp.com";
-    return url.protocol === "https:" && allowedHost && url.pathname.includes("/oauth2/authorize") ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function extractBotInvite(result: OrderStatusResponse | null) {
-  if (!result) return null;
-  const directInvite = normalizeDiscordInvite(result.bot_invite);
-  if (directInvite) return directInvite;
-  if (typeof result.details !== "string" || !result.details.trim()) return null;
-
-  const document = new DOMParser().parseFromString(result.details, "text/html");
-  return normalizeDiscordInvite(document.querySelector("a[href]")?.getAttribute("href"));
-}
-
-function getPlainDetails(value?: string) {
-  if (!value?.trim()) return "No details.";
-  const document = new DOMParser().parseFromString(value, "text/html");
-  return (document.body.textContent ?? value).replace(/\s+/g, " ").trim();
 }
 
 function PageSkeleton() {
