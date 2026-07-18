@@ -72,6 +72,10 @@ function getServiceLabel(service?: ServiceType) {
   return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
 
+function formatDelay(value?: number) {
+  return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
+}
+
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
@@ -770,11 +774,22 @@ export default function HomePage() {
                                   <dd>{formatNumber(order.amount)}</dd>
                                 </div>
                               ) : null}
+                              {typeof order.delay === "number" ? (
+                                <div className="tracked-order-metric">
+                                  <dt>Delay</dt>
+                                  <dd>{formatDelay(order.delay)}</dd>
+                                </div>
+                              ) : null}
                               {progress ? (
                                 <div className="tracked-order-metric">
                                   <dt>Users</dt>
                                   <dd className="grid gap-1">
-                                    <span>{`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}</span>
+                                    <Badge
+                                      variant={progress.remaining === 0 ? "success" : "secondary"}
+                                      className="tracked-order-users-pill justify-center"
+                                    >
+                                      {`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}
+                                    </Badge>
                                     <span className="text-xs text-[var(--app-muted)]">{`${formatNumber(progress.remaining)} left`}</span>
                                   </dd>
                                 </div>
