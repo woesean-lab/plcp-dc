@@ -35,66 +35,38 @@ function isTerminalStatus(status?: string) {
   return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
 }
 
-function PageSkeleton() {
+function LookupPreloader({ uniqid }: { uniqid?: string }) {
   return (
     <section
-      className="tab-slide-in grid gap-4 xl:grid-cols-[0.94fr_1.06fr]"
+      className="tab-slide-in grid min-h-[62vh] place-items-center px-4 py-10"
       role="status"
       aria-live="polite"
       aria-busy="true"
       aria-label="Loading order lookup"
     >
-      <span className="sr-only">Loading order lookup</span>
-      <div className="app-panel p-5">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-2/3" />
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-11 w-4/5" />
-          <div className="space-y-2">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-11 w-full" />
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <Skeleton className="h-10 w-28" />
-            <Skeleton className="h-10 w-24" />
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="app-panel-soft p-4">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="mt-3 h-4 w-full" />
-            </div>
-            <div className="app-panel-soft p-4">
-              <Skeleton className="h-3 w-24" />
-              <Skeleton className="mt-3 h-4 w-2/3" />
-            </div>
-          </div>
+      <div className="app-panel relative w-full max-w-md overflow-hidden p-8 text-center sm:p-10">
+        <div className="pointer-events-none absolute inset-x-12 top-0 h-24 rounded-full bg-[var(--app-accent-soft)] blur-3xl" aria-hidden="true" />
+        <div className="relative mx-auto grid h-20 w-20 place-items-center" aria-hidden="true">
+          <span className="absolute inset-0 animate-spin rounded-full border border-[var(--app-accent-border)] border-t-[var(--app-accent)]" />
+          <span className="absolute inset-2 animate-[spin_1.8s_linear_infinite_reverse] rounded-full border border-[var(--app-border)] border-b-[var(--app-accent)]" />
+          <span className="brand-mark shadow-[0_0_28px_var(--app-accent-soft)]"><span className="brand-letter">P</span></span>
         </div>
-      </div>
 
-      <div className="app-panel p-5">
-        <div className="space-y-4">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-2/3" />
-          <div className="grid gap-3 sm:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="app-panel-soft p-4">
-                <Skeleton className="h-3 w-16" />
-                <Skeleton className="mt-3 h-4 w-20" />
-              </div>
-            ))}
+        <p className="app-kicker mt-7">Pulcip Members</p>
+        <h1 className="app-title mt-2 text-2xl font-semibold">Opening order lookup</h1>
+        <p className="app-copy mx-auto mt-3 max-w-xs text-sm leading-6">
+          Your order was created. We’re preparing the latest delivery details.
+        </p>
+
+        {uniqid ? (
+          <div className="app-panel-soft mt-5 px-4 py-3">
+            <span className="app-kicker">Order ID</span>
+            <strong className="mt-1 block truncate font-mono text-xs text-[var(--app-text)]">{uniqid}</strong>
           </div>
-          <div className="app-panel-soft p-4">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="mt-3 h-4 w-full" />
-            <Skeleton className="mt-2 h-4 w-5/6" />
-          </div>
-          <div className="app-panel-soft p-4">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="mt-3 h-4 w-full" />
-            <Skeleton className="mt-2 h-4 w-11/12" />
-            <Skeleton className="mt-2 h-4 w-4/5" />
-          </div>
+        ) : null}
+
+        <div className="mt-6 h-1.5 overflow-hidden rounded-full bg-[var(--app-accent-soft)]" aria-hidden="true">
+          <span className="block h-full w-2/3 animate-pulse rounded-full bg-[var(--app-accent)] shadow-[0_0_14px_var(--app-accent)]" />
         </div>
       </div>
     </section>
@@ -217,7 +189,7 @@ export default function OrderPage() {
   if (pageLoading || loading) {
     return (
       <section className="relative">
-        <PageSkeleton />
+        <LookupPreloader uniqid={uniqid} />
       </section>
     );
   }
