@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -158,13 +158,20 @@ function ProtectedGate() {
   return <ProtectedShell onSignedOut={() => setAuthState("anonymous")} />;
 }
 
+function LegacyPublicOrderRedirect() {
+  const { uniqid = "" } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/monitor/${encodeURIComponent(uniqid)}${location.search}`} replace />;
+}
+
 export default function App() {
   return (
     <>
       <Routes>
         <Route path="/" element={null} />
         <Route path="/login" element={<Navigate to="/" replace />} />
-        <Route path="/public/order/:uniqid" element={<PublicOrderPage />} />
+        <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
+        <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
         <Route path="*" element={<ProtectedGate />} />
       </Routes>
 
