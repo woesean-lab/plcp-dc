@@ -319,7 +319,7 @@ export default function OrderPage() {
           </div>
           {result ? (
             <Button type="button" variant="secondary" size="sm" onClick={() => void copyPublicMonitorLink()}>
-              <Copy className="h-4 w-4" aria-hidden="true" /> Copy link
+              <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
             </Button>
           ) : null}
         </div>
