@@ -173,8 +173,11 @@ export default function PublicOrderPage() {
     };
   }, [uniqid]);
 
-  const serverName = status?.serverName ?? seed.serverName ?? "Unknown server";
-  const serviceName = getServiceTitle(seed.service ?? status?.type);
+  const isInitialLoading = loading && !status && !error;
+  const serviceType = seed.service ?? status?.type;
+  const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
+  const serviceName = serviceType ? getServiceTitle(serviceType) : "Service unavailable";
+  const statusLabel = status?.status ?? (error ? "UNAVAILABLE" : "PENDING");
   const totalMembers =
     typeof status?.amount === "number" ? status.amount : typeof status?.quantity === "number" ? status.quantity : seed.amount;
   const membersAdded = typeof status?.added === "number" ? status.added : undefined;
@@ -292,13 +295,22 @@ export default function PublicOrderPage() {
             <div className="public-stats-heading">
               <div className="min-w-0">
                 <div className="public-live-label"><span aria-hidden="true" /> Live public stats</div>
-                <h1>{serverName}</h1>
+                <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
                 <p>Real-time delivery visibility for your order, securely shared with you.</p>
               </div>
 
               <div className="public-stats-actions">
-                <Badge variant={getStatusBadgeVariant(status?.status)}>{status?.status ?? "LOADING"}</Badge>
-                <Badge variant="outline">{serviceName}</Badge>
+                {isInitialLoading ? (
+                  <>
+                    <Skeleton className="h-8 w-20 rounded-full" />
+                    <Skeleton className="h-8 w-28 rounded-full" />
+                  </>
+                ) : (
+                  <>
+                    <Badge variant={getStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge>
+                    <Badge variant="outline">{serviceName}</Badge>
+                  </>
+                )}
                 <div className={`auto-refresh-pill ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite" aria-label={autoRefreshing ? "Refreshing live stats" : `Next automatic refresh in ${secondsUntilRefresh} seconds`}>
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
                   <span>{autoRefreshing ? "Refreshing" : "Next refresh"}</span>
@@ -314,11 +326,11 @@ export default function PublicOrderPage() {
               </div>
               <div>
                 <span className="public-meta-icon"><CalendarDays className="h-4 w-4" /></span>
-                <span><small>Created</small><strong>{formatDateTime(createdAt)}</strong></span>
+                <span><small>Created</small>{isInitialLoading ? <Skeleton className="mt-2 h-4 w-28" /> : <strong>{formatDateTime(createdAt)}</strong>}</span>
               </div>
               <div>
                 <span className="public-meta-icon"><Activity className="h-4 w-4" /></span>
-                <span><small>Service</small><strong>{serviceName}</strong></span>
+                <span><small>Service</small>{isInitialLoading ? <Skeleton className="mt-2 h-4 w-24" /> : <strong>{serviceName}</strong>}</span>
               </div>
             </div>
           </div>
