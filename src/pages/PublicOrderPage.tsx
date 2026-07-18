@@ -72,7 +72,6 @@ export default function PublicOrderPage() {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
@@ -115,7 +114,6 @@ export default function PublicOrderPage() {
       } finally {
         if (active) {
           setLoading(false);
-          setRefreshing(false);
         }
       }
     }
@@ -186,25 +184,6 @@ export default function PublicOrderPage() {
     }
   }, [currentDelay]);
 
-  async function refresh() {
-    if (!uniqid) return;
-
-    try {
-      refreshInFlightRef.current = true;
-      setRefreshing(true);
-      countdownRef.current = AUTO_REFRESH_SECONDS;
-      setSecondsUntilRefresh(AUTO_REFRESH_SECONDS);
-      const data = await getOrderStatus(uniqid);
-      setStatus(data);
-      toast.success("Live stats refreshed.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Stats could not be refreshed.");
-    } finally {
-      refreshInFlightRef.current = false;
-      setRefreshing(false);
-    }
-  }
-
   async function handleUpdateDelay() {
     const nextDelay = Number.parseInt(delayDraft, 10);
 
@@ -235,6 +214,40 @@ export default function PublicOrderPage() {
     }
   }
 
+  const delayUpdatePanel = !isCompleted ? (
+    <div className="public-delay-card">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="app-kicker">Delay update</p>
+          <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
+        </div>
+        <Badge variant={hasApiKey ? "success" : "secondary"}>{hasApiKey ? "Key ready" : "Admin key required"}</Badge>
+      </div>
+
+      <div className="mt-4 flex gap-3 max-sm:flex-col">
+        <Input
+          type="number"
+          min={1}
+          max={1200}
+          value={delayDraft}
+          onChange={(event) => setDelayDraft(event.target.value)}
+          placeholder="Delay"
+          className="w-36 shrink-0"
+        />
+        <Button type="button" variant="secondary" onClick={() => void handleUpdateDelay()} disabled={updatingDelay || !hasApiKey}>
+          <Timer className="h-4 w-4" aria-hidden="true" />
+          {updatingDelay ? "Updating..." : "Update delay"}
+        </Button>
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
+        {hasApiKey
+          ? "This uses the admin API key stored in your browser."
+          : "Add the admin API key in the same browser if you want this public page to submit delay changes."}
+      </p>
+    </div>
+  ) : null;
+
   return (
     <section className="app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
@@ -245,7 +258,7 @@ export default function PublicOrderPage() {
           <div className="public-stats-hero">
             <div className="public-stats-brand">
               <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-              <span><span className="brand-eyebrow">Pulcip Members</span><strong>Live order intelligence</strong></span>
+              <span><span className="brand-eyebrow">Pulcip Members</span><strong>Eldorado best seller :)</strong></span>
             </div>
 
             <div className="public-stats-heading">
@@ -263,10 +276,6 @@ export default function PublicOrderPage() {
                   <span>{autoRefreshing ? "Refreshing" : "Next refresh"}</span>
                   <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
                 </div>
-                <Button variant="secondary" size="sm" type="button" onClick={() => void refresh()} disabled={loading || refreshing}>
-                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-                  Refresh
-                </Button>
               </div>
             </div>
 
@@ -349,6 +358,8 @@ export default function PublicOrderPage() {
                 ) : null}
                 </div>
 
+              {delayUpdatePanel}
+
               <div className="public-progress-card">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -389,44 +400,6 @@ export default function PublicOrderPage() {
                 <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
               </aside>
 
-              {!isCompleted ? (
-                <div className="public-delay-card">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="app-kicker">Delay update</p>
-                      <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
-                    </div>
-                    <Badge variant={hasApiKey ? "success" : "secondary"}>{hasApiKey ? "Key ready" : "Admin key required"}</Badge>
-                  </div>
-
-                  <div className="mt-4 flex gap-3 max-sm:flex-col">
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1200}
-                      value={delayDraft}
-                      onChange={(event) => setDelayDraft(event.target.value)}
-                      placeholder="Delay"
-                      className="w-36 shrink-0"
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => void handleUpdateDelay()}
-                      disabled={updatingDelay || !hasApiKey}
-                    >
-                      <Timer className="h-4 w-4" aria-hidden="true" />
-                      {updatingDelay ? "Updating..." : "Update delay"}
-                    </Button>
-                  </div>
-
-                  <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
-                    {hasApiKey
-                      ? "This uses the admin API key stored in your browser."
-                      : "Add the admin API key in the same browser if you want this public page to submit delay changes."}
-                  </p>
-                </div>
-              ) : null}
             </div>
           )}
         </article>
