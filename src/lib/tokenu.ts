@@ -1,8 +1,9 @@
 import type { BalanceResponse, CreateOrderPayload, CreateOrderResponse, OrderStatusResponse } from "../types";
 import { getApiKey } from "./auth";
+import { readRuntimeEnv } from "./runtime-env";
 
-const API_BASE = "https://dev.tokenu.net/api/v1/reseller";
-const OAUTH_API_BASE = "https://api.tokenu.net/api/oauth2";
+const API_BASE = readRuntimeEnv("VITE_TOKENU_API_BASE_URL") ?? "https://dev.tokenu.net/api/v1/reseller";
+const OAUTH_API_BASE = readRuntimeEnv("VITE_TOKENU_OAUTH_API_BASE_URL") ?? "https://api.tokenu.net/api/oauth2";
 
 async function requestJson<T>(baseUrl: string, path: string, init: RequestInit = {}) {
   const apiKey = getApiKey();

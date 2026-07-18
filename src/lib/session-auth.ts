@@ -1,7 +1,9 @@
+import { readRuntimeEnv } from "./runtime-env";
+
 const STORAGE_KEY = "tokenu.console.session";
 
-const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME;
-const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
+const DEFAULT_USERNAME = readRuntimeEnv("VITE_ADMIN_USERNAME");
+const DEFAULT_PASSWORD = readRuntimeEnv("VITE_ADMIN_PASSWORD");
 
 export function isAuthenticated() {
   return localStorage.getItem(STORAGE_KEY) === "1";
