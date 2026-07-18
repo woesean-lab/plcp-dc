@@ -61,7 +61,7 @@ function formatDateTime(value?: number | string) {
 function getStatusBadgeVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled"].some((value) => normalized.includes(value))) {
+  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
     return "destructive";
   }
   return "secondary";
@@ -221,13 +221,15 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
-  const isCompleted = String(status?.status ?? "").toUpperCase() === "COMPLETED";
+  const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
+  const isCompleted = normalizedStatus === "COMPLETED";
+  const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
-  const estimatedCompletion = isCompleted ? null : formatEstimatedDuration(membersRemaining, currentDelay);
+  const estimatedCompletion = isCompleted || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
