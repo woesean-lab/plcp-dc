@@ -79,6 +79,7 @@ export default function PublicOrderPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
+  const delayUpdateInFlightRef = useRef(false);
 
   const seed = useMemo(
     () => ({
@@ -185,6 +186,8 @@ export default function PublicOrderPage() {
   }, [currentDelay]);
 
   async function handleUpdateDelay() {
+    if (delayUpdateInFlightRef.current) return;
+
     const nextDelay = Number.parseInt(delayDraft, 10);
 
     if (!Number.isFinite(nextDelay) || nextDelay <= 0) {
@@ -203,13 +206,15 @@ export default function PublicOrderPage() {
     }
 
     try {
+      delayUpdateInFlightRef.current = true;
       setUpdatingDelay(true);
       await updateOrderDelay(uniqid, nextDelay);
       setStatus((current) => (current ? { ...current, delay: nextDelay } : current));
-      toast.success("Delay updated.");
+      toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
     } finally {
+      delayUpdateInFlightRef.current = false;
       setUpdatingDelay(false);
     }
   }
