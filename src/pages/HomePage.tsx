@@ -116,6 +116,10 @@ function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
   return "active";
 }
 
+function isCompletedOrder(status?: string) {
+  return String(status ?? "").toLowerCase().includes("completed");
+}
+
 function getOrderProgress(order: TrackedOrder) {
   if (typeof order.amount !== "number") {
     return null;
@@ -841,6 +845,7 @@ export default function HomePage() {
                       const ServiceIcon = serviceOption?.icon ?? KeyRound;
                       const orderTitleId = `tracked-order-${index}`;
                       const progress = getOrderProgress(order);
+                      const completed = isCompletedOrder(order.status);
 
                       return (
                         <li key={order.uniqid}>
@@ -883,7 +888,7 @@ export default function HomePage() {
                                   <dd>{formatNumber(order.amount)}</dd>
                                 </div>
                               ) : null}
-                              {typeof order.statusDelay === "number" ? (
+                              {!completed && typeof order.statusDelay === "number" ? (
                                 <div className="tracked-order-metric">
                                   <dt>Delay</dt>
                                   <dd>{formatDelay(order.statusDelay)}</dd>
@@ -912,36 +917,38 @@ export default function HomePage() {
                               </div>
                             </dl>
 
-                            <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
-                              <div className="grid gap-2">
-                                <span className="tracked-order-label">Update delay</span>
-                                <div className="flex gap-2 max-sm:flex-col">
-                                  <Input
-                                    type="number"
-                                    min={1}
-                                    max={1200}
-                                    value={delayDrafts[order.uniqid] ?? String(order.statusDelay ?? "")}
-                                    onChange={(event) =>
-                                      setDelayDrafts((current) => ({
-                                        ...current,
-                                        [order.uniqid]: event.target.value
-                                      }))
-                                    }
-                                    placeholder="Delay"
-                                    className="w-24 shrink-0"
-                                  />
-                                  <Button
-                                    type="button"
-                                    size="xs"
-                                    variant="secondary"
-                                    className="max-sm:w-full"
-                                    disabled={updatingDelayId === order.uniqid}
-                                    onClick={() => void handleUpdateDelay(order)}
-                                  >
-                                    {updatingDelayId === order.uniqid ? "Updating..." : "Update"}
-                                  </Button>
+                              <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
+                              {!completed ? (
+                                <div className="grid gap-2">
+                                  <span className="tracked-order-label">Update delay</span>
+                                  <div className="flex gap-2 max-sm:flex-col">
+                                    <Input
+                                      type="number"
+                                      min={1}
+                                      max={1200}
+                                      value={delayDrafts[order.uniqid] ?? String(order.statusDelay ?? "")}
+                                      onChange={(event) =>
+                                        setDelayDrafts((current) => ({
+                                          ...current,
+                                          [order.uniqid]: event.target.value
+                                        }))
+                                      }
+                                      placeholder="Delay"
+                                      className="w-24 shrink-0"
+                                    />
+                                    <Button
+                                      type="button"
+                                      size="xs"
+                                      variant="secondary"
+                                      className="max-sm:w-full"
+                                      disabled={updatingDelayId === order.uniqid}
+                                      onClick={() => void handleUpdateDelay(order)}
+                                    >
+                                      {updatingDelayId === order.uniqid ? "Updating..." : "Update"}
+                                    </Button>
+                                  </div>
                                 </div>
-                              </div>
+                              ) : null}
                               <Button asChild variant="secondary" size="sm" title="View order">
                                 <Link
                                   to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
