@@ -66,6 +66,10 @@ export async function getOrderStatus(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/status`);
 }
 
+export async function restartOrder(uniqid: string) {
+  return requestJson<unknown>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
+}
+
 async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",

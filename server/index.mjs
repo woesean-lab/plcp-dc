@@ -450,6 +450,42 @@ app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, ne
   }
 });
 
+app.post("/api/tokenu/orders/:uniqid/restart", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const cooldownKey = `${req.ip}:${uniqid}`;
+    const cooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return res.status(429).json({
+        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before restarting again.`
+      });
+    }
+
+    const currentStatus = await requestTokenu(
+      tokenuApiBase,
+      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
+      { cache: "no-store" }
+    );
+    const normalizedStatus = String(currentStatus?.status ?? "").trim().toUpperCase();
+    if (!normalizedStatus.includes("INVITE") || !normalizedStatus.includes("PAUSED")) {
+      return res.status(409).json({ message: "Order is not in Invites Paused status." });
+    }
+
+    const payload = await requestTokenuPublicData(
+      `restart?uniqid=${encodeURIComponent(uniqid)}`,
+      { method: "GET", cache: "no-store" }
+    );
+    publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
+    res.set("Cache-Control", "no-store").json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/tokenu/check", requireSession, async (req, res, next) => {
   try {
     const service = String(req.query.service ?? "").trim();

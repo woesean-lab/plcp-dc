@@ -16,6 +16,7 @@ import {
   LoaderCircle,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   Settings2,
   ShieldCheck,
@@ -35,6 +36,7 @@ import {
   getBalance,
   getOrderStatus,
   getTokenuConfig,
+  restartOrder,
   saveTokenuApiKey,
   updateOrderDelay
 } from "../lib/tokenu";
@@ -321,6 +323,7 @@ export default function HomePage() {
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
+  const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
@@ -583,6 +586,27 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Delay could not be updated.");
     } finally {
       setUpdatingDelayId(null);
+    }
+  }
+
+  async function handleRestartOrder(order: TrackedOrder) {
+    if (restartingOrderId) return;
+
+    try {
+      setRestartingOrderId(order.uniqid);
+      await restartOrder(order.uniqid);
+      notifySuccess(`Continue request sent for ${order.uniqid}.`);
+
+      try {
+        const status = await getOrderStatus(order.uniqid);
+        updateLocalOrder(mergeTrackedOrder(order, status));
+      } catch {
+        // The regular Manage refresh can verify the status if Tokenu needs more time.
+      }
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Order could not be continued.");
+    } finally {
+      setRestartingOrderId(null);
     }
   }
 
@@ -929,6 +953,7 @@ export default function HomePage() {
                       const completed = isTerminalOrder(order.status);
                       const botInvite = extractBotInvite(order);
                       const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
+                      const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
 
                       return (
                         <li key={order.uniqid}>
@@ -1045,6 +1070,18 @@ export default function HomePage() {
                                     </Button>
                                   </div>
                                 </div>
+                              ) : null}
+                              {isInvitesPaused ? (
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="sm"
+                                  disabled={restartingOrderId !== null}
+                                  onClick={() => void handleRestartOrder(order)}
+                                >
+                                  <RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} aria-hidden="true" />
+                                  {restartingOrderId === order.uniqid ? "Continuing..." : "Continue"}
+                                </Button>
                               ) : null}
                               <Button
                                 type="button"
