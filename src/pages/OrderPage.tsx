@@ -201,6 +201,18 @@ export default function OrderPage() {
     }
   }
 
+  async function copyPublicMonitorLink() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target) return;
+
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/monitor/${encodeURIComponent(target)}`);
+      toast.success("Public monitor link copied.");
+    } catch {
+      toast.error("Public monitor link could not be copied.");
+    }
+  }
+
   const shell = "app-panel";
   if (pageLoading || loading) {
     return (
@@ -305,6 +317,11 @@ export default function OrderPage() {
               <h2 className="app-title mt-1 text-xl font-semibold">Summary and details</h2>
             </div>
           </div>
+          {result ? (
+            <Button type="button" variant="secondary" size="sm" onClick={() => void copyPublicMonitorLink()}>
+              <Copy className="h-4 w-4" aria-hidden="true" /> Copy link
+            </Button>
+          ) : null}
         </div>
 
         {loading && !result ? (
