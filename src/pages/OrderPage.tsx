@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock3, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
@@ -32,6 +32,34 @@ function formatDelay(value?: string | number) {
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
+}
+
+function normalizeDiscordInvite(value?: unknown) {
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  try {
+    const url = new URL(value.trim());
+    const allowedHost = url.hostname === "discord.com" || url.hostname === "www.discord.com" || url.hostname === "discordapp.com";
+    return url.protocol === "https:" && allowedHost && url.pathname.includes("/oauth2/authorize") ? url.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractBotInvite(result: OrderStatusResponse | null) {
+  if (!result) return null;
+  const directInvite = normalizeDiscordInvite(result.bot_invite);
+  if (directInvite) return directInvite;
+  if (typeof result.details !== "string" || !result.details.trim()) return null;
+
+  const document = new DOMParser().parseFromString(result.details, "text/html");
+  return normalizeDiscordInvite(document.querySelector("a[href]")?.getAttribute("href"));
+}
+
+function getPlainDetails(value?: string) {
+  if (!value?.trim()) return "No details.";
+  const document = new DOMParser().parseFromString(value, "text/html");
+  return (document.body.textContent ?? value).replace(/\s+/g, " ").trim();
 }
 
 function PageSkeleton() {
@@ -121,6 +149,7 @@ export default function OrderPage() {
       }
     ];
   }, [result]);
+  const botInvite = useMemo(() => extractBotInvite(result), [result]);
 
   useEffect(() => {
     const incoming = params.get("uniqid");
@@ -186,6 +215,16 @@ export default function OrderPage() {
       void lookup(target);
     } finally {
       setUpdatingDelay(false);
+    }
+  }
+
+  async function copyBotInvite() {
+    if (!botInvite) return;
+    try {
+      await navigator.clipboard.writeText(botInvite);
+      toast.success("Bot invite link copied.");
+    } catch {
+      toast.error("Bot invite link could not be copied.");
     }
   }
 
@@ -334,12 +373,28 @@ export default function OrderPage() {
               ))}
             </div>
 
-            <div className="app-panel-soft p-4">
+            <div className={`app-panel-soft p-4 ${botInvite ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)]" : ""}`}>
               <div className="flex items-center gap-2 text-[var(--app-text)]">
-                <Hash className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-                <strong className="block font-mono text-sm font-semibold">{result.uniqid}</strong>
+                {botInvite ? <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" /> : <Hash className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />}
+                <strong className="block text-sm font-semibold">{botInvite ? "Action required" : result.uniqid}</strong>
               </div>
-              <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
+              {botInvite ? (
+                <>
+                  <p className="app-copy mt-3 text-sm leading-6">Add the delivery bot to your Discord server to start this order. The bot only needs the <strong className="text-[var(--app-text)]">Create Invite</strong> permission.</p>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Button type="button" variant="secondary" onClick={() => void copyBotInvite()}>
+                      <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite link
+                    </Button>
+                    <Button asChild>
+                      <a href={botInvite} target="_blank" rel="noreferrer">
+                        <Bot className="h-4 w-4" aria-hidden="true" /> Add bot to server <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                      </a>
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <p className="app-copy mt-2 text-sm leading-6">{result.error ?? getPlainDetails(result.details)}</p>
+              )}
             </div>
 
             {!terminal ? (

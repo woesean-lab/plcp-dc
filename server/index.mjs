@@ -192,7 +192,13 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       `status?uniqid=${encodeURIComponent(uniqid)}&_=${cacheBuster}`,
       { cache: "no-store" }
     );
-    res.set("Cache-Control", "no-store").json(payload);
+    const cooldownKey = `${req.ip}:${uniqid}`;
+    const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
+    const delayUpdateCooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+    const responsePayload = typeof payload === "object" && payload && !Array.isArray(payload)
+      ? { ...payload, delayUpdateCooldownSeconds }
+      : { data: payload, delayUpdateCooldownSeconds };
+    res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);
   }

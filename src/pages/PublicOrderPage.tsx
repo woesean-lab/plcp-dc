@@ -83,6 +83,17 @@ export default function PublicOrderPage() {
   const delayUpdateInFlightRef = useRef(false);
   const delayUpdateCooldownUntilRef = useRef(0);
 
+  function syncDelayUpdateCooldown(data: OrderStatusResponse) {
+    const remaining = Number(data.delayUpdateCooldownSeconds);
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+
+    const cooldownUntil = Date.now() + Math.ceil(remaining) * 1000;
+    if (cooldownUntil > delayUpdateCooldownUntilRef.current) {
+      delayUpdateCooldownUntilRef.current = cooldownUntil;
+      setDelayUpdateCooldown(Math.ceil(remaining));
+    }
+  }
+
   const seed = useMemo(
     () => ({
       service: searchParams.get("service") ?? undefined,
@@ -109,6 +120,7 @@ export default function PublicOrderPage() {
         setError("");
         const data = await getPublicOrderStatus(uniqid);
         if (!active) return;
+        syncDelayUpdateCooldown(data);
         setStatus(data);
       } catch (err) {
         if (!active) return;
@@ -153,7 +165,10 @@ export default function PublicOrderPage() {
           setAutoRefreshing(true);
           void getPublicOrderStatus(uniqid)
             .then((data) => {
-              if (active) setStatus(data);
+              if (active) {
+                syncDelayUpdateCooldown(data);
+                setStatus(data);
+              }
             })
             .catch(() => {
               // Keep the last known stats visible and retry on the next cycle.
@@ -219,6 +234,7 @@ export default function PublicOrderPage() {
       await updatePublicOrderDelay(uniqid, nextDelay);
       try {
         const verifiedStatus = await getPublicOrderStatus(uniqid);
+        syncDelayUpdateCooldown(verifiedStatus);
         setStatus(verifiedStatus);
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.

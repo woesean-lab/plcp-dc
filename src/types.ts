@@ -43,6 +43,7 @@ export interface OrderStatusResponse {
   serverId?: string;
   serverName?: string;
   error?: string;
+  delayUpdateCooldownSeconds?: number;
   [key: string]: unknown;
 }
 
