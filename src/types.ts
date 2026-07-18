@@ -53,6 +53,7 @@ export interface TrackedOrder {
   amount?: number;
   added?: number;
   delay?: number;
+  statusDelay?: number;
   billingCycle?: number;
   cost?: number;
   botInvite?: string;

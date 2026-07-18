@@ -414,7 +414,7 @@ export default function HomePage() {
 
   function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
     const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
-    const resolvedDelay = parseDelay(status.delay) ?? order.delay;
+    const resolvedStatusDelay = parseDelay(status.delay) ?? order.statusDelay;
     const resolvedAdded =
       typeof status.added === "number"
         ? status.added
@@ -427,7 +427,7 @@ export default function HomePage() {
       status: String(status.status ?? order.status ?? "NEW"),
       amount: typeof resolvedAmount === "number" ? resolvedAmount : order.amount,
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
-      delay: typeof resolvedDelay === "number" ? resolvedDelay : order.delay,
+      statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details
     };
   }
@@ -438,6 +438,7 @@ export default function HomePage() {
       a.status === b.status &&
       a.amount === b.amount &&
       a.added === b.added &&
+      a.statusDelay === b.statusDelay &&
       a.details === b.details &&
       a.cost === b.cost &&
       a.serverId === b.serverId &&
@@ -789,10 +790,10 @@ export default function HomePage() {
                                   <dd>{formatNumber(order.amount)}</dd>
                                 </div>
                               ) : null}
-                              {typeof order.delay === "number" ? (
+                              {typeof order.statusDelay === "number" ? (
                                 <div className="tracked-order-metric">
                                   <dt>Delay</dt>
-                                  <dd>{formatDelay(order.delay)}</dd>
+                                  <dd>{formatDelay(order.statusDelay)}</dd>
                                 </div>
                               ) : null}
                               {progress ? (
