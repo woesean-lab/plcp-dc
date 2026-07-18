@@ -67,7 +67,7 @@ function formatTrackedDate(value: string) {
 }
 
 function getServiceLabel(service?: ServiceType) {
-  return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "Manual";
+  return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
 
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
@@ -75,11 +75,6 @@ function getOrderStatusVariant(status?: string): "success" | "destructive" | "se
   if (normalized.includes("completed")) return "success";
   if (["error", "invalid", "terminated"].some((value) => normalized.includes(value))) return "destructive";
   return "secondary";
-}
-
-function getOrderStatusTone(status?: string) {
-  const variant = getOrderStatusVariant(status);
-  return variant === "success" ? "is-completed" : variant === "destructive" ? "is-error" : "is-active";
 }
 
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY }: { children: ReactNode; fallback: ReactNode; delay?: number }) {
@@ -163,31 +158,49 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                 <Skeleton className="mt-2 h-5 w-36" />
               </div>
             </div>
-            <div className="tracked-order-list">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="tracked-order-card">
-                  <div className="tracked-order-identity">
-                    <Skeleton className="h-9 w-9 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <Skeleton className="h-3 w-20" />
-                      <Skeleton className="mt-3 h-4 w-36 max-w-full" />
-                      <Skeleton className="mt-2 h-3 w-28 max-w-full" />
-                    </div>
-                  </div>
-                  <div className="tracked-order-metrics">
-                    {Array.from({ length: 4 }).map((_, metricIndex) => (
-                      <div key={metricIndex} className="tracked-order-metric">
-                        <Skeleton className="h-3 w-12" />
-                        <Skeleton className="mt-2 h-4 w-20 max-w-full" />
-                      </div>
+            <div className="tracked-table-region">
+              <table className="tracked-table tracked-table-skeleton">
+                <caption className="sr-only">Loading tracked orders</caption>
+                <colgroup>
+                  <col className="tracked-table-col-order" />
+                  <col className="tracked-table-col-status" />
+                  <col className="tracked-table-col-service" />
+                  <col className="tracked-table-col-amount" />
+                  <col className="tracked-table-col-cost" />
+                  <col className="tracked-table-col-added" />
+                  <col className="tracked-table-col-actions" />
+                </colgroup>
+                <thead>
+                  <tr>
+                    {Array.from({ length: 7 }).map((_, index) => (
+                      <th key={index} scope="col">
+                        <Skeleton className="h-2.5 w-12 max-w-full" />
+                      </th>
                     ))}
-                  </div>
-                  <div className="tracked-order-actions">
-                    <Skeleton className="h-11 w-full" />
-                    <Skeleton className="h-11 w-full" />
-                  </div>
-                </div>
-              ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: 4 }).map((_, rowIndex) => (
+                    <tr key={rowIndex}>
+                      <th scope="row">
+                        <Skeleton className="h-3.5 w-32 max-w-full" />
+                        <Skeleton className="mt-2 h-2.5 w-24 max-w-full" />
+                      </th>
+                      <td><Skeleton className="h-6 w-16 max-w-full" /></td>
+                      <td><Skeleton className="h-3 w-20 max-w-full" /></td>
+                      <td><Skeleton className="h-3 w-10 max-w-full" /></td>
+                      <td><Skeleton className="h-3 w-12 max-w-full" /></td>
+                      <td><Skeleton className="h-3 w-20 max-w-full" /></td>
+                      <td>
+                        <div className="tracked-table-actions">
+                          <Skeleton className="h-8 w-14" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
           <div className={`${shell} p-5 sm:p-6`}>
@@ -571,80 +584,89 @@ export default function HomePage() {
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
               <section className={`${shell} tracked-orders-panel overflow-hidden`}>
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--app-divider)] px-5 py-5 sm:px-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--app-divider)] px-5 py-4 sm:px-6">
                   <div className="flex items-center gap-3">
                     <span className="stat-icon" aria-hidden="true">
                       <ListChecks className="h-4 w-4" />
                     </span>
                     <div>
                       <p className={labelClass}>Local queue</p>
-                      <h2 className="app-title mt-1 text-lg font-semibold">Tracked orders</h2>
+                      <h2 id="tracked-orders-title" className="app-title mt-1 text-lg font-semibold">Tracked orders</h2>
                     </div>
                   </div>
-                  <span className="tracked-order-ordering">
-                    <Radio className="h-3.5 w-3.5" aria-hidden="true" />
-                    Newest first
-                  </span>
+                  <span className="tracked-table-sorting">Sorted by newest</span>
                 </div>
 
                 {orders.length ? (
-                  <div className="tracked-order-list" role="list">
-                    {orders.map((order, index) => (
-                      <article key={order.uniqid} className={`tracked-order-card ${getOrderStatusTone(order.status)}`} role="listitem">
-                        <div className="tracked-order-identity">
-                          <span className="tracked-order-index" aria-hidden="true">
-                            {String(index + 1).padStart(2, "0")}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <span className="tracked-order-label">Order ID</span>
+                  <div className="tracked-table-region" role="region" aria-labelledby="tracked-orders-title" tabIndex={0}>
+                    <table className="tracked-table">
+                      <caption className="sr-only">Tracked local orders, newest first</caption>
+                      <colgroup>
+                        <col className="tracked-table-col-order" />
+                        <col className="tracked-table-col-status" />
+                        <col className="tracked-table-col-service" />
+                        <col className="tracked-table-col-amount" />
+                        <col className="tracked-table-col-cost" />
+                        <col className="tracked-table-col-added" />
+                        <col className="tracked-table-col-actions" />
+                      </colgroup>
+                      <thead>
+                        <tr>
+                          <th scope="col">Order</th>
+                          <th scope="col">Status</th>
+                          <th scope="col">Service</th>
+                          <th scope="col" className="tracked-table-number">Amount</th>
+                          <th scope="col" className="tracked-table-number">Cost</th>
+                          <th scope="col">Added</th>
+                          <th scope="col"><span className="sr-only">Actions</span></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {orders.map((order) => (
+                          <tr key={order.uniqid}>
+                            <th scope="row" className="tracked-table-order">
+                              <strong className="tracked-table-id">{order.uniqid}</strong>
+                              <span className="tracked-table-meta">{order.serverId || "Manually tracked"}</span>
+                            </th>
+                            <td className="tracked-table-status-cell">
                               <Badge variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
-                            </div>
-                            <strong className="tracked-order-id">{order.uniqid}</strong>
-                            <span className="tracked-order-server">{order.serverId || "Manually tracked"}</span>
-                          </div>
-                        </div>
-
-                        <dl className="tracked-order-metrics">
-                          <div className="tracked-order-metric">
-                            <dt>Service</dt>
-                            <dd>{getServiceLabel(order.service)}</dd>
-                          </div>
-                          <div className="tracked-order-metric">
-                            <dt>Amount</dt>
-                            <dd>{formatNumber(order.amount)}</dd>
-                          </div>
-                          <div className="tracked-order-metric">
-                            <dt>Cost</dt>
-                            <dd>{typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "—"}</dd>
-                          </div>
-                          <div className="tracked-order-metric">
-                            <dt>Added</dt>
-                            <dd>{formatTrackedDate(order.createdAt)}</dd>
-                          </div>
-                        </dl>
-
-                        <div className="tracked-order-actions">
-                          <Button asChild variant="secondary">
-                            <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
-                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                              Open
-                            </Link>
-                          </Button>
-                          <Button
-                            variant="destructive"
-                            type="button"
-                            aria-label={`Remove order ${order.uniqid}`}
-                            onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
-                          >
-                            <Trash2 className="h-4 w-4" aria-hidden="true" />
-                            Remove
-                          </Button>
-                        </div>
-
-                        {order.details ? <p className="tracked-order-details">{order.details}</p> : null}
-                      </article>
-                    ))}
+                              {order.details ? <span className="tracked-table-note" title={order.details}>{order.details}</span> : null}
+                            </td>
+                            <td><span className="tracked-table-service">{getServiceLabel(order.service)}</span></td>
+                            <td className="tracked-table-number">{formatNumber(order.amount)}</td>
+                            <td className="tracked-table-number">{typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "—"}</td>
+                            <td>
+                              <time className="tracked-table-date" dateTime={order.createdAt} title={order.createdAt}>
+                                {formatTrackedDate(order.createdAt)}
+                              </time>
+                            </td>
+                            <td>
+                              <div className="tracked-table-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
+                                <Button asChild variant="secondary" size="xs" title="Open order">
+                                  <Link
+                                    to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
+                                    aria-label={`Open order ${order.uniqid}`}
+                                  >
+                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                                    Open
+                                  </Link>
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="icon-sm"
+                                  type="button"
+                                  title="Remove order"
+                                  aria-label={`Remove order ${order.uniqid}`}
+                                  onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
                   <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
