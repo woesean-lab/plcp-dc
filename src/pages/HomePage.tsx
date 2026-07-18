@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
+import { resolveDiscordGuildId } from "../lib/discord";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
 import type { ServiceType, TrackedOrder } from "../types";
@@ -308,7 +309,8 @@ export default function HomePage() {
   async function refreshAvailability() {
     try {
       setCheckingAvailability(true);
-      const data = await checkAvailableAmount(form.service, form.serverId);
+      const serverId = await resolveDiscordGuildId(form.serverId);
+      const data = await checkAvailableAmount(form.service, serverId);
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
     } catch {
       setAvailability("");
@@ -351,9 +353,10 @@ export default function HomePage() {
     setCreating(true);
 
     try {
+      const serverId = await resolveDiscordGuildId(form.serverId);
       const created = await createOrder({
         service: form.service,
-        id: form.serverId.trim(),
+        id: serverId,
         amount: form.amount,
         delay: form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined
@@ -362,7 +365,7 @@ export default function HomePage() {
       const nextOrder: TrackedOrder = {
         uniqid: created.uniqid,
         service: form.service,
-        serverId: form.serverId.trim(),
+        serverId,
         amount: form.amount,
         delay: form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
@@ -512,9 +515,12 @@ export default function HomePage() {
                     <Input
                       value={form.serverId}
                       onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                      placeholder="Discord server ID"
+                      placeholder="Discord server ID or invite link"
                       required
                     />
+                    <p className="text-xs text-[var(--app-muted)]">
+                      Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically.
+                    </p>
                   </label>
 
                   <label className="grid gap-2">
