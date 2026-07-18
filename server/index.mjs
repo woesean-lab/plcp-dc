@@ -52,13 +52,50 @@ function safeEqual(value, expected) {
   return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
-async function requestTokenu(baseUrl, pathname, init = {}) {
-  const apiKey = process.env.TOKENU_API_KEY;
-  if (!apiKey) {
-    const error = new Error("Tokenu API key is not configured on the server.");
+function getCredentialEncryptionKey() {
+  const secret = process.env.ADMIN_PASSWORD ?? process.env.VITE_ADMIN_PASSWORD;
+  if (!secret) {
+    const error = new Error("Admin credentials are not configured.");
     error.statusCode = 503;
     throw error;
   }
+
+  return crypto.scryptSync(secret, "pulcip-members-tokenu-credential-v1", 32);
+}
+
+function encryptCredential(value) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv("aes-256-gcm", getCredentialEncryptionKey(), iv);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${encrypted.toString("base64url")}`;
+}
+
+function decryptCredential(value) {
+  const [version, ivValue, tagValue, encryptedValue] = String(value).split(":");
+  if (version !== "v1" || !ivValue || !tagValue || !encryptedValue) {
+    throw new Error("Stored credential format is invalid.");
+  }
+
+  const decipher = crypto.createDecipheriv("aes-256-gcm", getCredentialEncryptionKey(), Buffer.from(ivValue, "base64url"));
+  decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedValue, "base64url")),
+    decipher.final()
+  ]).toString("utf8");
+}
+
+async function loadTokenuApiKey() {
+  const result = await pool.query("SELECT encrypted_value FROM app_settings WHERE setting_key = 'tokenu_api_key' LIMIT 1");
+  if (!result.rowCount) {
+    const error = new Error("Tokenu API key has not been configured in Admin settings.");
+    error.statusCode = 503;
+    throw error;
+  }
+  return decryptCredential(result.rows[0].encrypted_value);
+}
+
+async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
 
   const response = await fetch(new URL(pathname, `${baseUrl.replace(/\/$/, "")}/`), {
     ...init,
@@ -91,6 +128,10 @@ async function requestTokenu(baseUrl, pathname, init = {}) {
   return payload;
 }
 
+async function requestTokenu(baseUrl, pathname, init = {}) {
+  return requestTokenuWithKey(await loadTokenuApiKey(), baseUrl, pathname, init);
+}
+
 async function initializeDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tracked_orders (
@@ -108,6 +149,13 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS admin_sessions_expires_at_idx ON admin_sessions (expires_at)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key TEXT PRIMARY KEY,
+      encrypted_value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
 }
 
@@ -230,6 +278,136 @@ app.post("/api/auth/logout", async (req, res, next) => {
     if (token) await pool.query("DELETE FROM admin_sessions WHERE token_hash = $1", [hashToken(token)]);
     res.clearCookie(sessionCookie, { httpOnly: true, secure: isProduction, sameSite: "strict", path: "/" });
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tokenu/config", requireSession, async (_req, res, next) => {
+  try {
+    const result = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'tokenu_api_key' LIMIT 1");
+    res.json({ configured: Boolean(result.rowCount) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/tokenu/config", requireSession, async (req, res, next) => {
+  try {
+    const apiKey = String(req.body?.apiKey ?? "").trim();
+    if (!apiKey || apiKey.length > 2000) {
+      return res.status(400).json({ message: "A valid Tokenu API key is required." });
+    }
+
+    const balance = await requestTokenuWithKey(apiKey, tokenuApiBase, "balance");
+    await pool.query(
+      `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
+       VALUES ('tokenu_api_key', $1, NOW())
+       ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+      [encryptCredential(apiKey)]
+    );
+    res.json({ configured: true, balance: balance?.balance });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/tokenu/config", requireSession, async (_req, res, next) => {
+  try {
+    await pool.query("DELETE FROM app_settings WHERE setting_key = 'tokenu_api_key'");
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tokenu/balance", requireSession, async (_req, res, next) => {
+  try {
+    res.json(await requestTokenu(tokenuApiBase, "balance"));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/tokenu/orders", requireSession, async (req, res, next) => {
+  try {
+    const { service, id, amount, delay, billingCycle } = req.body ?? {};
+    if (typeof service !== "string" || typeof id !== "string" || !id.trim() || !Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Valid service, server ID, and amount are required." });
+    }
+
+    const payload = { service, id: id.trim(), amount };
+    if (Number.isFinite(delay)) payload.delay = delay;
+    if (Number.isFinite(billingCycle)) payload.billingCycle = billingCycle;
+
+    res.json(await requestTokenu(tokenuApiBase, "order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const payload = await requestTokenu(
+      tokenuApiBase,
+      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
+      { cache: "no-store" }
+    );
+    res.set("Cache-Control", "no-store").json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/tokenu/check", requireSession, async (req, res, next) => {
+  try {
+    const service = String(req.query.service ?? "").trim();
+    const id = String(req.query.id ?? "").trim();
+    if (!service || !id || service.length > 80 || id.length > 160) {
+      return res.status(400).json({ message: "A valid service and server ID are required." });
+    }
+
+    res.json(await requestTokenu(
+      tokenuApiBase,
+      `check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
+    ));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/tokenu/orders/:uniqid/delay", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const delay = Number.parseInt(req.body?.delay, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay <= 0 || delay > 1200) {
+      return res.status(400).json({ message: "A valid order ID and delay are required." });
+    }
+
+    const cooldownKey = `admin:${uniqid}`;
+    const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return res.status(429).json({
+        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before updating again.`
+      });
+    }
+
+    const payload = await requestTokenu(tokenuOauthApiBase, "delay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqid, delay })
+    });
+    publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
+    res.json(payload);
   } catch (error) {
     next(error);
   }

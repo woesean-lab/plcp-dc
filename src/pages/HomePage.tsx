@@ -21,12 +21,20 @@ import {
   Trash2,
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
-import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { SERVICE_OPTIONS } from "../lib/services";
-import { checkAvailableAmount, createOrder, getBalance, getOrderStatus, updateOrderDelay } from "../lib/tokenu";
+import {
+  checkAvailableAmount,
+  clearTokenuApiKey,
+  createOrder,
+  getBalance,
+  getOrderStatus,
+  getTokenuConfig,
+  saveTokenuApiKey,
+  updateOrderDelay
+} from "../lib/tokenu";
 import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
@@ -300,9 +308,10 @@ export default function HomePage() {
   const navigate = useNavigate();
   const activeTab = normalizeAdminTab(searchParams.get("tab"));
 
-  const [apiKey, setApiKeyValue] = useState(getApiKey());
+  const [apiKey, setApiKey] = useState("");
+  const [apiConfigured, setApiConfigured] = useState(false);
   const [balance, setBalance] = useState<number | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [savingApiKey, setSavingApiKey] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -316,7 +325,6 @@ export default function HomePage() {
   const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
   const [delaySyncLocks, setDelaySyncLocks] = useState<Record<string, number>>({});
 
-  const storedApiKey = getApiKey();
   const activeOrders = orders.filter(
     (order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())
   );
@@ -336,10 +344,20 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (getApiKey()) void refreshBalance();
-    // The initial connection check runs once; saves refresh explicitly.
+    void loadTokenuConnection();
+    // The initial connection check runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function loadTokenuConnection() {
+    try {
+      const config = await getTokenuConfig();
+      setApiConfigured(config.configured);
+      if (config.configured) await refreshBalance();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Tokenu connection could not be checked.");
+    }
+  }
 
   useEffect(() => {
     if (activeTab !== "manage" || !orders.some((order) => order.uniqid)) {
@@ -427,6 +445,43 @@ export default function HomePage() {
       setAvailability("");
     } finally {
       setCheckingAvailability(false);
+    }
+  }
+
+  async function handleSaveApiKey(event: FormEvent) {
+    event.preventDefault();
+    const value = apiKey.trim();
+    if (!value) {
+      notifyError("Tokenu API key is required.");
+      return;
+    }
+
+    try {
+      setSavingApiKey(true);
+      const result = await saveTokenuApiKey(value);
+      setApiConfigured(true);
+      setApiKey("");
+      if (typeof result.balance === "number") setBalance(result.balance);
+      notifySuccess("API key verified and saved securely.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "API key could not be saved.");
+    } finally {
+      setSavingApiKey(false);
+    }
+  }
+
+  async function handleClearApiKey() {
+    try {
+      setSavingApiKey(true);
+      await clearTokenuApiKey();
+      setApiConfigured(false);
+      setApiKey("");
+      setBalance(null);
+      notifySuccess("API key removed from the server.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "API key could not be removed.");
+    } finally {
+      setSavingApiKey(false);
     }
   }
 
@@ -556,29 +611,6 @@ export default function HomePage() {
     }
   }
 
-  async function handleSaveApiKey(event: FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-
-    try {
-      const trimmed = apiKey.trim();
-      if (trimmed) {
-        setApiKey(trimmed);
-        setApiKeyValue(trimmed);
-        notifySuccess("API key saved.");
-        await refreshBalance();
-      } else {
-        clearApiKey();
-        notifySuccess("API key cleared.");
-        setBalance(null);
-      }
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Could not save API key.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -641,26 +673,10 @@ export default function HomePage() {
     notifySuccess("Order added.");
   }
 
-  const showOverlay = saving;
   const showManageSkeleton = refreshingManage;
 
   return (
     <div className="relative">
-      {showOverlay ? (
-        <div className="app-overlay" role="status" aria-live="polite">
-          <div className="app-preloader">
-            <div className="app-spinner" />
-            <div>
-              <p className="app-kicker">Secure sync</p>
-              <p className="mt-2 text-sm text-[var(--app-muted)]">Refreshing your private workspace</p>
-            </div>
-            <div className="app-progress" aria-hidden="true">
-              <span />
-            </div>
-          </div>
-        </div>
-      ) : null}
-
       <TimedReveal key={activeTab} fallback={<HomePageSkeleton tab={activeTab} />}>
         <div className="space-y-5 tab-slide-in">
         {activeTab === "create" ? (
@@ -671,7 +687,7 @@ export default function HomePage() {
                 <h1 className="page-title">New order</h1>
                 <p className="app-copy page-copy">Choose a service and configure the delivery details.</p>
               </div>
-              <Badge variant={storedApiKey ? "success" : "destructive"}>{storedApiKey ? "API connected" : "API key required"}</Badge>
+              <Badge variant={apiConfigured ? "success" : "destructive"}>{apiConfigured ? "API connected" : "API key required"}</Badge>
             </header>
 
             <section className={`${shell} p-5 sm:p-6`}>
@@ -786,11 +802,11 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !storedApiKey}>
+                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !apiConfigured}>
                     {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                     {creating ? "Creating..." : "Create order"}
                   </Button>
-                  {!storedApiKey ? (
+                  {!apiConfigured ? (
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
@@ -1060,16 +1076,16 @@ export default function HomePage() {
               <div>
                 <p className={labelClass}>Settings</p>
                 <h1 className="page-title">Tokenu connection</h1>
-                <p className="app-copy page-copy">Manage the API key and connection details for this browser.</p>
+                <p className="app-copy page-copy">Configure the server-side Tokenu connection and review its balance.</p>
               </div>
-              <Badge variant={storedApiKey ? "success" : "destructive"}>{storedApiKey ? "Connected" : "Not connected"}</Badge>
+              <Badge variant={apiConfigured ? "success" : "destructive"}>{apiConfigured ? "Connected" : "Not connected"}</Badge>
             </header>
 
             <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
-                    <KeyRound className="h-4 w-4" />
+                    <ShieldCheck className="h-4 w-4" />
                   </span>
                   <div>
                     <p className={labelClass}>Secure access</p>
@@ -1077,39 +1093,29 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  The key is stored locally in this browser and is never included in the application source.
+                  Enter the key here once. It is verified by the server, encrypted in PostgreSQL, and never returned to this browser or exposed to visitors.
                 </p>
-
                 <form onSubmit={handleSaveApiKey} className="mt-6 grid gap-5">
                   <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Local API key</span>
+                    <span className={fieldLabelClass}>{apiConfigured ? "Replace API key" : "API key"}</span>
                     <Input
                       type="password"
                       value={apiKey}
-                      onChange={(event) => setApiKeyValue(event.target.value)}
-                      placeholder="Paste API key"
-                      autoComplete="off"
+                      onChange={(event) => setApiKey(event.target.value)}
+                      placeholder={apiConfigured ? "Enter a new key to replace the current one" : "Paste Tokenu API key"}
+                      autoComplete="new-password"
                     />
                   </label>
-
                   <div className="flex flex-wrap gap-3">
-                    <Button className="min-w-[132px] max-sm:w-full" type="submit" disabled={saving}>
+                    <Button className="min-w-[132px] max-sm:w-full" type="submit" disabled={savingApiKey || !apiKey.trim()}>
                       <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                      {saving ? "Saving..." : "Save key"}
+                      {savingApiKey ? "Verifying..." : apiConfigured ? "Replace key" : "Save key"}
                     </Button>
-                    <Button
-                      className="min-w-[132px] max-sm:w-full"
-                      variant="destructive"
-                      type="button"
-                      onClick={() => {
-                        clearApiKey();
-                        setApiKeyValue("");
-                        setBalance(null);
-                        notifySuccess("API key cleared.");
-                      }}
-                    >
-                      Clear key
-                    </Button>
+                    {apiConfigured ? (
+                      <Button className="min-w-[132px] max-sm:w-full" variant="destructive" type="button" disabled={savingApiKey} onClick={() => void handleClearApiKey()}>
+                        Remove key
+                      </Button>
+                    ) : null}
                   </div>
                 </form>
               </section>
@@ -1131,8 +1137,8 @@ export default function HomePage() {
                       <KeyRound className="h-4 w-4" />
                     </span>
                     <span>
-                      <span className="settings-status-label">API key</span>
-                      <strong>{storedApiKey ? "Ready" : "Missing"}</strong>
+                      <span className="settings-status-label">API access</span>
+                      <strong>{apiConfigured ? "Configured" : "Missing"}</strong>
                     </span>
                   </div>
                   <div className="settings-status-row">
@@ -1153,13 +1159,13 @@ export default function HomePage() {
                       <ShieldCheck className="h-4 w-4" />
                     </span>
                     <span>
-                      <span className="settings-status-label">Storage</span>
-                      <strong>Local browser only</strong>
+                      <span className="settings-status-label">Credential storage</span>
+                      <strong>Encrypted PostgreSQL</strong>
                     </span>
                   </div>
                 </div>
 
-                <Button className="mt-5 w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!storedApiKey || loadingBalance}>
+                <Button className="mt-5 w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!apiConfigured || loadingBalance}>
                   <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh balance
                 </Button>
