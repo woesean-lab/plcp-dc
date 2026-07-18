@@ -1847,6 +1847,14 @@
     color: #e8c976;
   }
 
+  .public-delay-description {
+    max-width: 42rem;
+    margin: .45rem 0 0;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--app-muted);
+  }
+
   .public-delay-warning svg {
     margin-top: .1rem;
     color: #f3c95f;

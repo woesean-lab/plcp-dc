@@ -220,6 +220,10 @@ export default function PublicOrderPage() {
         <div>
           <p className="app-kicker">Delay update</p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
+          <p className="public-delay-description">
+            Delay determines how many seconds the system waits before the next member joins your server. For example, a
+            30-second delay means each member will join 30 seconds after the previous one.
+          </p>
         </div>
         <Badge variant={hasApiKey ? "success" : "secondary"}>{hasApiKey ? "Key ready" : "Admin key required"}</Badge>
       </div>
@@ -248,11 +252,6 @@ export default function PublicOrderPage() {
         </p>
       </div>
 
-      <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
-        {hasApiKey
-          ? "This uses the admin API key stored in your browser."
-          : "Add the admin API key in the same browser if you want this public page to submit delay changes."}
-      </p>
     </div>
   ) : null;
 
