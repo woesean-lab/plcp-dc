@@ -452,18 +452,6 @@ export default function PublicOrderPage() {
                 <div className="public-progress-track">
                   <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
                 </div>
-
-                <div className="public-progress-details">
-                  <div>
-                    <small>Server</small><strong>{serverName}</strong>
-                  </div>
-                  <div>
-                    <small>Status</small><strong>{status?.status ?? "Loading"}</strong>
-                  </div>
-                  <div>
-                    <small>Details</small><strong>{status?.details ?? status?.error ?? "Live stats are active."}</strong>
-                  </div>
-                </div>
               </div>
               </div>
 
