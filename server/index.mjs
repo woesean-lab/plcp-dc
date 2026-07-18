@@ -135,6 +135,36 @@ async function requestTokenu(baseUrl, pathname, init = {}) {
   return requestTokenuWithKey(await loadTokenuApiKey(), baseUrl, pathname, init);
 }
 
+async function requestTokenuPublicData(pathname, init = {}) {
+  const response = await fetch(new URL(pathname, `${tokenuDataApiBase.replace(/\/$/, "")}/`), init);
+  const text = await response.text();
+  let payload = text;
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    // Preserve non-JSON upstream error messages.
+  }
+
+  if (!response.ok) {
+    const upstreamMessage =
+      typeof payload === "object" && payload && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "string" && payload
+          ? payload
+          : `Tokenu request failed with ${response.status}.`;
+    const error = new Error(
+      upstreamMessage.trim().toLowerCase() === "invalid action"
+        ? "Restart is not available yet. Make sure the Discord server restriction has been removed, then try again."
+        : upstreamMessage
+    );
+    error.statusCode = upstreamMessage.trim().toLowerCase() === "invalid action" ? 409 : response.status;
+    throw error;
+  }
+
+  return payload;
+}
+
 async function initializeDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tracked_orders (
@@ -272,8 +302,7 @@ app.post("/api/public/orders/:uniqid/restart", async (req, res, next) => {
       return res.status(409).json({ message: "Order is not in Invites Paused status." });
     }
 
-    const payload = await requestTokenu(
-      tokenuDataApiBase,
+    const payload = await requestTokenuPublicData(
       `restart?uniqid=${encodeURIComponent(uniqid)}`,
       { method: "GET", cache: "no-store" }
     );
