@@ -238,7 +238,7 @@ export default function PublicOrderPage() {
   }, [currentDelay]);
 
   async function handleUpdateDelay() {
-    if (delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
+    if (isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
 
     const nextDelay = Number.parseInt(delayDraft, 10);
 
@@ -301,10 +301,10 @@ export default function PublicOrderPage() {
           type="button"
           variant="secondary"
           onClick={() => void handleUpdateDelay()}
-          disabled={updatingDelay || delayUpdateCooldown > 0}
+          disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
         >
           <Timer className="h-4 w-4" aria-hidden="true" />
-          {updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
+          {isInvitesPaused ? "Invites paused" : updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
         </Button>
       </div>
 
