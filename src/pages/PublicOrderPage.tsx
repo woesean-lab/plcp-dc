@@ -4,8 +4,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, CalendarDays, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
+import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle } from "../lib/services";
 import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
@@ -242,7 +243,9 @@ export default function PublicOrderPage() {
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
+  const isWaiting = normalizedStatus === "WAITING";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
+  const botInvite = useMemo(() => extractBotInvite(status), [status]);
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
@@ -317,6 +320,17 @@ export default function PublicOrderPage() {
     } finally {
       restartInFlightRef.current = false;
       setRestartingOrder(false);
+    }
+  }
+
+  async function copyBotInviteLink() {
+    if (!botInvite) return;
+
+    try {
+      await navigator.clipboard.writeText(botInvite);
+      toast.success("Bot link copied.");
+    } catch {
+      toast.error("Bot invite link could not be copied.");
     }
   }
 
@@ -508,6 +522,24 @@ export default function PublicOrderPage() {
                       {restartingOrder ? "Continuing..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Continue"}
                     </Button>
                   </div>
+                </div>
+              ) : null}
+
+              {isWaiting && botInvite ? (
+                <div className="app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
+                  <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
+                    <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+                    Bot required to start
+                  </span>
+                  <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
+                    <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
+                  </Button>
+                  <Button asChild size="xs">
+                    <a href={botInvite} target="_blank" rel="noreferrer">
+                      <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
+                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                    </a>
+                  </Button>
                 </div>
               ) : null}
 
