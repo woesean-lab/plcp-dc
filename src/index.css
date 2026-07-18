@@ -872,11 +872,6 @@
     background: var(--app-danger-soft);
   }
 
-  .tracked-order-users-pill {
-    min-width: 88px;
-    justify-content: center;
-  }
-
   .app-button {
     display: inline-flex;
     min-height: 44px;

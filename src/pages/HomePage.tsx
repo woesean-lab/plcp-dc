@@ -76,6 +76,19 @@ function formatDelay(value?: number) {
   return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
 }
 
+function parseDelay(value?: string | number) {
+  if (typeof value === "number" && !Number.isNaN(value)) {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+
+  return undefined;
+}
+
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
@@ -401,6 +414,7 @@ export default function HomePage() {
 
   function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
     const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
+    const resolvedDelay = parseDelay(status.delay) ?? order.delay;
     const resolvedAdded =
       typeof status.added === "number"
         ? status.added
@@ -413,6 +427,7 @@ export default function HomePage() {
       status: String(status.status ?? order.status ?? "NEW"),
       amount: typeof resolvedAmount === "number" ? resolvedAmount : order.amount,
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
+      delay: typeof resolvedDelay === "number" ? resolvedDelay : order.delay,
       details: typeof status.details === "string" ? status.details : order.details
     };
   }
@@ -784,12 +799,7 @@ export default function HomePage() {
                                 <div className="tracked-order-metric">
                                   <dt>Users</dt>
                                   <dd className="grid gap-1">
-                                    <Badge
-                                      variant={progress.remaining === 0 ? "success" : "secondary"}
-                                      className="tracked-order-users-pill justify-center"
-                                    >
-                                      {`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}
-                                    </Badge>
+                                    <span>{`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}</span>
                                     <span className="text-xs text-[var(--app-muted)]">{`${formatNumber(progress.remaining)} left`}</span>
                                   </dd>
                                 </div>
