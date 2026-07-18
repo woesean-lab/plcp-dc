@@ -13,7 +13,11 @@ function ProtectedShell() {
   const navigate = useNavigate();
 
   if (!isAuthenticated()) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    if (location.pathname !== "/manage") {
+      return <Navigate to="/manage" replace state={{ from: location }} />;
+    }
+
+    return <LoginPage />;
   }
 
   const search = new URLSearchParams(location.search);
@@ -105,7 +109,7 @@ function ProtectedShell() {
                 className="session-logout"
                 onClick={() => {
                   signOut();
-                  navigate("/login", { replace: true });
+                  navigate("/manage", { replace: true });
                 }}
               >
                 Logout
@@ -120,7 +124,6 @@ function ProtectedShell() {
             <Route path="/orders" element={<OrderPage />} />
             <Route path="/manage" element={<HomePage />} />
             <Route path="/admin" element={<HomePage />} />
-            <Route path="/" element={<Navigate to="/manage?tab=create" replace />} />
             <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
           </Routes>
         </main>
@@ -139,7 +142,8 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={null} />
+        <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/public/order/:uniqid" element={<PublicOrderPage />} />
         <Route path="*" element={<ProtectedShell />} />
       </Routes>
