@@ -1070,9 +1070,11 @@
     position: relative;
     display: grid;
     min-width: 0;
-    grid-template-areas: "identity service metrics actions";
-    grid-template-columns: minmax(175px, 1fr) minmax(135px, .68fr) minmax(340px, 1.35fr) auto;
-    align-items: center;
+    grid-template-areas:
+      "identity service"
+      "metrics actions";
+    grid-template-columns: minmax(0, 1fr) minmax(280px, .72fr);
+    align-items: stretch;
     gap: 1.1rem;
     overflow: hidden;
     border: 1px solid var(--app-border);
@@ -1114,6 +1116,8 @@
   .tracked-order-identity {
     grid-area: identity;
     min-width: 0;
+    align-self: center;
+    padding: .2rem .35rem;
   }
 
   .tracked-order-eyebrow {
@@ -1185,8 +1189,10 @@
     grid-template-columns: 40px minmax(0, 1fr);
     align-items: center;
     gap: 0.7rem;
-    border-left: 1px solid var(--app-divider);
-    padding-left: 1rem;
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    background: rgba(255,255,255,.022);
+    padding: .65rem .75rem;
   }
 
   .tracked-order-service-icon {
@@ -1267,8 +1273,11 @@
   .tracked-order-actions {
     grid-area: actions;
     display: flex;
+    min-width: 0;
     align-items: center;
     justify-content: flex-end;
+    align-content: center;
+    flex-wrap: wrap;
     gap: .4rem;
     border: 1px solid var(--app-border);
     border-radius: 14px;
@@ -1294,9 +1303,9 @@
   }
 
   .tracked-order-delay-control {
-    border-right: 1px solid var(--app-divider);
-    margin-right: .15rem;
-    padding: .15rem .7rem .15rem .25rem;
+    width: 100%;
+    border-bottom: 1px solid var(--app-divider);
+    padding: .25rem .3rem .65rem;
   }
 
   .app-overlay {
@@ -2037,18 +2046,17 @@
 
   .tracked-order-card {
     grid-template-areas:
-      "identity actions"
-      "service service"
-      "metrics metrics";
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: start;
+      "identity"
+      "service"
+      "metrics"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
   }
 
   .tracked-order-service {
-    border-top: 1px solid var(--app-divider);
-    border-left: 0;
-    padding-top: 0.85rem;
-    padding-left: 0;
+    border: 1px solid var(--app-border);
+    padding: .65rem .75rem;
   }
 
   .tracked-order-metrics {
@@ -2057,7 +2065,9 @@
   }
 
   .tracked-order-actions {
-    align-self: start;
+    align-self: stretch;
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 
   .tracked-order-delay-control {
