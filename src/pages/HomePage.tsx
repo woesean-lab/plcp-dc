@@ -86,6 +86,23 @@ function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
   return "active";
 }
 
+function getOrderProgress(order: TrackedOrder) {
+  if (typeof order.amount !== "number") {
+    return null;
+  }
+
+  const used = typeof order.added === "number" ? Math.max(order.added, 0) : 0;
+  const total = Math.max(order.amount, 0);
+  const clampedUsed = Math.min(used, total);
+  const remaining = Math.max(total - clampedUsed, 0);
+
+  return {
+    used: clampedUsed,
+    total,
+    remaining
+  };
+}
+
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY }: { children: ReactNode; fallback: ReactNode; delay?: number }) {
   const [ready, setReady] = useState(false);
 
@@ -367,6 +384,7 @@ export default function HomePage() {
         service: form.service,
         serverId,
         amount: form.amount,
+        added: 0,
         delay: form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
         cost: created.cost,
@@ -624,6 +642,7 @@ export default function HomePage() {
                       const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
                       const ServiceIcon = serviceOption?.icon ?? KeyRound;
                       const orderTitleId = `tracked-order-${index}`;
+                      const progress = getOrderProgress(order);
 
                       return (
                         <li key={order.uniqid}>
@@ -663,6 +682,15 @@ export default function HomePage() {
                                 <div className="tracked-order-metric">
                                   <dt>Amount</dt>
                                   <dd>{formatNumber(order.amount)}</dd>
+                                </div>
+                              ) : null}
+                              {progress ? (
+                                <div className="tracked-order-metric">
+                                  <dt>Users</dt>
+                                  <dd className="grid gap-1">
+                                    <span>{`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}</span>
+                                    <span className="text-xs text-[var(--app-muted)]">{`${formatNumber(progress.remaining)} left`}</span>
+                                  </dd>
                                 </div>
                               ) : null}
                               {typeof order.cost === "number" ? (

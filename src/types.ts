@@ -51,6 +51,7 @@ export interface TrackedOrder {
   service?: ServiceType;
   serverId?: string;
   amount?: number;
+  added?: number;
   delay?: number;
   billingCycle?: number;
   cost?: number;
