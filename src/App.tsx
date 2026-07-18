@@ -4,6 +4,7 @@ import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
+import LandingPage from "./pages/LandingPage";
 import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
@@ -168,7 +169,7 @@ export default function App() {
   return (
     <>
       <Routes>
-        <Route path="/" element={null} />
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
         <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
