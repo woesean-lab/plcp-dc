@@ -27,8 +27,8 @@ import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
-import { checkAvailableAmount, createOrder, getBalance } from "../lib/tokenu";
-import type { ServiceType, TrackedOrder } from "../types";
+import { checkAvailableAmount, createOrder, getBalance, getOrderStatus } from "../lib/tokenu";
+import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string; description: string; icon: LucideIcon }> = [
   { value: "OAUTH-OFFLINE", title: "OAuth Offline", description: "Persistent authorization", icon: CloudOff },
@@ -91,7 +91,13 @@ function getOrderProgress(order: TrackedOrder) {
     return null;
   }
 
-  const used = typeof order.added === "number" ? Math.max(order.added, 0) : 0;
+  const inferredUsed =
+    typeof order.added === "number"
+      ? order.added
+      : String(order.status ?? "").toUpperCase() === "COMPLETED"
+        ? order.amount
+        : 0;
+  const used = Math.max(inferredUsed, 0);
   const total = Math.max(order.amount, 0);
   const clampedUsed = Math.min(used, total);
   const remaining = Math.max(total - clampedUsed, 0);
@@ -273,6 +279,7 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [syncingOrders, setSyncingOrders] = useState(false);
   const [message, setMessage] = useState("");
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
@@ -293,6 +300,53 @@ export default function HomePage() {
   useEffect(() => {
     setMessage("");
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "manage" || !orders.some((order) => order.uniqid)) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void syncTrackedOrders();
+    }, 200);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+
+    async function syncTrackedOrders() {
+      try {
+        setSyncingOrders(true);
+
+        const updates = await Promise.all(
+          orders.map(async (order) => {
+            if (!order.uniqid) return order;
+
+            try {
+              const status = await getOrderStatus(order.uniqid);
+              return mergeTrackedOrder(order, status);
+            } catch {
+              return order;
+            }
+          })
+        );
+
+        if (cancelled) return;
+
+        const changed = updates.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
+        if (changed) {
+          persistOrders(updates);
+        }
+      } finally {
+        if (!cancelled) {
+          setSyncingOrders(false);
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, orders]);
 
   useEffect(() => {
     if (activeTab !== "create") return;
@@ -339,6 +393,37 @@ export default function HomePage() {
   function persistOrders(nextOrders: TrackedOrder[]) {
     setOrders(nextOrders);
     saveTrackedOrders(nextOrders);
+  }
+
+  function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
+    const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
+    const resolvedAdded =
+      typeof status.added === "number"
+        ? status.added
+        : String(status.status ?? "").toUpperCase() === "COMPLETED" && typeof resolvedAmount === "number"
+          ? resolvedAmount
+          : order.added;
+
+    return {
+      ...order,
+      status: String(status.status ?? order.status ?? "NEW"),
+      amount: typeof resolvedAmount === "number" ? resolvedAmount : order.amount,
+      added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
+      details: typeof status.details === "string" ? status.details : order.details
+    };
+  }
+
+  function areTrackedOrdersEqual(a: TrackedOrder, b: TrackedOrder) {
+    return (
+      a.uniqid === b.uniqid &&
+      a.status === b.status &&
+      a.amount === b.amount &&
+      a.added === b.added &&
+      a.details === b.details &&
+      a.cost === b.cost &&
+      a.serverId === b.serverId &&
+      a.service === b.service
+    );
   }
 
   async function handleSaveApiKey(event: FormEvent) {
@@ -616,6 +701,7 @@ export default function HomePage() {
               <div className="page-heading-meta">
                 <Badge variant="outline">{orders.length} tracked</Badge>
                 <Badge variant="secondary">{activeOrders.length} active</Badge>
+                {syncingOrders ? <Badge variant="secondary">Syncing...</Badge> : null}
               </div>
             </header>
 
