@@ -492,12 +492,12 @@ export default function PublicOrderPage() {
                   </span>
                   <div>
                     <p className="app-kicker">Invites paused</p>
-                    <h2>Discord sunucu kısıtlamasını kontrol edin</h2>
+                    <h2>Check your Discord server restriction</h2>
                     <p>
-                      Discord tarafından bir uyarı aldınız mı kontrol edin. Discord davetiye bağlantınızla sunucunuza
-                      katılmayı deneyin. Bir uyarı aldıysanız sunucunuzun kısıtlaması kaldırıldığında aşağıdaki butona
-                      tekrar tıklayın.
+                      Have you received a warning from Discord? Try joining your server using its Discord invite link.
+                      If you see a warning, wait until the server restriction has been lifted before continuing.
                     </p>
+                    <p className="public-restart-action-copy">Click here to start again if you've fixed the issues</p>
                     <Button
                       type="button"
                       variant="destructive"
@@ -505,7 +505,7 @@ export default function PublicOrderPage() {
                       disabled={restartingOrder || restartCooldown > 0}
                     >
                       <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
-                      {restartingOrder ? "Restarting..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Restart order"}
+                      {restartingOrder ? "Continuing..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Continue"}
                     </Button>
                   </div>
                 </div>

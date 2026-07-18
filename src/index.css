@@ -1915,6 +1915,7 @@
   .public-restart-warning .app-kicker { color: var(--app-danger); }
   .public-restart-warning h2 { margin-top: .3rem; font-size: 1.05rem; font-weight: 700; color: var(--app-text); }
   .public-restart-warning p:not(.app-kicker) { max-width: 48rem; margin: .55rem 0 1rem; font-size: 12px; line-height: 1.7; color: #d5aeb6; }
+  .public-restart-warning .public-restart-action-copy { margin-top: -.25rem; font-weight: 700; color: var(--app-danger-button-text); }
 
   .public-delay-warning {
     display: grid;
