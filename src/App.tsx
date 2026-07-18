@@ -2,17 +2,23 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
+import LoginPage from "./pages/LoginPage";
 import OrderPage from "./pages/OrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
+import { isAuthenticated, signOut } from "./lib/session-auth";
 
-function Shell() {
+function ProtectedShell() {
   const location = useLocation();
   const navigate = useNavigate();
+
+  if (!isAuthenticated()) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
+  }
 
   const search = new URLSearchParams(location.search);
   const tab = normalizeAdminTab(search.get("tab"));
   const isOrders = location.pathname.startsWith("/orders");
-  const isAdmin = location.pathname.startsWith("/admin") || location.pathname === "/";
+  const isManage = location.pathname.startsWith("/manage") || location.pathname.startsWith("/admin");
 
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
@@ -26,7 +32,7 @@ function Shell() {
       <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-5 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
         <header className="app-header sticky top-3 z-30">
           <div className="app-header-inner">
-            <button className="app-brand" type="button" onClick={() => navigate("/admin?tab=create")} aria-label="Pulcip Members home">
+            <button className="app-brand" type="button" onClick={() => navigate("/manage?tab=create")} aria-label="Pulcip Members home">
               <span className="brand-mark" aria-hidden="true">
                 <span className="brand-letter">P</span>
               </span>
@@ -42,9 +48,9 @@ function Shell() {
                   type="button"
                   aria-label="Create order"
                   title="Create order"
-                  className={`app-nav-button ${isAdmin && tab === "create" ? "is-active" : ""}`}
-                  aria-current={isAdmin && tab === "create" ? "page" : undefined}
-                  onClick={() => navigate("/admin?tab=create")}
+                  className={`app-nav-button ${isManage && tab === "create" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "create" ? "page" : undefined}
+                  onClick={() => navigate("/manage?tab=create")}
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   <span>Create</span>
@@ -53,9 +59,9 @@ function Shell() {
                   type="button"
                   aria-label="Manage orders"
                   title="Manage orders"
-                  className={`app-nav-button ${isAdmin && tab === "manage" ? "is-active" : ""}`}
-                  aria-current={isAdmin && tab === "manage" ? "page" : undefined}
-                  onClick={() => navigate("/admin?tab=manage")}
+                  className={`app-nav-button ${isManage && tab === "manage" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "manage" ? "page" : undefined}
+                  onClick={() => navigate("/manage?tab=manage")}
                 >
                   <ListChecks className="h-4 w-4" aria-hidden="true" />
                   <span>Manage</span>
@@ -75,15 +81,14 @@ function Shell() {
                   type="button"
                   aria-label="Settings"
                   title="Settings"
-                  className={`app-nav-button ${isAdmin && tab === "settings" ? "is-active" : ""}`}
-                  aria-current={isAdmin && tab === "settings" ? "page" : undefined}
-                  onClick={() => navigate("/admin?tab=settings")}
+                  className={`app-nav-button ${isManage && tab === "settings" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "settings" ? "page" : undefined}
+                  onClick={() => navigate("/manage?tab=settings")}
                 >
                   <Settings2 className="h-4 w-4" aria-hidden="true" />
                   <span>Settings</span>
                 </button>
               </nav>
-
             </div>
 
             <div className="app-security" aria-label="Security status: local vault protected">
@@ -94,18 +99,28 @@ function Shell() {
                 <span className="brand-eyebrow">Local vault</span>
                 <strong>Protected session</strong>
               </span>
+              <button
+                type="button"
+                className="rounded-full border border-[var(--app-border)] px-3 py-1 text-xs font-semibold text-[var(--app-muted)] transition-colors hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
+                onClick={() => {
+                  signOut();
+                  navigate("/login", { replace: true });
+                }}
+              >
+                Logout
+              </button>
               <ShieldCheck className="h-[18px] w-[18px] text-[var(--app-success)]" aria-hidden="true" />
             </div>
           </div>
         </header>
 
-      <main id="main-content" className="flex-1">
-        <Routes>
-          <Route path="/" element={<Navigate to="/admin?tab=create" replace />} />
-          <Route path="/admin" element={<HomePage />} />
-          <Route path="/orders" element={<OrderPage />} />
-            <Route path="/manage" element={<Navigate to="/admin?tab=manage" replace />} />
-            <Route path="*" element={<Navigate to="/admin?tab=create" replace />} />
+        <main id="main-content" className="flex-1">
+          <Routes>
+            <Route path="/orders" element={<OrderPage />} />
+            <Route path="/manage" element={<HomePage />} />
+            <Route path="/admin" element={<HomePage />} />
+            <Route path="/" element={<Navigate to="/manage?tab=create" replace />} />
+            <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
           </Routes>
         </main>
 
@@ -115,6 +130,18 @@ function Shell() {
           <span>Private operations console</span>
         </footer>
       </div>
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/orders" element={<OrderPage />} />
+        <Route path="*" element={<ProtectedShell />} />
+      </Routes>
 
       <Toaster
         position="top-right"
@@ -141,8 +168,6 @@ function Shell() {
           }
         }}
       />
-    </div>
+    </>
   );
 }
-
-export default Shell;

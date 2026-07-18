@@ -1,0 +1,28 @@
+const STORAGE_KEY = "tokenu.console.session";
+
+const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME ?? "admin";
+const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? "admin123";
+
+export function isAuthenticated() {
+  return localStorage.getItem(STORAGE_KEY) === "1";
+}
+
+export function signIn(username: string, password: string) {
+  const normalizedUsername = username.trim();
+  const normalizedPassword = password;
+
+  if (normalizedUsername !== DEFAULT_USERNAME || normalizedPassword !== DEFAULT_PASSWORD) {
+    return false;
+  }
+
+  localStorage.setItem(STORAGE_KEY, "1");
+  return true;
+}
+
+export function signOut() {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+export function getDefaultUsername() {
+  return DEFAULT_USERNAME;
+}

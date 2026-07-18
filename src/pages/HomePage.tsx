@@ -774,7 +774,7 @@ export default function HomePage() {
                   </Button>
                   {!storedApiKey ? (
                     <Button asChild variant="secondary" className="max-sm:w-full">
-                      <Link to="/admin?tab=settings">
+                      <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
                         Configure API key
                       </Link>
