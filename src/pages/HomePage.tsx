@@ -54,6 +54,34 @@ function formatNumber(value?: number) {
     : "—";
 }
 
+function formatTrackedDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
+}
+
+function getServiceLabel(service?: ServiceType) {
+  return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "Manual";
+}
+
+function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
+  const normalized = String(status ?? "").toLowerCase();
+  if (normalized.includes("completed")) return "success";
+  if (["error", "invalid", "terminated"].some((value) => normalized.includes(value))) return "destructive";
+  return "secondary";
+}
+
+function getOrderStatusTone(status?: string) {
+  const variant = getOrderStatusVariant(status);
+  return variant === "success" ? "is-completed" : variant === "destructive" ? "is-error" : "is-active";
+}
+
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY }: { children: ReactNode; fallback: ReactNode; delay?: number }) {
   const [ready, setReady] = useState(false);
 
@@ -135,16 +163,29 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                 <Skeleton className="mt-2 h-5 w-36" />
               </div>
             </div>
-            <div className="space-y-4 p-5 sm:px-6">
-              {Array.from({ length: 4 }).map((_, index) => (
-                <div key={index} className="grid grid-cols-[1.5fr_1fr_0.7fr_0.8fr] items-center gap-4 border-b border-[var(--app-divider)] pb-4 last:border-0 last:pb-0">
-                  <div>
-                    <Skeleton className="h-4 w-32 max-w-full" />
-                    <Skeleton className="mt-2 h-3 w-24 max-w-full" />
+            <div className="tracked-order-list">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="tracked-order-card">
+                  <div className="tracked-order-identity">
+                    <Skeleton className="h-9 w-9 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <Skeleton className="h-3 w-20" />
+                      <Skeleton className="mt-3 h-4 w-36 max-w-full" />
+                      <Skeleton className="mt-2 h-3 w-28 max-w-full" />
+                    </div>
                   </div>
-                  <Skeleton className="h-4 w-20 max-w-full" />
-                  <Skeleton className="h-4 w-12 max-w-full" />
-                  <Skeleton className="h-7 w-20 max-w-full" />
+                  <div className="tracked-order-metrics">
+                    {Array.from({ length: 4 }).map((_, metricIndex) => (
+                      <div key={metricIndex} className="tracked-order-metric">
+                        <Skeleton className="h-3 w-12" />
+                        <Skeleton className="mt-2 h-4 w-20 max-w-full" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="tracked-order-actions">
+                    <Skeleton className="h-11 w-full" />
+                    <Skeleton className="h-11 w-full" />
+                  </div>
                 </div>
               ))}
             </div>
@@ -529,84 +570,81 @@ export default function HomePage() {
             {feedback}
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
-              <section className={`${shell} overflow-hidden`}>
-                <div className="flex items-center gap-3 border-b border-[var(--app-divider)] px-5 py-5 sm:px-6">
-                  <span className="stat-icon" aria-hidden="true">
-                    <ListChecks className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Local queue</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Tracked orders</h2>
+              <section className={`${shell} tracked-orders-panel overflow-hidden`}>
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--app-divider)] px-5 py-5 sm:px-6">
+                  <div className="flex items-center gap-3">
+                    <span className="stat-icon" aria-hidden="true">
+                      <ListChecks className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className={labelClass}>Local queue</p>
+                      <h2 className="app-title mt-1 text-lg font-semibold">Tracked orders</h2>
+                    </div>
                   </div>
+                  <span className="tracked-order-ordering">
+                    <Radio className="h-3.5 w-3.5" aria-hidden="true" />
+                    Newest first
+                  </span>
                 </div>
 
                 {orders.length ? (
-                  <div className="overflow-auto">
-                    <table className="w-full min-w-[860px] border-collapse">
-                      <thead className="sticky top-0 z-10 bg-[var(--app-table-head)]">
-                        <tr className="text-left text-[11px] uppercase tracking-[0.18em] text-[var(--app-subtle)]">
-                          <th className="px-5 py-4 font-semibold">Order</th>
-                          <th className="px-5 py-4 font-semibold">Service</th>
-                          <th className="px-5 py-4 font-semibold">Amount</th>
-                          <th className="px-5 py-4 font-semibold">Status</th>
-                          <th className="px-5 py-4 font-semibold">Cost</th>
-                          <th className="px-5 py-4 font-semibold">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {orders.map((order) => (
-                          <tr key={order.uniqid} className="border-t border-[var(--app-divider)]">
-                            <td className="px-5 py-4 align-top">
-                              <strong className="block font-mono text-sm font-semibold text-[var(--app-text)]">{order.uniqid}</strong>
-                              <span className="mt-1 block text-sm text-[var(--app-subtle)]">{order.serverId || "Manually tracked"}</span>
-                            </td>
-                            <td className="px-5 py-4 align-top text-sm text-[var(--app-text-secondary)]">{order.service ?? "—"}</td>
-                            <td className="px-5 py-4 align-top text-sm text-[var(--app-text-secondary)]">
-                              {typeof order.amount === "number" ? order.amount : "—"}
-                            </td>
-                            <td className="px-5 py-4 align-top">
-                              <Badge
-                                variant={
-                                  String(order.status ?? "").toLowerCase().includes("completed")
-                                    ? "success"
-                                    : ["error", "invalid", "terminated"].some((value) =>
-                                        String(order.status ?? "").toLowerCase().includes(value)
-                                      )
-                                      ? "destructive"
-                                      : "secondary"
-                                }
-                              >
-                                {order.status ?? "NEW"}
-                              </Badge>
-                              {order.details ? <div className="mt-2 text-sm text-[var(--app-subtle)]">{order.details}</div> : null}
-                            </td>
-                            <td className="px-5 py-4 align-top text-sm text-[var(--app-text-secondary)]">
-                              {typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "—"}
-                            </td>
-                            <td className="px-5 py-4 align-top">
-                              <div className="flex flex-wrap gap-2">
-                                <Button asChild variant="secondary" size="xs" className="px-3 text-[10px] uppercase tracking-[0.12em]">
-                                  <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
-                                    <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                                    Open
-                                  </Link>
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  size="xs"
-                                  className="px-3 text-[10px] uppercase tracking-[0.12em]"
-                                  type="button"
-                                  onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                                  Remove
-                                </Button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div className="tracked-order-list" role="list">
+                    {orders.map((order, index) => (
+                      <article key={order.uniqid} className={`tracked-order-card ${getOrderStatusTone(order.status)}`} role="listitem">
+                        <div className="tracked-order-identity">
+                          <span className="tracked-order-index" aria-hidden="true">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="tracked-order-label">Order ID</span>
+                              <Badge variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
+                            </div>
+                            <strong className="tracked-order-id">{order.uniqid}</strong>
+                            <span className="tracked-order-server">{order.serverId || "Manually tracked"}</span>
+                          </div>
+                        </div>
+
+                        <dl className="tracked-order-metrics">
+                          <div className="tracked-order-metric">
+                            <dt>Service</dt>
+                            <dd>{getServiceLabel(order.service)}</dd>
+                          </div>
+                          <div className="tracked-order-metric">
+                            <dt>Amount</dt>
+                            <dd>{formatNumber(order.amount)}</dd>
+                          </div>
+                          <div className="tracked-order-metric">
+                            <dt>Cost</dt>
+                            <dd>{typeof order.cost === "number" ? `$${formatNumber(order.cost)}` : "—"}</dd>
+                          </div>
+                          <div className="tracked-order-metric">
+                            <dt>Added</dt>
+                            <dd>{formatTrackedDate(order.createdAt)}</dd>
+                          </div>
+                        </dl>
+
+                        <div className="tracked-order-actions">
+                          <Button asChild variant="secondary">
+                            <Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}>
+                              <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                              Open
+                            </Link>
+                          </Button>
+                          <Button
+                            variant="destructive"
+                            type="button"
+                            aria-label={`Remove order ${order.uniqid}`}
+                            onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
+                            Remove
+                          </Button>
+                        </div>
+
+                        {order.details ? <p className="tracked-order-details">{order.details}</p> : null}
+                      </article>
+                    ))}
                   </div>
                 ) : (
                   <div className="grid min-h-56 place-items-center px-5 py-10 text-center">

@@ -16,7 +16,6 @@
     --app-code-bg: #060910;
     --app-overlay-bg: rgba(3, 5, 10, 0.62);
     --app-preloader-bg: #0d121c;
-    --app-table-head: rgba(16, 22, 32, 0.93);
     --app-hover: rgba(255, 255, 255, 0.04);
     --app-hover-strong: rgba(255, 255, 255, 0.075);
     --app-control-bg: rgba(255, 255, 255, 0.045);
@@ -922,6 +921,179 @@
     color: var(--app-subtle);
   }
 
+  .tracked-order-ordering {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-soft);
+    padding: 0.45rem 0.65rem;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--app-muted);
+  }
+
+  .tracked-order-ordering svg {
+    color: var(--app-accent);
+  }
+
+  .tracked-order-list {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .tracked-order-card {
+    position: relative;
+    display: grid;
+    grid-template-columns: minmax(220px, 0.9fr) minmax(360px, 1.35fr) minmax(112px, 0.42fr);
+    align-items: center;
+    gap: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    background: var(--app-surface-soft);
+    padding: 1rem 1rem 1rem 1.15rem;
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
+    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+  }
+
+  .tracked-order-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 3px;
+    background: var(--app-border-strong);
+  }
+
+  .tracked-order-card.is-active::before {
+    background: var(--app-accent);
+  }
+
+  .tracked-order-card.is-completed::before {
+    background: var(--app-success);
+  }
+
+  .tracked-order-card.is-error::before {
+    background: var(--app-danger);
+  }
+
+  .tracked-order-card:hover,
+  .tracked-order-card:focus-within {
+    border-color: var(--app-border-strong);
+    background: var(--app-hover);
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 14px 30px rgba(0, 0, 0, 0.14);
+    transform: translateY(-1px);
+  }
+
+  .tracked-order-card:focus-within {
+    outline: 1px solid var(--app-accent-border);
+    outline-offset: 2px;
+  }
+
+  .tracked-order-identity {
+    grid-column: 1;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 38px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.8rem;
+  }
+
+  .tracked-order-index {
+    display: grid;
+    width: 38px;
+    height: 38px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    background: var(--app-code-bg);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--app-subtle);
+  }
+
+  .tracked-order-label,
+  .tracked-order-metric dt {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--app-subtle);
+  }
+
+  .tracked-order-id {
+    display: block;
+    margin-top: 0.55rem;
+    overflow-wrap: anywhere;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.4;
+    color: var(--app-text);
+  }
+
+  .tracked-order-server {
+    display: block;
+    margin-top: 0.25rem;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--app-muted);
+  }
+
+  .tracked-order-metrics {
+    grid-column: 2;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin: 0;
+  }
+
+  .tracked-order-metric {
+    min-width: 0;
+    border: 1px solid var(--app-border);
+    background: rgba(0, 0, 0, 0.12);
+    padding: 0.65rem 0.7rem;
+  }
+
+  .tracked-order-metric dd {
+    overflow: hidden;
+    margin: 0.35rem 0 0;
+    font-size: 12px;
+    font-weight: 650;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    color: var(--app-text-secondary);
+    white-space: nowrap;
+  }
+
+  .tracked-order-actions {
+    grid-column: 3;
+    display: grid;
+    min-width: 112px;
+    gap: 0.5rem;
+  }
+
+  .tracked-order-details {
+    grid-column: 1 / -1;
+    margin: 0;
+    border-top: 1px solid var(--app-divider);
+    padding-top: 0.8rem;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--app-muted);
+  }
+
+  .tracked-order-card.is-error .tracked-order-details {
+    color: #ffc2cb;
+  }
+
   .app-overlay {
     position: fixed;
     inset: 0;
@@ -1014,22 +1186,6 @@
     background: var(--app-accent);
   }
 
-  table {
-    font-variant-numeric: tabular-nums;
-  }
-
-  thead {
-    backdrop-filter: blur(12px);
-  }
-
-  tbody tr {
-    transition: background-color 160ms ease;
-  }
-
-  tbody tr:hover {
-    background: var(--app-hover);
-  }
-
   pre,
   code {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -1103,6 +1259,31 @@
   }
 }
 
+@media (max-width: 1023px) {
+  .tracked-order-card {
+    grid-template-columns: minmax(0, 1fr) minmax(112px, auto);
+  }
+
+  .tracked-order-identity {
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  .tracked-order-actions {
+    grid-row: 1;
+    grid-column: 2;
+  }
+
+  .tracked-order-metrics {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .tracked-order-details {
+    grid-row: 3;
+  }
+}
+
 @media (max-width: 639px) {
   .app-frame {
     gap: 0.9rem;
@@ -1149,6 +1330,43 @@
 
   .page-heading-meta {
     justify-content: flex-start;
+  }
+
+  .tracked-order-list {
+    gap: 0.65rem;
+    padding: 0.75rem;
+  }
+
+  .tracked-order-card {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+    padding: 0.9rem 0.9rem 0.9rem 1rem;
+  }
+
+  .tracked-order-identity,
+  .tracked-order-metrics,
+  .tracked-order-actions,
+  .tracked-order-details {
+    grid-column: 1;
+  }
+
+  .tracked-order-identity {
+    grid-row: 1;
+  }
+
+  .tracked-order-metrics {
+    grid-row: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tracked-order-actions {
+    grid-row: 3;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
+  }
+
+  .tracked-order-details {
+    grid-row: 4;
   }
 
   .app-panel {
