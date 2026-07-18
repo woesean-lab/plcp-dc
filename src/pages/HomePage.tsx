@@ -311,6 +311,7 @@ export default function HomePage() {
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
+  const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
@@ -499,6 +500,39 @@ export default function HomePage() {
     }
   }
 
+  async function refreshTrackedOrders() {
+    if (!orders.some((order) => order.uniqid)) {
+      notifyError("No tracked orders to refresh.");
+      return;
+    }
+
+    try {
+      setRefreshingManage(true);
+      const updates = await Promise.all(
+        orders.map(async (order) => {
+          if (!order.uniqid) return order;
+
+          try {
+            const status = await getOrderStatus(order.uniqid);
+            return mergeTrackedOrder(order, status);
+          } catch {
+            return order;
+          }
+        })
+      );
+
+      const changed = updates.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
+      if (changed) {
+        persistOrders(updates);
+      }
+      notifySuccess("Orders refreshed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Orders could not be refreshed.");
+    } finally {
+      setRefreshingManage(false);
+    }
+  }
+
   async function handleSaveApiKey(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -585,6 +619,7 @@ export default function HomePage() {
   }
 
   const showOverlay = saving;
+  const showManageSkeleton = refreshingManage;
 
   return (
     <div className="relative">
@@ -757,7 +792,10 @@ export default function HomePage() {
         ) : null}
 
         {activeTab === "manage" ? (
-          <>
+          showManageSkeleton ? (
+            <HomePageSkeleton tab="manage" />
+          ) : (
+            <>
             <header className="page-heading">
               <div>
                 <p className={labelClass}>Manage</p>
@@ -768,6 +806,16 @@ export default function HomePage() {
                 <Badge variant="outline">{orders.length} tracked</Badge>
                 <Badge variant="secondary">{activeOrders.length} active</Badge>
                 {syncingOrders ? <Badge variant="secondary">Syncing...</Badge> : null}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="xs"
+                  onClick={() => void refreshTrackedOrders()}
+                  disabled={refreshingManage || syncingOrders || !orders.some((order) => order.uniqid)}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshingManage ? "animate-spin" : ""}`} aria-hidden="true" />
+                  Refresh
+                </Button>
               </div>
             </header>
 
@@ -966,7 +1014,8 @@ export default function HomePage() {
                 </div>
               </aside>
             </div>
-          </>
+            </>
+          )
         ) : null}
 
         {activeTab === "settings" ? (

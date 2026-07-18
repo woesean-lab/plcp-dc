@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock3, FileJson, Hash, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { Clock3, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
@@ -149,19 +149,9 @@ export default function OrderPage() {
   }
 
   const shell = "app-panel";
-  const showOverlay = loading && !pageLoading;
-
-  if (pageLoading) {
+  if (pageLoading || loading) {
     return (
       <section className="relative">
-        {showOverlay ? (
-          <div className="app-overlay">
-            <div className="app-preloader">
-              <div className="app-spinner" />
-              <p className="app-kicker">Loading</p>
-            </div>
-          </div>
-        ) : null}
         <PageSkeleton />
       </section>
     );
@@ -169,19 +159,6 @@ export default function OrderPage() {
 
   return (
     <section className="tab-slide-in relative grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-      {showOverlay ? (
-        <div className="app-overlay" role="status" aria-live="polite">
-          <div className="app-preloader">
-            <div className="app-spinner" />
-            <div>
-              <p className="app-kicker">Order lookup</p>
-              <p className="mt-2 text-sm text-[var(--app-muted)]">Retrieving the latest status</p>
-            </div>
-            <div className="app-progress" aria-hidden="true"><span /></div>
-          </div>
-        </div>
-      ) : null}
-
       <div className={`${shell} p-5 sm:p-6`}>
         <div className="flex items-center gap-3">
           <span className="stat-icon" aria-hidden="true">
@@ -215,6 +192,16 @@ export default function OrderPage() {
             <Button className="min-w-[132px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={loading}>
               <Search className="h-4 w-4" aria-hidden="true" />
               {loading ? "Loading..." : "Check"}
+            </Button>
+            <Button
+              variant="secondary"
+              className="min-w-[132px] px-4 py-2.5 max-sm:w-full"
+              type="button"
+              disabled={loading || !uniqid.trim()}
+              onClick={() => void lookup()}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
+              Refresh
             </Button>
             <Button
               variant="secondary"
