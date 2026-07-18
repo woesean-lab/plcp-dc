@@ -1507,6 +1507,32 @@
     gap: .5rem;
   }
 
+  .auto-refresh-pill {
+    display: inline-flex;
+    min-height: 40px;
+    align-items: center;
+    gap: .45rem;
+    border: 1px solid var(--app-accent-border);
+    border-radius: 999px;
+    background: var(--app-accent-soft);
+    padding: 0 .75rem;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    color: var(--app-muted);
+  }
+
+  .auto-refresh-pill svg {
+    color: var(--app-accent-bright);
+    animation: app-spin 6s linear infinite;
+  }
+
+  .auto-refresh-pill strong {
+    min-width: 20px;
+    font-variant-numeric: tabular-nums;
+    color: var(--app-accent-bright);
+  }
+
   .public-stats-meta {
     position: relative;
     z-index: 1;

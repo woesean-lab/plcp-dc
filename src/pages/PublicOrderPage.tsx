@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
 import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
+
+const AUTO_REFRESH_SECONDS = 10;
 
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -74,6 +76,9 @@ export default function PublicOrderPage() {
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
+  const refreshInFlightRef = useRef(false);
+  const countdownRef = useRef(AUTO_REFRESH_SECONDS);
 
   const seed = useMemo(
     () => ({
@@ -121,6 +126,40 @@ export default function PublicOrderPage() {
     };
   }, [uniqid]);
 
+  useEffect(() => {
+    if (!uniqid) return;
+
+    let active = true;
+    countdownRef.current = AUTO_REFRESH_SECONDS;
+    setSecondsUntilRefresh(AUTO_REFRESH_SECONDS);
+
+    const timer = window.setInterval(() => {
+      countdownRef.current -= 1;
+      if (countdownRef.current <= 0) {
+        countdownRef.current = AUTO_REFRESH_SECONDS;
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = true;
+          void getOrderStatus(uniqid)
+            .then((data) => {
+              if (active) setStatus(data);
+            })
+            .catch(() => {
+              // Keep the last known stats visible and retry on the next cycle.
+            })
+            .finally(() => {
+              refreshInFlightRef.current = false;
+            });
+        }
+      }
+      setSecondsUntilRefresh(countdownRef.current);
+    }, 1000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [uniqid]);
+
   const serverName = status?.serverName ?? seed.serverName ?? "Unknown server";
   const serviceName = getServiceTitle(seed.service ?? status?.type);
   const totalMembers =
@@ -148,13 +187,17 @@ export default function PublicOrderPage() {
     if (!uniqid) return;
 
     try {
+      refreshInFlightRef.current = true;
       setRefreshing(true);
+      countdownRef.current = AUTO_REFRESH_SECONDS;
+      setSecondsUntilRefresh(AUTO_REFRESH_SECONDS);
       const data = await getOrderStatus(uniqid);
       setStatus(data);
       toast.success("Live stats refreshed.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Stats could not be refreshed.");
     } finally {
+      refreshInFlightRef.current = false;
       setRefreshing(false);
     }
   }
@@ -212,6 +255,11 @@ export default function PublicOrderPage() {
               <div className="public-stats-actions">
                 <Badge variant={getStatusBadgeVariant(status?.status)}>{status?.status ?? "LOADING"}</Badge>
                 <Badge variant="outline">{serviceName}</Badge>
+                <div className="auto-refresh-pill" aria-live="polite" aria-label={`Next automatic refresh in ${secondsUntilRefresh} seconds`}>
+                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Next refresh</span>
+                  <strong>{secondsUntilRefresh}s</strong>
+                </div>
                 <Button variant="secondary" size="sm" type="button" onClick={() => void refresh()} disabled={loading || refreshing}>
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh
