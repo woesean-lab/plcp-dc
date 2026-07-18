@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import toast from "react-hot-toast";
 import {
   CircleDollarSign,
   Check,
@@ -74,6 +75,14 @@ function getServiceLabel(service?: ServiceType) {
 
 function formatDelay(value?: number) {
   return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
+}
+
+function notifySuccess(message: string) {
+  toast.success(message);
+}
+
+function notifyError(message: string) {
+  toast.error(message);
 }
 
 function parseDelay(value?: string | number) {
@@ -292,6 +301,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
 
 export default function HomePage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const activeTab = normalizeAdminTab(searchParams.get("tab"));
 
   const [apiKey, setApiKeyValue] = useState(getApiKey());
@@ -302,7 +312,6 @@ export default function HomePage() {
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
-  const [message, setMessage] = useState("");
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
   const [form, setForm] = useState(EMPTY_FORM);
@@ -320,10 +329,6 @@ export default function HomePage() {
     // The initial connection check runs once; saves refresh explicitly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  useEffect(() => {
-    setMessage("");
-  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "manage" || !orders.some((order) => order.uniqid)) {
@@ -395,7 +400,7 @@ export default function HomePage() {
       const data = await getBalance();
       setBalance(data.balance);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Balance could not be loaded.");
+      notifyError(error instanceof Error ? error.message : "Balance could not be loaded.");
     } finally {
       setLoadingBalance(false);
     }
@@ -470,7 +475,7 @@ export default function HomePage() {
     const delay = Number.parseInt(draft, 10);
 
     if (!Number.isFinite(delay) || delay <= 0) {
-      setMessage("Delay must be a positive number.");
+      notifyError("Delay must be a positive number.");
       return;
     }
 
@@ -485,10 +490,10 @@ export default function HomePage() {
       setDelayDrafts((current) => ({ ...current, [order.uniqid]: String(delay) }));
 
       await updateOrderDelay(order.uniqid, delay);
-      setMessage(`Delay updated for ${order.uniqid}.`);
+      notifySuccess(`Delay updated for ${order.uniqid}.`);
     } catch (error) {
       updateLocalOrder(order);
-      setMessage(error instanceof Error ? error.message : "Delay could not be updated.");
+      notifyError(error instanceof Error ? error.message : "Delay could not be updated.");
     } finally {
       setUpdatingDelayId(null);
     }
@@ -503,15 +508,15 @@ export default function HomePage() {
       if (trimmed) {
         setApiKey(trimmed);
         setApiKeyValue(trimmed);
-        setMessage("API key saved.");
+        notifySuccess("API key saved.");
         await refreshBalance();
       } else {
         clearApiKey();
-        setMessage("API key cleared.");
+        notifySuccess("API key cleared.");
         setBalance(null);
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not save API key.");
+      notifyError(error instanceof Error ? error.message : "Could not save API key.");
     } finally {
       setSaving(false);
     }
@@ -519,7 +524,6 @@ export default function HomePage() {
 
   async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
-    setMessage("");
     setCreating(true);
 
     try {
@@ -547,9 +551,10 @@ export default function HomePage() {
       };
 
       persistOrders([nextOrder, ...orders]);
-      setMessage(`Order created: ${created.uniqid}`);
+      notifySuccess(`Order created: ${created.uniqid}`);
+      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Order could not be created.");
+      notifyError(error instanceof Error ? error.message : "Order could not be created.");
     } finally {
       setCreating(false);
     }
@@ -558,12 +563,12 @@ export default function HomePage() {
   function trackOrderManually() {
     const uniqid = orderIdToTrack.trim();
     if (!uniqid) {
-      setMessage("Order ID is required.");
+      notifyError("Order ID is required.");
       return;
     }
 
     if (orders.some((order) => order.uniqid === uniqid)) {
-      setMessage("Order is already tracked.");
+      notifyError("Order is already tracked.");
       return;
     }
 
@@ -576,15 +581,10 @@ export default function HomePage() {
       ...orders
     ]);
     setOrderIdToTrack("");
-    setMessage("Order added.");
+    notifySuccess("Order added.");
   }
 
   const showOverlay = saving;
-  const feedback = message ? (
-    <div className="app-panel-soft app-notice px-4 py-3 text-sm text-[var(--app-text-secondary)]" role="status" aria-live="polite">
-      {message}
-    </div>
-  ) : null;
 
   return (
     <div className="relative">
@@ -615,8 +615,6 @@ export default function HomePage() {
               </div>
               <Badge variant={storedApiKey ? "success" : "destructive"}>{storedApiKey ? "API connected" : "API key required"}</Badge>
             </header>
-
-            {feedback}
 
             <section className={`${shell} p-5 sm:p-6`}>
               <div className="mb-6 flex items-center gap-4">
@@ -772,8 +770,6 @@ export default function HomePage() {
                 {syncingOrders ? <Badge variant="secondary">Syncing...</Badge> : null}
               </div>
             </header>
-
-            {feedback}
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
               <section className={`${shell} tracked-orders-panel overflow-hidden`}>
@@ -984,8 +980,6 @@ export default function HomePage() {
               <Badge variant={storedApiKey ? "success" : "destructive"}>{storedApiKey ? "Connected" : "Not connected"}</Badge>
             </header>
 
-            {feedback}
-
             <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
@@ -1026,7 +1020,7 @@ export default function HomePage() {
                         clearApiKey();
                         setApiKeyValue("");
                         setBalance(null);
-                        setMessage("API key cleared.");
+                        notifySuccess("API key cleared.");
                       }}
                     >
                       Clear key

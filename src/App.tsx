@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import OrderPage from "./pages/OrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
@@ -98,11 +99,11 @@ function Shell() {
           </div>
         </header>
 
-        <main id="main-content" className="flex-1">
-          <Routes>
-            <Route path="/" element={<Navigate to="/admin?tab=create" replace />} />
-            <Route path="/admin" element={<HomePage />} />
-            <Route path="/orders" element={<OrderPage />} />
+      <main id="main-content" className="flex-1">
+        <Routes>
+          <Route path="/" element={<Navigate to="/admin?tab=create" replace />} />
+          <Route path="/admin" element={<HomePage />} />
+          <Route path="/orders" element={<OrderPage />} />
             <Route path="/manage" element={<Navigate to="/admin?tab=manage" replace />} />
             <Route path="*" element={<Navigate to="/admin?tab=create" replace />} />
           </Routes>
@@ -114,6 +115,32 @@ function Shell() {
           <span>Private operations console</span>
         </footer>
       </div>
+
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3500,
+          style: {
+            borderRadius: "14px",
+            border: "1px solid var(--app-border)",
+            background: "var(--app-surface)",
+            color: "var(--app-text)",
+            boxShadow: "0 16px 38px rgba(0, 0, 0, 0.22)"
+          },
+          success: {
+            iconTheme: {
+              primary: "var(--app-success)",
+              secondary: "var(--app-surface)"
+            }
+          },
+          error: {
+            iconTheme: {
+              primary: "var(--app-danger)",
+              secondary: "var(--app-surface)"
+            }
+          }
+        }}
+      />
     </div>
   );
 }

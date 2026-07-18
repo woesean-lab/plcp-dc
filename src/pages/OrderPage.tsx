@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock3, FileJson, Hash, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import toast from "react-hot-toast";
 import { getOrderStatus } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
@@ -94,7 +95,6 @@ export default function OrderPage() {
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
-  const [message, setMessage] = useState("Enter an order ID.");
 
   const summary = useMemo(() => {
     if (!result) return [];
@@ -129,21 +129,20 @@ export default function OrderPage() {
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
     if (!target) {
-      setMessage("Order ID is required.");
+      toast.error("Order ID is required.");
       return;
     }
 
     setLoading(true);
-    setMessage("");
 
     try {
       const data = await getOrderStatus(target);
       setResult(data);
-      setMessage(`Loaded ${target}.`);
+      toast.success(`Loaded ${target}.`);
       setParams({ uniqid: target });
     } catch (error) {
       setResult(null);
-      setMessage(error instanceof Error ? error.message : "Order could not be found.");
+      toast.error(error instanceof Error ? error.message : "Order could not be found.");
     } finally {
       setLoading(false);
     }
@@ -224,16 +223,14 @@ export default function OrderPage() {
               onClick={() => {
                 setUniqid("");
                 setResult(null);
-                setMessage("Enter an order ID.");
                 setParams({});
+                toast("Enter an order ID.");
               }}
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               Clear
             </Button>
           </div>
-
-          {message ? <div className="app-panel-soft app-notice px-4 py-3 text-sm text-[var(--app-text-secondary)]" role="status" aria-live="polite">{message}</div> : null}
         </form>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2">
