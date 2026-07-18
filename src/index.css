@@ -1527,6 +1527,17 @@
     animation: app-spin 6s linear infinite;
   }
 
+  .auto-refresh-pill.is-refreshing {
+    border-color: rgba(105,221,178,.28);
+    color: var(--app-text-secondary);
+    background: var(--app-success-soft);
+  }
+
+  .auto-refresh-pill.is-refreshing svg {
+    color: var(--app-success);
+    animation-duration: .8s;
+  }
+
   .auto-refresh-pill strong {
     min-width: 20px;
     font-variant-numeric: tabular-nums;

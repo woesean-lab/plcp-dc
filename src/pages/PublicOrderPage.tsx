@@ -73,6 +73,7 @@ export default function PublicOrderPage() {
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
@@ -139,6 +140,7 @@ export default function PublicOrderPage() {
         countdownRef.current = AUTO_REFRESH_SECONDS;
         if (!refreshInFlightRef.current) {
           refreshInFlightRef.current = true;
+          setAutoRefreshing(true);
           void getOrderStatus(uniqid)
             .then((data) => {
               if (active) setStatus(data);
@@ -148,6 +150,7 @@ export default function PublicOrderPage() {
             })
             .finally(() => {
               refreshInFlightRef.current = false;
+              if (active) setAutoRefreshing(false);
             });
         }
       }
@@ -255,10 +258,10 @@ export default function PublicOrderPage() {
               <div className="public-stats-actions">
                 <Badge variant={getStatusBadgeVariant(status?.status)}>{status?.status ?? "LOADING"}</Badge>
                 <Badge variant="outline">{serviceName}</Badge>
-                <div className="auto-refresh-pill" aria-live="polite" aria-label={`Next automatic refresh in ${secondsUntilRefresh} seconds`}>
+                <div className={`auto-refresh-pill ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite" aria-label={autoRefreshing ? "Refreshing live stats" : `Next automatic refresh in ${secondsUntilRefresh} seconds`}>
                   <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>Next refresh</span>
-                  <strong>{secondsUntilRefresh}s</strong>
+                  <span>{autoRefreshing ? "Refreshing" : "Next refresh"}</span>
+                  <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
                 </div>
                 <Button variant="secondary" size="sm" type="button" onClick={() => void refresh()} disabled={loading || refreshing}>
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />

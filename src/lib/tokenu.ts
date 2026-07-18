@@ -56,7 +56,12 @@ export async function createOrder(payload: CreateOrderPayload) {
 }
 
 export async function getOrderStatus(uniqid: string) {
-  return requestJson<OrderStatusResponse>(API_BASE, `/status?uniqid=${encodeURIComponent(uniqid)}`);
+  const cacheBuster = Date.now();
+  return requestJson<OrderStatusResponse>(
+    API_BASE,
+    `/status?uniqid=${encodeURIComponent(uniqid)}&_=${cacheBuster}`,
+    { cache: "no-store" }
+  );
 }
 
 export async function checkAvailableAmount(service: string, id: string) {
