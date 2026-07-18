@@ -8,35 +8,26 @@ import toast from "react-hot-toast";
 import {
   CircleDollarSign,
   Check,
-  CloudOff,
+  Copy,
   ExternalLink,
-  Hexagon,
   KeyRound,
   ListChecks,
   LoaderCircle,
   Plus,
-  Radio,
   RefreshCw,
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Trash2,
-  type LucideIcon
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { clearApiKey, getApiKey, setApiKey } from "../lib/auth";
 import { resolveDiscordGuildId } from "../lib/discord";
+import { buildGuestOrderLink } from "../lib/order-links";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
+import { SERVICE_OPTIONS } from "../lib/services";
 import { checkAvailableAmount, createOrder, getBalance, getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
-
-const SERVICE_OPTIONS: Array<{ value: ServiceType; title: string; description: string; icon: LucideIcon }> = [
-  { value: "OAUTH-OFFLINE", title: "OAuth Offline", description: "Persistent authorization", icon: CloudOff },
-  { value: "OAUTH-ONLINE", title: "OAuth Online", description: "Live authorization", icon: Radio },
-  { value: "OAUTH-PREMIUM", title: "OAuth Premium", description: "Priority authorization", icon: Sparkles },
-  { value: "OAUTH-NFT", title: "OAuth NFT", description: "Token-based authorization", icon: Hexagon }
-];
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
@@ -538,6 +529,17 @@ export default function HomePage() {
     }
   }
 
+  async function copyGuestLink(order: TrackedOrder) {
+    const link = buildGuestOrderLink(order);
+
+    try {
+      await navigator.clipboard.writeText(link);
+      notifySuccess("Guest link copied.");
+    } catch {
+      notifyError("Guest link could not be copied.");
+    }
+  }
+
   async function handleSaveApiKey(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -950,6 +952,16 @@ export default function HomePage() {
                                   </div>
                                 </div>
                               ) : null}
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                title="Copy guest link"
+                                onClick={() => void copyGuestLink(order)}
+                              >
+                                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                                Copy link
+                              </Button>
                               <Button asChild variant="secondary" size="sm" title="View order">
                                 <Link
                                   to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
@@ -1016,7 +1028,7 @@ export default function HomePage() {
                   <Button asChild variant="secondary" className="w-full">
                     <Link to="/orders">
                       <Search className="h-4 w-4" aria-hidden="true" />
-                      Open public lookup
+                      Open order lookup
                     </Link>
                   </Button>
                 </div>

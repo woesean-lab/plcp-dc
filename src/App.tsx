@@ -4,6 +4,7 @@ import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import OrderPage from "./pages/OrderPage";
+import PublicOrderPage from "./pages/PublicOrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { isAuthenticated, signOut } from "./lib/session-auth";
 
@@ -139,6 +140,7 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/public/order/:uniqid" element={<PublicOrderPage />} />
         <Route path="*" element={<ProtectedShell />} />
       </Routes>
 
