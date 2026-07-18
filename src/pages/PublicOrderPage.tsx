@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock3, RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
+import { RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
@@ -65,23 +65,6 @@ function getStatusBadgeVariant(status?: string): "success" | "destructive" | "se
   return "secondary";
 }
 
-function formatCountdown(target?: number, now = Date.now()) {
-  if (!target) return "No countdown";
-
-  const diff = target - now;
-  if (diff <= 0) return "Expired";
-
-  const totalSeconds = Math.floor(diff / 1000);
-  const days = Math.floor(totalSeconds / 86400);
-  const hours = Math.floor((totalSeconds % 86400) / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
-  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
-  return `${minutes}m ${seconds}s`;
-}
-
 export default function PublicOrderPage() {
   const { uniqid = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -90,7 +73,6 @@ export default function PublicOrderPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
-  const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
 
   const seed = useMemo(
@@ -103,12 +85,6 @@ export default function PublicOrderPage() {
     }),
     [searchParams]
   );
-
-  useEffect(() => {
-    setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   useEffect(() => {
     if (!uniqid) {
@@ -154,13 +130,14 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : seed.delay;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
-  const expiry = parseTimestamp(status?.expiredAt ?? status?.expired_at);
-  const countdown = formatCountdown(expiry, now);
   const isCompleted = String(status?.status ?? "").toUpperCase() === "COMPLETED";
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
+  const remainingRatio = typeof membersRemaining === "number" && typeof totalMembers === "number" && totalMembers > 0
+    ? Math.min(Math.max(membersRemaining / totalMembers, 0), 1)
+    : null;
   const hasApiKey = Boolean(getApiKey());
 
   useEffect(() => {
@@ -284,7 +261,7 @@ export default function PublicOrderPage() {
             </div>
           ) : (
             <div className="grid gap-5 p-5 sm:p-7">
-              <div className={`grid gap-3 ${isCompleted ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-4"}`}>
+              <div className={`grid gap-3 ${isCompleted ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
                 <div className="app-panel-soft p-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="app-kicker">Members</p>
@@ -316,14 +293,32 @@ export default function PublicOrderPage() {
                     </strong>
                   </div>
                 ) : null}
-                <div className="app-panel-soft p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="app-kicker">Countdown</p>
-                    <Clock3 className="h-4 w-4 text-[var(--app-danger)]" aria-hidden="true" />
+                <div className="app-panel-soft flex min-h-[210px] flex-col items-center justify-center p-4">
+                  <p className="app-kicker">Remaining chart</p>
+                  <div className="relative mt-4 flex aspect-square w-full max-w-[170px] items-center justify-center">
+                    <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
+                      <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="46"
+                        fill="none"
+                        stroke="var(--app-accent)"
+                        strokeWidth="10"
+                        strokeLinecap="round"
+                        strokeDasharray="289"
+                        strokeDashoffset={remainingRatio === null ? 289 : 289 - remainingRatio * 289}
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
+                      <strong className="text-[2.4rem] font-semibold leading-none tracking-tight text-[var(--app-text)]">
+                        {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
+                      </strong>
+                      <span className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--app-muted)]">
+                        {isCompleted ? "Completed" : "Left"}
+                      </span>
+                    </div>
                   </div>
-                  <strong className="mt-3 block text-2xl font-semibold tracking-tight text-[var(--app-text)]">
-                    {isCompleted ? "Completed" : countdown}
-                  </strong>
                 </div>
               </div>
 
