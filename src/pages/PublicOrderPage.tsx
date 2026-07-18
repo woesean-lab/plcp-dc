@@ -463,6 +463,24 @@ export default function PublicOrderPage() {
             </div>
           ) : (
             <div className="public-stats-body">
+              {isWaiting && botInvite ? (
+                <div className="public-bot-required-card app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
+                  <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
+                    <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+                    Bot required to start
+                  </span>
+                  <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
+                    <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
+                  </Button>
+                  <Button asChild size="xs">
+                    <a href={botInvite} target="_blank" rel="noreferrer">
+                      <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
+                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                    </a>
+                  </Button>
+                </div>
+              ) : null}
+
               <div className="public-stats-overview">
                 <div className={`public-metrics-grid ${isCompleted ? "is-completed" : ""}`}>
                 <div className="public-metric-card">
@@ -525,24 +543,6 @@ export default function PublicOrderPage() {
                       {restartingOrder ? "Continuing..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Continue"}
                     </Button>
                   </div>
-                </div>
-              ) : null}
-
-              {isWaiting && botInvite ? (
-                <div className="app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
-                  <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
-                    <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-                    Bot required to start
-                  </span>
-                  <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
-                    <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
-                  </Button>
-                  <Button asChild size="xs">
-                    <a href={botInvite} target="_blank" rel="noreferrer">
-                      <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
-                      <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                    </a>
-                  </Button>
                 </div>
               ) : null}
 

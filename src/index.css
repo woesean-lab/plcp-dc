@@ -1650,6 +1650,10 @@
     gap: 1rem;
   }
 
+  .public-bot-required-card {
+    grid-column: 1 / -1;
+  }
+
   .public-metrics-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
