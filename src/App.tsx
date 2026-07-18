@@ -139,7 +139,6 @@ export default function App() {
     <>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/orders" element={<OrderPage />} />
         <Route path="*" element={<ProtectedShell />} />
       </Routes>
 
