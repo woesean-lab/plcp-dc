@@ -1012,7 +1012,7 @@
     color: var(--app-subtle);
   }
 
-  .tracked-table-sorting {
+  .tracked-order-sorting {
     font-size: 10px;
     font-weight: 650;
     letter-spacing: 0.08em;
@@ -1020,151 +1020,214 @@
     color: var(--app-subtle);
   }
 
-  .tracked-table-region {
-    width: 100%;
+  .tracked-order-list {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0.75rem;
+    list-style: none;
+  }
+
+  .tracked-order-list-skeleton {
+    pointer-events: none;
+  }
+
+  .tracked-order-card {
+    position: relative;
+    display: grid;
     min-width: 0;
-    overflow-x: auto;
-    scrollbar-gutter: stable;
-  }
-
-  .tracked-table-region:focus-visible {
-    outline: 0;
-    box-shadow: inset 0 0 0 2px var(--app-accent);
-  }
-
-  .tracked-table {
-    width: 100%;
-    min-width: 820px;
-    border-collapse: collapse;
-    table-layout: fixed;
-    color: var(--app-text-secondary);
+    grid-template-areas: "identity service metrics actions";
+    grid-template-columns: minmax(190px, 1.1fr) minmax(150px, 0.72fr) minmax(240px, 1fr) auto;
+    align-items: center;
+    gap: 1rem;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    background: linear-gradient(115deg, var(--app-surface-soft), rgba(255, 255, 255, 0.012));
+    padding: 0.95rem;
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
     font-variant-numeric: tabular-nums;
+    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
 
-  .tracked-table-col-order {
-    width: 25%;
+  .tracked-order-card::before {
+    content: "";
+    position: absolute;
+    inset: 18% auto 18% 0;
+    width: 2px;
+    background: var(--app-accent);
+    box-shadow: 0 0 14px var(--app-accent-border);
   }
 
-  .tracked-table-col-status {
-    width: 14%;
+  .tracked-order-card[data-status-tone="success"]::before {
+    background: var(--app-success);
+    box-shadow: 0 0 14px var(--app-success-soft);
   }
 
-  .tracked-table-col-service {
-    width: 16%;
+  .tracked-order-card[data-status-tone="danger"]::before {
+    background: var(--app-danger);
+    box-shadow: 0 0 14px var(--app-danger-soft);
   }
 
-  .tracked-table-col-amount {
-    width: 9%;
+  .tracked-order-card:hover,
+  .tracked-order-card:focus-within {
+    border-color: var(--app-border-strong);
+    background: linear-gradient(115deg, var(--app-hover), var(--app-surface-soft));
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 10px 26px rgba(0, 0, 0, 0.12);
+    transform: translateY(-1px);
   }
 
-  .tracked-table-col-cost {
-    width: 9%;
+  .tracked-order-identity {
+    grid-area: identity;
+    min-width: 0;
   }
 
-  .tracked-table-col-added {
-    width: 14%;
+  .tracked-order-eyebrow {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
   }
 
-  .tracked-table-col-actions {
-    width: 118px;
-  }
-
-  .tracked-table thead {
-    background: var(--app-surface-soft);
-  }
-
-  .tracked-table th,
-  .tracked-table td {
-    border-bottom: 1px solid var(--app-divider);
-    padding: 0.72rem 0.8rem;
-    text-align: left;
-    vertical-align: middle;
-  }
-
-  .tracked-table thead th {
-    height: 38px;
-    padding-block: 0.55rem;
+  .tracked-order-eyebrow > span:first-child,
+  .tracked-order-label,
+  .tracked-order-metric dt {
     font-size: 9px;
     font-weight: 750;
-    letter-spacing: 0.13em;
-    line-height: 1.2;
+    letter-spacing: 0.12em;
+    line-height: 1.3;
     text-transform: uppercase;
     color: var(--app-subtle);
   }
 
-  .tracked-table tbody th {
-    font-weight: inherit;
-  }
-
-  .tracked-table tbody tr {
-    transition: background-color 150ms ease;
-  }
-
-  .tracked-table tbody tr:hover,
-  .tracked-table tbody tr:focus-within {
-    background: var(--app-hover);
-  }
-
-  .tracked-table tbody tr:last-child > * {
-    border-bottom: 0;
-  }
-
-  .tracked-table-id {
-    display: block;
-    overflow-wrap: anywhere;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-    font-size: 12.5px;
-    font-weight: 700;
-    line-height: 1.35;
-    color: var(--app-text);
-  }
-
-  .tracked-table-meta,
-  .tracked-table-note {
-    display: block;
-    margin-top: 0.25rem;
-    overflow: hidden;
-    font-size: 10.5px;
-    line-height: 1.35;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--app-subtle);
-  }
-
-  .tracked-table-service,
-  .tracked-table-date {
-    display: block;
-    overflow-wrap: anywhere;
-    font-size: 11.5px;
-    font-weight: 600;
-    line-height: 1.4;
-    color: var(--app-text-secondary);
-  }
-
-  .tracked-table-status-cell {
-    overflow: hidden;
-  }
-
-  .tracked-table-status-cell .ui-badge-secondary {
+  .tracked-order-eyebrow .ui-badge-secondary {
     border-color: var(--app-accent-border);
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
   }
 
-  .tracked-table-number {
-    text-align: right !important;
+  .tracked-order-id {
+    display: block;
+    overflow-wrap: anywhere;
+    margin: 0.7rem 0 0;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 13px;
+    font-weight: 750;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+    color: var(--app-text);
+  }
+
+  .tracked-order-context {
+    display: flex;
+    min-width: 0;
+    gap: 0.45rem;
+    margin-top: 0.35rem;
+    overflow: hidden;
+    font-size: 10.5px;
+    line-height: 1.35;
+    color: var(--app-subtle);
+  }
+
+  .tracked-order-context span {
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .tracked-table-actions {
+  .tracked-order-detail {
+    margin: 0.45rem 0 0;
+    overflow-wrap: anywhere;
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: var(--app-muted);
+  }
+
+  .tracked-order-service {
+    grid-area: service;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: 40px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.7rem;
+    border-left: 1px solid var(--app-divider);
+    padding-left: 1rem;
+  }
+
+  .tracked-order-service-icon {
+    display: inline-flex;
+    width: 40px;
+    height: 40px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--app-accent-border);
+    color: var(--app-accent);
+    background: var(--app-accent-soft);
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
+  }
+
+  .tracked-order-service strong {
+    display: block;
+    overflow: hidden;
+    margin-top: 0.25rem;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    color: var(--app-text-secondary);
+    white-space: nowrap;
+  }
+
+  .tracked-order-service-code {
+    display: block;
+    overflow: hidden;
+    margin-top: 0.2rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 8.5px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    line-height: 1.3;
+    text-overflow: ellipsis;
+    color: var(--app-subtle);
+    white-space: nowrap;
+  }
+
+  .tracked-order-metrics {
+    grid-area: metrics;
+    display: grid;
+    min-width: 0;
+    grid-template-columns: repeat(auto-fit, minmax(72px, 1fr));
+    border-left: 1px solid var(--app-divider);
+    margin: 0;
+    padding-left: 0.25rem;
+  }
+
+  .tracked-order-metric {
+    min-width: 0;
+    padding: 0.25rem 0.7rem;
+  }
+
+  .tracked-order-metric + .tracked-order-metric {
+    border-left: 1px solid var(--app-divider);
+  }
+
+  .tracked-order-metric dd {
+    overflow: hidden;
+    margin: 0.4rem 0 0;
+    font-size: 11.5px;
+    font-weight: 700;
+    line-height: 1.4;
+    text-overflow: ellipsis;
+    color: var(--app-text-secondary);
+    white-space: nowrap;
+  }
+
+  .tracked-order-actions {
+    grid-area: actions;
     display: flex;
     align-items: center;
     justify-content: flex-end;
     gap: 0.4rem;
-  }
-
-  .tracked-table-skeleton {
-    pointer-events: none;
   }
 
   .app-overlay {
@@ -1341,6 +1404,35 @@
   }
 }
 
+@media (max-width: 899px) {
+  .tracked-order-card {
+    grid-template-areas:
+      "identity actions"
+      "service service"
+      "metrics metrics";
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .tracked-order-service {
+    border-top: 1px solid var(--app-divider);
+    border-left: 0;
+    padding-top: 0.85rem;
+    padding-left: 0;
+  }
+
+  .tracked-order-metrics {
+    border-top: 1px solid var(--app-divider);
+    border-left: 0;
+    padding-top: 0.85rem;
+    padding-left: 0;
+  }
+
+  .tracked-order-actions {
+    align-self: start;
+  }
+}
+
 @media (max-width: 639px) {
   .app-frame {
     gap: 0.9rem;
@@ -1411,6 +1503,30 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 0.5rem;
+  }
+
+  .tracked-order-list {
+    gap: 0.55rem;
+    padding: 0.55rem;
+  }
+
+  .tracked-order-card {
+    grid-template-areas:
+      "identity"
+      "service"
+      "metrics"
+      "actions";
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.85rem;
+    padding: 0.85rem;
+  }
+
+  .tracked-order-actions {
+    justify-content: stretch;
+  }
+
+  .tracked-order-actions .ui-button-secondary {
+    flex: 1 1 auto;
   }
 
   .app-footer {
