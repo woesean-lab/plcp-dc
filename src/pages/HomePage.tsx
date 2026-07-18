@@ -308,6 +308,7 @@ export default function HomePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
+  const [delaySyncLocks, setDelaySyncLocks] = useState<Record<string, number>>({});
 
   const storedApiKey = getApiKey();
   const activeOrders = orders.filter(
@@ -425,7 +426,12 @@ export default function HomePage() {
 
   function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
     const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
-    const resolvedStatusDelay = parseDelay(status.delay) ?? order.statusDelay;
+    const lockedUntil = delaySyncLocks[order.uniqid] ?? 0;
+    const parsedStatusDelay = parseDelay(status.delay);
+    const resolvedStatusDelay =
+      Date.now() < lockedUntil && typeof order.statusDelay === "number"
+        ? order.statusDelay
+        : parsedStatusDelay ?? order.statusDelay;
     const resolvedAdded =
       typeof status.added === "number"
         ? status.added
@@ -470,6 +476,7 @@ export default function HomePage() {
 
     try {
       setUpdatingDelayId(order.uniqid);
+      setDelaySyncLocks((current) => ({ ...current, [order.uniqid]: Date.now() + 7000 }));
       await updateOrderDelay(order.uniqid, delay);
 
       const nextOrder: TrackedOrder = {
