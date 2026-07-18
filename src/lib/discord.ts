@@ -1,5 +1,3 @@
-const DISCORD_API_BASE = "https://discord.com/api/v10";
-
 const inviteResolutionCache = new Map<string, string>();
 
 function isGuildId(value: string) {
@@ -55,11 +53,20 @@ export async function resolveDiscordGuildId(value: string) {
     return cached;
   }
 
-  const response = await fetch(`${DISCORD_API_BASE}/invites/${encodeURIComponent(inviteCode)}?with_counts=false`);
+  let response: Response;
+  try {
+    response = await fetch("/api/discord/resolve", {
+      method: "POST",
+      cache: "no-store",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: inviteCode })
+    });
+  } catch {
+    throw new Error("The server could not be reached. Please try again.");
+  }
+
   const payload = (await response.json().catch(() => ({}))) as {
-    guild?: {
-      id?: string;
-    };
+    guildId?: string;
     message?: string;
   };
 
@@ -67,7 +74,7 @@ export async function resolveDiscordGuildId(value: string) {
     throw new Error(payload.message ?? "Discord invite could not be resolved.");
   }
 
-  const guildId = payload.guild?.id;
+  const guildId = payload.guildId;
   if (!guildId) {
     throw new Error("That invite does not resolve to a Discord server ID.");
   }

@@ -19,6 +19,30 @@ const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
 
+function isDiscordGuildId(value) {
+  return /^\d{17,20}$/.test(value);
+}
+
+function extractDiscordInviteCode(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+
+  try {
+    const url = new URL(trimmed.startsWith("http") ? trimmed : `https://${trimmed}`);
+    const hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+    const segments = url.pathname.split("/").filter(Boolean);
+
+    if (hostname === "discord.gg") return segments[0] ?? null;
+    if ((hostname === "discord.com" || hostname === "discordapp.com") && segments[0] === "invite") {
+      return segments[1] ?? null;
+    }
+  } catch {
+    // Fall through to raw invite-code handling.
+  }
+
+  return /^[A-Za-z0-9_-]{3,}$/.test(trimmed) ? trimmed : null;
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || undefined,
   host: process.env.DATABASE_URL ? undefined : process.env.PGHOST,
@@ -411,6 +435,50 @@ app.get("/api/tokenu/balance", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
+  try {
+    const value = String(req.body?.value ?? "").trim();
+    if (!value || value.length > 256) {
+      return res.status(400).json({ message: "Server ID or Discord invite link is required." });
+    }
+
+    if (isDiscordGuildId(value)) {
+      return res.json({ guildId: value });
+    }
+
+    const inviteCode = extractDiscordInviteCode(value);
+    if (!inviteCode) {
+      return res.status(400).json({ message: "Enter a Discord server ID or invite link." });
+    }
+
+    const response = await fetch(
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false`,
+      { signal: AbortSignal.timeout(10_000) }
+    );
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      return res.status(response.status === 404 ? 400 : 502).json({
+        message: response.status === 404
+          ? "Discord invite could not be found."
+          : "Discord invite could not be resolved right now."
+      });
+    }
+
+    const guildId = payload?.guild?.id;
+    if (!isDiscordGuildId(String(guildId ?? ""))) {
+      return res.status(400).json({ message: "That invite does not resolve to a Discord server ID." });
+    }
+
+    res.json({ guildId: String(guildId) });
+  } catch (error) {
+    if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
+      return res.status(502).json({ message: "Discord could not be reached. Please try again." });
+    }
+    next(error);
+  }
+});
+
 app.post("/api/tokenu/orders", requireSession, async (req, res, next) => {
   try {
     const { service, id, amount, delay, billingCycle } = req.body ?? {};
@@ -580,6 +648,12 @@ app.use(express.static(distDir, { index: false }));
 app.get("/{*splat}", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
 
 app.use((error, _req, res, _next) => {
+  if (error?.type === "entity.parse.failed") {
+    return res.status(400).json({
+      message: "Invalid JSON body. Property names must use double quotes."
+    });
+  }
+
   console.error(error);
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
   res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });

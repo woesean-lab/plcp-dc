@@ -1,10 +1,15 @@
 import type { BalanceResponse, CreateOrderPayload, CreateOrderResponse, OrderStatusResponse } from "../types";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
-  const response = await fetch(path, {
-    cache: "no-store",
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      cache: "no-store",
+      ...init,
+    });
+  } catch {
+    throw new Error("The server could not be reached. Please try again.");
+  }
 
   const text = await response.text();
   let payload: unknown = text;
