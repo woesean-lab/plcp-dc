@@ -1,4 +1,4 @@
-import { Activity, ArrowRight, ArrowUpRight, Check, Gauge, ShieldCheck, Sparkles, Store, Timer, Users, Zap } from "lucide-react";
+import { Activity, ArrowRight, ArrowUpRight, Check, Hexagon, ShieldCheck, Sparkles, Store, Timer, Users, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -7,7 +7,8 @@ const STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?sea
 const services = [
   { icon: Users, label: "OAuth Offline", title: "Offline members", copy: "Build a stronger member count with delivery configured around your server and order size." },
   { icon: Zap, label: "OAuth Online", title: "Online members", copy: "Add visible activity with online member packages designed for active Discord communities." },
-  { icon: Gauge, label: "Flexible pacing", title: "Controlled delivery", copy: "Choose a delivery delay that fits your server, then follow every order from a live monitor." }
+  { icon: Sparkles, label: "OAuth Premium", title: "Premium members", copy: "Choose a priority member solution for communities that want a stronger, more elevated presence." },
+  { icon: Hexagon, label: "OAuth NFT", title: "NFT members", copy: "Grow NFT and Web3-focused Discord communities with a dedicated token-based member option." }
 ];
 
 export default function LandingPage() {
