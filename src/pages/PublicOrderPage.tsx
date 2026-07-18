@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock3, RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
 import toast from "react-hot-toast";
+import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
-import { getOrderStatus } from "../lib/tokenu";
+import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 function formatNumber(value?: number) {
@@ -86,6 +88,8 @@ export default function PublicOrderPage() {
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [delayDraft, setDelayDraft] = useState("");
   const [now, setNow] = useState(Date.now());
   const [error, setError] = useState("");
 
@@ -156,6 +160,13 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
+  const hasApiKey = Boolean(getApiKey());
+
+  useEffect(() => {
+    if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
+      setDelayDraft(String(currentDelay));
+    }
+  }, [currentDelay]);
 
   async function refresh() {
     if (!uniqid) return;
@@ -169,6 +180,36 @@ export default function PublicOrderPage() {
       toast.error(err instanceof Error ? err.message : "Stats could not be refreshed.");
     } finally {
       setRefreshing(false);
+    }
+  }
+
+  async function handleUpdateDelay() {
+    const nextDelay = Number.parseInt(delayDraft, 10);
+
+    if (!Number.isFinite(nextDelay) || nextDelay <= 0) {
+      toast.error("Delay must be a positive number.");
+      return;
+    }
+
+    if (!uniqid) {
+      toast.error("Order ID is missing.");
+      return;
+    }
+
+    if (!hasApiKey) {
+      toast.error("Admin API key is required to update delay.");
+      return;
+    }
+
+    try {
+      setUpdatingDelay(true);
+      await updateOrderDelay(uniqid, nextDelay);
+      setStatus((current) => (current ? { ...current, delay: nextDelay } : current));
+      toast.success("Delay updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
+    } finally {
+      setUpdatingDelay(false);
     }
   }
 
@@ -313,6 +354,43 @@ export default function PublicOrderPage() {
                     </strong>
                   </div>
                 </div>
+              </div>
+
+              <div className="app-panel-soft p-4 sm:p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="app-kicker">Delay update</p>
+                    <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
+                  </div>
+                  <Badge variant={hasApiKey ? "success" : "secondary"}>{hasApiKey ? "Key ready" : "Admin key required"}</Badge>
+                </div>
+
+                <div className="mt-4 flex gap-3 max-sm:flex-col">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1200}
+                    value={delayDraft}
+                    onChange={(event) => setDelayDraft(event.target.value)}
+                    placeholder="Delay"
+                    className="w-36 shrink-0"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => void handleUpdateDelay()}
+                    disabled={updatingDelay || !hasApiKey}
+                  >
+                    <Timer className="h-4 w-4" aria-hidden="true" />
+                    {updatingDelay ? "Updating..." : "Update delay"}
+                  </Button>
+                </div>
+
+                <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
+                  {hasApiKey
+                    ? "This uses the admin API key stored in your browser."
+                    : "Add the admin API key in the same browser if you want this public page to submit delay changes."}
+                </p>
               </div>
             </div>
           )}
