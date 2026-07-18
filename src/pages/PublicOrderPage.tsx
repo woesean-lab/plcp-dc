@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
+import { Activity, CalendarDays, Hash, RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
@@ -135,10 +135,8 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
-  const remainingRatio = typeof membersRemaining === "number" && typeof totalMembers === "number" && totalMembers > 0
-    ? Math.min(Math.max(membersRemaining / totalMembers, 0), 1)
-    : null;
   const hasApiKey = Boolean(getApiKey());
+  const progressPercent = progress === null ? 0 : Math.round(progress * 100);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -196,21 +194,22 @@ export default function PublicOrderPage() {
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-5xl items-center">
-        <article className="app-panel w-full overflow-hidden">
-          <div className="border-b border-[var(--app-divider)] px-5 py-5 sm:px-7 sm:py-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center">
+        <article className="public-stats-card app-panel w-full overflow-hidden">
+          <div className="public-stats-hero">
+            <div className="public-stats-brand">
+              <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+              <span><span className="brand-eyebrow">Pulcip Members</span><strong>Live order intelligence</strong></span>
+            </div>
+
+            <div className="public-stats-heading">
               <div className="min-w-0">
-                <p className="app-kicker">Guest access</p>
-                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-[var(--app-text)] sm:text-[2.2rem]">
-                  {serverName}
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--app-muted)]">
-                  Live public stats for this order. No admin controls are exposed here.
-                </p>
+                <div className="public-live-label"><span aria-hidden="true" /> Live public stats</div>
+                <h1>{serverName}</h1>
+                <p>Real-time delivery visibility for your order, securely shared with you.</p>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="public-stats-actions">
                 <Badge variant={getStatusBadgeVariant(status?.status)}>{status?.status ?? "LOADING"}</Badge>
                 <Badge variant="outline">{serviceName}</Badge>
                 <Button variant="secondary" size="sm" type="button" onClick={() => void refresh()} disabled={loading || refreshing}>
@@ -220,18 +219,18 @@ export default function PublicOrderPage() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-3">
-              <div className="app-panel-soft p-4">
-                <p className="app-kicker">Order ID</p>
-                <strong className="mt-2 block truncate font-mono text-base text-[var(--app-text)]">{uniqid || "-"}</strong>
+            <div className="public-stats-meta">
+              <div>
+                <span className="public-meta-icon"><Hash className="h-4 w-4" /></span>
+                <span><small>Order ID</small><strong className="font-mono">{uniqid || "-"}</strong></span>
               </div>
-              <div className="app-panel-soft p-4">
-                <p className="app-kicker">Created</p>
-                <strong className="mt-2 block text-base text-[var(--app-text)]">{formatDateTime(createdAt)}</strong>
+              <div>
+                <span className="public-meta-icon"><CalendarDays className="h-4 w-4" /></span>
+                <span><small>Created</small><strong>{formatDateTime(createdAt)}</strong></span>
               </div>
-              <div className="app-panel-soft p-4">
-                <p className="app-kicker">Service</p>
-                <strong className="mt-2 block text-base text-[var(--app-text)]">{serviceName}</strong>
+              <div>
+                <span className="public-meta-icon"><Activity className="h-4 w-4" /></span>
+                <span><small>Service</small><strong>{serviceName}</strong></span>
               </div>
             </div>
           </div>
@@ -260,104 +259,87 @@ export default function PublicOrderPage() {
               </div>
             </div>
           ) : (
-            <div className="grid gap-5 p-5 sm:p-7">
-              <div className={`grid gap-3 ${isCompleted ? "sm:grid-cols-3" : "sm:grid-cols-2 xl:grid-cols-3"}`}>
-                <div className="app-panel-soft p-4">
+            <div className="public-stats-body">
+              <div className="public-stats-overview">
+                <div className={`public-metrics-grid ${isCompleted ? "is-completed" : ""}`}>
+                <div className="public-metric-card">
                   <div className="flex items-center justify-between gap-3">
                     <p className="app-kicker">Members</p>
-                    <Users className="h-4 w-4 text-[var(--app-success)]" aria-hidden="true" />
+                    <span className="public-metric-icon is-success"><Users className="h-4 w-4" aria-hidden="true" /></span>
                   </div>
-                  <strong className="mt-3 block text-2xl font-semibold tracking-tight text-[var(--app-text)]">
+                  <strong>
                     {typeof membersAdded === "number" && typeof totalMembers === "number"
                       ? `${formatNumber(membersAdded)}/${formatNumber(totalMembers)}`
                       : "-"}
                   </strong>
+                  <small>Successfully delivered</small>
                 </div>
-                <div className="app-panel-soft p-4">
+                <div className="public-metric-card">
                   <div className="flex items-center justify-between gap-3">
                     <p className="app-kicker">Remaining</p>
-                    <Server className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+                    <span className="public-metric-icon"><Server className="h-4 w-4" aria-hidden="true" /></span>
                   </div>
-                  <strong className="mt-3 block text-2xl font-semibold tracking-tight text-[var(--app-text)]">
+                  <strong>
                     {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
                   </strong>
+                  <small>Members left in queue</small>
                 </div>
                 {!isCompleted ? (
-                  <div className="app-panel-soft p-4">
+                  <div className="public-metric-card">
                     <div className="flex items-center justify-between gap-3">
                       <p className="app-kicker">Delay</p>
-                      <Timer className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+                      <span className="public-metric-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
                     </div>
-                    <strong className="mt-3 block text-2xl font-semibold tracking-tight text-[var(--app-text)]">
+                    <strong>
                       {typeof currentDelay === "number" ? `${currentDelay}s` : "-"}
                     </strong>
+                    <small>Current delivery interval</small>
                   </div>
                 ) : null}
-                <div className="app-panel-soft flex min-h-[210px] flex-col items-center justify-center p-4">
-                  <p className="app-kicker">Remaining chart</p>
-                  <div className="relative mt-4 flex aspect-square w-full max-w-[170px] items-center justify-center">
-                    <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90">
-                      <circle cx="60" cy="60" r="46" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="10" />
-                      <circle
-                        cx="60"
-                        cy="60"
-                        r="46"
-                        fill="none"
-                        stroke="var(--app-accent)"
-                        strokeWidth="10"
-                        strokeLinecap="round"
-                        strokeDasharray="289"
-                        strokeDashoffset={remainingRatio === null ? 289 : 289 - remainingRatio * 289}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-                      <strong className="text-[2.4rem] font-semibold leading-none tracking-tight text-[var(--app-text)]">
-                        {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
-                      </strong>
-                      <span className="mt-1 text-xs font-semibold uppercase tracking-[0.18em] text-[var(--app-muted)]">
-                        {isCompleted ? "Completed" : "Left"}
-                      </span>
-                    </div>
-                  </div>
                 </div>
-              </div>
 
-              <div className="app-panel-soft p-4 sm:p-5">
+              <div className="public-progress-card">
                 <div className="flex items-center justify-between gap-3">
                   <div>
                     <p className="app-kicker">Progress</p>
-                    <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Live delivery state</h2>
+                    <h2>Live delivery state</h2>
                   </div>
-                  <ShieldCheck className="h-5 w-5 text-[var(--app-success)]" aria-hidden="true" />
+                  <span className="public-secure-mark"><ShieldCheck className="h-4 w-4" /> Verified feed</span>
                 </div>
 
-                <div className="mt-4 h-2 overflow-hidden rounded-full bg-[rgba(255,255,255,0.05)]">
-                  <div
-                    className="h-full rounded-full bg-[var(--app-accent)] transition-[width] duration-300"
-                    style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }}
-                  />
+                <div className="public-progress-copy"><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>completed</span></div>
+                <div className="public-progress-track">
+                  <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
                 </div>
 
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="public-progress-details">
                   <div>
-                    <p className="app-kicker">Server</p>
-                    <strong className="mt-2 block text-sm text-[var(--app-text-secondary)]">{serverName}</strong>
+                    <small>Server</small><strong>{serverName}</strong>
                   </div>
                   <div>
-                    <p className="app-kicker">Status</p>
-                    <strong className="mt-2 block text-sm text-[var(--app-text-secondary)]">{status?.status ?? "Loading"}</strong>
+                    <small>Status</small><strong>{status?.status ?? "Loading"}</strong>
                   </div>
                   <div>
-                    <p className="app-kicker">Details</p>
-                    <strong className="mt-2 block text-sm text-[var(--app-text-secondary)]">
-                      {status?.details ?? status?.error ?? "Live stats are active."}
-                    </strong>
+                    <small>Details</small><strong>{status?.details ?? status?.error ?? "Live stats are active."}</strong>
                   </div>
                 </div>
               </div>
+              </div>
+
+              <aside className="public-radial-card">
+                <p className="app-kicker">Delivery overview</p>
+                <div className="public-radial" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}>
+                  <div><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>{isCompleted ? "Complete" : "Delivered"}</span></div>
+                </div>
+                <div className="public-radial-stats">
+                  <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
+                  <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
+                </div>
+                <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
+              </aside>
 
               {!isCompleted ? (
-                <div className="app-panel-soft p-4 sm:p-5">
+                <div className="public-delay-card">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="app-kicker">Delay update</p>

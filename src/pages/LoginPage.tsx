@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
-import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
+import { Check, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,28 +57,45 @@ export default function LoginPage() {
   }
 
   return (
-    <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-2xl items-center px-3 py-8 sm:px-5">
-      <div className="app-panel w-full p-5 sm:p-8">
-        <div className="flex items-center gap-3">
-          <span className="stat-icon" aria-hidden="true">
-            <LockKeyhole className="h-4 w-4" />
-          </span>
+    <section className="login-shell">
+      <div className="app-ambient app-ambient-one" aria-hidden="true" />
+      <div className="app-ambient app-ambient-two" aria-hidden="true" />
+      <div className="login-card app-panel">
+        <aside className="login-story">
           <div>
-            <p className="app-kicker">Protected access</p>
-            <h1 className="app-title mt-1 text-2xl font-semibold">Sign in</h1>
+            <div className="login-brand">
+              <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+              <span><span className="brand-eyebrow">Pulcip</span><strong>Members Suite</strong></span>
+            </div>
+            <div className="login-hero-icon" aria-hidden="true"><Sparkles className="h-6 w-6" /></div>
+            <p className="app-kicker">Private operations</p>
+            <h1 className="login-headline">Everything in control.<br />Beautifully simple.</h1>
+            <p className="login-copy">Create, monitor, and manage every delivery from one secure workspace.</p>
           </div>
-        </div>
+          <ul className="login-benefits" aria-label="Platform benefits">
+            <li><Check className="h-4 w-4" /> Live delivery intelligence</li>
+            <li><Check className="h-4 w-4" /> Protected local credentials</li>
+            <li><Check className="h-4 w-4" /> Precision order controls</li>
+          </ul>
+        </aside>
 
-        <p className="app-copy mt-4 max-w-lg text-sm leading-6">
-          Enter the dashboard credentials to access the manage console.
-        </p>
+        <div className="login-form-panel">
+          <div className="flex items-center justify-between gap-3">
+            <span className="stat-icon" aria-hidden="true"><LockKeyhole className="h-4 w-4" /></span>
+            <span className="login-security"><ShieldCheck className="h-3.5 w-3.5" /> Secure access</span>
+          </div>
+          <div className="mt-8">
+            <p className="app-kicker">Welcome back</p>
+            <h2 className="app-title mt-2 text-3xl font-semibold">Sign in to continue</h2>
+            <p className="app-copy mt-3 max-w-lg text-sm leading-6">Use your dashboard credentials to open the operations suite.</p>
+          </div>
         {!getConfiguredCredentials() ? (
           <div className="app-panel-soft mt-5 px-4 py-3 text-sm text-[var(--app-danger)]">
             Missing `VITE_ADMIN_USERNAME` or `VITE_ADMIN_PASSWORD`.
           </div>
         ) : null}
 
-        <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
+        <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
           <label className="grid gap-2">
             <span className="field-label">Username</span>
             <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
@@ -94,17 +111,18 @@ export default function LoginPage() {
             />
           </label>
 
-          <div className="flex flex-wrap gap-3">
-            <Button type="submit" className="min-w-[132px] px-4 py-2.5 max-sm:w-full" disabled={loading}>
+          <div className="grid gap-3">
+            <Button type="submit" size="lg" className="w-full" disabled={loading}>
               <LogIn className="h-4 w-4" aria-hidden="true" />
               {loading ? "Signing in..." : "Sign in"}
             </Button>
-            <div className="app-panel-soft flex items-center gap-2 px-4 py-3 text-sm text-[var(--app-muted)] max-sm:w-full">
+            <div className="login-hint">
               <KeyRound className="h-4 w-4" aria-hidden="true" />
               <span>Use the configured dashboard credentials.</span>
             </div>
           </div>
         </form>
+        </div>
       </div>
     </section>
   );

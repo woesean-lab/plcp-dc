@@ -30,7 +30,7 @@ function ProtectedShell() {
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-5 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
+      <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1520px] flex-col gap-6 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
         <header className="app-header sticky top-3 z-30">
           <div className="app-header-inner">
             <button className="app-brand" type="button" onClick={() => navigate("/manage?tab=create")} aria-label="Pulcip Members home">
@@ -102,7 +102,7 @@ function ProtectedShell() {
               </span>
               <button
                 type="button"
-                className="rounded-full border border-[var(--app-border)] px-3 py-1 text-xs font-semibold text-[var(--app-muted)] transition-colors hover:border-[var(--app-border-strong)] hover:text-[var(--app-text)]"
+                className="session-logout"
                 onClick={() => {
                   signOut();
                   navigate("/login", { replace: true });
@@ -128,7 +128,7 @@ function ProtectedShell() {
         <footer className="app-footer">
           <span>Pulcip Members</span>
           <span className="app-footer-divider" aria-hidden="true" />
-          <span>Private operations console</span>
+          <span>Private operations suite</span>
         </footer>
       </div>
     </div>
