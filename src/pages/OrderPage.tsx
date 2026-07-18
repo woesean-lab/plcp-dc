@@ -24,7 +24,14 @@ function formatTime(value?: number) {
 
 function PageSkeleton() {
   return (
-    <section className="tab-slide-in grid gap-4 xl:grid-cols-[0.94fr_1.06fr]">
+    <section
+      className="tab-slide-in grid gap-4 xl:grid-cols-[0.94fr_1.06fr]"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Loading order lookup"
+    >
+      <span className="sr-only">Loading order lookup</span>
       <div className="app-panel p-5">
         <div className="space-y-4">
           <Skeleton className="h-4 w-24" />

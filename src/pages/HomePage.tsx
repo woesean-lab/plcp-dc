@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CircleDollarSign,
+  Check,
   CloudOff,
   ExternalLink,
   Hexagon,
@@ -447,7 +448,7 @@ export default function HomePage() {
             {feedback}
 
             <section className={`${shell} p-5 sm:p-6`}>
-              <div className="mb-6 flex items-center justify-between gap-4">
+              <div className="mb-6 flex items-center gap-4">
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
                     <Plus className="h-4 w-4" />
@@ -457,15 +458,21 @@ export default function HomePage() {
                     <h2 className="app-title mt-1 text-xl font-semibold">Configure order</h2>
                   </div>
                 </div>
-                <Badge variant="default">Primary action</Badge>
               </div>
 
               <form onSubmit={handleCreateOrder} className="grid gap-6">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <fieldset className="md:col-span-2">
-                    <legend className={`${fieldLabelClass} mb-2`}>Service</legend>
+                  <fieldset className="service-selector md:col-span-2">
+                    <legend className="sr-only">Service</legend>
+                    <div className="service-selector-heading">
+                      <div>
+                        <span className={fieldLabelClass}>Choose service</span>
+                        <p className="service-selector-copy">Select the authorization mode for this order.</p>
+                      </div>
+                      <span className="service-selector-count">{SERVICE_OPTIONS.length} services</span>
+                    </div>
                     <div className="service-grid">
-                      {SERVICE_OPTIONS.map((option) => {
+                      {SERVICE_OPTIONS.map((option, index) => {
                         const Icon = option.icon;
                         const selected = form.service === option.value;
 
@@ -479,14 +486,24 @@ export default function HomePage() {
                               checked={selected}
                               onChange={() => setForm((current) => ({ ...current, service: option.value }))}
                             />
-                            <span className="service-option-icon" aria-hidden="true">
-                              <Icon className="h-4 w-4" />
+                            <span className="service-option-head" aria-hidden="true">
+                              <span className="service-option-icon">
+                                <Icon className="h-5 w-5" />
+                              </span>
+                              <span className="service-option-state">
+                                {selected ? (
+                                  <>
+                                    <Check className="h-3 w-3" />
+                                    Selected
+                                  </>
+                                ) : (
+                                  String(index + 1).padStart(2, "0")
+                                )}
+                              </span>
                             </span>
-                            <span className="min-w-0">
-                              <span className="service-option-title">{option.title}</span>
-                              <span className="service-option-code">{option.description}</span>
-                            </span>
-                            <span className="service-option-dot" aria-hidden="true" />
+                            <span className="service-option-title">{option.title}</span>
+                            <span className="service-option-description">{option.description}</span>
+                            <span className="service-option-code">{option.value}</span>
                           </label>
                         );
                       })}
@@ -524,17 +541,18 @@ export default function HomePage() {
                     />
                   </label>
 
-                  <label className="grid gap-2 md:col-span-2">
-                    <span className={fieldLabelClass}>Billing cycle</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={12}
-                      disabled={form.service !== "OAUTH-ONLINE"}
-                      value={form.billingCycle}
-                      onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
-                    />
-                  </label>
+                  {form.service === "OAUTH-ONLINE" ? (
+                    <label className="grid gap-2 md:col-span-2">
+                      <span className={fieldLabelClass}>Billing cycle</span>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={12}
+                        value={form.billingCycle}
+                        onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
+                      />
+                    </label>
+                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-3">
@@ -652,11 +670,11 @@ export default function HomePage() {
                                   </Link>
                                 </Button>
                                 <Button
-                                  variant="destructive"
+                                  variant="dangerGhost"
                                   size="icon-sm"
                                   type="button"
-                                  title="Remove order"
-                                  aria-label={`Remove order ${order.uniqid}`}
+                                  title="Remove from tracked orders"
+                                  aria-label={`Remove ${order.uniqid} from tracked orders`}
                                   onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
                                 >
                                   <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />

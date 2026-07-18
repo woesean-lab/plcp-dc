@@ -3,7 +3,7 @@
 
 @layer base {
   :root {
-    color-scheme: dark;
+    color-scheme: only dark;
     --app-bg: #070910;
     --app-bg-deep: #04060b;
     --app-surface: rgba(14, 19, 29, 0.9);
@@ -46,7 +46,8 @@
     --app-danger-button-text: #ffe1e6;
     --app-indigo: #c7d2fe;
     --app-indigo-soft: rgba(129, 140, 248, 0.1);
-    --app-skeleton: rgba(29, 36, 49, 0.96);
+    --app-skeleton: rgba(31, 39, 54, 0.96);
+    --app-skeleton-highlight: rgba(52, 65, 87, 0.92);
     --app-divider: rgba(255, 255, 255, 0.07);
     --app-inset-line: rgba(255, 255, 255, 0.04);
     --app-scroll-track: rgba(255, 255, 255, 0.03);
@@ -266,12 +267,6 @@
     pointer-events: none;
   }
 
-  .brand-mark-loader {
-    width: 48px;
-    height: 48px;
-    border-radius: 15px;
-  }
-
   .brand-letter {
     position: relative;
     z-index: 1;
@@ -279,10 +274,6 @@
     font-weight: 850;
     letter-spacing: -0.05em;
     line-height: 1;
-  }
-
-  .brand-mark-loader .brand-letter {
-    font-size: 20px;
   }
 
   .brand-eyebrow {
@@ -542,95 +533,171 @@
     opacity: 0.45;
   }
 
+  .service-selector {
+    min-width: 0;
+  }
+
+  .service-selector-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .service-selector-copy {
+    margin: 0.3rem 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--app-subtle);
+  }
+
+  .service-selector-count {
+    flex: 0 0 auto;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--app-subtle);
+  }
+
   .service-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.625rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.7rem;
   }
 
   .service-option {
     position: relative;
-    display: grid;
-    min-height: 68px;
-    grid-template-columns: 32px minmax(0, 1fr) 12px;
-    align-items: center;
-    gap: 0.7rem;
+    display: flex;
+    min-width: 0;
+    min-height: 154px;
+    flex-direction: column;
+    overflow: hidden;
     border: 1px solid var(--app-border);
-    background: var(--app-surface-soft);
-    padding: 0.7rem 0.8rem;
+    background: linear-gradient(145deg, var(--app-surface-soft), rgba(255, 255, 255, 0.012));
+    padding: 0.95rem;
     color: var(--app-text);
     cursor: pointer;
-    transition: border-color 160ms ease, background-color 160ms ease, box-shadow 160ms ease;
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
+    transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .service-option::before {
+    content: "";
+    position: absolute;
+    inset: 0 18% auto;
+    height: 1px;
+    opacity: 0;
+    background: var(--app-accent);
+    box-shadow: 0 0 16px var(--app-accent);
+    transition: opacity 180ms ease;
   }
 
   .service-option:hover {
     border-color: var(--app-border-strong);
     background: var(--app-surface-raised);
+    transform: translateY(-2px);
   }
 
-  .service-option:focus-within {
+  .service-option:has(input:focus-visible) {
     outline: 2px solid var(--app-accent);
     outline-offset: 2px;
   }
 
   .service-option.is-selected {
     border-color: var(--app-accent);
-    background: var(--app-accent-soft);
-    box-shadow: inset 3px 0 0 var(--app-accent);
+    background: linear-gradient(145deg, var(--app-accent-soft), var(--app-surface-raised) 82%);
+    box-shadow: inset 0 0 0 1px var(--app-accent-border), 0 12px 30px rgba(38, 128, 190, 0.11);
+  }
+
+  .service-option.is-selected::before {
+    opacity: 1;
+  }
+
+  .service-option-head {
+    display: flex;
+    width: 100%;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 1.05rem;
   }
 
   .service-option-icon {
     display: inline-flex;
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
     align-items: center;
     justify-content: center;
     border: 1px solid var(--app-border);
     background: var(--app-control-bg);
     color: var(--app-muted);
+    box-shadow: inset 0 1px 0 var(--app-inset-line);
   }
 
   .service-option.is-selected .service-option-icon {
     border-color: var(--app-accent-border);
     background: var(--app-accent-soft);
     color: var(--app-accent);
+    box-shadow: inset 0 0 0 1px var(--app-accent-border), 0 7px 18px rgba(38, 128, 190, 0.1);
+  }
+
+  .service-option-state {
+    display: inline-flex;
+    min-height: 22px;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    border: 1px solid transparent;
+    padding: 0.2rem 0.35rem;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--app-subtle);
+  }
+
+  .service-option.is-selected .service-option-state {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
   }
 
   .service-option-title {
     display: block;
     overflow: hidden;
-    font-size: 13px;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 700;
     line-height: 1.3;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .service-option-description {
+    display: block;
+    margin-top: 0.35rem;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--app-muted);
   }
 
   .service-option-code {
     display: block;
     overflow: hidden;
-    margin-top: 0.2rem;
+    margin-top: auto;
+    padding-top: 0.9rem;
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     font-size: 9px;
-    font-weight: 600;
+    font-weight: 650;
     letter-spacing: 0.05em;
     line-height: 1.3;
     text-overflow: ellipsis;
     color: var(--app-subtle);
     white-space: nowrap;
-  }
-
-  .service-option-dot {
-    width: 10px;
-    height: 10px;
-    border: 1px solid var(--app-border-strong);
-    background: transparent;
-  }
-
-  .service-option.is-selected .service-option-dot {
-    border-color: var(--app-accent);
-    background: var(--app-accent);
-    box-shadow: inset 0 0 0 2px var(--app-surface);
   }
 
   .ui-button {
@@ -678,6 +745,30 @@
     border-color: var(--app-danger-button-border);
     background: var(--app-danger-button-bg-active);
     box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.38);
+    transform: translateY(1px);
+  }
+
+  .ui-button-danger-ghost {
+    border-color: transparent;
+    color: var(--app-subtle);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-button-danger-ghost:not(:disabled):hover,
+  .ui-button-danger-ghost:not(:disabled):focus-visible {
+    border-color: var(--app-danger-soft);
+    color: var(--app-danger);
+    background: var(--app-danger-soft);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .ui-button-danger-ghost:not(:disabled):active {
+    border-color: var(--app-danger-soft);
+    color: var(--app-danger);
+    background: var(--app-danger-hover-soft);
+    box-shadow: none;
     transform: translateY(1px);
   }
 
@@ -1129,8 +1220,14 @@
     position: relative;
     overflow: hidden;
     border-radius: 10px;
-    background: var(--app-skeleton);
-    animation: app-pulse 1.35s ease-in-out infinite;
+    background: linear-gradient(
+      100deg,
+      var(--app-skeleton) 22%,
+      var(--app-skeleton-highlight) 42%,
+      var(--app-skeleton) 62%
+    );
+    background-size: 220% 100%;
+    animation: app-shimmer 1.45s ease-in-out infinite;
   }
 
   .app-skeleton-line {
@@ -1189,13 +1286,12 @@
   }
 }
 
-@keyframes app-pulse {
-  0%,
-  100% {
-    opacity: 0.62;
+@keyframes app-shimmer {
+  from {
+    background-position: 130% 0;
   }
-  50% {
-    opacity: 1;
+  to {
+    background-position: -90% 0;
   }
 }
 
@@ -1238,6 +1334,10 @@
     flex: 1 1 0;
     min-width: 0;
     padding-inline: 0.7rem;
+  }
+
+  .service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1305,6 +1405,12 @@
 
   .service-grid {
     grid-template-columns: 1fr;
+  }
+
+  .service-selector-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.5rem;
   }
 
   .app-footer {

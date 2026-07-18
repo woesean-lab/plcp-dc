@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import HomePage from "./pages/HomePage";
@@ -6,7 +5,6 @@ import OrderPage from "./pages/OrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
 
 function Shell() {
-  const [booting, setBooting] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -14,14 +12,6 @@ function Shell() {
   const tab = normalizeAdminTab(search.get("tab"));
   const isOrders = location.pathname.startsWith("/orders");
   const isAdmin = location.pathname.startsWith("/admin") || location.pathname === "/";
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setBooting(false);
-    }, 480);
-
-    return () => window.clearTimeout(timer);
-  }, []);
 
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
@@ -31,23 +21,6 @@ function Shell() {
 
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
-
-      {booting ? (
-        <div className="app-overlay" role="status" aria-live="polite" aria-atomic="true">
-          <div className="app-preloader">
-            <span className="brand-mark brand-mark-loader" aria-hidden="true">
-              <span className="brand-letter">P</span>
-            </span>
-            <div>
-              <p className="app-kicker">Pulcip Members</p>
-              <p className="mt-2 text-sm text-[var(--app-muted)]">Preparing your workspace</p>
-            </div>
-            <div className="app-progress" aria-hidden="true">
-              <span />
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1440px] flex-col gap-5 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
         <header className="app-header sticky top-3 z-30">

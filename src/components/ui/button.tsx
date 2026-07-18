@@ -11,6 +11,7 @@ const buttonVariants = cva(
       variant: {
         default: "ui-button-primary",
         destructive: "ui-button-destructive",
+        dangerGhost: "ui-button-danger-ghost",
         outline: "ui-button-outline",
         secondary: "ui-button-secondary",
         ghost: "ui-button-ghost",
