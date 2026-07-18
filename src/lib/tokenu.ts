@@ -64,6 +64,32 @@ export async function getOrderStatus(uniqid: string) {
   );
 }
 
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay", init?: RequestInit) {
+  const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
+    cache: "no-store",
+    ...init
+  });
+  const payload = (await response.json().catch(() => ({}))) as { message?: string } & T;
+
+  if (!response.ok) {
+    throw new Error(payload.message ?? `Request failed with ${response.status}`);
+  }
+
+  return payload;
+}
+
+export function getPublicOrderStatus(uniqid: string) {
+  return requestPublicOrderApi<OrderStatusResponse>(uniqid, "status");
+}
+
+export function updatePublicOrderDelay(uniqid: string, delay: number) {
+  return requestPublicOrderApi<unknown>(uniqid, "delay", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ delay })
+  });
+}
+
 export async function checkAvailableAmount(service: string, id: string) {
   return requestJson<{ available: number; maximum: number }>(
     API_BASE,

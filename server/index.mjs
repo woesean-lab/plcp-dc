@@ -11,6 +11,10 @@ const port = Number(process.env.PORT ?? 3000);
 const isProduction = process.env.NODE_ENV === "production";
 const sessionCookie = "plcp_session";
 const sessionDurationMs = 12 * 60 * 60 * 1000;
+const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
+const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
+const publicDelayCooldownMs = 60 * 1000;
+const publicDelayCooldowns = new Map();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || undefined,
@@ -46,6 +50,45 @@ function safeEqual(value, expected) {
   const left = Buffer.from(String(value));
   const right = Buffer.from(String(expected));
   return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+async function requestTokenu(baseUrl, pathname, init = {}) {
+  const apiKey = process.env.TOKENU_API_KEY;
+  if (!apiKey) {
+    const error = new Error("Tokenu API key is not configured on the server.");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const response = await fetch(new URL(pathname, `${baseUrl.replace(/\/$/, "")}/`), {
+    ...init,
+    headers: {
+      Authorization: apiKey,
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  let payload = text;
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    // Preserve non-JSON upstream error messages.
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      typeof payload === "object" && payload && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "string" && payload
+          ? payload
+          : `Tokenu request failed with ${response.status}.`
+    );
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return payload;
 }
 
 async function initializeDatabase() {
@@ -87,6 +130,58 @@ async function requireSession(req, res, next) {
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "256kb" }));
+
+app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const cacheBuster = Date.now();
+    const payload = await requestTokenu(
+      tokenuApiBase,
+      `status?uniqid=${encodeURIComponent(uniqid)}&_=${cacheBuster}`,
+      { cache: "no-store" }
+    );
+    res.set("Cache-Control", "no-store").json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const delay = Number.parseInt(req.body?.delay, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay <= 0 || delay > 1200) {
+      return res.status(400).json({ message: "A valid order ID and delay are required." });
+    }
+
+    const trackedOrder = await pool.query("SELECT 1 FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    if (!trackedOrder.rowCount) {
+      return res.status(404).json({ message: "Public order was not found." });
+    }
+
+    const cooldownKey = `${req.ip}:${uniqid}`;
+    const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return res.status(429).json({
+        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before updating again.`
+      });
+    }
+
+    const payload = await requestTokenu(tokenuOauthApiBase, "delay", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ uniqid, delay })
+    });
+    publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
+    res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/healthz", async (_req, res, next) => {
   try {
@@ -190,7 +285,8 @@ app.get("/{*splat}", (_req, res) => res.sendFile(path.join(distDir, "index.html"
 
 app.use((error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({ message: "Internal server error." });
+  const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
+  res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });
 });
 
 await initializeDatabase();

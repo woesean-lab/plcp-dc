@@ -6,9 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, CalendarDays, Hash, RefreshCw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
-import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
-import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
+import { getPublicOrderStatus, updatePublicOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -108,7 +107,7 @@ export default function PublicOrderPage() {
       try {
         setLoading(true);
         setError("");
-        const data = await getOrderStatus(uniqid);
+        const data = await getPublicOrderStatus(uniqid);
         if (!active) return;
         setStatus(data);
       } catch (err) {
@@ -152,7 +151,7 @@ export default function PublicOrderPage() {
         if (!refreshInFlightRef.current) {
           refreshInFlightRef.current = true;
           setAutoRefreshing(true);
-          void getOrderStatus(uniqid)
+          void getPublicOrderStatus(uniqid)
             .then((data) => {
               if (active) setStatus(data);
             })
@@ -188,7 +187,6 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
-  const hasApiKey = Boolean(getApiKey());
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
 
   useEffect(() => {
@@ -212,17 +210,12 @@ export default function PublicOrderPage() {
       return;
     }
 
-    if (!hasApiKey) {
-      toast.error("Admin API key is required to update delay.");
-      return;
-    }
-
     try {
       delayUpdateInFlightRef.current = true;
       setUpdatingDelay(true);
-      await updateOrderDelay(uniqid, nextDelay);
+      await updatePublicOrderDelay(uniqid, nextDelay);
       try {
-        const verifiedStatus = await getOrderStatus(uniqid);
+        const verifiedStatus = await getPublicOrderStatus(uniqid);
         setStatus(verifiedStatus);
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.
@@ -265,7 +258,7 @@ export default function PublicOrderPage() {
           type="button"
           variant="secondary"
           onClick={() => void handleUpdateDelay()}
-          disabled={updatingDelay || delayUpdateCooldown > 0 || !hasApiKey}
+          disabled={updatingDelay || delayUpdateCooldown > 0}
         >
           <Timer className="h-4 w-4" aria-hidden="true" />
           {updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
