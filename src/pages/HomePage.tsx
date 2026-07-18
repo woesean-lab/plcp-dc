@@ -427,6 +427,7 @@ export default function HomePage() {
       status: String(status.status ?? order.status ?? "NEW"),
       amount: typeof resolvedAmount === "number" ? resolvedAmount : order.amount,
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
+      serverName: typeof status.serverName === "string" ? status.serverName : order.serverName,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details
     };
@@ -438,6 +439,7 @@ export default function HomePage() {
       a.status === b.status &&
       a.amount === b.amount &&
       a.added === b.added &&
+      a.serverName === b.serverName &&
       a.statusDelay === b.statusDelay &&
       a.details === b.details &&
       a.cost === b.cost &&
@@ -767,6 +769,7 @@ export default function HomePage() {
                               </div>
                               <h3 id={orderTitleId} className="tracked-order-id">{order.uniqid}</h3>
                               <div className="tracked-order-context">
+                                {order.serverName ? <span>{order.serverName}</span> : null}
                                 <span>{order.serverId ? `Server ${order.serverId}` : "Added locally"}</span>
                               </div>
                               {order.details ? <p className="tracked-order-detail">{order.details}</p> : null}

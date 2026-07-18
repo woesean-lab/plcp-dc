@@ -50,6 +50,7 @@ export interface TrackedOrder {
   uniqid: string;
   service?: ServiceType;
   serverId?: string;
+  serverName?: string;
   amount?: number;
   added?: number;
   delay?: number;
