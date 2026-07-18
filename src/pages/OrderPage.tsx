@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Clock3, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
-import { getOrderStatus } from "../lib/tokenu";
+import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
@@ -21,6 +21,17 @@ function formatTime(value?: number) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatDelay(value?: string | number) {
+  if (typeof value === "number" && !Number.isNaN(value)) return `${value}s`;
+  if (typeof value === "string" && value.trim()) return value;
+  return "-";
+}
+
+function isTerminalStatus(status?: string) {
+  const normalized = String(status ?? "").toLowerCase();
+  return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
 }
 
 function PageSkeleton() {
@@ -94,6 +105,8 @@ export default function OrderPage() {
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
 
   const summary = useMemo(() => {
@@ -138,6 +151,7 @@ export default function OrderPage() {
     try {
       const data = await getOrderStatus(target);
       setResult(data);
+      setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       toast.success(`Loaded ${target}.`);
       setParams({ uniqid: target });
     } catch (error) {
@@ -145,6 +159,33 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleUpdateDelay() {
+    const target = (result?.uniqid ?? uniqid).trim();
+    const delay = Number.parseInt(delayDraft, 10);
+
+    if (!target) {
+      toast.error("Order ID is required.");
+      return;
+    }
+
+    if (!Number.isFinite(delay) || delay <= 0) {
+      toast.error("Delay must be a positive number.");
+      return;
+    }
+
+    try {
+      setUpdatingDelay(true);
+      setResult((current) => (current ? { ...current, delay } : current));
+      await updateOrderDelay(target, delay);
+      toast.success("Delay updated.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Delay could not be updated.");
+      void lookup(target);
+    } finally {
+      setUpdatingDelay(false);
     }
   }
 
@@ -156,6 +197,8 @@ export default function OrderPage() {
       </section>
     );
   }
+
+  const terminal = isTerminalStatus(result?.status);
 
   return (
     <section className="tab-slide-in relative grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
@@ -298,6 +341,40 @@ export default function OrderPage() {
               </div>
               <p className="app-copy mt-2 text-sm leading-6">{result.details ?? result.error ?? "No details."}</p>
             </div>
+
+            {!terminal ? (
+              <div className="app-panel-soft p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className={labelClass}>Delay</p>
+                    <strong className="mt-2 block text-lg font-semibold text-[var(--app-text)]">
+                      {formatDelay(result.delay)}
+                    </strong>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="xs"
+                    onClick={() => void handleUpdateDelay()}
+                    disabled={updatingDelay}
+                  >
+                    {updatingDelay ? "Updating..." : "Update"}
+                  </Button>
+                </div>
+                <div className="mt-4 flex gap-2 max-sm:flex-col">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1200}
+                    value={delayDraft}
+                    onChange={(event) => setDelayDraft(event.target.value)}
+                    placeholder="Delay"
+                    className="w-28 shrink-0"
+                  />
+                  <p className="app-copy self-center text-sm">Update the current delay for this order.</p>
+                </div>
+              </div>
+            ) : null}
 
             <div className="payload-panel overflow-auto p-4">
               <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
