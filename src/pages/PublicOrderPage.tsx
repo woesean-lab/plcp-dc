@@ -209,7 +209,12 @@ export default function PublicOrderPage() {
       delayUpdateInFlightRef.current = true;
       setUpdatingDelay(true);
       await updateOrderDelay(uniqid, nextDelay);
-      setStatus((current) => (current ? { ...current, delay: nextDelay } : current));
+      try {
+        const verifiedStatus = await getOrderStatus(uniqid);
+        setStatus(verifiedStatus);
+      } catch {
+        // Keep the last server-confirmed value until the next automatic refresh.
+      }
       toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
