@@ -4,7 +4,15 @@ import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { hasAuthConfig, signIn, isAuthenticated, getDefaultUsername } from "../lib/session-auth";
+import {
+  clearRuntimeCredentials,
+  getConfiguredCredentials,
+  getDefaultUsername,
+  hasAuthConfig,
+  isAuthenticated,
+  setRuntimeCredentials,
+  signIn
+} from "../lib/session-auth";
 
 type LocationState = {
   from?: {
@@ -19,7 +27,10 @@ export default function LoginPage() {
   const state = location.state as LocationState | null;
   const [username, setUsername] = useState(getDefaultUsername());
   const [password, setPassword] = useState("");
+  const [setupUsername, setSetupUsername] = useState("");
+  const [setupPassword, setSetupPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [savingSetup, setSavingSetup] = useState(false);
 
   if (isAuthenticated()) {
     const destination = `${state?.from?.pathname ?? "/manage"}${state?.from?.search ?? "?tab=create"}`;
@@ -50,6 +61,25 @@ export default function LoginPage() {
     }
   }
 
+  async function handleSetup(event: FormEvent) {
+    event.preventDefault();
+    setSavingSetup(true);
+
+    try {
+      if (!setupUsername.trim() || !setupPassword) {
+        toast.error("Username and password are required.");
+        return;
+      }
+
+      setRuntimeCredentials(setupUsername, setupPassword);
+      setUsername(setupUsername.trim());
+      setPassword(setupPassword);
+      toast.success("Credentials saved locally.");
+    } finally {
+      setSavingSetup(false);
+    }
+  }
+
   return (
     <section className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-2xl items-center px-3 py-8 sm:px-5">
       <div className="app-panel w-full p-5 sm:p-8">
@@ -66,10 +96,45 @@ export default function LoginPage() {
         <p className="app-copy mt-4 max-w-lg text-sm leading-6">
           Enter the dashboard credentials to access the manage console.
         </p>
-        {!hasAuthConfig() ? (
-          <div className="app-panel-soft mt-5 px-4 py-3 text-sm text-[var(--app-danger)]">
-            Missing `VITE_ADMIN_USERNAME` or `VITE_ADMIN_PASSWORD`.
-          </div>
+        {!getConfiguredCredentials() ? (
+          <form className="app-panel-soft mt-5 grid gap-3 p-4" onSubmit={handleSetup}>
+            <div className="flex items-start gap-3 text-sm text-[var(--app-danger)]">
+              <LockKeyhole className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p>Build-time credentials were not injected. Set local credentials once to unlock the console.</p>
+            </div>
+            <label className="grid gap-2">
+              <span className="field-label">Setup username</span>
+              <Input value={setupUsername} onChange={(event) => setSetupUsername(event.target.value)} autoComplete="username" />
+            </label>
+            <label className="grid gap-2">
+              <span className="field-label">Setup password</span>
+              <Input
+                type="password"
+                value={setupPassword}
+                onChange={(event) => setSetupPassword(event.target.value)}
+                autoComplete="new-password"
+              />
+            </label>
+            <div className="flex flex-wrap gap-3">
+              <Button type="submit" className="min-w-[132px] px-4 py-2.5 max-sm:w-full" disabled={savingSetup}>
+                <KeyRound className="h-4 w-4" aria-hidden="true" />
+                {savingSetup ? "Saving..." : "Save credentials"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="max-sm:w-full"
+                onClick={() => {
+                  clearRuntimeCredentials();
+                  setSetupUsername("");
+                  setSetupPassword("");
+                  toast("Local credentials cleared.");
+                }}
+              >
+                Clear
+              </Button>
+            </div>
+          </form>
         ) : null}
 
         <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
