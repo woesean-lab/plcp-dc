@@ -21,7 +21,7 @@ import {
   ShieldCheck,
   Trash2,
 } from "lucide-react";
-import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
+import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { resolveDiscordGuildId } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
@@ -320,6 +320,7 @@ export default function HomePage() {
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
+  const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -619,6 +620,28 @@ export default function HomePage() {
       notifySuccess("Bot invite link copied.");
     } catch {
       notifyError("Bot invite link could not be copied.");
+    }
+  }
+
+  async function handleDeleteOrder(order: TrackedOrder) {
+    if (deletingOrderId || syncingOrders || refreshingManage) return;
+    const confirmed = window.confirm(`Delete ${order.uniqid} from tracked orders? This cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      setDeletingOrderId(order.uniqid);
+      await deleteTrackedOrder(order.uniqid);
+      setOrders((current) => current.filter((item) => item.uniqid !== order.uniqid));
+      setDelayDrafts((current) => {
+        const next = { ...current };
+        delete next[order.uniqid];
+        return next;
+      });
+      notifySuccess(`Order ${order.uniqid} deleted.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Order could not be deleted.");
+    } finally {
+      setDeletingOrderId(null);
     }
   }
 
@@ -1035,9 +1058,10 @@ export default function HomePage() {
                                 type="button"
                                 title="Remove from tracked orders"
                                 aria-label={`Remove ${order.uniqid} from tracked orders`}
-                                onClick={() => persistOrders(orders.filter((item) => item.uniqid !== order.uniqid))}
+                                disabled={Boolean(deletingOrderId) || syncingOrders || refreshingManage}
+                                onClick={() => void handleDeleteOrder(order)}
                               >
-                                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                {deletingOrderId === order.uniqid ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                               </Button>
                             </div>
                           </article>

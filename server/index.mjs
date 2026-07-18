@@ -428,6 +428,24 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
   }
 });
 
+app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const result = await pool.query("DELETE FROM tracked_orders WHERE uniqid = $1", [uniqid]);
+    if (!result.rowCount) {
+      return res.status(404).json({ message: "Tracked order was not found." });
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.put("/api/orders", requireSession, async (req, res, next) => {
   const orders = Array.isArray(req.body?.orders) ? req.body.orders : null;
   if (!orders || orders.some((order) => !order || typeof order.uniqid !== "string" || !order.uniqid.trim())) {
