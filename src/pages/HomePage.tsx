@@ -92,14 +92,18 @@ function parseDelay(value?: string | number) {
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated"].some((value) => normalized.includes(value))) return "destructive";
+  if (["error", "invalid", "terminated", "canceled", "cancelled"].some((value) => normalized.includes(value))) {
+    return "destructive";
+  }
   return "secondary";
 }
 
 function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated"].some((value) => normalized.includes(value))) return "danger";
+  if (["error", "invalid", "terminated", "canceled", "cancelled"].some((value) => normalized.includes(value))) {
+    return "danger";
+  }
   return "active";
 }
 
