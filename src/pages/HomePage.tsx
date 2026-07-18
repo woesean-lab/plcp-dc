@@ -928,7 +928,7 @@ export default function HomePage() {
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
                       const botInvite = extractBotInvite(order);
-                      const botInviteRequired = String(order.status ?? "").trim().toUpperCase() === "NEW" ? botInvite : null;
+                      const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
 
                       return (
                         <li key={order.uniqid}>
