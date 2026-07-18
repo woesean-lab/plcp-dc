@@ -1835,6 +1835,35 @@
     padding: 1.25rem;
   }
 
+  .public-delay-warning {
+    display: grid;
+    grid-template-columns: 20px minmax(0, 1fr);
+    gap: .65rem;
+    margin-top: 1rem;
+    border: 1px solid rgba(251, 191, 36, .22);
+    border-radius: var(--app-radius-md);
+    background: rgba(251, 191, 36, .07);
+    padding: .8rem .9rem;
+    color: #e8c976;
+  }
+
+  .public-delay-warning svg {
+    margin-top: .1rem;
+    color: #f3c95f;
+  }
+
+  .public-delay-warning p {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: #c8b984;
+  }
+
+  .public-delay-warning strong {
+    font-weight: 750;
+    color: #f2d985;
+  }
+
   .login-shell {
     position: relative;
     display: grid;

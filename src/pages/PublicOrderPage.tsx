@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, CalendarDays, Hash, RefreshCw, Server, ShieldCheck, Timer, Users } from "lucide-react";
+import { Activity, CalendarDays, Hash, RefreshCw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { getApiKey } from "../lib/auth";
 import { getServiceTitle } from "../lib/services";
@@ -238,6 +238,14 @@ export default function PublicOrderPage() {
           <Timer className="h-4 w-4" aria-hidden="true" />
           {updatingDelay ? "Updating..." : "Update delay"}
         </Button>
+      </div>
+
+      <div className="public-delay-warning" role="note">
+        <TriangleAlert className="h-4 w-4" aria-hidden="true" />
+        <p>
+          For new or small servers, we recommend a minimum <strong>700-second delay</strong> between joins when purchasing over
+          <strong> 500 members</strong> to avoid the risk of server limitation.
+        </p>
       </div>
 
       <p className="mt-3 text-sm leading-6 text-[var(--app-muted)]">
