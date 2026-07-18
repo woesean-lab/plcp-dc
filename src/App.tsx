@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
@@ -6,19 +7,11 @@ import LoginPage from "./pages/LoginPage";
 import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
-import { isAuthenticated, signOut } from "./lib/session-auth";
+import { refreshSession, signOut } from "./lib/session-auth";
 
-function ProtectedShell() {
+function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
-
-  if (!isAuthenticated()) {
-    if (location.pathname !== "/manage") {
-      return <Navigate to="/manage" replace state={{ from: location }} />;
-    }
-
-    return <LoginPage />;
-  }
 
   const search = new URLSearchParams(location.search);
   const tab = normalizeAdminTab(search.get("tab"));
@@ -108,8 +101,10 @@ function ProtectedShell() {
                 type="button"
                 className="session-logout"
                 onClick={() => {
-                  signOut();
-                  navigate("/manage", { replace: true });
+                  void signOut().finally(() => {
+                    onSignedOut();
+                    navigate("/manage", { replace: true });
+                  });
                 }}
               >
                 Logout
@@ -138,6 +133,31 @@ function ProtectedShell() {
   );
 }
 
+function ProtectedGate() {
+  const location = useLocation();
+  const [authState, setAuthState] = useState<"loading" | "authenticated" | "anonymous">("loading");
+
+  useEffect(() => {
+    let active = true;
+    void refreshSession().then((ok) => {
+      if (active) setAuthState(ok ? "authenticated" : "anonymous");
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (authState === "loading") return <div className="min-h-screen" />;
+  if (authState === "anonymous") {
+    if (location.pathname !== "/manage") {
+      return <Navigate to="/manage" replace state={{ from: location }} />;
+    }
+    return <LoginPage onAuthenticated={() => setAuthState("authenticated")} />;
+  }
+
+  return <ProtectedShell onSignedOut={() => setAuthState("anonymous")} />;
+}
+
 export default function App() {
   return (
     <>
@@ -145,7 +165,7 @@ export default function App() {
         <Route path="/" element={null} />
         <Route path="/login" element={<Navigate to="/" replace />} />
         <Route path="/public/order/:uniqid" element={<PublicOrderPage />} />
-        <Route path="*" element={<ProtectedShell />} />
+        <Route path="*" element={<ProtectedGate />} />
       </Routes>
 
       <Toaster

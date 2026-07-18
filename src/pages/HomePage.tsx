@@ -310,7 +310,7 @@ export default function HomePage() {
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
   const [availability, setAvailability] = useState("");
-  const [orders, setOrders] = useState<TrackedOrder[]>(() => loadTrackedOrders());
+  const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
@@ -320,6 +320,20 @@ export default function HomePage() {
   const activeOrders = orders.filter(
     (order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())
   );
+
+  useEffect(() => {
+    let active = true;
+    void loadTrackedOrders()
+      .then((savedOrders) => {
+        if (active) setOrders(savedOrders);
+      })
+      .catch((error) => {
+        if (active) notifyError(error instanceof Error ? error.message : "Saved orders could not be loaded.");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (getApiKey()) void refreshBalance();
@@ -418,7 +432,9 @@ export default function HomePage() {
 
   function persistOrders(nextOrders: TrackedOrder[]) {
     setOrders(nextOrders);
-    saveTrackedOrders(nextOrders);
+    void saveTrackedOrders(nextOrders).catch((error) => {
+      notifyError(error instanceof Error ? error.message : "Orders could not be saved.");
+    });
   }
 
   function updateLocalOrder(nextOrder: TrackedOrder) {

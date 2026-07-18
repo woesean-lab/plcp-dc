@@ -1,16 +1,10 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Check, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  getConfiguredCredentials,
-  getDefaultUsername,
-  hasAuthConfig,
-  isAuthenticated,
-  signIn
-} from "../lib/session-auth";
+import { signIn } from "../lib/session-auth";
 
 type LocationState = {
   from?: {
@@ -19,36 +13,31 @@ type LocationState = {
   };
 };
 
-export default function LoginPage() {
+type LoginPageProps = {
+  onAuthenticated?: () => void;
+};
+
+export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const state = location.state as LocationState | null;
-  const [username, setUsername] = useState(getDefaultUsername());
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  if (isAuthenticated()) {
-    const destination = `${state?.from?.pathname ?? "/manage"}${state?.from?.search ?? "?tab=create"}`;
-    return <Navigate to={destination} replace />;
-  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
 
     try {
-      if (!hasAuthConfig()) {
-        toast.error("Login credentials are not configured.");
-        return;
-      }
-
-      const ok = signIn(username, password);
+      const ok = await signIn(username, password);
       if (!ok) {
         toast.error("Invalid username or password.");
         return;
       }
 
       toast.success("Signed in.");
+      onAuthenticated?.();
       const destination = `${state?.from?.pathname ?? "/manage"}${state?.from?.search ?? "?tab=create"}`;
       navigate(destination, { replace: true });
     } finally {
@@ -89,12 +78,6 @@ export default function LoginPage() {
             <h2 className="app-title mt-2 text-3xl font-semibold">Sign in to continue</h2>
             <p className="app-copy mt-3 max-w-lg text-sm leading-6">Use your dashboard credentials to open the operations suite.</p>
           </div>
-        {!getConfiguredCredentials() ? (
-          <div className="app-panel-soft mt-5 px-4 py-3 text-sm text-[var(--app-danger)]">
-            Missing `VITE_ADMIN_USERNAME` or `VITE_ADMIN_PASSWORD`.
-          </div>
-        ) : null}
-
         <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
           <label className="grid gap-2">
             <span className="field-label">Username</span>

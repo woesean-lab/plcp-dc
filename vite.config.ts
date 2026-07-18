@@ -15,6 +15,10 @@ export default defineConfig({
     }
   },
   server: {
-    host: "0.0.0.0"
+    host: "0.0.0.0",
+    proxy: {
+      "/api": "http://localhost:3000",
+      "/healthz": "http://localhost:3000"
+    }
   }
 });

@@ -1,41 +1,30 @@
-import { readRuntimeEnv } from "./runtime-env";
+let authenticated = false;
 
-const STORAGE_KEY = "tokenu.console.session";
-
-const DEFAULT_USERNAME = readRuntimeEnv("VITE_ADMIN_USERNAME");
-const DEFAULT_PASSWORD = readRuntimeEnv("VITE_ADMIN_PASSWORD");
-
-export function isAuthenticated() {
-  return localStorage.getItem(STORAGE_KEY) === "1";
-}
-
-export function signIn(username: string, password: string) {
-  const normalizedUsername = username.trim();
-  const normalizedPassword = password;
-
-  const configured = getConfiguredCredentials();
-  if (!configured) return false;
-
-  if (normalizedUsername !== configured.username || normalizedPassword !== configured.password) {
-    return false;
+export async function refreshSession() {
+  try {
+    const response = await fetch("/api/auth/session", { credentials: "same-origin", cache: "no-store" });
+    authenticated = response.ok;
+  } catch {
+    authenticated = false;
   }
-
-  localStorage.setItem(STORAGE_KEY, "1");
-  return true;
+  return authenticated;
 }
 
-export function signOut() {
-  localStorage.removeItem(STORAGE_KEY);
+export async function signIn(username: string, password: string) {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: username.trim(), password })
+  });
+  authenticated = response.ok;
+  return authenticated;
 }
 
-export function getDefaultUsername() {
-  return DEFAULT_USERNAME ?? "";
-}
-
-export function hasAuthConfig() {
-  return Boolean(getConfiguredCredentials());
-}
-
-export function getConfiguredCredentials() {
-  return DEFAULT_USERNAME && DEFAULT_PASSWORD ? { username: DEFAULT_USERNAME, password: DEFAULT_PASSWORD } : null;
+export async function signOut() {
+  try {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" });
+  } finally {
+    authenticated = false;
+  }
 }
