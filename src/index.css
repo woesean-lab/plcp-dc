@@ -1888,6 +1888,34 @@
     padding: 1.25rem;
   }
 
+  .public-restart-warning {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 1rem;
+    border: 1px solid var(--app-danger-button-border);
+    border-radius: var(--app-radius-lg);
+    padding: 1.15rem;
+    background: linear-gradient(145deg, rgba(84, 24, 37, .72), rgba(42, 16, 23, .78));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 16px 44px rgba(42, 6, 15, .18);
+  }
+
+  .public-restart-warning-icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border: 1px solid rgba(255, 117, 136, .34);
+    border-radius: 13px;
+    color: var(--app-danger);
+    background: rgba(255, 117, 136, .1);
+    box-shadow: 0 0 22px rgba(255, 117, 136, .1);
+  }
+
+  .public-restart-warning .app-kicker { color: var(--app-danger); }
+  .public-restart-warning h2 { margin-top: .3rem; font-size: 1.05rem; font-weight: 700; color: var(--app-text); }
+  .public-restart-warning p:not(.app-kicker) { max-width: 48rem; margin: .55rem 0 1rem; font-size: 12px; line-height: 1.7; color: #d5aeb6; }
+
   .public-delay-warning {
     display: grid;
     grid-template-columns: 20px minmax(0, 1fr);

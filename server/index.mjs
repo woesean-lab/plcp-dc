@@ -13,8 +13,11 @@ const sessionCookie = "plcp_session";
 const sessionDurationMs = 12 * 60 * 60 * 1000;
 const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
 const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
+const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
+const publicRestartCooldownMs = 60 * 1000;
+const publicRestartCooldowns = new Map();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || undefined,
@@ -195,9 +198,11 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     const cooldownKey = `${req.ip}:${uniqid}`;
     const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
     const delayUpdateCooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
+    const restartCooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
+    const restartCooldownSeconds = Math.max(0, Math.ceil((restartCooldownUntil - Date.now()) / 1000));
     const responsePayload = typeof payload === "object" && payload && !Array.isArray(payload)
-      ? { ...payload, delayUpdateCooldownSeconds }
-      : { data: payload, delayUpdateCooldownSeconds };
+      ? { ...payload, delayUpdateCooldownSeconds, restartCooldownSeconds }
+      : { data: payload, delayUpdateCooldownSeconds, restartCooldownSeconds };
     res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);
@@ -232,6 +237,48 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
     });
     publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
     res.json(payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/orders/:uniqid/restart", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const trackedOrder = await pool.query("SELECT 1 FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    if (!trackedOrder.rowCount) {
+      return res.status(404).json({ message: "Public order was not found." });
+    }
+
+    const cooldownKey = `${req.ip}:${uniqid}`;
+    const cooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return res.status(429).json({
+        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before restarting again.`
+      });
+    }
+
+    const currentStatus = await requestTokenu(
+      tokenuApiBase,
+      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
+      { cache: "no-store" }
+    );
+    const normalizedStatus = String(currentStatus?.status ?? "").trim().toUpperCase();
+    if (!normalizedStatus.includes("INVITE") || !normalizedStatus.includes("PAUSED")) {
+      return res.status(409).json({ message: "Order is not in Invites Paused status." });
+    }
+
+    const payload = await requestTokenu(
+      tokenuDataApiBase,
+      `restart?uniqid=${encodeURIComponent(uniqid)}`,
+      { method: "GET", cache: "no-store" }
+    );
+    publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
+    res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
   }

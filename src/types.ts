@@ -44,6 +44,7 @@ export interface OrderStatusResponse {
   serverName?: string;
   error?: string;
   delayUpdateCooldownSeconds?: number;
+  restartCooldownSeconds?: number;
   [key: string]: unknown;
 }
 

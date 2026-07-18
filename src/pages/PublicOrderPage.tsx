@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, CalendarDays, Hash, RefreshCw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, CalendarDays, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { getServiceTitle } from "../lib/services";
-import { getPublicOrderStatus, updatePublicOrderDelay } from "../lib/tokenu";
+import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/tokenu";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -95,14 +95,18 @@ export default function PublicOrderPage() {
   const [loading, setLoading] = useState(true);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [restartingOrder, setRestartingOrder] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
+  const [restartCooldown, setRestartCooldown] = useState(0);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
   const delayUpdateCooldownUntilRef = useRef(0);
+  const restartInFlightRef = useRef(false);
+  const restartCooldownUntilRef = useRef(0);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -112,6 +116,17 @@ export default function PublicOrderPage() {
     if (cooldownUntil > delayUpdateCooldownUntilRef.current) {
       delayUpdateCooldownUntilRef.current = cooldownUntil;
       setDelayUpdateCooldown(Math.ceil(remaining));
+    }
+  }
+
+  function syncRestartCooldown(data: OrderStatusResponse) {
+    const remaining = Number(data.restartCooldownSeconds);
+    if (!Number.isFinite(remaining) || remaining <= 0) return;
+
+    const cooldownUntil = Date.now() + Math.ceil(remaining) * 1000;
+    if (cooldownUntil > restartCooldownUntilRef.current) {
+      restartCooldownUntilRef.current = cooldownUntil;
+      setRestartCooldown(Math.ceil(remaining));
     }
   }
 
@@ -142,6 +157,7 @@ export default function PublicOrderPage() {
         const data = await getPublicOrderStatus(uniqid);
         if (!active) return;
         syncDelayUpdateCooldown(data);
+        syncRestartCooldown(data);
         setStatus(data);
       } catch (err) {
         if (!active) return;
@@ -165,6 +181,8 @@ export default function PublicOrderPage() {
     const timer = window.setInterval(() => {
       const remaining = Math.max(0, Math.ceil((delayUpdateCooldownUntilRef.current - Date.now()) / 1000));
       setDelayUpdateCooldown((current) => (current === remaining ? current : remaining));
+      const restartRemaining = Math.max(0, Math.ceil((restartCooldownUntilRef.current - Date.now()) / 1000));
+      setRestartCooldown((current) => (current === restartRemaining ? current : restartRemaining));
     }, 1000);
 
     return () => window.clearInterval(timer);
@@ -188,6 +206,7 @@ export default function PublicOrderPage() {
             .then((data) => {
               if (active) {
                 syncDelayUpdateCooldown(data);
+                syncRestartCooldown(data);
                 setStatus(data);
               }
             })
@@ -271,6 +290,33 @@ export default function PublicOrderPage() {
     } finally {
       delayUpdateInFlightRef.current = false;
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleRestartOrder() {
+    if (!isInvitesPaused || !uniqid || restartInFlightRef.current || restartCooldownUntilRef.current > Date.now()) return;
+
+    try {
+      restartInFlightRef.current = true;
+      setRestartingOrder(true);
+      await restartPublicOrder(uniqid);
+      restartCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
+      setRestartCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
+      toast.success("Restart request sent successfully.");
+
+      try {
+        const verifiedStatus = await getPublicOrderStatus(uniqid);
+        syncDelayUpdateCooldown(verifiedStatus);
+        syncRestartCooldown(verifiedStatus);
+        setStatus(verifiedStatus);
+      } catch {
+        // Automatic refresh will verify the updated status shortly.
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Order could not be restarted.");
+    } finally {
+      restartInFlightRef.current = false;
+      setRestartingOrder(false);
     }
   }
 
@@ -438,6 +484,32 @@ export default function PublicOrderPage() {
                   </div>
                 ) : null}
                 </div>
+
+              {isInvitesPaused ? (
+                <div className="public-restart-warning" role="alert">
+                  <span className="public-restart-warning-icon" aria-hidden="true">
+                    <TriangleAlert className="h-5 w-5" />
+                  </span>
+                  <div>
+                    <p className="app-kicker">Invites paused</p>
+                    <h2>Discord sunucu kısıtlamasını kontrol edin</h2>
+                    <p>
+                      Discord tarafından bir uyarı aldınız mı kontrol edin. Discord davetiye bağlantınızla sunucunuza
+                      katılmayı deneyin. Bir uyarı aldıysanız sunucunuzun kısıtlaması kaldırıldığında aşağıdaki butona
+                      tekrar tıklayın.
+                    </p>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => void handleRestartOrder()}
+                      disabled={restartingOrder || restartCooldown > 0}
+                    >
+                      <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {restartingOrder ? "Restarting..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Restart order"}
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               {delayUpdatePanel}
 

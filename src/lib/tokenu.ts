@@ -66,7 +66,7 @@ export async function getOrderStatus(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/status`);
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -90,6 +90,10 @@ export function updatePublicOrderDelay(uniqid: string, delay: number) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ delay })
   });
+}
+
+export function restartPublicOrder(uniqid: string) {
+  return requestPublicOrderApi<unknown>(uniqid, "restart", { method: "POST" });
 }
 
 export async function checkAvailableAmount(service: string, id: string) {
