@@ -240,7 +240,7 @@ export default function PublicOrderPage() {
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl items-center">
+      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
         <article className="public-stats-card app-panel w-full overflow-hidden">
           <div className="public-stats-hero">
             <div className="public-stats-brand">
@@ -430,6 +430,12 @@ export default function PublicOrderPage() {
             </div>
           )}
         </article>
+
+        <footer className="app-footer" aria-label="Pulcip Members">
+          <span>Pulcip Members</span>
+          <span className="app-footer-divider" aria-hidden="true" />
+          <span>Private operations suite</span>
+        </footer>
       </div>
     </section>
   );
