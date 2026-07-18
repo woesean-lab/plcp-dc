@@ -477,17 +477,17 @@ export default function HomePage() {
     try {
       setUpdatingDelayId(order.uniqid);
       setDelaySyncLocks((current) => ({ ...current, [order.uniqid]: Date.now() + 7000 }));
-      await updateOrderDelay(order.uniqid, delay);
 
-      const nextOrder: TrackedOrder = {
+      updateLocalOrder({
         ...order,
         statusDelay: delay
-      };
-
-      updateLocalOrder(nextOrder);
+      });
       setDelayDrafts((current) => ({ ...current, [order.uniqid]: String(delay) }));
+
+      await updateOrderDelay(order.uniqid, delay);
       setMessage(`Delay updated for ${order.uniqid}.`);
     } catch (error) {
+      updateLocalOrder(order);
       setMessage(error instanceof Error ? error.message : "Delay could not be updated.");
     } finally {
       setUpdatingDelayId(null);
