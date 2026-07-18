@@ -89,43 +89,6 @@ function formatEstimatedDuration(remaining?: number, delay?: number) {
   return `About ${parts.join(" ")} remaining`;
 }
 
-function getDiscordServerAvatarUrl(status: OrderStatusResponse | null, serverId?: string) {
-  if (!status) return null;
-
-  const directCandidates = [
-    status.serverIconUrl,
-    status.server_icon_url,
-    status.guildIconUrl,
-    status.guild_icon_url,
-    status.iconUrl,
-    status.icon_url
-  ];
-
-  for (const candidate of directCandidates) {
-    if (typeof candidate !== "string" || !candidate.trim()) continue;
-    try {
-      const url = new URL(candidate);
-      if (url.protocol === "https:" && ["cdn.discordapp.com", "media.discordapp.net"].includes(url.hostname)) {
-        return url.toString();
-      }
-    } catch {
-      // Ignore malformed or non-Discord image URLs.
-    }
-  }
-
-  const iconHash = [status.serverIcon, status.server_icon, status.guildIcon, status.guild_icon, status.icon]
-    .find((value) => typeof value === "string" && /^[A-Za-z0-9_]+$/.test(value)) as string | undefined;
-  return serverId && /^\d{17,20}$/.test(serverId) && iconHash
-    ? `https://cdn.discordapp.com/icons/${serverId}/${iconHash}.webp?size=128`
-    : null;
-}
-
-function getServerInitials(name: string) {
-  const words = name.replace(/^#+/, "").trim().split(/\s+/).filter(Boolean);
-  const initials = words.length > 1 ? `${words[0][0] ?? ""}${words[1][0] ?? ""}` : Array.from(words[0] ?? "D").slice(0, 2).join("");
-  return initials.toUpperCase();
-}
-
 export default function PublicOrderPage() {
   const { uniqid = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -269,8 +232,6 @@ export default function PublicOrderPage() {
   const isInitialLoading = loading && !status && !error;
   const serviceType = seed.service ?? status?.type;
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
-  const serverId = typeof status?.serverId === "string" ? status.serverId : undefined;
-  const serverAvatarUrl = useMemo(() => getDiscordServerAvatarUrl(status, serverId), [status, serverId]);
   const serviceName = serviceType ? getServiceTitle(serviceType) : "Service unavailable";
   const statusLabel = status?.status ?? (error ? "UNAVAILABLE" : "PENDING");
   const totalMembers =
@@ -437,19 +398,7 @@ export default function PublicOrderPage() {
             <div className="public-stats-heading">
               <div className="min-w-0">
                 <div className="public-live-label"><span aria-hidden="true" /> Live public stats</div>
-                <div className="public-server-title-row">
-                  {isInitialLoading ? (
-                    <Skeleton className="public-server-avatar rounded-2xl" />
-                  ) : (
-                    <span className="public-server-avatar" aria-hidden="true">
-                      <span>{getServerInitials(serverName)}</span>
-                      {serverAvatarUrl ? (
-                        <img src={serverAvatarUrl} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} />
-                      ) : null}
-                    </span>
-                  )}
-                  <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
-                </div>
+                <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
                 <p>Real-time delivery visibility for your order, securely shared with you.</p>
               </div>
 
