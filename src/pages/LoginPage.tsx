@@ -4,7 +4,7 @@ import { KeyRound, LockKeyhole, LogIn } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { signIn, isAuthenticated, getDefaultUsername } from "../lib/session-auth";
+import { hasAuthConfig, signIn, isAuthenticated, getDefaultUsername } from "../lib/session-auth";
 
 type LocationState = {
   from?: {
@@ -31,6 +31,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      if (!hasAuthConfig()) {
+        toast.error("Login credentials are not configured.");
+        return;
+      }
+
       const ok = signIn(username, password);
       if (!ok) {
         toast.error("Invalid username or password.");
@@ -61,6 +66,11 @@ export default function LoginPage() {
         <p className="app-copy mt-4 max-w-lg text-sm leading-6">
           Enter the dashboard credentials to access the manage console.
         </p>
+        {!hasAuthConfig() ? (
+          <div className="app-panel-soft mt-5 px-4 py-3 text-sm text-[var(--app-danger)]">
+            Missing `VITE_ADMIN_USERNAME` or `VITE_ADMIN_PASSWORD`.
+          </div>
+        ) : null}
 
         <form className="mt-6 grid gap-4" onSubmit={handleSubmit}>
           <label className="grid gap-2">

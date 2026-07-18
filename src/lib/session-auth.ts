@@ -1,7 +1,7 @@
 const STORAGE_KEY = "tokenu.console.session";
 
-const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME ?? "admin";
-const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD ?? "admin123";
+const DEFAULT_USERNAME = import.meta.env.VITE_ADMIN_USERNAME;
+const DEFAULT_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
 
 export function isAuthenticated() {
   return localStorage.getItem(STORAGE_KEY) === "1";
@@ -10,6 +10,10 @@ export function isAuthenticated() {
 export function signIn(username: string, password: string) {
   const normalizedUsername = username.trim();
   const normalizedPassword = password;
+
+  if (!DEFAULT_USERNAME || !DEFAULT_PASSWORD) {
+    return false;
+  }
 
   if (normalizedUsername !== DEFAULT_USERNAME || normalizedPassword !== DEFAULT_PASSWORD) {
     return false;
@@ -24,5 +28,9 @@ export function signOut() {
 }
 
 export function getDefaultUsername() {
-  return DEFAULT_USERNAME;
+  return DEFAULT_USERNAME ?? "";
+}
+
+export function hasAuthConfig() {
+  return Boolean(DEFAULT_USERNAME && DEFAULT_PASSWORD);
 }
