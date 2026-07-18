@@ -770,7 +770,7 @@ export default function HomePage() {
                               <h3 id={orderTitleId} className="tracked-order-id">{order.uniqid}</h3>
                               <div className="tracked-order-context">
                                 {order.serverName ? <span>{order.serverName}</span> : null}
-                                <span>{order.serverId ? `Server ${order.serverId}` : "Added locally"}</span>
+                                <span>{order.serverId ? `ID ${order.serverId}` : "Added locally"}</span>
                               </div>
                               {order.details ? <p className="tracked-order-detail">{order.details}</p> : null}
                             </div>
