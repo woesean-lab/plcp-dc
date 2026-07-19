@@ -18,7 +18,7 @@ export default function LandingPage() {
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
       <header className="landing-nav">
-        <a className="landing-brand" href="/" aria-label="Pulcip Members home">
+        <a className="landing-brand" href="/home" aria-label="Pulcip Members home">
           <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
           <span><span className="brand-eyebrow">PulcipStore</span><strong>Discord Members</strong></span>
         </a>
