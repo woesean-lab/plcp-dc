@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle } from "../lib/services";
@@ -13,6 +13,7 @@ import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
+const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?searchQuery=members";
 
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -108,6 +109,14 @@ export default function PublicOrderPage() {
   const delayUpdateCooldownUntilRef = useRef(0);
   const restartInFlightRef = useRef(false);
   const restartCooldownUntilRef = useRef(0);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = "Members Monitor";
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -392,7 +401,32 @@ export default function PublicOrderPage() {
           <div className="public-stats-hero">
             <div className="public-stats-brand">
               <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-              <span><span className="brand-eyebrow">Pulcip Members</span><strong>Eldorado best seller :)</strong></span>
+              <span>
+                <span className="brand-eyebrow">Pulcip Members</span>
+                <a className="public-stats-store-badge" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                  <span className="public-store-star" aria-hidden="true">
+                    <Star className="h-3.5 w-3.5" fill="currentColor" />
+                  </span>
+                  <span className="public-store-copy">
+                    <span className="public-store-title">Eldorado Top Seller</span>
+                    <span className="public-store-meta">
+                      <span>25,000+ Sales</span>
+                      <i aria-hidden="true" />
+                      <span className="public-store-feedback">
+                        <span className="public-store-stars" aria-hidden="true">
+                          {Array.from({ length: 5 }).map((_, index) => (
+                            <Star key={index} className="h-2.5 w-2.5" fill="currentColor" />
+                          ))}
+                        </span>
+                        99.7% Positive Feedback
+                      </span>
+                    </span>
+                  </span>
+                  <span className="public-store-cta">
+                    Buy now <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                  </span>
+                </a>
+              </span>
             </div>
 
             <div className="public-stats-heading">
