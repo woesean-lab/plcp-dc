@@ -426,6 +426,7 @@ export default function PublicOrderPage() {
                       99.7% Positive Feedback
                     </span>
                   </span>
+                  <span className="public-store-explore">Explore our other member products</span>
                 </span>
                 <span className="public-store-cta">
                   Buy now <ExternalLink className="h-3 w-3" aria-hidden="true" />

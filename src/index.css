@@ -1586,6 +1586,13 @@
     background: var(--app-muted);
   }
 
+  .public-store-explore {
+    color: var(--app-accent);
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
   .public-store-cta {
     display: inline-flex;
     min-height: 28px;
