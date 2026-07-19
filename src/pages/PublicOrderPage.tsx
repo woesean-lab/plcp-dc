@@ -399,34 +399,38 @@ export default function PublicOrderPage() {
       <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
         <article className="public-stats-card app-panel w-full overflow-hidden">
           <div className="public-stats-hero">
-            <div className="public-stats-brand">
-              <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-              <span>
-                <span className="brand-eyebrow">Pulcip Members</span>
-                <a className="public-stats-store-badge" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-                  <span className="public-store-star" aria-hidden="true">
-                    <Star className="h-3.5 w-3.5" fill="currentColor" />
-                  </span>
-                  <span className="public-store-copy">
-                    <span className="public-store-title">Eldorado Top Seller</span>
-                    <span className="public-store-meta">
-                      <span>25,000+ Sales</span>
-                      <i aria-hidden="true" />
-                      <span className="public-store-feedback">
-                        <span className="public-store-stars" aria-hidden="true">
-                          {Array.from({ length: 5 }).map((_, index) => (
-                            <Star key={index} className="h-2.5 w-2.5" fill="currentColor" />
-                          ))}
-                        </span>
-                        99.7% Positive Feedback
+            <div className="public-stats-topline">
+              <div className="public-stats-brand">
+                <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+                <span>
+                  <span className="brand-eyebrow">Pulcip</span>
+                  <strong>Members Monitor</strong>
+                </span>
+              </div>
+
+              <a className="public-stats-store-badge" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                <span className="public-store-star" aria-hidden="true">
+                  <Star className="h-3.5 w-3.5" fill="currentColor" />
+                </span>
+                <span className="public-store-copy">
+                  <span className="public-store-title">Eldorado Top Seller</span>
+                  <span className="public-store-meta">
+                    <span>25,000+ Sales</span>
+                    <i aria-hidden="true" />
+                    <span className="public-store-feedback">
+                      <span className="public-store-stars" aria-hidden="true">
+                        {Array.from({ length: 5 }).map((_, index) => (
+                          <Star key={index} className="h-2.5 w-2.5" fill="currentColor" />
+                        ))}
                       </span>
+                      99.7% Positive Feedback
                     </span>
                   </span>
-                  <span className="public-store-cta">
-                    Buy now <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                  </span>
-                </a>
-              </span>
+                </span>
+                <span className="public-store-cta">
+                  Buy now <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                </span>
+              </a>
             </div>
 
             <div className="public-stats-heading">

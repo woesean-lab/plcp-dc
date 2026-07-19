@@ -1469,9 +1469,16 @@
     pointer-events: none;
   }
 
-  .public-stats-brand {
+  .public-stats-topline {
     position: relative;
     z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .public-stats-brand {
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -1492,7 +1499,7 @@
 
   .public-stats-brand > span:last-child {
     display: grid;
-    gap: .35rem;
+    gap: .1rem;
   }
 
   .public-stats-store-badge {
@@ -2342,6 +2349,19 @@
 }
 
 @media (max-width: 639px) {
+  .public-stats-topline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .public-stats-store-badge {
+    width: 100%;
+  }
+
+  .public-store-copy {
+    flex: 1;
+  }
+
   .public-stats-heading {
     align-items: flex-start;
     flex-direction: column;
