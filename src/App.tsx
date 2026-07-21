@@ -173,7 +173,9 @@ export default function App() {
         <Route path="/" element={<BrandPage />} />
         <Route path="/home" element={<LandingPage />} />
         <Route path="/login" element={<Navigate to="/" replace />} />
+        <Route path="/monitor" element={<PublicOrderPage />} />
         <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
+        <Route path="/monitor/*" element={<PublicOrderPage />} />
         <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
         <Route path="*" element={<ProtectedGate />} />
       </Routes>
