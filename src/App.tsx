@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
@@ -10,6 +10,16 @@ import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
+
+function ScrollToRouteTop() {
+  const { pathname } = useLocation();
+
+  useLayoutEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [pathname]);
+
+  return null;
+}
 
 function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const location = useLocation();
@@ -169,6 +179,7 @@ function LegacyPublicOrderRedirect() {
 export default function App() {
   return (
     <>
+      <ScrollToRouteTop />
       <Routes>
         <Route path="/" element={<BrandPage />} />
         <Route path="/home" element={<LandingPage />} />
