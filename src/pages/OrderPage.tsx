@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
@@ -28,6 +28,26 @@ function formatDelay(value?: string | number) {
   if (typeof value === "number" && !Number.isNaN(value)) return `${value}s`;
   if (typeof value === "string" && value.trim()) return value;
   return "-";
+}
+
+function formatTemplateDelay(value?: string | number) {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value !== "string") return "-";
+
+  const parsed = Number.parseFloat(value);
+  return Number.isFinite(parsed) ? String(parsed) : value.trim() || "-";
+}
+
+function getStringField(source: OrderStatusResponse | null, keys: string[]) {
+  if (!source) return "";
+
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+
+  return "";
 }
 
 function isTerminalStatus(status?: string) {
@@ -178,10 +198,50 @@ export default function OrderPage() {
     if (!target) return;
 
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/monitor/${encodeURIComponent(target)}`);
+      await navigator.clipboard.writeText(getPublicMonitorLink(target));
       toast.success("Public monitor link copied.");
     } catch {
       toast.error("Public monitor link could not be copied.");
+    }
+  }
+
+  function getPublicMonitorLink(target: string) {
+    return `${window.location.origin}/monitor/${encodeURIComponent(target)}`;
+  }
+
+  async function copyDeliveryTemplate() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
+
+    if (!target || !botInvite) {
+      toast.error("Bot invite link is required.");
+      return;
+    }
+
+    const message = [
+      "🚀 **Your order is ready!**",
+      "",
+      "Please add our bot to your server to start the delivery.",
+      "",
+      "🔑 **Required Permission:** **Create Invite** only.",
+      "",
+      "**🤖 Add Bot:**",
+      botInvite,
+      `🆔 **Server ID:** ${serverId || "-"}`,
+      "",
+      "**📊 Order Monitor:**",
+      getPublicMonitorLink(target),
+      "",
+      `**⚙️ Join Delay:** **${formatTemplateDelay(result?.delay)} seconds** *(Fully customizable.)*`,
+      "",
+      "⚠️ **Please do not remove the bot.** It helps keep members in your server and improves delivery stability."
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(message);
+      toast.success("Delivery template copied.");
+    } catch {
+      toast.error("Delivery template could not be copied.");
     }
   }
 
@@ -290,9 +350,22 @@ export default function OrderPage() {
             </div>
           </div>
           {result ? (
-            <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
-              <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
-            </Button>
+            <div className="flex flex-wrap gap-2 max-sm:w-full">
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="max-sm:w-full"
+                disabled={!botInvite}
+                title={botInvite ? "Copy delivery template message" : "Delivery template requires a bot invite link"}
+                onClick={() => void copyDeliveryTemplate()}
+              >
+                <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Copy delivery template
+              </Button>
+              <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
+                <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
+              </Button>
+            </div>
           ) : null}
         </div>
 
