@@ -42,6 +42,7 @@ export interface OrderStatusResponse {
   type?: string;
   serverId?: string;
   serverName?: string;
+  serverMemberCount?: number;
   error?: string;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
@@ -53,6 +54,7 @@ export interface TrackedOrder {
   service?: ServiceType;
   serverId?: string;
   serverName?: string;
+  serverMemberCount?: number;
   amount?: number;
   added?: number;
   delay?: number;

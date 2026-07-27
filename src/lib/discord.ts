@@ -1,4 +1,9 @@
-const inviteResolutionCache = new Map<string, string>();
+export interface DiscordGuildResolution {
+  guildId: string;
+  approximateMemberCount?: number;
+}
+
+const inviteResolutionCache = new Map<string, DiscordGuildResolution>();
 
 function isGuildId(value: string) {
   return /^\d{17,20}$/.test(value);
@@ -33,14 +38,14 @@ function extractInviteCode(value: string) {
   return null;
 }
 
-export async function resolveDiscordGuildId(value: string) {
+export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGuildResolution> {
   const trimmed = value.trim();
   if (!trimmed) {
     throw new Error("Server ID or Discord invite link is required.");
   }
 
   if (isGuildId(trimmed)) {
-    return trimmed;
+    return { guildId: trimmed };
   }
 
   const inviteCode = extractInviteCode(trimmed);
@@ -67,6 +72,7 @@ export async function resolveDiscordGuildId(value: string) {
 
   const payload = (await response.json().catch(() => ({}))) as {
     guildId?: string;
+    approximateMemberCount?: number;
     message?: string;
   };
 
@@ -79,6 +85,15 @@ export async function resolveDiscordGuildId(value: string) {
     throw new Error("That invite does not resolve to a Discord server ID.");
   }
 
-  inviteResolutionCache.set(inviteCode, guildId);
-  return guildId;
+  const resolution = {
+    guildId,
+    approximateMemberCount: typeof payload.approximateMemberCount === "number" ? payload.approximateMemberCount : undefined
+  };
+  inviteResolutionCache.set(inviteCode, resolution);
+  return resolution;
+}
+
+export async function resolveDiscordGuildId(value: string) {
+  const resolution = await resolveDiscordGuildInfo(value);
+  return resolution.guildId;
 }

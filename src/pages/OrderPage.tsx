@@ -11,6 +11,7 @@ import type { OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
+const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -22,6 +23,20 @@ function formatTime(value?: number) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function formatTemplateDate(value?: number) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
+function formatTemplateNumber(value?: number) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? new Intl.NumberFormat("en-US").format(value)
+    : "-";
 }
 
 function formatDelay(value?: string | number) {
@@ -48,6 +63,32 @@ function getStringField(source: OrderStatusResponse | null, keys: string[]) {
   }
 
   return "";
+}
+
+function getNumberField(source: OrderStatusResponse | null, keys: string[]) {
+  if (!source) return undefined;
+
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim()) {
+      const parsed = Number.parseFloat(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+function getDiscordServerCreatedAt(serverId: string) {
+  if (!/^\d{17,20}$/.test(serverId)) return undefined;
+
+  try {
+    const timestamp = Number((BigInt(serverId) >> 22n) + DISCORD_EPOCH_MS);
+    return Number.isFinite(timestamp) ? timestamp : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isTerminalStatus(status?: string) {
@@ -212,6 +253,15 @@ export default function OrderPage() {
   async function copyDeliveryTemplate() {
     const target = String(result?.uniqid ?? uniqid).trim();
     const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
+    const serverCreatedAt = getDiscordServerCreatedAt(serverId);
+    const serverMemberCount = getNumberField(result, [
+      "serverMemberCount",
+      "approximateMemberCount",
+      "approximate_member_count",
+      "memberCount",
+      "member_count",
+      "members"
+    ]);
 
     if (!target || !botInvite) {
       toast.error("Bot invite link is required.");
@@ -228,13 +278,15 @@ export default function OrderPage() {
       "🤖 Add Bot:",
       botInvite,
       `🆔 Server ID: ${serverId || "-"}`,
+      `📅 Server Created: ${formatTemplateDate(serverCreatedAt)}`,
+      `👥 Current Members: ${formatTemplateNumber(serverMemberCount)}`,
       "",
       "📊 Order Monitor:",
       getPublicMonitorLink(target),
       "",
       `⚙️ Join Delay: ${formatTemplateDelay(result?.delay)} seconds (Fully customizable.)`,
       "",
-      "⚠️ **Please do not remove the bot.** It helps keep members in your server and improves delivery stability."
+      "⚠️ Please do not remove the bot. It helps keep members in your server and improves delivery stability."
     ].join("\n");
 
     try {

@@ -452,7 +452,7 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
     }
 
     const response = await fetch(
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=false`,
+      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`,
       { signal: AbortSignal.timeout(10_000) }
     );
     const payload = await response.json().catch(() => ({}));
@@ -470,7 +470,12 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "That invite does not resolve to a Discord server ID." });
     }
 
-    res.json({ guildId: String(guildId) });
+    res.json({
+      guildId: String(guildId),
+      approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
+        ? payload.approximate_member_count
+        : undefined
+    });
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });
@@ -512,7 +517,13 @@ app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, ne
       `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
       { cache: "no-store" }
     );
-    res.set("Cache-Control", "no-store").json(payload);
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const trackedPayload = tracked.rows[0]?.payload;
+    const responsePayload =
+      typeof payload === "object" && payload && !Array.isArray(payload) && typeof trackedPayload === "object" && trackedPayload && !Array.isArray(trackedPayload)
+        ? { ...trackedPayload, ...payload }
+        : payload;
+    res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);
   }
