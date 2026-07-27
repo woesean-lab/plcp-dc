@@ -126,7 +126,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
           </div>
         </header>
 
-        <main id="main-content" className="flex-1">
+        <main id="main-content" className="min-w-0 flex-1">
           <Routes>
             <Route path="/orders" element={<OrderPage />} />
             <Route path="/manage" element={<HomePage />} />

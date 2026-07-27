@@ -207,10 +207,13 @@
   .app-frame {
     position: relative;
     z-index: 1;
+    min-width: 0;
   }
 
   .app-header {
     overflow: hidden;
+    width: 100%;
+    max-width: 100%;
     border: 1px solid var(--app-border);
     border-radius: 22px;
     background: var(--app-header-bg);
@@ -229,6 +232,7 @@
 
   .app-header-inner {
     display: flex;
+    min-width: 0;
     min-height: 74px;
     align-items: center;
     gap: 1rem;
@@ -437,6 +441,7 @@
 
   .app-panel {
     position: relative;
+    min-width: 0;
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-xl);
     background: linear-gradient(145deg, rgba(23, 24, 40, .94), rgba(13, 14, 25, .91));
@@ -455,6 +460,7 @@
   }
 
   .app-panel-soft {
+    min-width: 0;
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-lg);
     background: linear-gradient(145deg, rgba(255,255,255,.052), rgba(255,255,255,.025));
@@ -462,6 +468,7 @@
   }
 
   .payload-panel {
+    min-width: 0;
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-lg);
     background: var(--app-code-bg);
@@ -2444,8 +2451,14 @@
   }
 
   .app-nav-cluster {
+    width: 100%;
+    min-width: 0;
     overflow: visible;
     border-radius: 12px;
+  }
+
+  .app-nav {
+    width: 100%;
   }
 
   .app-nav-button {

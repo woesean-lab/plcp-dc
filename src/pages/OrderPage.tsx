@@ -197,8 +197,8 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
 
   return (
-    <section className="tab-slide-in relative grid gap-5 xl:grid-cols-[0.92fr_1.08fr]">
-      <div className={`${shell} p-5 sm:p-6`}>
+    <section className="tab-slide-in relative grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+      <div className={`${shell} min-w-0 p-5 sm:p-6`}>
         <div className="flex items-center gap-3">
           <span className="stat-icon" aria-hidden="true">
             <Search className="h-4 w-4" />
@@ -278,8 +278,8 @@ export default function OrderPage() {
           </div>
         </div>
       </div>
-      <div className={`${shell} p-5 sm:p-6`}>
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className={`${shell} min-w-0 p-5 sm:p-6`}>
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <span className="stat-icon" aria-hidden="true">
               <FileJson className="h-4 w-4" />
@@ -290,7 +290,7 @@ export default function OrderPage() {
             </div>
           </div>
           {result ? (
-            <Button type="button" variant="secondary" size="sm" onClick={() => void copyPublicMonitorLink()}>
+            <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
               <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
             </Button>
           ) : null}
@@ -344,10 +344,10 @@ export default function OrderPage() {
                 <>
                   <p className="app-copy mt-3 text-sm leading-6">Add the delivery bot to your Discord server to start this order. The bot only needs the <strong className="text-[var(--app-text)]">Create Invite</strong> permission.</p>
                   <div className="mt-4 flex flex-wrap gap-3">
-                    <Button type="button" variant="secondary" onClick={() => void copyBotInvite()}>
+                    <Button type="button" variant="secondary" className="max-sm:w-full" onClick={() => void copyBotInvite()}>
                       <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite link
                     </Button>
-                    <Button asChild>
+                    <Button asChild className="max-sm:w-full">
                       <a href={botInvite} target="_blank" rel="noreferrer">
                         <Bot className="h-4 w-4" aria-hidden="true" /> Add bot to server <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                       </a>
