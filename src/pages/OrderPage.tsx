@@ -146,13 +146,27 @@ export default function OrderPage() {
   const summary = useMemo(() => {
     if (!result) return [];
 
+    const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
+    const serverCreatedAt = getDiscordServerCreatedAt(serverId);
+    const serverMemberCount = getNumberField(result, [
+      "serverMemberCount",
+      "approximateMemberCount",
+      "approximate_member_count",
+      "memberCount",
+      "member_count",
+      "members"
+    ]);
+
     return [
       { label: "Status", value: result.status ?? "UNKNOWN" },
       { label: "Added", value: typeof result.added === "number" ? String(result.added) : "-" },
       {
         label: "Amount",
         value: typeof result.amount === "number" ? String(result.amount) : typeof result.quantity === "number" ? String(result.quantity) : "-"
-      }
+      },
+      { label: "Server ID", value: serverId || "-" },
+      { label: "Server Created", value: formatTemplateDate(serverCreatedAt) },
+      { label: "Current members (being created)", value: formatTemplateNumber(serverMemberCount) }
     ];
   }, [result]);
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
@@ -252,16 +266,6 @@ export default function OrderPage() {
 
   async function copyDeliveryTemplate() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
-    const serverCreatedAt = getDiscordServerCreatedAt(serverId);
-    const serverMemberCount = getNumberField(result, [
-      "serverMemberCount",
-      "approximateMemberCount",
-      "approximate_member_count",
-      "memberCount",
-      "member_count",
-      "members"
-    ]);
 
     if (!target || !botInvite) {
       toast.error("Bot invite link is required.");
@@ -277,9 +281,6 @@ export default function OrderPage() {
       "",
       "🤖 Add Bot:",
       botInvite,
-      `🆔 Server ID: ${serverId || "-"}`,
-      `📅 Server Created: ${formatTemplateDate(serverCreatedAt)}`,
-      `👥 Current Members: ${formatTemplateNumber(serverMemberCount)}`,
       "",
       "📊 Order Monitor:",
       getPublicMonitorLink(target),
