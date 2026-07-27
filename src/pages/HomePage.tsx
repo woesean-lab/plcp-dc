@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
+import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { SERVICE_OPTIONS } from "../lib/services";
@@ -556,6 +556,7 @@ export default function HomePage() {
       a.details === b.details &&
       a.cost === b.cost &&
       a.serverId === b.serverId &&
+      a.serverInvite === b.serverInvite &&
       a.serverMemberCount === b.serverMemberCount &&
       a.service === b.service
     );
@@ -707,6 +708,7 @@ export default function HomePage() {
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
         cost: created.cost,
         botInvite: created.bot_invite,
+        serverInvite: extractDiscordInviteCode(form.serverId) ? form.serverId.trim() : undefined,
         serverMemberCount: serverInfo.approximateMemberCount,
         createdAt: new Date().toISOString(),
         status: "NEW"

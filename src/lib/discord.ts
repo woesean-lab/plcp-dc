@@ -9,7 +9,7 @@ function isGuildId(value: string) {
   return /^\d{17,20}$/.test(value);
 }
 
-function extractInviteCode(value: string) {
+export function extractDiscordInviteCode(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
 
@@ -48,7 +48,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
     return { guildId: trimmed };
   }
 
-  const inviteCode = extractInviteCode(trimmed);
+  const inviteCode = extractDiscordInviteCode(trimmed);
   if (!inviteCode) {
     throw new Error("Enter a Discord server ID or invite link.");
   }

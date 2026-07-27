@@ -43,6 +43,43 @@ function extractDiscordInviteCode(value) {
   return /^[A-Za-z0-9_-]{3,}$/.test(trimmed) ? trimmed : null;
 }
 
+async function resolveDiscordInvite(inviteValue) {
+  const inviteCode = extractDiscordInviteCode(inviteValue);
+  if (!inviteCode) {
+    const error = new Error("Enter a Discord server ID or invite link.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const response = await fetch(
+    `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`,
+    { signal: AbortSignal.timeout(10_000) }
+  );
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error = new Error(response.status === 404
+      ? "Discord invite could not be found."
+      : "Discord invite could not be resolved right now.");
+    error.statusCode = response.status === 404 ? 400 : 502;
+    throw error;
+  }
+
+  const guildId = payload?.guild?.id;
+  if (!isDiscordGuildId(String(guildId ?? ""))) {
+    const error = new Error("That invite does not resolve to a Discord server ID.");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    guildId: String(guildId),
+    approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
+      ? payload.approximate_member_count
+      : undefined
+  };
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || undefined,
   host: process.env.DATABASE_URL ? undefined : process.env.PGHOST,
@@ -446,36 +483,7 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
       return res.json({ guildId: value });
     }
 
-    const inviteCode = extractDiscordInviteCode(value);
-    if (!inviteCode) {
-      return res.status(400).json({ message: "Enter a Discord server ID or invite link." });
-    }
-
-    const response = await fetch(
-      `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`,
-      { signal: AbortSignal.timeout(10_000) }
-    );
-    const payload = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      return res.status(response.status === 404 ? 400 : 502).json({
-        message: response.status === 404
-          ? "Discord invite could not be found."
-          : "Discord invite could not be resolved right now."
-      });
-    }
-
-    const guildId = payload?.guild?.id;
-    if (!isDiscordGuildId(String(guildId ?? ""))) {
-      return res.status(400).json({ message: "That invite does not resolve to a Discord server ID." });
-    }
-
-    res.json({
-      guildId: String(guildId),
-      approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
-        ? payload.approximate_member_count
-        : undefined
-    });
+    res.json(await resolveDiscordInvite(value));
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });
@@ -518,7 +526,30 @@ app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, ne
       { cache: "no-store" }
     );
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    const trackedPayload = tracked.rows[0]?.payload;
+    let trackedPayload = tracked.rows[0]?.payload;
+    if (
+      trackedPayload &&
+      typeof trackedPayload === "object" &&
+      !Array.isArray(trackedPayload) &&
+      !Number.isFinite(trackedPayload.serverMemberCount) &&
+      typeof trackedPayload.serverInvite === "string" &&
+      trackedPayload.serverInvite.trim()
+    ) {
+      try {
+        const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
+        trackedPayload = {
+          ...trackedPayload,
+          serverId: trackedPayload.serverId ?? inviteInfo.guildId,
+          serverMemberCount: inviteInfo.approximateMemberCount
+        };
+        await pool.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [
+          uniqid,
+          JSON.stringify(trackedPayload)
+        ]);
+      } catch {
+        // Keep the order lookup available even if Discord count lookup fails.
+      }
+    }
     const responsePayload =
       typeof payload === "object" && payload && !Array.isArray(payload) && typeof trackedPayload === "object" && trackedPayload && !Array.isArray(trackedPayload)
         ? { ...trackedPayload, ...payload }
