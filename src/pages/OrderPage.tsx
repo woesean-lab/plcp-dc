@@ -273,8 +273,6 @@ export default function OrderPage() {
     }
 
     const message = [
-      "🚀 Your order is ready!",
-      "",
       "Please add our bot to your server to start the delivery.",
       "",
       "🔑 Required Permission: Create Invite only.",
@@ -285,9 +283,7 @@ export default function OrderPage() {
       "📊 Order Monitor:",
       getPublicMonitorLink(target),
       "",
-      `⚙️ Join Delay: ${formatTemplateDelay(result?.delay)} seconds (Fully customizable.)`,
-      "",
-      "⚠️ Please do not remove the bot. It helps keep members in your server and improves delivery stability."
+      `⚙️ Join Delay: ${formatTemplateDelay(result?.delay)} seconds (Fully customizable.)`
     ].join("\n");
 
     try {
