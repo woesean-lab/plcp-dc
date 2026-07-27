@@ -795,7 +795,7 @@ export default function HomePage() {
                         const selected = form.service === option.value;
 
                         return (
-                          <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`}>
+                          <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
                             <input
                               className="sr-only"
                               type="radio"
