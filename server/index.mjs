@@ -363,7 +363,8 @@ app.post("/api/public/orders/:uniqid/restart", async (req, res, next) => {
       return res.status(409).json({ message: "Order is not in Invites Paused status." });
     }
 
-    const payload = await requestTokenuPublicData(
+    const payload = await requestTokenu(
+      tokenuOauthApiBase,
       `restart?uniqid=${encodeURIComponent(uniqid)}`,
       { method: "GET", cache: "no-store" }
     );
@@ -585,7 +586,8 @@ app.post("/api/tokenu/orders/:uniqid/restart", requireSession, async (req, res, 
       return res.status(409).json({ message: "Order is not in Invites Paused status." });
     }
 
-    const payload = await requestTokenuPublicData(
+    const payload = await requestTokenu(
+      tokenuOauthApiBase,
       `restart?uniqid=${encodeURIComponent(uniqid)}`,
       { method: "GET", cache: "no-store" }
     );
