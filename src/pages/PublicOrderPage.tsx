@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, Hash, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle } from "../lib/services";
@@ -462,10 +462,6 @@ export default function PublicOrderPage() {
             </div>
 
             <div className="public-stats-meta">
-              <div>
-                <span className="public-meta-icon"><Hash className="h-4 w-4" /></span>
-                <span><small>Order ID</small><strong className="font-mono">{uniqid || "-"}</strong></span>
-              </div>
               <div>
                 <span className="public-meta-icon"><CalendarDays className="h-4 w-4" /></span>
                 <span><small>Created</small>{isInitialLoading ? <Skeleton className="mt-2 h-4 w-28" /> : <strong>{formatDateTime(createdAt)}</strong>}</span>
