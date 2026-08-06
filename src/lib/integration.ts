@@ -33,20 +33,20 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   return payload as T;
 }
 
-export function getTokenuConfig() {
-  return requestJson<{ configured: boolean }>("/api/tokenu/config");
+export function getIntegrationConfig() {
+  return requestJson<{ configured: boolean }>("/api/integration/config");
 }
 
-export function saveTokenuApiKey(apiKey: string) {
-  return requestJson<{ configured: true; balance?: number }>("/api/tokenu/config", {
+export function saveIntegrationApiKey(apiKey: string) {
+  return requestJson<{ configured: true; balance?: number }>("/api/integration/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ apiKey })
   });
 }
 
-export async function clearTokenuApiKey() {
-  const response = await fetch("/api/tokenu/config", { method: "DELETE", cache: "no-store" });
+export async function clearIntegrationApiKey() {
+  const response = await fetch("/api/integration/config", { method: "DELETE", cache: "no-store" });
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(payload.message ?? `Request failed with ${response.status}`);
@@ -54,11 +54,11 @@ export async function clearTokenuApiKey() {
 }
 
 export async function getBalance() {
-  return requestJson<BalanceResponse>("/api/tokenu/balance");
+  return requestJson<BalanceResponse>("/api/integration/balance");
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
-  return requestJson<CreateOrderResponse>("/api/tokenu/orders", {
+  return requestJson<CreateOrderResponse>("/api/integration/orders", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
@@ -68,11 +68,11 @@ export async function createOrder(payload: CreateOrderPayload) {
 }
 
 export async function getOrderStatus(uniqid: string) {
-  return requestJson<OrderStatusResponse>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/status`);
+  return requestJson<OrderStatusResponse>(`/api/integration/orders/${encodeURIComponent(uniqid)}/status`);
 }
 
 export async function restartOrder(uniqid: string) {
-  return requestJson<unknown>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
+  return requestJson<unknown>(`/api/integration/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
 async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart", init?: RequestInit) {
@@ -107,12 +107,12 @@ export function restartPublicOrder(uniqid: string) {
 
 export async function checkAvailableAmount(service: string, id: string) {
   return requestJson<{ available: number; maximum: number }>(
-    `/api/tokenu/check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
+    `/api/integration/check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
   );
 }
 
 export async function updateOrderDelay(uniqid: string, delay: number) {
-  return requestJson<unknown>(`/api/tokenu/orders/${encodeURIComponent(uniqid)}/delay`, {
+  return requestJson<unknown>(`/api/integration/orders/${encodeURIComponent(uniqid)}/delay`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

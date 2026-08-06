@@ -8,7 +8,7 @@ import { Activity, Bot, CalendarDays, Copy, ExternalLink, Hash, RefreshCw, Rotat
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle } from "../lib/services";
-import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/tokenu";
+import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;

@@ -31,15 +31,15 @@ import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
-  clearTokenuApiKey,
+  clearIntegrationApiKey,
   createOrder,
   getBalance,
   getOrderStatus,
-  getTokenuConfig,
+  getIntegrationConfig,
   restartOrder,
-  saveTokenuApiKey,
+  saveIntegrationApiKey,
   updateOrderDelay
-} from "../lib/tokenu";
+} from "../lib/integration";
 import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
@@ -366,18 +366,18 @@ export default function HomePage() {
   }, [orderPendingDeletion, deletingTrackedOrder]);
 
   useEffect(() => {
-    void loadTokenuConnection();
+    void loadIntegrationConnection();
     // The initial connection check runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadTokenuConnection() {
+  async function loadIntegrationConnection() {
     try {
-      const config = await getTokenuConfig();
+      const config = await getIntegrationConfig();
       setApiConfigured(config.configured);
       if (config.configured) await refreshBalance();
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Tokenu connection could not be checked.");
+      notifyError(error instanceof Error ? error.message : "Connection could not be checked.");
     }
   }
 
@@ -474,13 +474,13 @@ export default function HomePage() {
     event.preventDefault();
     const value = apiKey.trim();
     if (!value) {
-      notifyError("Tokenu API key is required.");
+      notifyError("API key is required.");
       return;
     }
 
     try {
       setSavingApiKey(true);
-      const result = await saveTokenuApiKey(value);
+      const result = await saveIntegrationApiKey(value);
       setApiConfigured(true);
       setApiKey("");
       if (typeof result.balance === "number") setBalance(result.balance);
@@ -495,7 +495,7 @@ export default function HomePage() {
   async function handleClearApiKey() {
     try {
       setSavingApiKey(true);
-      await clearTokenuApiKey();
+      await clearIntegrationApiKey();
       setApiConfigured(false);
       setApiKey("");
       setBalance(null);
@@ -603,7 +603,7 @@ export default function HomePage() {
         const status = await getOrderStatus(order.uniqid);
         updateLocalOrder(mergeTrackedOrder(order, status));
       } catch {
-        // The regular Manage refresh can verify the status if Tokenu needs more time.
+        // The regular Manage refresh can verify the status if the upstream service needs more time.
       }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Order could not be continued.");
@@ -1179,8 +1179,8 @@ export default function HomePage() {
             <header className="page-heading">
               <div>
                 <p className={labelClass}>Settings</p>
-                <h1 className="page-title">Tokenu connection</h1>
-                <p className="app-copy page-copy">Configure the server-side Tokenu connection and review its balance.</p>
+                <h1 className="page-title">Integration connection</h1>
+                <p className="app-copy page-copy">Configure the server-side integration connection and review its balance.</p>
               </div>
               <Badge variant={apiConfigured ? "success" : "destructive"}>{apiConfigured ? "Connected" : "Not connected"}</Badge>
             </header>
@@ -1193,7 +1193,7 @@ export default function HomePage() {
                   </span>
                   <div>
                     <p className={labelClass}>Secure access</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Tokenu API key</h2>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Integration API key</h2>
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
@@ -1206,7 +1206,7 @@ export default function HomePage() {
                       type="password"
                       value={apiKey}
                       onChange={(event) => setApiKey(event.target.value)}
-                      placeholder={apiConfigured ? "Enter a new key to replace the current one" : "Paste Tokenu API key"}
+                      placeholder={apiConfigured ? "Enter a new key to replace the current one" : "Paste integration API key"}
                       autoComplete="new-password"
                     />
                   </label>
@@ -1291,7 +1291,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Remove order</p>
             <h2 id="delete-order-title">Stop tracking this order?</h2>
-            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Manage list and tracked orders database. It does not cancel the Tokenu order.</p>
+            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Manage list and tracked orders database. It does not cancel the upstream order.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={deletingTrackedOrder} onClick={() => setOrderPendingDeletion(null)}>Keep order</Button>
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>

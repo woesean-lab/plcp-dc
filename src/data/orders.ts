@@ -1,6 +1,6 @@
 import type { TrackedOrder } from "../types";
 
-const STORAGE_KEY = "tokenu.trackedOrders";
+const STORAGE_KEY = "integration.trackedOrders";
 
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return response.json() as Promise<T>;

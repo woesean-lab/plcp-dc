@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { getOrderStatus, updateOrderDelay } from "../lib/tokenu";
+import { getOrderStatus, updateOrderDelay } from "../lib/integration";
 import type { OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";

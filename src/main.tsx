@@ -5,7 +5,7 @@ import App from "./App";
 import "./index.css";
 
 // Remove credentials left by older browser-only versions of the dashboard.
-localStorage.removeItem("tokenu.apiKey");
+localStorage.removeItem("integration.apiKey");
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

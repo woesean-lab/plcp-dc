@@ -11,6 +11,8 @@ const port = Number(process.env.PORT ?? 3000);
 const isProduction = process.env.NODE_ENV === "production";
 const sessionCookie = "plcp_session";
 const sessionDurationMs = 12 * 60 * 60 * 1000;
+const legacyApiPrefix = "/api/tokenu";
+const integrationApiPrefix = "/api/integration";
 const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
 const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
 const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
@@ -427,7 +429,7 @@ app.post("/api/auth/logout", async (req, res, next) => {
   }
 });
 
-app.get("/api/tokenu/config", requireSession, async (_req, res, next) => {
+app.get([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'tokenu_api_key' LIMIT 1");
     res.json({ configured: Boolean(result.rowCount) });
@@ -436,7 +438,7 @@ app.get("/api/tokenu/config", requireSession, async (_req, res, next) => {
   }
 });
 
-app.put("/api/tokenu/config", requireSession, async (req, res, next) => {
+app.put([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (req, res, next) => {
   try {
     const apiKey = String(req.body?.apiKey ?? "").trim();
     if (!apiKey || apiKey.length > 2000) {
@@ -456,7 +458,7 @@ app.put("/api/tokenu/config", requireSession, async (req, res, next) => {
   }
 });
 
-app.delete("/api/tokenu/config", requireSession, async (_req, res, next) => {
+app.delete([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (_req, res, next) => {
   try {
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'tokenu_api_key'");
     res.status(204).end();
@@ -465,7 +467,7 @@ app.delete("/api/tokenu/config", requireSession, async (_req, res, next) => {
   }
 });
 
-app.get("/api/tokenu/balance", requireSession, async (_req, res, next) => {
+app.get([`${legacyApiPrefix}/balance`, `${integrationApiPrefix}/balance`], requireSession, async (_req, res, next) => {
   try {
     res.json(await requestTokenu(tokenuApiBase, "balance"));
   } catch (error) {
@@ -493,7 +495,7 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
   }
 });
 
-app.post("/api/tokenu/orders", requireSession, async (req, res, next) => {
+app.post([`${legacyApiPrefix}/orders`, `${integrationApiPrefix}/orders`], requireSession, async (req, res, next) => {
   try {
     const { service, id, amount, delay, billingCycle } = req.body ?? {};
     if (typeof service !== "string" || typeof id !== "string" || !id.trim() || !Number.isFinite(amount) || amount <= 0) {
@@ -514,7 +516,7 @@ app.post("/api/tokenu/orders", requireSession, async (req, res, next) => {
   }
 });
 
-app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, next) => {
+app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/orders/:uniqid/status`], requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
@@ -561,7 +563,7 @@ app.get("/api/tokenu/orders/:uniqid/status", requireSession, async (req, res, ne
   }
 });
 
-app.post("/api/tokenu/orders/:uniqid/restart", requireSession, async (req, res, next) => {
+app.post([`${legacyApiPrefix}/orders/:uniqid/restart`, `${integrationApiPrefix}/orders/:uniqid/restart`], requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
@@ -598,7 +600,7 @@ app.post("/api/tokenu/orders/:uniqid/restart", requireSession, async (req, res, 
   }
 });
 
-app.get("/api/tokenu/check", requireSession, async (req, res, next) => {
+app.get([`${legacyApiPrefix}/check`, `${integrationApiPrefix}/check`], requireSession, async (req, res, next) => {
   try {
     const service = String(req.query.service ?? "").trim();
     const id = String(req.query.id ?? "").trim();
@@ -615,7 +617,7 @@ app.get("/api/tokenu/check", requireSession, async (req, res, next) => {
   }
 });
 
-app.post("/api/tokenu/orders/:uniqid/delay", requireSession, async (req, res, next) => {
+app.post([`${legacyApiPrefix}/orders/:uniqid/delay`, `${integrationApiPrefix}/orders/:uniqid/delay`], requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const delay = Number.parseInt(req.body?.delay, 10);
