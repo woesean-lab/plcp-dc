@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,8 @@ import {
   Check,
   Copy,
   ExternalLink,
+  ChevronLeft,
+  ChevronRight,
   KeyRound,
   ListChecks,
   LoaderCircle,
@@ -54,6 +56,9 @@ const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
 const shell = "app-panel";
 const PAGE_SKELETON_DELAY = 300;
+const ACTIVE_SYNC_BATCH_SIZE = 16;
+const ACTIVE_SYNC_PAUSE_MS = 180;
+const ORDER_PAGE_SIZE = 20;
 
 function formatNumber(value?: number) {
   return typeof value === "number" && !Number.isNaN(value)
@@ -123,6 +128,10 @@ function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
 function isTerminalOrder(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
 function getOrderProgress(order: TrackedOrder) {
@@ -332,10 +341,58 @@ export default function HomePage() {
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
   const [delaySyncLocks, setDelaySyncLocks] = useState<Record<string, number>>({});
+  const [currentOrderPage, setCurrentOrderPage] = useState(1);
 
-  const activeOrders = orders.filter(
-    (order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())
+  const activeOrders = useMemo(
+    () =>
+      orders.filter((order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())),
+    [orders]
   );
+  const orderPageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
+  const paginatedOrders = useMemo(() => {
+    const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
+    return orders.slice(start, start + ORDER_PAGE_SIZE);
+  }, [currentOrderPage, orders]);
+
+  useEffect(() => {
+    if (activeTab === "manage") {
+      setCurrentOrderPage(1);
+    }
+  }, [activeTab]);
+
+  useEffect(() => {
+    setCurrentOrderPage((current) => Math.min(Math.max(current, 1), orderPageCount));
+  }, [orderPageCount]);
+
+  async function syncActiveOrders(sourceOrders: TrackedOrder[]) {
+    const syncedOrders = [...sourceOrders];
+
+    for (let start = 0; start < sourceOrders.length; start += ACTIVE_SYNC_BATCH_SIZE) {
+      const batch = sourceOrders.slice(start, start + ACTIVE_SYNC_BATCH_SIZE);
+      const results = await Promise.all(
+        batch.map(async (order) => {
+          if (!order.uniqid) return order;
+
+          try {
+            const status = await getOrderStatus(order.uniqid);
+            return mergeTrackedOrder(order, status);
+          } catch {
+            return order;
+          }
+        })
+      );
+
+      results.forEach((nextOrder, offset) => {
+        syncedOrders[start + offset] = nextOrder;
+      });
+
+      if (start + ACTIVE_SYNC_BATCH_SIZE < sourceOrders.length) {
+        await sleep(ACTIVE_SYNC_PAUSE_MS);
+      }
+    }
+
+    return syncedOrders;
+  }
 
   useEffect(() => {
     let active = true;
@@ -382,7 +439,8 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (activeTab !== "manage" || !orders.some((order) => order.uniqid)) {
+    const syncTargets = activeOrders.filter((order) => order.uniqid);
+    if (activeTab !== "manage" || !syncTargets.length) {
       return;
     }
 
@@ -399,25 +457,15 @@ export default function HomePage() {
     async function syncTrackedOrders() {
       try {
         setSyncingOrders(true);
-
-        const updates = await Promise.all(
-          orders.map(async (order) => {
-            if (!order.uniqid) return order;
-
-            try {
-              const status = await getOrderStatus(order.uniqid);
-              return mergeTrackedOrder(order, status);
-            } catch {
-              return order;
-            }
-          })
-        );
+        const updates = await syncActiveOrders(syncTargets);
 
         if (cancelled) return;
 
-        const changed = updates.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
+        const updatesById = new Map(updates.map((order) => [order.uniqid, order]));
+        const nextOrders = orders.map((order) => updatesById.get(order.uniqid) ?? order);
+        const changed = nextOrders.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
         if (changed) {
-          persistOrders(updates);
+          setOrders(nextOrders);
         }
       } finally {
         if (!cancelled) {
@@ -426,7 +474,7 @@ export default function HomePage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, orders]);
+  }, [activeTab, activeOrders, orders]);
 
   useEffect(() => {
     if (activeTab !== "create") return;
@@ -613,29 +661,20 @@ export default function HomePage() {
   }
 
   async function refreshTrackedOrders() {
-    if (!orders.some((order) => order.uniqid)) {
+    const syncTargets = activeOrders.filter((order) => order.uniqid);
+    if (!syncTargets.length) {
       notifyError("No tracked orders to refresh.");
       return;
     }
 
     try {
       setRefreshingManage(true);
-      const updates = await Promise.all(
-        orders.map(async (order) => {
-          if (!order.uniqid) return order;
-
-          try {
-            const status = await getOrderStatus(order.uniqid);
-            return mergeTrackedOrder(order, status);
-          } catch {
-            return order;
-          }
-        })
-      );
-
-      const changed = updates.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
+      const updates = await syncActiveOrders(syncTargets);
+      const updatesById = new Map(updates.map((order) => [order.uniqid, order]));
+      const nextOrders = orders.map((order) => updatesById.get(order.uniqid) ?? order);
+      const changed = nextOrders.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
       if (changed) {
-        persistOrders(updates);
+        setOrders(nextOrders);
       }
       notifySuccess("Orders refreshed.");
     } catch (error) {
@@ -919,13 +958,16 @@ export default function HomePage() {
               <div className="page-heading-meta">
                 <Badge variant="outline">{orders.length} tracked</Badge>
                 <Badge variant="secondary">{activeOrders.length} active</Badge>
+                <Badge variant="secondary">
+                  Page {currentOrderPage}/{orderPageCount}
+                </Badge>
                 {syncingOrders ? <Badge variant="secondary">Syncing...</Badge> : null}
                 <Button
                   type="button"
                   variant="secondary"
                   size="xs"
                   onClick={() => void refreshTrackedOrders()}
-                  disabled={refreshingManage || syncingOrders || !orders.some((order) => order.uniqid)}
+                  disabled={refreshingManage || syncingOrders || !activeOrders.length}
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshingManage ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh
@@ -949,11 +991,41 @@ export default function HomePage() {
                 </div>
 
                 {orders.length ? (
+                  <>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] px-5 py-3 text-sm text-[var(--app-text-secondary)] sm:px-6">
+                    <span>
+                      Showing {Math.min((currentOrderPage - 1) * ORDER_PAGE_SIZE + 1, orders.length)}-
+                      {Math.min(currentOrderPage * ORDER_PAGE_SIZE, orders.length)} of {orders.length}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))}
+                        disabled={currentOrderPage <= 1}
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                        Prev
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))}
+                        disabled={currentOrderPage >= orderPageCount}
+                      >
+                        Next
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
                   <ol className="tracked-order-list" aria-labelledby="tracked-orders-title">
-                    {orders.map((order, index) => {
+                    {paginatedOrders.map((order, index) => {
                       const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
                       const ServiceIcon = serviceOption?.icon ?? KeyRound;
-                      const orderTitleId = `tracked-order-${index}`;
+                      const orderIndex = (currentOrderPage - 1) * ORDER_PAGE_SIZE + index;
+                      const orderTitleId = `tracked-order-${orderIndex}`;
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
                       const botInvite = extractBotInvite(order);
@@ -1123,6 +1195,32 @@ export default function HomePage() {
                       );
                     })}
                   </ol>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-divider)] px-5 py-3 text-sm text-[var(--app-text-secondary)] sm:px-6">
+                    <span>Page {currentOrderPage} of {orderPageCount}</span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))}
+                        disabled={currentOrderPage <= 1}
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+                        Prev
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))}
+                        disabled={currentOrderPage >= orderPageCount}
+                      >
+                        Next
+                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+                      </Button>
+                    </div>
+                  </div>
+                  </>
                 ) : (
                   <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
                     <div>

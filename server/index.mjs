@@ -273,7 +273,7 @@ async function requireSession(req, res, next) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "256kb" }));
+app.use(express.json({ limit: "2mb" }));
 
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
@@ -310,11 +310,6 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
       return res.status(400).json({ message: "A valid order ID and delay are required." });
     }
 
-    const trackedOrder = await pool.query("SELECT 1 FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    if (!trackedOrder.rowCount) {
-      return res.status(404).json({ message: "Public order was not found." });
-    }
-
     const cooldownKey = `${req.ip}:${uniqid}`;
     const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
     if (cooldownUntil > Date.now()) {
@@ -340,11 +335,6 @@ app.post("/api/public/orders/:uniqid/restart", async (req, res, next) => {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
       return res.status(400).json({ message: "A valid order ID is required." });
-    }
-
-    const trackedOrder = await pool.query("SELECT 1 FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    if (!trackedOrder.rowCount) {
-      return res.status(404).json({ message: "Public order was not found." });
     }
 
     const cooldownKey = `${req.ip}:${uniqid}`;
