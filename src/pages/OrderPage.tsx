@@ -277,6 +277,8 @@ export default function OrderPage() {
       "",
       "🔑 Required Permission: Create Invite only.",
       "",
+      "You can remove the bot from your server after all members have been added.",
+      "",
       "🤖 Add Bot:",
       botInvite,
       "",
