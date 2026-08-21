@@ -604,6 +604,10 @@
     gap: 0.7rem;
   }
 
+  .service-grid-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .service-option {
     position: relative;
     display: flex;
@@ -624,6 +628,23 @@
     cursor: pointer;
     box-shadow: inset 0 1px 0 var(--app-inset-line);
     transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+  }
+
+  .service-option[data-service="members"] {
+    --service-tone: #69ddb2;
+    --service-tone-soft: rgba(105, 221, 178, 0.11);
+    --service-tone-border: rgba(105, 221, 178, 0.32);
+    --service-tone-glow: rgba(105, 221, 178, 0.18);
+    --service-tone-ink: #a9f4d8;
+  }
+
+  .service-option[data-service="boosts"],
+  .service-option[data-service="DCORD-BOOSTS"] {
+    --service-tone: #9b8cff;
+    --service-tone-soft: rgba(155, 140, 255, 0.12);
+    --service-tone-border: rgba(155, 140, 255, 0.3);
+    --service-tone-glow: rgba(112, 82, 255, 0.18);
+    --service-tone-ink: #c9c1ff;
   }
 
   .service-option::before {
@@ -780,7 +801,7 @@
 
   .boost-order-panel {
     display: grid;
-    gap: 1.25rem;
+    gap: 1.35rem;
     max-width: 860px;
     border: 1px solid var(--app-border);
     border-radius: 18px;
@@ -797,7 +818,7 @@
 
   .boost-order-field {
     display: grid;
-    gap: 0.55rem;
+    gap: 0.72rem;
     min-width: 0;
   }
 
@@ -805,7 +826,7 @@
   .boost-order-field > span {
     color: var(--app-muted);
     font-size: 12px;
-    font-weight: 650;
+    font-weight: 500;
     letter-spacing: 0;
   }
 
@@ -817,17 +838,16 @@
   }
 
   .boost-amount-control button {
-    display: grid;
+    display: inline-flex;
     width: 38px;
     height: 40px;
-    place-items: center;
+    align-items: center;
+    justify-content: center;
     border: 1px solid var(--app-border);
     border-radius: 11px;
     color: var(--app-text);
     background: rgba(8, 9, 18, 0.64);
-    font-size: 18px;
-    font-weight: 700;
-    line-height: 1;
+    padding: 0;
     transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
   }
 
@@ -846,7 +866,7 @@
     color: var(--app-text);
     background: var(--app-input-bg);
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
 
@@ -874,7 +894,7 @@
     padding: 0 0.9rem;
     color: var(--app-muted);
     font-size: 13px;
-    font-weight: 650;
+    font-weight: 500;
   }
 
   .boost-invite-control input {
@@ -893,7 +913,7 @@
 
   .boost-duration-field {
     display: grid;
-    gap: 0.75rem;
+    gap: 0.85rem;
     min-width: 0;
   }
 

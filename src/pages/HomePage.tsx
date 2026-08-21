@@ -16,6 +16,7 @@ import {
   KeyRound,
   ListChecks,
   LoaderCircle,
+  Minus,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -385,6 +386,8 @@ export default function HomePage() {
   const orderPageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
+  const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
+  const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
     return orders.slice(start, start + ORDER_PAGE_SIZE);
@@ -1055,32 +1058,35 @@ export default function HomePage() {
               <form onSubmit={handleCreateOrder} className="grid gap-6">
                 <div className="grid gap-4 md:grid-cols-2">
                   <fieldset className="service-selector md:col-span-2">
-                    <legend className="sr-only">Service</legend>
+                    <legend className="sr-only">Service category</legend>
                     <div className="service-selector-heading">
                       <div>
                         <span className={fieldLabelClass}>Choose service</span>
-                        <p className="service-selector-copy">Select a members mode or create a Dcord boost order.</p>
+                        <p className="service-selector-copy">Select members or boosts, then configure the order details.</p>
                       </div>
-                      <span className="service-selector-count">{SERVICE_OPTIONS.length} services</span>
+                      <span className="service-selector-count">2 services</span>
                     </div>
-                    <div className="service-grid">
-                      {SERVICE_OPTIONS.map((option, index) => {
+                    <div className="service-grid service-grid-compact">
+                      {[
+                        { value: "members", title: "Members", description: "Tokenu member delivery", icon: KeyRound },
+                        { value: "boosts", title: "Boosts", description: "Dcord join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
+                      ].map((option, index) => {
                         const Icon = option.icon;
-                        const selected = form.service === option.value;
+                        const selected = option.value === "boosts" ? selectedIsBoost : !selectedIsBoost;
 
                         return (
                           <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
                             <input
                               className="sr-only"
                               type="radio"
-                              name="service"
+                              name="serviceCategory"
                               value={option.value}
                               checked={selected}
                               onChange={() =>
                                 setForm((current) => ({
                                   ...current,
-                                  service: option.value,
-                                  amount: isBoostService(option.value) ? 2 : current.amount
+                                  service: option.value === "boosts" ? "DCORD-BOOSTS" : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
+                                  amount: option.value === "boosts" ? 2 : current.amount
                                 }))
                               }
                             />
@@ -1108,44 +1114,58 @@ export default function HomePage() {
                     </div>
                   </fieldset>
 
+                  {!selectedIsBoost ? (
+                    <fieldset className="service-selector md:col-span-2">
+                      <legend className="sr-only">Member service</legend>
+                      <div className="service-selector-heading">
+                        <div>
+                          <span className={fieldLabelClass}>Member mode</span>
+                          <p className="service-selector-copy">Choose the Tokenu member service type.</p>
+                        </div>
+                        <span className="service-selector-count">{memberServiceOptions.length} modes</span>
+                      </div>
+                      <div className="service-grid">
+                        {memberServiceOptions.map((option, index) => {
+                          const Icon = option.icon;
+                          const selected = form.service === option.value;
+
+                          return (
+                            <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
+                              <input
+                                className="sr-only"
+                                type="radio"
+                                name="memberService"
+                                value={option.value}
+                                checked={selected}
+                                onChange={() => setForm((current) => ({ ...current, service: option.value }))}
+                              />
+                              <span className="service-option-head" aria-hidden="true">
+                                <span className="service-option-icon">
+                                  <Icon className="h-5 w-5" />
+                                </span>
+                                <span className="service-option-state">
+                                  {selected ? (
+                                    <>
+                                      <Check className="h-3 w-3" />
+                                      Selected
+                                    </>
+                                  ) : (
+                                    String(index + 1).padStart(2, "0")
+                                  )}
+                                </span>
+                              </span>
+                              <span className="service-option-title">{option.title}</span>
+                              <span className="service-option-description">{option.description}</span>
+                              <span className="service-option-code">{option.value}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ) : null}
+
                   {selectedIsBoost ? (
                     <div className="boost-order-panel md:col-span-2">
-                      <div className="boost-order-grid">
-                        <fieldset className="boost-order-field">
-                          <legend>Number of Boosts</legend>
-                          <div className="boost-amount-control">
-                            <button
-                              type="button"
-                              aria-label="Decrease boosts"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
-                            >
-                              -
-                            </button>
-                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
-                            <button
-                              type="button"
-                              aria-label="Increase boosts"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
-                            >
-                              +
-                            </button>
-                          </div>
-                        </fieldset>
-
-                        <label className="boost-order-field">
-                          <span>Server Invite</span>
-                          <div className="boost-invite-control">
-                            <span>discord.gg/</span>
-                            <input
-                              value={form.serverId}
-                              onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                              placeholder="yourcode"
-                              required
-                            />
-                          </div>
-                        </label>
-                      </div>
-
                       <fieldset className="boost-duration-field">
                         <legend className={fieldLabelClass}>Duration</legend>
                         <div className="boost-duration-grid">
@@ -1175,32 +1195,84 @@ export default function HomePage() {
                           })}
                         </div>
                       </fieldset>
+
+                      <div className="boost-order-grid">
+                        <fieldset className="boost-order-field">
+                          <legend>Number of Boosts</legend>
+                          <div className="boost-amount-control">
+                            <button
+                              type="button"
+                              aria-label="Decrease boosts"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
+                            >
+                              <Minus className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
+                            <button
+                              type="button"
+                              aria-label="Increase boosts"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
+                            >
+                              <Plus className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </fieldset>
+
+                        <label className="boost-order-field">
+                          <span>Server Invite</span>
+                          <div className="boost-invite-control">
+                            <span>discord.gg/</span>
+                            <input
+                              value={form.serverId}
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
+                              }}
+                              placeholder="yourcode"
+                              required
+                            />
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   ) : (
-                    <>
-                      <label className="grid gap-2 md:col-span-2">
-                        <span className={fieldLabelClass}>Server ID</span>
-                        <Input
-                          value={form.serverId}
-                          onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                          placeholder="Discord server ID or invite link"
-                          required
-                        />
-                        <p className="text-xs text-[var(--app-muted)]">
-                          Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically.
-                        </p>
-                      </label>
+                    <div className="boost-order-panel md:col-span-2">
+                      <div className="boost-order-grid">
+                        <fieldset className="boost-order-field">
+                          <legend>Number of Members</legend>
+                          <div className="boost-amount-control">
+                            <button
+                              type="button"
+                              aria-label="Decrease members"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(1, current.amount - 1) }))}
+                            >
+                              <Minus className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
+                            <button
+                              type="button"
+                              aria-label="Increase members"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(1, current.amount + 1) }))}
+                            >
+                              <Plus className="h-4 w-4" aria-hidden="true" />
+                            </button>
+                          </div>
+                        </fieldset>
 
-                      <label className="grid gap-2">
-                        <span className={fieldLabelClass}>Amount</span>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={form.amount}
-                          onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 0 }))}
-                        />
-                      </label>
-                    </>
+                        <label className="boost-order-field">
+                          <span>Server ID</span>
+                          <div className="boost-invite-control">
+                            <span>ID</span>
+                            <input
+                              value={form.serverId}
+                              onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
+                              placeholder="Discord server ID or invite link"
+                              required
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </div>
                   )}
 
                   {!selectedIsBoost ? (
