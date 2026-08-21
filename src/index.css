@@ -820,9 +820,13 @@
     display: grid;
     gap: 0.82rem;
     min-width: 0;
+    margin: 0;
+    border: 0;
+    padding: 0;
   }
 
   .boost-order-label {
+    display: block;
     color: var(--app-muted);
     font-size: 12px;
     font-weight: 500;
@@ -855,6 +859,11 @@
     border-color: var(--app-accent-border);
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
+  }
+
+  .boost-amount-control button:disabled {
+    cursor: not-allowed;
+    opacity: 0.42;
   }
 
   .boost-amount-value {

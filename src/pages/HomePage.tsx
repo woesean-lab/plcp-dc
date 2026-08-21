@@ -386,6 +386,7 @@ export default function HomePage() {
   const orderPageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
+  const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
@@ -1190,7 +1191,16 @@ export default function HomePage() {
                                 name="boostDuration"
                                 value={duration}
                                 checked={selected}
-                                onChange={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
+                                onChange={() =>
+                                  setForm((current) => {
+                                    const nextCapacity = duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+                                    return {
+                                      ...current,
+                                      duration: duration as 1 | 3,
+                                      amount: nextCapacity > 0 ? Math.min(current.amount, nextCapacity) : current.amount
+                                    };
+                                  })
+                                }
                               />
                               <span className="service-option-head" aria-hidden="true">
                                 <span className="service-option-icon">
@@ -1236,7 +1246,13 @@ export default function HomePage() {
                             <button
                               type="button"
                               aria-label="Increase boosts"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
+                              disabled={selectedBoostCapacity <= 0 || form.amount >= selectedBoostCapacity}
+                              onClick={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  amount: Math.min(Math.max(2, selectedBoostCapacity), current.amount + 2)
+                                }))
+                              }
                             >
                               <Plus className="h-4 w-4" aria-hidden="true" />
                             </button>
