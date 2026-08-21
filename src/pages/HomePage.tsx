@@ -1181,10 +1181,13 @@ export default function HomePage() {
                           const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
                           const boostCapacity = tokenStock * 2;
                           const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
-                          const enoughStock = tokenStock >= requiredTokens;
 
                           return (
-                            <label key={duration} className={`service-option ${selected ? "is-selected" : ""}`} data-service="boosts">
+                            <label
+                              key={duration}
+                              className={`service-option ${selected ? "is-selected" : ""}`}
+                              data-service={duration === 3 ? "boost-duration-3" : "boost-duration-1"}
+                            >
                               <input
                                 className="sr-only"
                                 type="radio"
@@ -1221,7 +1224,7 @@ export default function HomePage() {
                               <span className="service-option-description">
                                 {tokenStock} tokens available · {requiredTokens} needed
                               </span>
-                              <span className="service-option-code">{enoughStock ? `${boostCapacity} BOOSTS` : "LOW STOCK"}</span>
+                              <span className="service-option-code service-option-code-badge">{boostCapacity} BOOSTS</span>
                             </label>
                           );
                         })}

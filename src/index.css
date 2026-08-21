@@ -639,7 +639,8 @@
   }
 
   .service-option[data-service="boosts"],
-  .service-option[data-service="DCORD-BOOSTS"] {
+  .service-option[data-service="DCORD-BOOSTS"],
+  .service-option[data-service="boost-duration-1"] {
     --service-tone: #9b8cff;
     --service-tone-soft: rgba(155, 140, 255, 0.12);
     --service-tone-border: rgba(155, 140, 255, 0.3);
@@ -675,6 +676,14 @@
   }
 
   .service-option[data-service="OAUTH-PREMIUM"] {
+    --service-tone: #f8d66d;
+    --service-tone-soft: rgba(248, 214, 109, 0.13);
+    --service-tone-border: rgba(248, 214, 109, 0.36);
+    --service-tone-glow: rgba(248, 214, 109, 0.2);
+    --service-tone-ink: #ffe9a4;
+  }
+
+  .service-option[data-service="boost-duration-3"] {
     --service-tone: #f8d66d;
     --service-tone-soft: rgba(248, 214, 109, 0.13);
     --service-tone-border: rgba(248, 214, 109, 0.36);
@@ -797,6 +806,19 @@
     text-overflow: ellipsis;
     color: var(--app-subtle);
     white-space: nowrap;
+  }
+
+  .service-option-code-badge {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(105, 221, 178, 0.48);
+    border-radius: 999px;
+    background: rgba(105, 221, 178, 0.12);
+    padding: 0.34rem 0.62rem;
+    color: #8af0cb;
   }
 
   .boost-order-panel {
