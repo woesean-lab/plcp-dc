@@ -19,6 +19,7 @@ const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.t
 const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
 const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https://app.dcord.co/api";
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
+const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
@@ -484,36 +485,47 @@ async function runDcordBoostToken(token, invite) {
 }
 
 async function processDcordBoostOrder(order, tokens, invite) {
-  const results = [];
-  let added = 0;
+  const results = Array.from({ length: tokens.length });
+  let nextIndex = 0;
+  let progressSave = Promise.resolve();
 
-  for (const token of tokens) {
+  async function saveCurrentProgress() {
+    progressSave = progressSave.then(async () => {
+      const completedResults = results.filter(Boolean);
+      const added = completedResults.reduce((total, item) => total + (item.boosted ? 2 : 0), 0);
+      const finished = completedResults.length >= tokens.length;
+      await saveTrackedOrderPayload({
+        ...order,
+        added,
+        status: finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
+        details: finished
+          ? added >= order.amount
+            ? `${added}/${order.amount} boosts completed.`
+            : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
+          : `${added}/${order.amount} boosts completed.`,
+        dcordResults: completedResults
+      });
+    });
+    await progressSave;
+  }
+
+  async function runNextToken() {
+    const index = nextIndex;
+    nextIndex += 1;
+    if (index >= tokens.length) return;
+
+    const token = tokens[index];
     const usageEntry = await recordUsedBoostToken({ token, duration: order.duration, order });
     const normalized = await runDcordBoostToken(token, invite);
     await updateUsedBoostTokenResult(usageEntry.id, normalized);
-    results.push({ ...normalized, usedTokenId: usageEntry.id });
-    if (normalized.boosted) added += 2;
-
-    const inProgress = {
-      ...order,
-      added,
-      status: added >= order.amount ? "COMPLETED" : "PROCESS",
-      details: `${added}/${order.amount} boosts completed.`,
-      dcordResults: results
-    };
-    await saveTrackedOrderPayload(inProgress);
+    results[index] = { ...normalized, usedTokenId: usageEntry.id };
+    await saveCurrentProgress();
+    await runNextToken();
   }
 
-  const completed = added >= order.amount;
-  await saveTrackedOrderPayload({
-    ...order,
-    added,
-    status: completed ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
-    details: completed
-      ? `${added}/${order.amount} boosts completed.`
-      : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`,
-    dcordResults: results
-  });
+  const workerCount = Math.min(tokens.length, dcordBoostConcurrency);
+  await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
+  await saveCurrentProgress();
 }
 
 async function requestTokenuPublicData(pathname, init = {}) {
