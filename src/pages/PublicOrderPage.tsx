@@ -547,7 +547,7 @@ export default function PublicOrderPage() {
               </div>
             </div>
           ) : (
-            <div className="public-stats-body">
+            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""}`}>
               {isWaiting && botInvite ? (
                 <div className="public-bot-required-card app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
                   <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
@@ -689,6 +689,7 @@ export default function PublicOrderPage() {
               ) : null}
               </div>
 
+              {!isBoostOrder ? (
               <aside className="public-radial-card">
                 <p className="app-kicker">Delivery overview</p>
                 <div className="public-radial" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}>
@@ -700,6 +701,7 @@ export default function PublicOrderPage() {
                 </div>
                 <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
               </aside>
+              ) : null}
 
             </div>
           )}

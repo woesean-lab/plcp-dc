@@ -2076,6 +2076,10 @@
     padding: clamp(1.25rem, 4vw, 2rem);
   }
 
+  .public-stats-body.is-boost-monitor {
+    grid-template-columns: 1fr;
+  }
+
   .public-stats-overview {
     display: grid;
     gap: 1rem;
@@ -2092,6 +2096,10 @@
   }
 
   .public-metrics-grid.is-completed {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .public-stats-body.is-boost-monitor .public-metrics-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

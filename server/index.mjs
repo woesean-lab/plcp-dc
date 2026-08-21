@@ -79,6 +79,7 @@ async function resolveDiscordInvite(inviteValue) {
 
   return {
     guildId: String(guildId),
+    guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
     approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
       ? payload.approximate_member_count
       : undefined
@@ -506,13 +507,27 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     }
 
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    const trackedPayload = tracked.rows[0]?.payload;
+    let trackedPayload = tracked.rows[0]?.payload;
     if (
       trackedPayload &&
       typeof trackedPayload === "object" &&
       !Array.isArray(trackedPayload) &&
       (trackedPayload.provider === "dcord" || trackedPayload.service === "DCORD-BOOSTS")
     ) {
+      if ((!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) && typeof trackedPayload.serverInvite === "string" && trackedPayload.serverInvite.trim()) {
+        try {
+          const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
+          trackedPayload = {
+            ...trackedPayload,
+            serverId: trackedPayload.serverId ?? inviteInfo.guildId,
+            serverName: trackedPayload.serverName ?? inviteInfo.guildName,
+            serverMemberCount: Number.isFinite(trackedPayload.serverMemberCount) ? trackedPayload.serverMemberCount : inviteInfo.approximateMemberCount
+          };
+          await saveTrackedOrderPayload(trackedPayload);
+        } catch {
+          // Keep the public monitor available even if Discord metadata lookup fails.
+        }
+      }
       return res.set("Cache-Control", "no-store").json(trackedPayload);
     }
 
@@ -880,6 +895,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       provider: "dcord",
       service: "DCORD-BOOSTS",
       serverId: serverInfo.guildId,
+      serverName: serverInfo.guildName,
       serverInvite: String(req.body?.id ?? "").trim(),
       serverMemberCount: serverInfo.approximateMemberCount,
       amount,
@@ -963,7 +979,30 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
       return res.status(404).json({ message: "Boost order could not be found." });
     }
 
-    res.set("Cache-Control", "no-store").json(tracked.rows[0].payload);
+    let payload = tracked.rows[0].payload;
+    if (
+      payload &&
+      typeof payload === "object" &&
+      !Array.isArray(payload) &&
+      (!payload.serverName || !Number.isFinite(payload.serverMemberCount)) &&
+      typeof payload.serverInvite === "string" &&
+      payload.serverInvite.trim()
+    ) {
+      try {
+        const inviteInfo = await resolveDiscordInvite(payload.serverInvite);
+        payload = {
+          ...payload,
+          serverId: payload.serverId ?? inviteInfo.guildId,
+          serverName: payload.serverName ?? inviteInfo.guildName,
+          serverMemberCount: Number.isFinite(payload.serverMemberCount) ? payload.serverMemberCount : inviteInfo.approximateMemberCount
+        };
+        await saveTrackedOrderPayload(payload);
+      } catch {
+        // Keep the private lookup available even if Discord metadata lookup fails.
+      }
+    }
+
+    res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
   }
