@@ -778,6 +778,23 @@
     white-space: nowrap;
   }
 
+  .boost-order-panel {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 860px;
+    border: 1px solid var(--app-border);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
+    padding: 1.15rem;
+  }
+
+  .boost-order-grid {
+    display: grid;
+    grid-template-columns: minmax(190px, 240px) minmax(280px, 1fr);
+    gap: 1rem;
+    align-items: end;
+  }
+
   .boost-order-field {
     display: grid;
     gap: 0.55rem;
@@ -794,15 +811,15 @@
 
   .boost-amount-control {
     display: grid;
-    grid-template-columns: 36px minmax(0, 1fr) 36px;
-    gap: 0.55rem;
+    grid-template-columns: 38px minmax(72px, 1fr) 38px;
+    gap: 0.5rem;
     align-items: center;
   }
 
   .boost-amount-control button {
     display: grid;
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 40px;
     place-items: center;
     border: 1px solid var(--app-border);
     border-radius: 11px;
@@ -822,7 +839,7 @@
 
   .boost-amount-value {
     display: grid;
-    min-height: 38px;
+    min-height: 40px;
     place-items: center;
     border: 1px solid var(--app-border);
     border-radius: 11px;
@@ -872,6 +889,57 @@
 
   .boost-invite-control input::placeholder {
     color: var(--app-placeholder);
+  }
+
+  .boost-duration-field {
+    display: grid;
+    gap: 0.75rem;
+    min-width: 0;
+  }
+
+  .boost-duration-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(210px, 1fr));
+    gap: 0.85rem;
+  }
+
+  .boost-duration-card {
+    display: grid;
+    gap: 0.8rem;
+    min-width: 0;
+    border: 1px solid var(--app-border);
+    border-radius: 15px;
+    background: var(--app-surface-soft);
+    padding: 1rem;
+    text-align: left;
+    color: var(--app-text-secondary);
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .boost-duration-card:hover,
+  .boost-duration-card.is-selected {
+    border-color: var(--app-accent-border);
+    color: var(--app-text);
+    background: var(--app-accent-soft);
+  }
+
+  .boost-duration-card-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .boost-duration-card-head strong {
+    font-size: 15px;
+  }
+
+  .boost-duration-card-meta {
+    display: grid;
+    gap: 0.25rem;
+    color: var(--app-muted);
+    font-size: 12px;
+    font-weight: 650;
   }
 
   .ui-button {
@@ -2857,5 +2925,6 @@
 .landing-footer { position: relative; z-index: 2; display: flex; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--app-divider); padding-block: 1.5rem 2rem; color: var(--app-muted); font-size: .75rem; }
 .landing-footer span:first-child { color: var(--app-text-secondary); font-weight: 700; }
 @media (max-width:1100px) { .landing-service-grid { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:760px) { .boost-order-grid,.boost-duration-grid { grid-template-columns:1fr; } .boost-order-panel { max-width:100%; } }
 @media (max-width:900px) { .landing-hero { grid-template-columns:1fr; min-height:auto; padding-top:4rem; } .landing-demo { width:min(620px,100%); margin-inline:auto; transform:none; } .landing-process ol { grid-template-columns:1fr; } .landing-service-card { min-height:240px; } .landing-section-heading,.landing-final-cta { align-items:flex-start; flex-direction:column; } }
 @media (max-width:640px) { .landing-nav { grid-template-columns:1fr auto; } .landing-nav-badge { display:none; } .landing-nav .ui-button { width:2.75rem; padding-inline:0; font-size:0; } .landing-nav .ui-button svg { width:1rem; height:1rem; } .landing-hero { gap:3.5rem; padding-block:3.5rem 4.5rem; } .landing-hero h1 { font-size:clamp(3rem,16vw,4.6rem); } .landing-actions .ui-button { width:100%; } .landing-demo { border-radius:22px; padding:1rem; } .landing-demo-grid,.landing-service-grid { grid-template-columns:1fr; } .landing-section,.landing-process { padding-block:4rem; } .landing-final-cta { margin-block:3rem; } .landing-final-cta .ui-button { width:100%; } .landing-footer { flex-direction:column; } }

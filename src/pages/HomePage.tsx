@@ -1109,40 +1109,72 @@ export default function HomePage() {
                   </fieldset>
 
                   {selectedIsBoost ? (
-                    <div className="md:col-span-2 grid gap-5">
-                      <fieldset className="boost-order-field">
-                        <legend>Number of Boosts</legend>
-                        <div className="boost-amount-control">
-                          <button
-                            type="button"
-                            aria-label="Decrease boosts"
-                            onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
-                          >
-                            -
-                          </button>
-                          <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
-                          <button
-                            type="button"
-                            aria-label="Increase boosts"
-                            onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
-                          >
-                            +
-                          </button>
+                    <div className="boost-order-panel md:col-span-2">
+                      <div className="boost-order-grid">
+                        <fieldset className="boost-order-field">
+                          <legend>Number of Boosts</legend>
+                          <div className="boost-amount-control">
+                            <button
+                              type="button"
+                              aria-label="Decrease boosts"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
+                            >
+                              -
+                            </button>
+                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
+                            <button
+                              type="button"
+                              aria-label="Increase boosts"
+                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
+                            >
+                              +
+                            </button>
+                          </div>
+                        </fieldset>
+
+                        <label className="boost-order-field">
+                          <span>Server Invite</span>
+                          <div className="boost-invite-control">
+                            <span>discord.gg/</span>
+                            <input
+                              value={form.serverId}
+                              onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
+                              placeholder="yourcode"
+                              required
+                            />
+                          </div>
+                        </label>
+                      </div>
+
+                      <fieldset className="boost-duration-field">
+                        <legend className={fieldLabelClass}>Duration</legend>
+                        <div className="boost-duration-grid">
+                          {[1, 3].map((duration) => {
+                            const selected = form.duration === duration;
+                            const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
+                            const boostCapacity = tokenStock * 2;
+                            const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
+                            const enoughStock = tokenStock >= requiredTokens;
+                            return (
+                              <button
+                                key={duration}
+                                type="button"
+                                className={`boost-duration-card ${selected ? "is-selected" : ""}`}
+                                onClick={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
+                              >
+                                <span className="boost-duration-card-head">
+                                  <strong>{duration} Month</strong>
+                                  <Badge variant={enoughStock ? "success" : "destructive"}>{boostCapacity} boosts</Badge>
+                                </span>
+                                <span className="boost-duration-card-meta">
+                                  <span>{tokenStock} tokens available</span>
+                                  <span>{requiredTokens} tokens needed</span>
+                                </span>
+                              </button>
+                            );
+                          })}
                         </div>
                       </fieldset>
-
-                      <label className="boost-order-field">
-                        <span>Server Invite</span>
-                        <div className="boost-invite-control">
-                          <span>discord.gg/</span>
-                          <input
-                            value={form.serverId}
-                            onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                            placeholder="yourcode"
-                            required
-                          />
-                        </div>
-                      </label>
                     </div>
                   ) : (
                     <>
@@ -1182,37 +1214,7 @@ export default function HomePage() {
                       onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
                     />
                   </label>
-                  ) : (
-                    <fieldset className="grid gap-3">
-                      <legend className={fieldLabelClass}>Duration</legend>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        {[1, 3].map((duration) => {
-                          const selected = form.duration === duration;
-                          const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
-                          const boostCapacity = tokenStock * 2;
-                          const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
-                          const enoughStock = tokenStock >= requiredTokens;
-                          return (
-                            <button
-                              key={duration}
-                              type="button"
-                              className={`app-panel-soft grid gap-3 px-4 py-4 text-left transition ${selected ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-secondary)]"}`}
-                              onClick={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
-                            >
-                              <span className="flex items-center justify-between gap-3">
-                                <strong className="text-base">{duration} Month</strong>
-                                <Badge variant={enoughStock ? "success" : "destructive"}>{boostCapacity} boosts</Badge>
-                              </span>
-                              <span className="grid gap-1 text-xs font-medium text-[var(--app-muted)]">
-                                <span>{tokenStock} tokens available</span>
-                                <span>{requiredTokens} tokens needed for this order</span>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  )}
+                  ) : null}
 
                   {form.service === "OAUTH-ONLINE" ? (
                     <label className="grid gap-2 md:col-span-2">
