@@ -731,6 +731,13 @@ app.get("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
     const stock = await loadBoostTokenStock();
     const summary = summarizeBoostTokenStock(stock);
     const availableTokens = duration === 3 ? summary.threeMonth : summary.oneMonth;
+    if (String(req.query.includeTokens ?? "") === "true") {
+      return res.json({
+        stock: summary,
+        oneMonthTokens: stock.oneMonth,
+        threeMonthTokens: stock.threeMonth
+      });
+    }
     res.json({ ...summary, available: availableTokens * 2, maximum: availableTokens * 2 });
   } catch (error) {
     next(error);
@@ -746,6 +753,35 @@ app.put("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
       threeMonth: [...existing.threeMonth, ...incoming.threeMonth]
     });
     res.json({ stock: summarizeBoostTokenStock(stock) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-stock/delete", requireSession, async (req, res, next) => {
+  try {
+    const duration = Number.parseInt(req.body?.duration, 10);
+    if (![1, 3].includes(duration)) {
+      return res.status(400).json({ message: "A valid boost duration is required." });
+    }
+
+    const tokensToRemove = new Set(normalizeBoostTokenList(req.body?.tokens));
+    if (!tokensToRemove.size) {
+      return res.status(400).json({ message: "At least one token is required." });
+    }
+
+    const stock = await loadBoostTokenStock();
+    const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+    const nextStock = await saveBoostTokenStock({
+      ...stock,
+      [stockKey]: stock[stockKey].filter((token) => !tokensToRemove.has(token))
+    });
+
+    res.json({
+      stock: summarizeBoostTokenStock(nextStock),
+      oneMonthTokens: nextStock.oneMonth,
+      threeMonthTokens: nextStock.threeMonth
+    });
   } catch (error) {
     next(error);
   }

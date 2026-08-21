@@ -85,3 +85,9 @@ export interface BoostTokenStockInput {
   oneMonthTokens: string;
   threeMonthTokens: string;
 }
+
+export interface BoostTokenStockSnapshot {
+  stock: BoostStock;
+  oneMonthTokens: string[];
+  threeMonthTokens: string[];
+}

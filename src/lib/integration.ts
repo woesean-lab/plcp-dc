@@ -1,4 +1,4 @@
-import type { BalanceResponse, BoostStock, BoostTokenStockInput, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
+import type { BalanceResponse, BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
 import { isBoostService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -164,5 +164,17 @@ export function saveBoostStock(stock: BoostTokenStockInput) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(stock)
+  });
+}
+
+export function getBoostStockTokens() {
+  return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock?includeTokens=true");
+}
+
+export function deleteBoostStockTokens(payload: { duration: 1 | 3; tokens: string[] }) {
+  return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
   });
 }

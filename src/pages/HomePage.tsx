@@ -36,7 +36,9 @@ import {
   clearIntegrationApiKey,
   clearDcordApiKey,
   createOrder,
+  deleteBoostStockTokens,
   getBalance,
+  getBoostStockTokens,
   getDcordBalance,
   getOrderStatus,
   getIntegrationConfig,
@@ -46,7 +48,7 @@ import {
   saveIntegrationApiKey,
   updateOrderDelay
 } from "../lib/integration";
-import type { BoostStock, BoostTokenStockInput, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
@@ -343,12 +345,19 @@ export default function HomePage() {
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
+  const [boostTokenLists, setBoostTokenLists] = useState<{ oneMonthTokens: string[]; threeMonthTokens: string[] }>({
+    oneMonthTokens: [],
+    threeMonthTokens: []
+  });
+  const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
+  const [loadingBoostStock, setLoadingBoostStock] = useState(false);
+  const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
@@ -473,6 +482,33 @@ export default function HomePage() {
     // Balances are loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
+
+  useEffect(() => {
+    if (activeTab !== "stock") return;
+    void refreshBoostStockTokens();
+    // Stock token lists are loaded only when the Stock page is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  function applyBoostStockSnapshot(snapshot: BoostTokenStockSnapshot) {
+    setBoostStock(snapshot.stock);
+    setBoostTokenLists({
+      oneMonthTokens: snapshot.oneMonthTokens,
+      threeMonthTokens: snapshot.threeMonthTokens
+    });
+    setSelectedBoostTokens({});
+  }
+
+  async function refreshBoostStockTokens() {
+    try {
+      setLoadingBoostStock(true);
+      applyBoostStockSnapshot(await getBoostStockTokens());
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Boost stock could not be loaded.");
+    } finally {
+      setLoadingBoostStock(false);
+    }
+  }
 
   useEffect(() => {
     const syncTargets = activeOrders.filter((order) => order.uniqid);
@@ -654,11 +690,74 @@ export default function HomePage() {
       const result = await saveBoostStock(boostTokenDrafts);
       setBoostStock(result.stock);
       setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS);
+      void refreshBoostStockTokens();
       notifySuccess("Boost stock updated.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Boost stock could not be saved.");
     } finally {
       setSavingBoostStock(false);
+    }
+  }
+
+  function getSelectedTokens(duration: 1 | 3) {
+    const source = duration === 3 ? boostTokenLists.threeMonthTokens : boostTokenLists.oneMonthTokens;
+    return source.filter((token) => selectedBoostTokens[`${duration}:${token}`]);
+  }
+
+  function toggleBoostToken(duration: 1 | 3, token: string, checked: boolean) {
+    setSelectedBoostTokens((current) => ({
+      ...current,
+      [`${duration}:${token}`]: checked
+    }));
+  }
+
+  function setAllBoostTokens(duration: 1 | 3, checked: boolean) {
+    const source = duration === 3 ? boostTokenLists.threeMonthTokens : boostTokenLists.oneMonthTokens;
+    setSelectedBoostTokens((current) => {
+      const next = { ...current };
+      source.forEach((token) => {
+        next[`${duration}:${token}`] = checked;
+      });
+      return next;
+    });
+  }
+
+  function downloadBoostTokens(duration: 1 | 3, onlySelected = false) {
+    const tokens = onlySelected
+      ? getSelectedTokens(duration)
+      : duration === 3
+        ? boostTokenLists.threeMonthTokens
+        : boostTokenLists.oneMonthTokens;
+
+    if (!tokens.length) {
+      notifyError("No tokens to download.");
+      return;
+    }
+
+    const blob = new Blob([`${tokens.join("\n")}\n`], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `boost-${duration}-month-tokens.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function removeSelectedBoostTokens(duration: 1 | 3) {
+    const tokens = getSelectedTokens(duration);
+    if (!tokens.length) {
+      notifyError("Select tokens to remove.");
+      return;
+    }
+
+    try {
+      setDeletingBoostTokens(true);
+      applyBoostStockSnapshot(await deleteBoostStockTokens({ duration, tokens }));
+      notifySuccess(`${tokens.length} token removed.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected tokens could not be removed.");
+    } finally {
+      setDeletingBoostTokens(false);
     }
   }
 
@@ -1035,21 +1134,29 @@ export default function HomePage() {
                     />
                   </label>
                   ) : (
-                    <fieldset className="grid gap-2">
+                    <fieldset className="grid gap-3">
                       <legend className={fieldLabelClass}>Duration</legend>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid gap-3 sm:grid-cols-2">
                         {[1, 3].map((duration) => {
                           const selected = form.duration === duration;
+                          const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
+                          const boostCapacity = tokenStock * 2;
+                          const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
+                          const enoughStock = tokenStock >= requiredTokens;
                           return (
                             <button
                               key={duration}
                               type="button"
-                              className={`app-panel-soft px-4 py-3 text-left text-sm font-semibold transition ${selected ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-secondary)]"}`}
+                              className={`app-panel-soft grid gap-3 px-4 py-4 text-left transition ${selected ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-secondary)]"}`}
                               onClick={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
                             >
-                              {duration} month
-                              <span className="mt-1 block text-xs font-medium text-[var(--app-muted)]">
-                                Stock {duration === 3 ? boostStock.threeMonth : boostStock.oneMonth}
+                              <span className="flex items-center justify-between gap-3">
+                                <strong className="text-base">{duration} Month</strong>
+                                <Badge variant={enoughStock ? "success" : "destructive"}>{boostCapacity} boosts</Badge>
+                              </span>
+                              <span className="grid gap-1 text-xs font-medium text-[var(--app-muted)]">
+                                <span>{tokenStock} tokens available</span>
+                                <span>{requiredTokens} tokens needed for this order</span>
                               </span>
                             </button>
                           );
@@ -1500,6 +1607,78 @@ export default function HomePage() {
                     </Button>
                   </div>
                 </form>
+
+                <div className="mt-6 border-t border-[var(--app-divider)] pt-6">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className={labelClass}>Token list</p>
+                      <h2 className="app-title mt-1 text-lg font-semibold">Current inventory</h2>
+                    </div>
+                    <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
+                      <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
+                      Refresh
+                    </Button>
+                  </div>
+
+                  <div className="mt-5 grid gap-5 lg:grid-cols-2">
+                    {[
+                      { duration: 1 as const, label: "1 month", tokens: boostTokenLists.oneMonthTokens },
+                      { duration: 3 as const, label: "3 month", tokens: boostTokenLists.threeMonthTokens }
+                    ].map((group) => {
+                      const selectedCount = getSelectedTokens(group.duration).length;
+                      return (
+                        <section key={group.duration} className="app-panel-soft overflow-hidden">
+                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] p-4">
+                            <div>
+                              <p className={labelClass}>{group.label}</p>
+                              <strong className="mt-1 block text-sm text-[var(--app-text)]">{group.tokens.length} tokens / {group.tokens.length * 2} boosts</strong>
+                            </div>
+                            <Badge variant="secondary">{selectedCount} selected</Badge>
+                          </div>
+                          <div className="flex flex-wrap gap-2 border-b border-[var(--app-divider)] p-3">
+                            <Button type="button" size="xs" variant="secondary" onClick={() => setAllBoostTokens(group.duration, true)} disabled={!group.tokens.length}>
+                              Select all
+                            </Button>
+                            <Button type="button" size="xs" variant="secondary" onClick={() => setAllBoostTokens(group.duration, false)} disabled={!selectedCount}>
+                              Clear
+                            </Button>
+                            <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration)} disabled={!group.tokens.length}>
+                              Download all
+                            </Button>
+                            <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration, true)} disabled={!selectedCount}>
+                              Download selected
+                            </Button>
+                            <Button type="button" size="xs" variant="destructive" onClick={() => void removeSelectedBoostTokens(group.duration)} disabled={!selectedCount || deletingBoostTokens}>
+                              Remove selected
+                            </Button>
+                          </div>
+                          <div className="max-h-80 overflow-auto p-3">
+                            {group.tokens.length ? (
+                              <ol className="grid gap-2">
+                                {group.tokens.map((token, index) => (
+                                  <li key={`${group.duration}-${token}`} className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])}
+                                      onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)}
+                                      aria-label={`Select token ${index + 1}`}
+                                    />
+                                    <span className="w-6 shrink-0 text-xs text-[var(--app-muted)]">{index + 1}</span>
+                                    <code className="min-w-0 flex-1 truncate text-xs text-[var(--app-text-secondary)]" title={token}>{token}</code>
+                                  </li>
+                                ))}
+                              </ol>
+                            ) : (
+                              <div className="grid min-h-32 place-items-center text-center">
+                                <p className="app-copy text-sm">No {group.label} tokens in stock.</p>
+                              </div>
+                            )}
+                          </div>
+                        </section>
+                      );
+                    })}
+                  </div>
+                </div>
               </section>
 
               <aside className={`${shell} p-5 sm:p-6 xl:sticky xl:top-[108px]`}>
