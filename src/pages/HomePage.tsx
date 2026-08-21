@@ -1080,7 +1080,7 @@ export default function HomePage() {
                                 setForm((current) => ({
                                   ...current,
                                   service: option.value,
-                                  amount: isBoostService(option.value) && current.amount % 2 !== 0 ? current.amount + 1 : current.amount
+                                  amount: isBoostService(option.value) ? 2 : current.amount
                                 }))
                               }
                             />
@@ -1108,35 +1108,68 @@ export default function HomePage() {
                     </div>
                   </fieldset>
 
-                  <label className="grid gap-2 md:col-span-2">
-                    <span className={fieldLabelClass}>{selectedIsBoost ? "Invite link or code" : "Server ID"}</span>
-                    <Input
-                      value={form.serverId}
-                      onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                      placeholder={selectedIsBoost ? "Discord invite link or code" : "Discord server ID or invite link"}
-                      required
-                    />
-                    <p className="text-xs text-[var(--app-muted)]">
-                      {selectedIsBoost
-                        ? "Boost orders need an invite because Dcord joins the server before applying boosts."
-                        : "Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically."}
-                    </p>
-                  </label>
+                  {selectedIsBoost ? (
+                    <div className="md:col-span-2 grid gap-5">
+                      <fieldset className="boost-order-field">
+                        <legend>Number of Boosts</legend>
+                        <div className="boost-amount-control">
+                          <button
+                            type="button"
+                            aria-label="Decrease boosts"
+                            onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
+                          >
+                            -
+                          </button>
+                          <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
+                          <button
+                            type="button"
+                            aria-label="Increase boosts"
+                            onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount + 2) }))}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </fieldset>
 
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Amount</span>
-                    <Input
-                      type="number"
-                      min={selectedIsBoost ? 2 : 1}
-                      step={selectedIsBoost ? 2 : 1}
-                      value={form.amount}
-                      onChange={(event) => {
-                        const nextAmount = Number(event.target.value) || 0;
-                        setForm((current) => ({ ...current, amount: selectedIsBoost && nextAmount % 2 !== 0 ? nextAmount + 1 : nextAmount }));
-                      }}
-                    />
-                    {selectedIsBoost ? <p className="text-xs text-[var(--app-muted)]">Boost orders use even quantities only.</p> : null}
-                  </label>
+                      <label className="boost-order-field">
+                        <span>Server Invite</span>
+                        <div className="boost-invite-control">
+                          <span>discord.gg/</span>
+                          <input
+                            value={form.serverId}
+                            onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
+                            placeholder="yourcode"
+                            required
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  ) : (
+                    <>
+                      <label className="grid gap-2 md:col-span-2">
+                        <span className={fieldLabelClass}>Server ID</span>
+                        <Input
+                          value={form.serverId}
+                          onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
+                          placeholder="Discord server ID or invite link"
+                          required
+                        />
+                        <p className="text-xs text-[var(--app-muted)]">
+                          Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically.
+                        </p>
+                      </label>
+
+                      <label className="grid gap-2">
+                        <span className={fieldLabelClass}>Amount</span>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={form.amount}
+                          onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 0 }))}
+                        />
+                      </label>
+                    </>
+                  )}
 
                   {!selectedIsBoost ? (
                   <label className="grid gap-2">

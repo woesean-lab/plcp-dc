@@ -778,6 +778,102 @@
     white-space: nowrap;
   }
 
+  .boost-order-field {
+    display: grid;
+    gap: 0.55rem;
+    min-width: 0;
+  }
+
+  .boost-order-field > legend,
+  .boost-order-field > span {
+    color: var(--app-muted);
+    font-size: 12px;
+    font-weight: 650;
+    letter-spacing: 0;
+  }
+
+  .boost-amount-control {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) 36px;
+    gap: 0.55rem;
+    align-items: center;
+  }
+
+  .boost-amount-control button {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    color: var(--app-text);
+    background: rgba(8, 9, 18, 0.64);
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+  }
+
+  .boost-amount-control button:hover {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+  }
+
+  .boost-amount-value {
+    display: grid;
+    min-height: 38px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    color: var(--app-text);
+    background: var(--app-input-bg);
+    font-size: 14px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .boost-invite-control {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 40px;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    background: var(--app-input-bg);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  .boost-invite-control:focus-within {
+    border-color: var(--app-accent);
+    background: var(--app-input-focus-bg);
+    box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .boost-invite-control span {
+    display: inline-flex;
+    align-items: center;
+    border-right: 1px solid var(--app-border);
+    padding: 0 0.9rem;
+    color: var(--app-muted);
+    font-size: 13px;
+    font-weight: 650;
+  }
+
+  .boost-invite-control input {
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    padding: 0 0.9rem;
+    color: var(--app-text);
+    font-size: 13px;
+  }
+
+  .boost-invite-control input::placeholder {
+    color: var(--app-placeholder);
+  }
+
   .ui-button {
     border-color: var(--app-border);
     color: var(--app-text-secondary);
