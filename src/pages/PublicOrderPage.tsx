@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
-import { getServiceTitle } from "../lib/services";
+import { getServiceTitle, isBoostService } from "../lib/services";
 import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
 import type { OrderStatusResponse } from "../types";
 
@@ -239,7 +239,10 @@ export default function PublicOrderPage() {
   }, [uniqid]);
 
   const isInitialLoading = loading && !status && !error;
-  const serviceType = seed.service ?? status?.type;
+  const statusService = typeof status?.service === "string" ? status.service : undefined;
+  const serviceType = seed.service ?? statusService ?? status?.type;
+  const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
+  const unitLabel = isBoostOrder ? "Boosts" : "Members";
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
   const serviceName = serviceType ? getServiceTitle(serviceType) : "Service unavailable";
   const statusLabel = status?.status ?? (error ? "UNAVAILABLE" : "PENDING");
@@ -263,7 +266,7 @@ export default function PublicOrderPage() {
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
-  const estimatedCompletion = isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
+  const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -346,7 +349,7 @@ export default function PublicOrderPage() {
     }
   }
 
-  const delayUpdatePanel = !isTerminalStatus ? (
+  const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="public-delay-card">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
@@ -404,7 +407,7 @@ export default function PublicOrderPage() {
                 <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
                 <span>
                   <span className="brand-eyebrow">Pulcip</span>
-                  <strong>Members Monitor</strong>
+                  <strong>{isBoostOrder ? "Boosts Monitor" : "Members Monitor"}</strong>
                 </span>
               </div>
 
@@ -520,7 +523,7 @@ export default function PublicOrderPage() {
                 <div className={`public-metrics-grid ${isCompleted ? "is-completed" : ""}`}>
                 <div className="public-metric-card">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="app-kicker">Members</p>
+                    <p className="app-kicker">{unitLabel}</p>
                     <span className="public-metric-icon is-success"><Users className="h-4 w-4" aria-hidden="true" /></span>
                   </div>
                   <strong>
@@ -538,10 +541,10 @@ export default function PublicOrderPage() {
                   <strong>
                     {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
                   </strong>
-                  <small>Members left in queue</small>
+                  <small>{unitLabel} left in queue</small>
                   {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
                 </div>
-                {!isCompleted ? (
+                {!isBoostOrder && !isCompleted ? (
                   <div className="public-metric-card">
                     <div className="flex items-center justify-between gap-3">
                       <p className="app-kicker">Delay</p>

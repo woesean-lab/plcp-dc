@@ -501,6 +501,17 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
 
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const trackedPayload = tracked.rows[0]?.payload;
+    if (
+      trackedPayload &&
+      typeof trackedPayload === "object" &&
+      !Array.isArray(trackedPayload) &&
+      (trackedPayload.provider === "dcord" || trackedPayload.service === "DCORD-BOOSTS")
+    ) {
+      return res.set("Cache-Control", "no-store").json(trackedPayload);
+    }
+
     const cacheBuster = Date.now();
     const payload = await requestTokenu(
       tokenuApiBase,

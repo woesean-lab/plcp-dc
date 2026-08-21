@@ -1234,6 +1234,12 @@ export default function HomePage() {
 
                   {selectedIsBoost ? (
                     <div className="boost-order-panel md:col-span-2">
+                      <div className="boost-order-panel-heading">
+                        <div>
+                          <span className={fieldLabelClass}>Boost details</span>
+                          <p className="service-selector-copy">Set the boost amount and target server invite.</p>
+                        </div>
+                      </div>
                       <div className="boost-order-grid">
                         <div className="boost-order-field">
                           <span className="boost-order-label">Number of Boosts</span>
@@ -1281,7 +1287,13 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div className="boost-order-panel md:col-span-2">
-                      <div className="boost-order-grid members-order-grid">
+                      <div className="boost-order-panel-heading">
+                        <div>
+                          <span className={fieldLabelClass}>Member details</span>
+                          <p className="service-selector-copy">Set the member amount, invite, and delivery timing.</p>
+                        </div>
+                      </div>
+                      <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""}`}>
                         <div className="boost-order-field">
                           <span className="boost-order-label">Number of Members</span>
                           <input
@@ -1320,22 +1332,23 @@ export default function HomePage() {
                             onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
                           />
                         </label>
+
+                        {form.service === "OAUTH-ONLINE" ? (
+                          <label className="boost-order-field">
+                            <span className="boost-order-label">Billing cycle</span>
+                            <input
+                              className="boost-number-input"
+                              type="number"
+                              min={1}
+                              max={12}
+                              value={form.billingCycle}
+                              onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
+                            />
+                          </label>
+                        ) : null}
                       </div>
                     </div>
                   )}
-
-                  {form.service === "OAUTH-ONLINE" ? (
-                    <label className="grid gap-2 md:col-span-2">
-                      <span className={fieldLabelClass}>Billing cycle</span>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={12}
-                        value={form.billingCycle}
-                        onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
-                      />
-                    </label>
-                  ) : null}
                 </div>
 
                 <div className="flex flex-wrap gap-3">

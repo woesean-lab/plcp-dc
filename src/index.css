@@ -837,6 +837,13 @@
     padding: 1.05rem;
   }
 
+  .boost-order-panel-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
   .boost-order-grid {
     display: grid;
     grid-template-columns: minmax(190px, 240px) minmax(280px, 1fr);
@@ -846,6 +853,10 @@
 
   .members-order-grid {
     grid-template-columns: minmax(170px, 210px) minmax(280px, 1fr) minmax(120px, 150px);
+  }
+
+  .members-order-grid.is-online {
+    grid-template-columns: minmax(155px, 185px) minmax(260px, 1fr) minmax(112px, 132px) minmax(112px, 132px);
   }
 
   .boost-order-field {

@@ -404,22 +404,22 @@ export default function OrderPage() {
           </div>
           {result ? (
             <div className="flex flex-wrap gap-2 max-sm:w-full">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="max-sm:w-full"
-                disabled={!botInvite}
-                title={botInvite ? "Copy delivery template message" : "Delivery template requires a bot invite link"}
-                onClick={() => void copyDeliveryTemplate()}
-              >
-                <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Copy delivery template
-              </Button>
               {!isDcordProvider ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="max-sm:w-full"
+                  disabled={!botInvite}
+                  title={botInvite ? "Copy delivery template message" : "Delivery template requires a bot invite link"}
+                  onClick={() => void copyDeliveryTemplate()}
+                >
+                  <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Copy delivery template
+                </Button>
+              ) : null}
               <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
                 <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
               </Button>
-              ) : null}
             </div>
           ) : null}
         </div>
