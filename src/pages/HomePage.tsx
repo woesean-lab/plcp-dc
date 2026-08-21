@@ -1167,7 +1167,7 @@ export default function HomePage() {
                   {selectedIsBoost ? (
                     <div className="boost-order-panel md:col-span-2">
                       <fieldset className="boost-duration-field">
-                        <legend className={fieldLabelClass}>Duration</legend>
+                        <legend className="boost-order-label">Duration</legend>
                         <div className="boost-duration-grid">
                           {[1, 3].map((duration) => {
                             const selected = form.duration === duration;
@@ -1198,7 +1198,7 @@ export default function HomePage() {
 
                       <div className="boost-order-grid">
                         <fieldset className="boost-order-field">
-                          <legend>Number of Boosts</legend>
+                          <legend className="boost-order-label">Number of Boosts</legend>
                           <div className="boost-amount-control">
                             <button
                               type="button"
@@ -1219,7 +1219,7 @@ export default function HomePage() {
                         </fieldset>
 
                         <label className="boost-order-field">
-                          <span>Server Invite</span>
+                          <span className="boost-order-label">Server Invite</span>
                           <div className="boost-invite-control">
                             <span>discord.gg/</span>
                             <input
@@ -1239,7 +1239,7 @@ export default function HomePage() {
                     <div className="boost-order-panel md:col-span-2">
                       <div className="boost-order-grid">
                         <fieldset className="boost-order-field">
-                          <legend>Number of Members</legend>
+                          <legend className="boost-order-label">Number of Members</legend>
                           <div className="boost-amount-control">
                             <button
                               type="button"
@@ -1260,7 +1260,7 @@ export default function HomePage() {
                         </fieldset>
 
                         <label className="boost-order-field">
-                          <span>Server ID</span>
+                          <span className="boost-order-label">Server ID</span>
                           <div className="boost-invite-control">
                             <span>ID</span>
                             <input
