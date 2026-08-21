@@ -358,6 +358,7 @@ export default function HomePage() {
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
   const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
+  const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
@@ -456,6 +457,20 @@ export default function HomePage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [orderPendingDeletion, deletingTrackedOrder]);
+
+  useEffect(() => {
+    if (!showAddTokensModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !savingBoostStock) setShowAddTokensModal(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAddTokensModal, savingBoostStock]);
 
   useEffect(() => {
     void loadIntegrationConnection();
@@ -690,6 +705,7 @@ export default function HomePage() {
       const result = await saveBoostStock(boostTokenDrafts);
       setBoostStock(result.stock);
       setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS);
+      setShowAddTokensModal(false);
       void refreshBoostStockTokens();
       notifySuccess("Boost stock updated.");
     } catch (error) {
@@ -1556,68 +1572,22 @@ export default function HomePage() {
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
               <section className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
-                    <Settings2 className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Inventory input</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Add tokens</h2>
-                  </div>
-                </div>
-
-                <form onSubmit={handleSaveBoostStock} className="mt-6 grid gap-5">
-                  <div className="grid gap-5 lg:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>1 month tokens</span>
-                      <textarea
-                        className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
-                        value={boostTokenDrafts.oneMonthTokens}
-                        onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, oneMonthTokens: event.target.value }))}
-                        placeholder="One token per line"
-                      />
-                      <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.oneMonth * 2} boosts</span>
-                    </label>
-
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>3 month tokens</span>
-                      <textarea
-                        className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
-                        value={boostTokenDrafts.threeMonthTokens}
-                        onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, threeMonthTokens: event.target.value }))}
-                        placeholder="One token per line"
-                      />
-                      <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.threeMonth * 2} boosts</span>
-                    </label>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3">
-                    <Button className="min-w-[140px] max-sm:w-full" type="submit" disabled={savingBoostStock}>
-                      {savingBoostStock ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
-                      {savingBoostStock ? "Saving..." : "Add to stock"}
-                    </Button>
-                    <Button
-                      className="max-sm:w-full"
-                      type="button"
-                      variant="secondary"
-                      disabled={savingBoostStock || (!boostTokenDrafts.oneMonthTokens && !boostTokenDrafts.threeMonthTokens)}
-                      onClick={() => setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS)}
-                    >
-                      Clear input
-                    </Button>
-                  </div>
-                </form>
-
-                <div className="mt-6 border-t border-[var(--app-divider)] pt-6">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] pb-5">
                     <div>
                       <p className={labelClass}>Token list</p>
                       <h2 className="app-title mt-1 text-lg font-semibold">Current inventory</h2>
                     </div>
-                    <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
-                      <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
-                      Refresh
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                        Add tokens
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
+                        <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
+                        Refresh
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="mt-5 grid gap-5 lg:grid-cols-2">
@@ -1917,6 +1887,72 @@ export default function HomePage() {
                 {deletingTrackedOrder ? "Removing..." : "Remove order"}
               </Button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showAddTokensModal ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !savingBoostStock) setShowAddTokensModal(false);
+          }}
+        >
+          <div className="confirm-modal w-[min(920px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="add-tokens-title">
+            <span className="confirm-modal-icon" aria-hidden="true"><Plus className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Stock</p>
+            <h2 id="add-tokens-title">Add boost tokens</h2>
+            <p>Paste one token per line. Tokens are stored in encrypted PostgreSQL and used only when a Boosts order runs.</p>
+
+            <form onSubmit={handleSaveBoostStock} className="mt-5 grid gap-5">
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className={fieldLabelClass}>1 month tokens</span>
+                  <textarea
+                    className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                    value={boostTokenDrafts.oneMonthTokens}
+                    onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, oneMonthTokens: event.target.value }))}
+                    placeholder="One token per line"
+                    autoFocus
+                  />
+                  <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.oneMonth * 2} boosts</span>
+                </label>
+
+                <label className="grid gap-2">
+                  <span className={fieldLabelClass}>3 month tokens</span>
+                  <textarea
+                    className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                    value={boostTokenDrafts.threeMonthTokens}
+                    onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, threeMonthTokens: event.target.value }))}
+                    placeholder="One token per line"
+                  />
+                  <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.threeMonth * 2} boosts</span>
+                </label>
+              </div>
+
+              <div className="confirm-modal-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={savingBoostStock}
+                  onClick={() => setShowAddTokensModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={savingBoostStock || (!boostTokenDrafts.oneMonthTokens && !boostTokenDrafts.threeMonthTokens)}
+                  onClick={() => setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS)}
+                >
+                  Clear input
+                </Button>
+                <Button type="submit" disabled={savingBoostStock}>
+                  {savingBoostStock ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                  {savingBoostStock ? "Saving..." : "Add to stock"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}
