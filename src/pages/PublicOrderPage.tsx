@@ -303,6 +303,7 @@ export default function PublicOrderPage() {
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
+  const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
 
   useEffect(() => {
@@ -665,7 +666,7 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              {isBoostOrder ? (
+              {isBoostOrder && canManageDcordTokens ? (
                 <div className="public-token-results-card">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -715,7 +716,7 @@ export default function PublicOrderPage() {
                   <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
                   <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
-                {isBoostOrder ? (
+                {isBoostOrder && canManageDcordTokens ? (
                   <p className="public-radial-note"><span aria-hidden="true" /> {dcordTokenResults.length}/{status?.tokenCount ?? "-"} token results received.</p>
                 ) : (
                   <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>

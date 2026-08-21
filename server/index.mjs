@@ -209,6 +209,35 @@ function summarizeBoostTokenStock(stock) {
   };
 }
 
+function normalizeUsedBoostTokenHistory(value) {
+  const items = Array.isArray(value) ? value : [];
+  return items
+    .map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const token = String(item.token ?? "").trim();
+      const duration = Number.parseInt(item.duration, 10);
+      const usedAt = String(item.usedAt ?? "").trim();
+      if (!token || ![1, 3].includes(duration) || !usedAt) return null;
+      return {
+        id: String(item.id ?? crypto.randomUUID()),
+        token,
+        redactedToken: String(item.redactedToken ?? redactToken(token)),
+        duration,
+        orderId: typeof item.orderId === "string" ? item.orderId : undefined,
+        serverId: typeof item.serverId === "string" ? item.serverId : undefined,
+        serverName: typeof item.serverName === "string" ? item.serverName : undefined,
+        usedAt,
+        resultAt: typeof item.resultAt === "string" ? item.resultAt : undefined,
+        status: typeof item.status === "string" ? item.status : "pending",
+        success: item.success === true,
+        boosted: item.boosted === true,
+        boostMessage: typeof item.boostMessage === "string" ? item.boostMessage : undefined,
+        replacementFor: typeof item.replacementFor === "string" ? item.replacementFor : undefined
+      };
+    })
+    .filter(Boolean);
+}
+
 async function loadBoostTokenStock() {
   const raw = await loadEncryptedSetting("dcord_boost_token_stock");
   if (!raw) return { oneMonth: [], threeMonth: [] };
@@ -224,6 +253,59 @@ async function saveBoostTokenStock(stock) {
   const normalized = normalizeBoostTokenStock(stock);
   await saveEncryptedSetting("dcord_boost_token_stock", JSON.stringify(normalized));
   return normalized;
+}
+
+async function loadUsedBoostTokenHistory() {
+  const raw = await loadEncryptedSetting("dcord_boost_token_usage");
+  if (!raw) return [];
+
+  try {
+    return normalizeUsedBoostTokenHistory(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
+async function saveUsedBoostTokenHistory(history) {
+  const normalized = normalizeUsedBoostTokenHistory(history).slice(0, 5000);
+  await saveEncryptedSetting("dcord_boost_token_usage", JSON.stringify(normalized));
+  return normalized;
+}
+
+async function recordUsedBoostToken({ token, duration, order, replacementFor }) {
+  const entry = {
+    id: crypto.randomUUID(),
+    token,
+    redactedToken: redactToken(token),
+    duration,
+    orderId: order?.uniqid,
+    serverId: order?.serverId,
+    serverName: order?.serverName,
+    usedAt: new Date().toISOString(),
+    status: "pending",
+    success: false,
+    boosted: false,
+    replacementFor
+  };
+  const history = await loadUsedBoostTokenHistory();
+  await saveUsedBoostTokenHistory([entry, ...history]);
+  return entry;
+}
+
+async function updateUsedBoostTokenResult(id, result) {
+  const history = await loadUsedBoostTokenHistory();
+  const nextHistory = history.map((entry) => {
+    if (entry.id !== id) return entry;
+    return {
+      ...entry,
+      resultAt: new Date().toISOString(),
+      status: typeof result.status === "string" ? result.status : "unknown",
+      success: result.success === true,
+      boosted: result.boosted === true,
+      boostMessage: typeof result.boostMessage === "string" ? result.boostMessage : undefined
+    };
+  });
+  await saveUsedBoostTokenHistory(nextHistory);
 }
 
 async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
@@ -396,8 +478,10 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let added = 0;
 
   for (const token of tokens) {
+    const usageEntry = await recordUsedBoostToken({ token, duration: order.duration, order });
     const normalized = await runDcordBoostToken(token, invite);
-    results.push(normalized);
+    await updateUsedBoostTokenResult(usageEntry.id, normalized);
+    results.push({ ...normalized, usedTokenId: usageEntry.id });
     if (normalized.boosted) added += 2;
 
     const inProgress = {
@@ -495,6 +579,17 @@ async function requireSession(req, res, next) {
   }
 }
 
+async function hasActiveSession(req) {
+  const token = parseCookies(req.headers.cookie)[sessionCookie];
+  if (!token) return false;
+
+  const result = await pool.query(
+    "SELECT 1 FROM admin_sessions WHERE token_hash = $1 AND expires_at > NOW() LIMIT 1",
+    [hashToken(token)]
+  );
+  return Boolean(result.rowCount);
+}
+
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "2mb" }));
@@ -528,7 +623,13 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
           // Keep the public monitor available even if Discord metadata lookup fails.
         }
       }
-      return res.set("Cache-Control", "no-store").json(trackedPayload);
+      const canManageDcordTokens = await hasActiveSession(req);
+      if (canManageDcordTokens) {
+        return res.set("Cache-Control", "no-store").json({ ...trackedPayload, canManageDcordTokens });
+      }
+
+      const { dcordResults, ...publicPayload } = trackedPayload;
+      return res.set("Cache-Control", "no-store").json({ ...publicPayload, canManageDcordTokens });
     }
 
     const cacheBuster = Date.now();
@@ -765,7 +866,8 @@ app.get("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
       return res.json({
         stock: summary,
         oneMonthTokens: stock.oneMonth,
-        threeMonthTokens: stock.threeMonth
+        threeMonthTokens: stock.threeMonth,
+        usedTokens: await loadUsedBoostTokenHistory()
       });
     }
     res.json({ ...summary, available: availableTokens * 2, maximum: availableTokens * 2 });
@@ -810,7 +912,40 @@ app.post("/api/dcord/boost-stock/delete", requireSession, async (req, res, next)
     res.json({
       stock: summarizeBoostTokenStock(nextStock),
       oneMonthTokens: nextStock.oneMonth,
-      threeMonthTokens: nextStock.threeMonth
+      threeMonthTokens: nextStock.threeMonth,
+      usedTokens: await loadUsedBoostTokenHistory()
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, next) => {
+  try {
+    const usageId = String(req.body?.id ?? "").trim();
+    if (!usageId) {
+      return res.status(400).json({ message: "A valid used token row is required." });
+    }
+
+    const history = await loadUsedBoostTokenHistory();
+    const usedToken = history.find((item) => item.id === usageId);
+    if (!usedToken) {
+      return res.status(404).json({ message: "Used token could not be found." });
+    }
+
+    const stock = await loadBoostTokenStock();
+    const stockKey = usedToken.duration === 3 ? "threeMonth" : "oneMonth";
+    const nextStock = await saveBoostTokenStock({
+      ...stock,
+      [stockKey]: stock[stockKey].includes(usedToken.token) ? stock[stockKey] : [usedToken.token, ...stock[stockKey]]
+    });
+    const nextHistory = await saveUsedBoostTokenHistory(history.filter((item) => item.id !== usageId));
+
+    res.json({
+      stock: summarizeBoostTokenStock(nextStock),
+      oneMonthTokens: nextStock.oneMonth,
+      threeMonthTokens: nextStock.threeMonth,
+      usedTokens: nextHistory
     });
   } catch (error) {
     next(error);
@@ -1056,8 +1191,18 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
       [stockKey]: stock[stockKey].slice(1)
     });
 
+    const usageEntry = await recordUsedBoostToken({
+      token: replacementToken,
+      duration,
+      order,
+      replacementFor: typeof currentResult.token === "string" ? currentResult.token : undefined
+    });
+    const normalizedReplacement = await runDcordBoostToken(replacementToken, invite);
+    await updateUsedBoostTokenResult(usageEntry.id, normalizedReplacement);
+
     const replacementResult = {
-      ...(await runDcordBoostToken(replacementToken, invite)),
+      ...normalizedReplacement,
+      usedTokenId: usageEntry.id,
       replaced: true,
       replacedAt: new Date().toISOString(),
       replacedResultIndex: resultIndex,

@@ -261,6 +261,12 @@ export default function OrderPage() {
     }
   }
 
+  function openPublicMonitorLink() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target) return;
+    window.open(getPublicMonitorLink(target), "_blank", "noopener,noreferrer");
+  }
+
   function getPublicMonitorLink(target: string) {
     return `${window.location.origin}/monitor/${encodeURIComponent(target)}`;
   }
@@ -419,6 +425,9 @@ export default function OrderPage() {
               ) : null}
               <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
                 <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
+              </Button>
+              <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={openPublicMonitorLink}>
+                <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open monitor
               </Button>
             </div>
           ) : null}

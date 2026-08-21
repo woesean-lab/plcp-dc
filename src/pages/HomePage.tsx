@@ -44,12 +44,13 @@ import {
   getOrderStatus,
   getIntegrationConfig,
   restartOrder,
+  returnUsedBoostToken,
   saveBoostStock,
   saveDcordApiKey,
   saveIntegrationApiKey,
   updateOrderDelay
 } from "../lib/integration";
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
@@ -350,6 +351,7 @@ export default function HomePage() {
     oneMonthTokens: [],
     threeMonthTokens: []
   });
+  const [usedBoostTokens, setUsedBoostTokens] = useState<BoostUsedToken[]>([]);
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
@@ -359,6 +361,7 @@ export default function HomePage() {
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
   const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
+  const [returningUsedTokenId, setReturningUsedTokenId] = useState<string | null>(null);
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
@@ -515,6 +518,7 @@ export default function HomePage() {
       oneMonthTokens: snapshot.oneMonthTokens,
       threeMonthTokens: snapshot.threeMonthTokens
     });
+    setUsedBoostTokens(snapshot.usedTokens ?? []);
     setSelectedBoostTokens({});
   }
 
@@ -778,6 +782,18 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Selected tokens could not be removed.");
     } finally {
       setDeletingBoostTokens(false);
+    }
+  }
+
+  async function handleReturnUsedBoostToken(item: BoostUsedToken) {
+    try {
+      setReturningUsedTokenId(item.id);
+      applyBoostStockSnapshot(await returnUsedBoostToken(item.id));
+      notifySuccess("Token returned to stock.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Token could not be returned to stock.");
+    } finally {
+      setReturningUsedTokenId(null);
     }
   }
 
@@ -1808,6 +1824,54 @@ export default function HomePage() {
                       );
                     })}
                   </div>
+
+                  <section className="app-panel-soft mt-5 overflow-hidden">
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] p-4">
+                      <div>
+                        <p className={labelClass}>Used tokens</p>
+                        <strong className="mt-1 block text-sm text-[var(--app-text)]">Usage history and Dcord result</strong>
+                      </div>
+                      <Badge variant="secondary">{usedBoostTokens.length} used</Badge>
+                    </div>
+                    <div className="max-h-96 overflow-auto p-3">
+                      {usedBoostTokens.length ? (
+                        <ol className="grid gap-2">
+                          {usedBoostTokens.map((item, index) => (
+                            <li key={item.id} className="grid gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-3 lg:grid-cols-[32px_minmax(0,1.2fr)_88px_minmax(0,1fr)_130px_auto_auto] lg:items-center">
+                              <span className="text-xs text-[var(--app-muted)]">{index + 1}</span>
+                              <code className="min-w-0 truncate text-xs text-[var(--app-text-secondary)]" title={item.token}>{item.token}</code>
+                              <Badge variant="secondary">{item.duration} Month</Badge>
+                              <span className="min-w-0 truncate text-xs text-[var(--app-muted)]" title={item.orderId ?? ""}>
+                                {item.orderId ? `Order ${item.orderId}` : "No order"}
+                              </span>
+                              <span className="text-xs text-[var(--app-muted)]">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
+                              <Badge variant={item.boosted ? "success" : item.status === "pending" ? "secondary" : "destructive"}>
+                                {item.boosted ? "Boosted" : item.status ?? "pending"}
+                              </Badge>
+                              <Button
+                                type="button"
+                                size="xs"
+                                variant="secondary"
+                                disabled={returningUsedTokenId !== null}
+                                onClick={() => void handleReturnUsedBoostToken(item)}
+                              >
+                                {returningUsedTokenId === item.id ? "Returning..." : "Return to stock"}
+                              </Button>
+                              {item.boostMessage ? (
+                                <span className="min-w-0 truncate text-xs text-[var(--app-muted)] lg:col-start-2 lg:col-end-8" title={item.boostMessage}>
+                                  {item.boostMessage}
+                                </span>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ol>
+                      ) : (
+                        <div className="grid min-h-32 place-items-center text-center">
+                          <p className="app-copy text-sm">No used boost tokens yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  </section>
                 </div>
               </section>
 

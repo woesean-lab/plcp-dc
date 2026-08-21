@@ -189,3 +189,11 @@ export function deleteBoostStockTokens(payload: { duration: 1 | 3; tokens: strin
     body: JSON.stringify(payload)
   });
 }
+
+export function returnUsedBoostToken(id: string) {
+  return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock/return-used", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id })
+  });
+}

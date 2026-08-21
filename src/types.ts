@@ -50,6 +50,7 @@ export interface OrderStatusResponse {
   serverInvite?: string;
   serverMemberCount?: number;
   error?: string;
+  canManageDcordTokens?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   [key: string]: unknown;
@@ -90,4 +91,22 @@ export interface BoostTokenStockSnapshot {
   stock: BoostStock;
   oneMonthTokens: string[];
   threeMonthTokens: string[];
+  usedTokens: BoostUsedToken[];
+}
+
+export interface BoostUsedToken {
+  id: string;
+  token: string;
+  redactedToken?: string;
+  duration: BoostDuration;
+  orderId?: string;
+  serverId?: string;
+  serverName?: string;
+  usedAt: string;
+  resultAt?: string;
+  status?: string;
+  success?: boolean;
+  boosted?: boolean;
+  boostMessage?: string;
+  replacementFor?: string;
 }
