@@ -58,6 +58,10 @@ export async function getBalance() {
   return requestJson<BalanceResponse>("/api/integration/balance");
 }
 
+export async function getDcordBalance() {
+  return requestJson<{ balance: number | null; creditsConsumed: number | null }>("/api/dcord/balance");
+}
+
 export async function createOrder(payload: CreateOrderPayload) {
   if (isBoostService(payload.service)) {
     return requestJson<CreateOrderResponse>("/api/dcord/boost-orders", {

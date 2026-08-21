@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Boxes, ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -86,6 +86,17 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 >
                   <Search className="h-4 w-4" aria-hidden="true" />
                   <span>Lookup</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Stock"
+                  title="Stock"
+                  className={`app-nav-button ${isManage && tab === "stock" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "stock" ? "page" : undefined}
+                  onClick={() => navigate("/manage?tab=stock")}
+                >
+                  <Boxes className="h-4 w-4" aria-hidden="true" />
+                  <span>Stock</span>
                 </button>
                 <button
                   type="button"

@@ -16,7 +16,8 @@ const integrationApiPrefix = "/api/integration";
 const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
 const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
 const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
-const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://app.dcord.co/api";
+const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
+const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https://app.dcord.co/api";
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -286,6 +287,38 @@ async function requestDcord(pathname, init = {}) {
         : typeof payload === "string" && payload
           ? payload
           : `Dcord request failed with ${response.status}.`
+    );
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return payload;
+}
+
+async function requestDcordDashboard(pathname, init = {}) {
+  const response = await fetch(new URL(pathname, `${dcordDashboardApiBase.replace(/\/$/, "")}/`), {
+    ...init,
+    headers: {
+      "X-API-Key": await loadDcordApiKey(),
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  let payload = text;
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    // Preserve non-JSON upstream error messages.
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      typeof payload === "object" && payload && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "string" && payload
+          ? payload
+          : `Dcord dashboard request failed with ${response.status}.`
     );
     error.statusCode = response.status;
     throw error;
@@ -672,6 +705,21 @@ app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
   try {
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'dcord_api_key'");
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/dcord/balance", requireSession, async (_req, res, next) => {
+  try {
+    const payload = await requestDcordDashboard("me", { cache: "no-store" });
+    const balance = Number(payload?.balance);
+    const creditsConsumed = Number(payload?.stats?.credits_consumed);
+    res.set("Cache-Control", "no-store").json({
+      balance: Number.isFinite(balance) ? balance : null,
+      creditsConsumed: Number.isFinite(creditsConsumed) ? creditsConsumed : null,
+      raw: payload
+    });
   } catch (error) {
     next(error);
   }

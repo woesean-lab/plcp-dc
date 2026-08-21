@@ -37,6 +37,7 @@ import {
   clearDcordApiKey,
   createOrder,
   getBalance,
+  getDcordBalance,
   getOrderStatus,
   getIntegrationConfig,
   restartOrder,
@@ -205,7 +206,7 @@ function SkeletonField({ className = "" }: { className?: string }) {
 }
 
 function HomePageSkeleton({ tab }: { tab: AdminTab }) {
-  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : "settings";
+  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : "settings";
 
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
@@ -297,7 +298,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
         </div>
       ) : null}
 
-      {tab === "settings" ? (
+      {tab === "stock" || tab === "settings" ? (
         <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start" aria-hidden="true">
           <div className={`${shell} p-5 sm:p-6`}>
             <Skeleton className="h-3 w-24" />
@@ -343,11 +344,14 @@ export default function HomePage() {
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
   const [balance, setBalance] = useState<number | null>(null);
+  const [dcordBalance, setDcordBalance] = useState<number | null>(null);
+  const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
@@ -457,11 +461,18 @@ export default function HomePage() {
       setApiConfigured(tokenuConfigured);
       setDcordConfigured(config.dcordConfigured);
       setBoostStock(config.boostStock);
-      if (tokenuConfigured) await refreshBalance();
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Connection could not be checked.");
     }
   }
+
+  useEffect(() => {
+    if (activeTab !== "settings") return;
+    if (apiConfigured && balance === null) void refreshBalance();
+    if (dcordConfigured && dcordBalance === null) void refreshDcordBalance();
+    // Balances are loaded lazily when Settings is opened.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, apiConfigured, dcordConfigured]);
 
   useEffect(() => {
     const syncTargets = activeOrders.filter((order) => order.uniqid);
@@ -530,6 +541,19 @@ export default function HomePage() {
     }
   }
 
+  async function refreshDcordBalance() {
+    try {
+      setLoadingDcordBalance(true);
+      const data = await getDcordBalance();
+      setDcordBalance(data.balance);
+      setDcordCreditsConsumed(data.creditsConsumed);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord balance could not be loaded.");
+    } finally {
+      setLoadingDcordBalance(false);
+    }
+  }
+
   async function refreshAvailability() {
     try {
       setCheckingAvailability(true);
@@ -593,6 +617,7 @@ export default function HomePage() {
       await saveDcordApiKey(value);
       setDcordConfigured(true);
       setDcordApiKey("");
+      void refreshDcordBalance();
       notifySuccess("Dcord API key saved securely.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be saved.");
@@ -607,6 +632,8 @@ export default function HomePage() {
       await clearDcordApiKey();
       setDcordConfigured(false);
       setDcordApiKey("");
+      setDcordBalance(null);
+      setDcordCreditsConsumed(null);
       notifySuccess("Dcord API key removed from the server.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
@@ -826,7 +853,6 @@ export default function HomePage() {
       const createdStock = (created as { stock?: BoostStock }).stock;
       if (createdStock) {
         setBoostStock(createdStock);
-        setBoostStockDraft(createdStock);
       }
 
       const nextOrder: TrackedOrder = {
@@ -1407,6 +1433,111 @@ export default function HomePage() {
           )
         ) : null}
 
+        {activeTab === "stock" ? (
+          <>
+            <header className="page-heading">
+              <div>
+                <p className={labelClass}>Stock</p>
+                <h1 className="page-title">Boost token stock</h1>
+                <p className="app-copy page-copy">Add 1 month and 3 month boost tokens. One token equals 2 boosts.</p>
+              </div>
+              <div className="page-heading-meta">
+                <Badge variant="secondary">{boostStock.oneMonth} 1 month tokens</Badge>
+                <Badge variant="secondary">{boostStock.threeMonth} 3 month tokens</Badge>
+              </div>
+            </header>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
+              <section className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true">
+                    <Settings2 className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Inventory input</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Add tokens</h2>
+                  </div>
+                </div>
+
+                <form onSubmit={handleSaveBoostStock} className="mt-6 grid gap-5">
+                  <div className="grid gap-5 lg:grid-cols-2">
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>1 month tokens</span>
+                      <textarea
+                        className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                        value={boostTokenDrafts.oneMonthTokens}
+                        onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, oneMonthTokens: event.target.value }))}
+                        placeholder="One token per line"
+                      />
+                      <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.oneMonth * 2} boosts</span>
+                    </label>
+
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>3 month tokens</span>
+                      <textarea
+                        className="ui-input min-h-72 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                        value={boostTokenDrafts.threeMonthTokens}
+                        onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, threeMonthTokens: event.target.value }))}
+                        placeholder="One token per line"
+                      />
+                      <span className="text-xs text-[var(--app-muted)]">Current capacity: {boostStock.threeMonth * 2} boosts</span>
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button className="min-w-[140px] max-sm:w-full" type="submit" disabled={savingBoostStock}>
+                      {savingBoostStock ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
+                      {savingBoostStock ? "Saving..." : "Add to stock"}
+                    </Button>
+                    <Button
+                      className="max-sm:w-full"
+                      type="button"
+                      variant="secondary"
+                      disabled={savingBoostStock || (!boostTokenDrafts.oneMonthTokens && !boostTokenDrafts.threeMonthTokens)}
+                      onClick={() => setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS)}
+                    >
+                      Clear input
+                    </Button>
+                  </div>
+                </form>
+              </section>
+
+              <aside className={`${shell} p-5 sm:p-6 xl:sticky xl:top-[108px]`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true">
+                    <ListChecks className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Available</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Boost capacity</h2>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  <div className="settings-status-row">
+                    <span>
+                      <span className="settings-status-label">1 month</span>
+                      <strong>{boostStock.oneMonth} tokens / {boostStock.oneMonth * 2} boosts</strong>
+                    </span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span>
+                      <span className="settings-status-label">3 month</span>
+                      <strong>{boostStock.threeMonth} tokens / {boostStock.threeMonth * 2} boosts</strong>
+                    </span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span>
+                      <span className="settings-status-label">Storage</span>
+                      <strong>Encrypted PostgreSQL</strong>
+                    </span>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </>
+        ) : null}
+
         {activeTab === "settings" ? (
           <>
             <header className="page-heading">
@@ -1535,12 +1666,28 @@ export default function HomePage() {
                       <CircleDollarSign className="h-4 w-4" />
                     </span>
                     <span>
-                      <span className="settings-status-label">Balance</span>
+                      <span className="settings-status-label">Tokenu balance</span>
                       {loadingBalance ? (
                         <Skeleton className="mt-2 h-4 w-24" aria-label="Loading balance" />
                       ) : (
                         <strong>{balance === null ? "Not synced" : `$${formatNumber(balance)}`}</strong>
                       )}
+                    </span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true">
+                      <CircleDollarSign className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="settings-status-label">Dcord balance</span>
+                      {loadingDcordBalance ? (
+                        <Skeleton className="mt-2 h-4 w-24" aria-label="Loading Dcord balance" />
+                      ) : (
+                        <strong>{dcordBalance === null ? "Not synced" : `${formatNumber(dcordBalance)} credits`}</strong>
+                      )}
+                      {dcordCreditsConsumed !== null ? (
+                        <span className="mt-1 block text-xs text-[var(--app-muted)]">{formatNumber(dcordCreditsConsumed)} credits used</span>
+                      ) : null}
                     </span>
                   </div>
                   <div className="settings-status-row">
@@ -1554,41 +1701,17 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <Button className="mt-5 w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!apiConfigured || loadingBalance}>
+                <div className="mt-5 grid gap-3">
+                <Button className="w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!apiConfigured || loadingBalance}>
                   <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} aria-hidden="true" />
-                  Refresh balance
+                  Refresh Tokenu balance
                 </Button>
+                <Button className="w-full" variant="secondary" type="button" onClick={refreshDcordBalance} disabled={!dcordConfigured || loadingDcordBalance}>
+                  <RefreshCw className={`h-4 w-4 ${loadingDcordBalance ? "animate-spin" : ""}`} aria-hidden="true" />
+                  Refresh Dcord balance
+                </Button>
+                </div>
 
-                <form onSubmit={handleSaveBoostStock} className="mt-5 grid gap-4 border-t border-[var(--app-divider)] pt-5">
-                  <div>
-                    <p className={labelClass}>Boost stock</p>
-                    <h3 className="app-title mt-1 text-base font-semibold">Available inventory</h3>
-                  </div>
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>1 month tokens</span>
-                    <textarea
-                      className="ui-input min-h-32 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
-                      value={boostTokenDrafts.oneMonthTokens}
-                      onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, oneMonthTokens: event.target.value }))}
-                      placeholder="One token per line"
-                    />
-                    <span className="text-xs text-[var(--app-muted)]">{boostStock.oneMonth} tokens in stock = {boostStock.oneMonth * 2} boosts</span>
-                  </label>
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>3 month tokens</span>
-                    <textarea
-                      className="ui-input min-h-32 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
-                      value={boostTokenDrafts.threeMonthTokens}
-                      onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, threeMonthTokens: event.target.value }))}
-                      placeholder="One token per line"
-                    />
-                    <span className="text-xs text-[var(--app-muted)]">{boostStock.threeMonth} tokens in stock = {boostStock.threeMonth * 2} boosts</span>
-                  </label>
-                  <Button className="w-full" type="submit" disabled={savingBoostStock}>
-                    {savingBoostStock ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Settings2 className="h-4 w-4" aria-hidden="true" />}
-                    {savingBoostStock ? "Saving..." : "Save stock"}
-                  </Button>
-                </form>
               </aside>
             </div>
           </>
