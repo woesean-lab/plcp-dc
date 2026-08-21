@@ -1281,7 +1281,7 @@ export default function HomePage() {
                     </div>
                   ) : (
                     <div className="boost-order-panel md:col-span-2">
-                      <div className="boost-order-grid">
+                      <div className="boost-order-grid members-order-grid">
                         <div className="boost-order-field">
                           <span className="boost-order-label">Number of Members</span>
                           <input
@@ -1294,33 +1294,35 @@ export default function HomePage() {
                         </div>
 
                         <label className="boost-order-field">
-                          <span className="boost-order-label">Server ID</span>
+                          <span className="boost-order-label">Server Invite</span>
                           <div className="boost-invite-control">
-                            <span>ID</span>
+                            <span>discord.gg/</span>
                             <input
                               value={form.serverId}
-                              onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                              placeholder="Discord server ID or invite link"
+                              onChange={(event) => {
+                                const value = event.target.value;
+                                setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
+                              }}
+                              placeholder="yourcode"
                               required
                             />
                           </div>
                         </label>
+
+                        <label className="boost-order-field">
+                          <span className="boost-order-label">Delay</span>
+                          <input
+                            className="boost-number-input"
+                            type="number"
+                            min={1}
+                            max={1200}
+                            value={form.delay}
+                            onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
+                          />
+                        </label>
                       </div>
                     </div>
                   )}
-
-                  {!selectedIsBoost ? (
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Delay</span>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={1200}
-                      value={form.delay}
-                      onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
-                    />
-                  </label>
-                  ) : null}
 
                   {form.service === "OAUTH-ONLINE" ? (
                     <label className="grid gap-2 md:col-span-2">

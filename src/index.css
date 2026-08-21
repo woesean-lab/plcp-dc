@@ -844,6 +844,10 @@
     align-items: start;
   }
 
+  .members-order-grid {
+    grid-template-columns: minmax(170px, 210px) minmax(280px, 1fr) minmax(120px, 150px);
+  }
+
   .boost-order-field {
     display: grid;
     grid-template-rows: 14px 40px;
