@@ -2076,10 +2076,6 @@
     padding: clamp(1.25rem, 4vw, 2rem);
   }
 
-  .public-stats-body.is-boost-monitor {
-    grid-template-columns: 1fr;
-  }
-
   .public-stats-overview {
     display: grid;
     gap: 1rem;
@@ -2413,6 +2409,29 @@
     font-size: 10px;
     line-height: 1.5;
     color: var(--app-subtle);
+  }
+
+  .public-radial-countdown {
+    display: grid;
+    width: 100%;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: .5rem;
+    align-items: center;
+    margin-top: 1rem;
+    border: 1px solid var(--app-accent-border);
+    border-radius: 999px;
+    background: var(--app-accent-soft);
+    padding: .55rem .75rem;
+    color: var(--app-accent-bright);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .public-radial-countdown strong {
+    color: var(--app-text);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   }
 
   .public-delay-card {

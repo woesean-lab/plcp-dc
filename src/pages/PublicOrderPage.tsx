@@ -689,9 +689,8 @@ export default function PublicOrderPage() {
               ) : null}
               </div>
 
-              {!isBoostOrder ? (
               <aside className="public-radial-card">
-                <p className="app-kicker">Delivery overview</p>
+                <p className="app-kicker">{isBoostOrder ? "Live refresh" : "Delivery overview"}</p>
                 <div className="public-radial" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}>
                   <div><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>{isCompleted ? "Complete" : "Delivered"}</span></div>
                 </div>
@@ -699,9 +698,19 @@ export default function PublicOrderPage() {
                   <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
                   <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
-                <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
+                {isBoostOrder ? (
+                  <div className="public-radial-countdown">
+                    <RefreshCw className={`h-3.5 w-3.5 ${autoRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+                    <span>{autoRefreshing ? "Refreshing now" : "Next refresh"}</span>
+                    <strong>{autoRefreshing ? "..." : `${secondsUntilRefresh}s`}</strong>
+                  </div>
+                ) : null}
+                {isBoostOrder ? (
+                  <p className="public-radial-note"><span aria-hidden="true" /> {dcordTokenResults.length}/{status?.tokenCount ?? "-"} token results received.</p>
+                ) : (
+                  <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
+                )}
               </aside>
-              ) : null}
 
             </div>
           )}
