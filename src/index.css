@@ -2414,28 +2414,6 @@
     color: var(--app-subtle);
   }
 
-  .public-radial-countdown {
-    display: flex;
-    width: 100%;
-    justify-content: center;
-    align-items: center;
-    margin-top: 1rem;
-    border: 1px solid var(--app-accent-border);
-    border-radius: 999px;
-    background: var(--app-accent-soft);
-    padding: .55rem .75rem;
-    color: var(--app-accent-bright);
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: .06em;
-    text-transform: uppercase;
-  }
-
-  .public-radial-countdown strong {
-    color: var(--app-text);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  }
-
   .public-delay-card {
     grid-column: 1 / -1;
     padding: 1.25rem;

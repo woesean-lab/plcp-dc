@@ -714,11 +714,6 @@ export default function PublicOrderPage() {
                   <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
                 {isBoostOrder ? (
-                  <div className="public-radial-countdown">
-                    <strong>{autoRefreshing ? "..." : `${secondsUntilRefresh}s`}</strong>
-                  </div>
-                ) : null}
-                {isBoostOrder ? (
                   <p className="public-radial-note"><span aria-hidden="true" /> {dcordTokenResults.length}/{status?.tokenCount ?? "-"} token results received.</p>
                 ) : (
                   <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
