@@ -715,7 +715,6 @@ export default function PublicOrderPage() {
                 </div>
                 {isBoostOrder ? (
                   <div className="public-radial-countdown">
-                    <RefreshCw className={`h-3.5 w-3.5 ${autoRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
                     <strong>{autoRefreshing ? "..." : `${secondsUntilRefresh}s`}</strong>
                   </div>
                 ) : null}

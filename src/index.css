@@ -2328,7 +2328,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
+    align-self: start;
     justify-content: center;
+    position: sticky;
+    top: 1rem;
     padding: 1.5rem;
     background: radial-gradient(circle at 50% 36%, rgba(155,140,255,.105), transparent 12rem), linear-gradient(145deg, rgba(255,255,255,.052), rgba(255,255,255,.018));
   }
@@ -2412,10 +2415,8 @@
   }
 
   .public-radial-countdown {
-    display: grid;
+    display: flex;
     width: 100%;
-    grid-template-columns: 18px auto;
-    gap: .5rem;
     justify-content: center;
     align-items: center;
     margin-top: 1rem;
@@ -2729,6 +2730,7 @@
 
   .public-radial-card {
     min-height: 360px;
+    position: static;
   }
 
   .login-card {
