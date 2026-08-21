@@ -1662,24 +1662,32 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="mt-5 space-y-3">
-                  <div className="settings-status-row">
-                    <span>
-                      <span className="settings-status-label">1 month</span>
-                      <strong>{boostStock.oneMonth} tokens / {boostStock.oneMonth * 2} boosts</strong>
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span>
-                      <span className="settings-status-label">3 month</span>
-                      <strong>{boostStock.threeMonth} tokens / {boostStock.threeMonth * 2} boosts</strong>
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span>
-                      <span className="settings-status-label">Storage</span>
-                      <strong>Encrypted PostgreSQL</strong>
-                    </span>
+                <div className="mt-5 grid gap-3">
+                  {[
+                    { label: "1 Month", tokens: boostStock.oneMonth },
+                    { label: "3 Month", tokens: boostStock.threeMonth }
+                  ].map((item) => (
+                    <div key={item.label} className="app-panel-soft p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={labelClass}>{item.label}</span>
+                        <Badge variant="secondary">{item.tokens * 2} boosts</Badge>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div>
+                          <span className="settings-status-label">Tokens</span>
+                          <strong className="mt-1 block text-xl font-semibold text-[var(--app-text)]">{item.tokens}</strong>
+                        </div>
+                        <div>
+                          <span className="settings-status-label">Capacity</span>
+                          <strong className="mt-1 block text-xl font-semibold text-[var(--app-text)]">{item.tokens * 2}</strong>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="app-panel-soft p-4">
+                    <span className={labelClass}>Storage</span>
+                    <strong className="mt-2 block text-sm font-semibold text-[var(--app-text)]">Encrypted PostgreSQL</strong>
+                    <span className="mt-1 block text-xs text-[var(--app-muted)]">Token values are stored server-side.</span>
                   </div>
                 </div>
               </aside>
@@ -1899,7 +1907,7 @@ export default function HomePage() {
           }}
         >
           <div className="confirm-modal w-[min(920px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="add-tokens-title">
-            <span className="confirm-modal-icon" aria-hidden="true"><Plus className="h-5 w-5" /></span>
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Plus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Stock</p>
             <h2 id="add-tokens-title">Add boost tokens</h2>
             <p>Paste one token per line. Tokens are stored in encrypted PostgreSQL and used only when a Boosts order runs.</p>
