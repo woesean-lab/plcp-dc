@@ -1232,8 +1232,8 @@ export default function HomePage() {
                   {selectedIsBoost ? (
                     <div className="boost-order-panel md:col-span-2">
                       <div className="boost-order-grid">
-                        <fieldset className="boost-order-field">
-                          <legend className="boost-order-label">Number of Boosts</legend>
+                        <div className="boost-order-field">
+                          <span className="boost-order-label">Number of Boosts</span>
                           <div className="boost-amount-control">
                             <button
                               type="button"
@@ -1257,7 +1257,7 @@ export default function HomePage() {
                               <Plus className="h-4 w-4" aria-hidden="true" />
                             </button>
                           </div>
-                        </fieldset>
+                        </div>
 
                         <label className="boost-order-field">
                           <span className="boost-order-label">Server Invite</span>
@@ -1279,8 +1279,8 @@ export default function HomePage() {
                   ) : (
                     <div className="boost-order-panel md:col-span-2">
                       <div className="boost-order-grid">
-                        <fieldset className="boost-order-field">
-                          <legend className="boost-order-label">Number of Members</legend>
+                        <div className="boost-order-field">
+                          <span className="boost-order-label">Number of Members</span>
                           <input
                             className="boost-number-input"
                             type="number"
@@ -1288,7 +1288,7 @@ export default function HomePage() {
                             value={form.amount}
                             onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 100 }))}
                           />
-                        </fieldset>
+                        </div>
 
                         <label className="boost-order-field">
                           <span className="boost-order-label">Server ID</span>

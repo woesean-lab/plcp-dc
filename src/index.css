@@ -813,12 +813,13 @@
     display: grid;
     grid-template-columns: minmax(190px, 240px) minmax(280px, 1fr);
     gap: 1rem;
-    align-items: end;
+    align-items: start;
   }
 
   .boost-order-field {
     display: grid;
-    gap: 0.82rem;
+    grid-template-rows: 14px 40px;
+    gap: 0.55rem;
     min-width: 0;
     margin: 0;
     border: 0;
@@ -831,7 +832,7 @@
     font-size: 12px;
     font-weight: 500;
     letter-spacing: 0;
-    line-height: 1;
+    line-height: 14px;
   }
 
   .boost-amount-control {
