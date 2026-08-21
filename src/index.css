@@ -2098,6 +2098,7 @@
   .public-metric-card,
   .public-progress-card,
   .public-radial-card,
+  .public-token-results-card,
   .public-delay-card {
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-lg);
@@ -2151,7 +2152,8 @@
     padding: 1.25rem;
   }
 
-  .public-progress-card h2 {
+  .public-progress-card h2,
+  .public-token-results-card h2 {
     margin: .3rem 0 0;
     font-size: 18px;
     font-weight: 650;
@@ -2206,6 +2208,93 @@
     background: linear-gradient(90deg, #7763ff, #a99dff 72%, #d2ccff);
     box-shadow: 0 0 18px rgba(155,140,255,.42);
     transition: width 400ms ease;
+  }
+
+  .public-token-results-card {
+    padding: 1.25rem;
+  }
+
+  .public-token-results-list {
+    display: grid;
+    gap: .65rem;
+    margin-top: 1rem;
+  }
+
+  .public-token-result-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto auto;
+    gap: .8rem;
+    align-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-md);
+    background: rgba(8, 9, 18, .42);
+    padding: .7rem .8rem;
+  }
+
+  .public-token-result-index {
+    display: grid;
+    width: 30px;
+    height: 30px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    color: var(--app-muted);
+    background: rgba(255, 255, 255, .035);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 10px;
+    font-weight: 750;
+  }
+
+  .public-token-result-main {
+    min-width: 0;
+  }
+
+  .public-token-result-main strong {
+    display: block;
+    overflow: hidden;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    color: var(--app-text);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .public-token-result-main small {
+    display: block;
+    overflow: hidden;
+    margin-top: .22rem;
+    font-size: 11px;
+    color: var(--app-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .public-token-result-status {
+    border: 1px solid var(--app-danger-button-border);
+    border-radius: 999px;
+    padding: .34rem .55rem;
+    color: var(--app-danger);
+    background: var(--app-danger-soft);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .public-token-result-row[data-result="success"] .public-token-result-status {
+    border-color: rgba(105,221,178,.26);
+    color: var(--app-success);
+    background: var(--app-success-soft);
+  }
+
+  .public-token-results-empty {
+    margin: 1rem 0 0;
+    border: 1px dashed var(--app-border);
+    border-radius: var(--app-radius-md);
+    padding: .9rem;
+    color: var(--app-muted);
+    font-size: 12px;
   }
 
   .public-progress-details {
@@ -3023,5 +3112,6 @@
 .landing-footer span:first-child { color: var(--app-text-secondary); font-weight: 700; }
 @media (max-width:1100px) { .landing-service-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:760px) { .boost-order-grid,.service-grid.boost-duration-grid { grid-template-columns:1fr; } .boost-order-panel { max-width:100%; } }
+@media (max-width:640px) { .public-token-result-row { grid-template-columns: 30px minmax(0, 1fr); } .public-token-result-status { width: fit-content; } .public-token-result-row .ui-button { width: 100%; grid-column: 1 / -1; } }
 @media (max-width:900px) { .landing-hero { grid-template-columns:1fr; min-height:auto; padding-top:4rem; } .landing-demo { width:min(620px,100%); margin-inline:auto; transform:none; } .landing-process ol { grid-template-columns:1fr; } .landing-service-card { min-height:240px; } .landing-section-heading,.landing-final-cta { align-items:flex-start; flex-direction:column; } }
 @media (max-width:640px) { .landing-nav { grid-template-columns:1fr auto; } .landing-nav-badge { display:none; } .landing-nav .ui-button { width:2.75rem; padding-inline:0; font-size:0; } .landing-nav .ui-button svg { width:1rem; height:1rem; } .landing-hero { gap:3.5rem; padding-block:3.5rem 4.5rem; } .landing-hero h1 { font-size:clamp(3rem,16vw,4.6rem); } .landing-actions .ui-button { width:100%; } .landing-demo { border-radius:22px; padding:1rem; } .landing-demo-grid,.landing-service-grid { grid-template-columns:1fr; } .landing-section,.landing-process { padding-block:4rem; } .landing-final-cta { margin-block:3rem; } .landing-final-cta .ui-button { width:100%; } .landing-footer { flex-direction:column; } }

@@ -121,6 +121,17 @@ export function restartPublicOrder(uniqid: string) {
   return requestPublicOrderApi<unknown>(uniqid, "restart", { method: "POST" });
 }
 
+export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
+  return requestJson<{ order: OrderStatusResponse; stock: BoostStock }>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/replace-token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resultIndex })
+    }
+  );
+}
+
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
   if (isBoostService(service)) {
     return requestJson<{ available: number; maximum: number }>(

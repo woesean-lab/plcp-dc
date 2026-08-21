@@ -370,30 +370,34 @@ function normalizeDcordJoinResult(result, token) {
   };
 }
 
+async function runDcordBoostToken(token, invite) {
+  try {
+    const result = await requestDcord(dcordJoinPath, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, invite, boost: true })
+    });
+    return normalizeDcordJoinResult(result, token);
+  } catch (error) {
+    return {
+      token: redactToken(token),
+      success: false,
+      status: "error",
+      boost: false,
+      boostMessage: error instanceof Error ? error.message : "Dcord join failed.",
+      boosted: false
+    };
+  }
+}
+
 async function processDcordBoostOrder(order, tokens, invite) {
   const results = [];
   let added = 0;
 
   for (const token of tokens) {
-    try {
-      const result = await requestDcord(dcordJoinPath, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, invite, boost: true })
-      });
-      const normalized = normalizeDcordJoinResult(result, token);
-      results.push(normalized);
-      if (normalized.boosted) added += 2;
-    } catch (error) {
-      results.push({
-        token: redactToken(token),
-        success: false,
-        status: "error",
-        boost: false,
-        boostMessage: error instanceof Error ? error.message : "Dcord join failed.",
-        boosted: false
-      });
-    }
+    const normalized = await runDcordBoostToken(token, invite);
+    results.push(normalized);
+    if (normalized.boosted) added += 2;
 
     const inProgress = {
       ...order,
@@ -960,6 +964,85 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
     }
 
     res.set("Cache-Control", "no-store").json(tracked.rows[0].payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const resultIndex = Number.parseInt(req.body?.resultIndex, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(resultIndex) || resultIndex < 0) {
+      return res.status(400).json({ message: "A valid order ID and token row are required." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || typeof order !== "object" || Array.isArray(order) || (order.provider !== "dcord" && order.service !== "DCORD-BOOSTS")) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (String(order.status ?? "").trim().toUpperCase() === "PROCESS") {
+      return res.status(409).json({ message: "Wait until the boost order finishes before replacing failed tokens." });
+    }
+
+    const results = Array.isArray(order.dcordResults) ? [...order.dcordResults] : [];
+    const currentResult = results[resultIndex];
+    if (!currentResult || typeof currentResult !== "object" || Array.isArray(currentResult)) {
+      return res.status(404).json({ message: "Token result could not be found." });
+    }
+    if (currentResult.boosted === true || currentResult.success === true) {
+      return res.status(409).json({ message: "Only failed token results can be replaced." });
+    }
+
+    const duration = Number.parseInt(order.duration, 10);
+    if (![1, 3].includes(duration)) {
+      return res.status(400).json({ message: "Boost duration is missing from this order." });
+    }
+
+    const invite = extractDiscordInviteCode(order.serverInvite);
+    if (!invite) {
+      return res.status(400).json({ message: "Server invite is missing from this order." });
+    }
+
+    const stock = await loadBoostTokenStock();
+    const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+    const replacementToken = stock[stockKey][0];
+    if (!replacementToken) {
+      return res.status(409).json({ message: `No ${duration} month replacement tokens are in stock.` });
+    }
+
+    await saveBoostTokenStock({
+      ...stock,
+      [stockKey]: stock[stockKey].slice(1)
+    });
+
+    const replacementResult = {
+      ...(await runDcordBoostToken(replacementToken, invite)),
+      replaced: true,
+      replacedAt: new Date().toISOString(),
+      replacedResultIndex: resultIndex,
+      previousToken: typeof currentResult.token === "string" ? currentResult.token : undefined
+    };
+    results[resultIndex] = replacementResult;
+
+    const added = results.reduce((total, item) => {
+      return total + (item && typeof item === "object" && !Array.isArray(item) && item.boosted === true ? 2 : 0);
+    }, 0);
+    const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
+    const completed = added >= amount;
+    const nextOrder = {
+      ...order,
+      added,
+      status: completed ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
+      details: completed
+        ? `${added}/${amount} boosts completed.`
+        : `${added}/${amount} boosts completed. Review failed tokens in the payload.`,
+      dcordResults: results
+    };
+
+    await saveTrackedOrderPayload(nextOrder);
+    res.set("Cache-Control", "no-store").json({ order: nextOrder, stock: summarizeBoostTokenStock(await loadBoostTokenStock()) });
   } catch (error) {
     next(error);
   }

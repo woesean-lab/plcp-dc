@@ -8,12 +8,20 @@ import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, 
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { getPublicOrderStatus, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
+import { getPublicOrderStatus, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?searchQuery=members";
+
+type DcordTokenResult = {
+  index: number;
+  token: string;
+  status: string;
+  boostMessage: string;
+  successful: boolean;
+};
 
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -90,6 +98,28 @@ function formatEstimatedDuration(remaining?: number, delay?: number) {
   return `About ${parts.join(" ")} remaining`;
 }
 
+function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
+  const results = source?.dcordResults;
+  if (!Array.isArray(results)) return [];
+
+  return results
+    .map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const row = item as Record<string, unknown>;
+      const token = typeof row.token === "string" && row.token.trim() ? row.token.trim() : `Token ${index + 1}`;
+      const status = typeof row.status === "string" && row.status.trim() ? row.status.trim() : "unknown";
+      const boostMessage = typeof row.boostMessage === "string" && row.boostMessage.trim()
+        ? row.boostMessage.trim()
+        : typeof row.boost_message === "string" && row.boost_message.trim()
+          ? row.boost_message.trim()
+          : "";
+      const successful = row.boosted === true || row.success === true || status.toLowerCase().includes("boost");
+
+      return { index, token, status, boostMessage, successful };
+    })
+    .filter((item): item is DcordTokenResult => Boolean(item));
+}
+
 export default function PublicOrderPage() {
   const { uniqid = "" } = useParams();
   const [searchParams] = useSearchParams();
@@ -98,6 +128,7 @@ export default function PublicOrderPage() {
   const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
+  const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -267,6 +298,7 @@ export default function PublicOrderPage() {
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
+  const dcordTokenResults = getDcordTokenResults(status);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -346,6 +378,21 @@ export default function PublicOrderPage() {
       toast.success("Bot link copied.");
     } catch {
       toast.error("Bot invite link could not be copied.");
+    }
+  }
+
+  async function handleReplaceDcordToken(resultIndex: number) {
+    if (!uniqid || replacingTokenIndex !== null || normalizedStatus === "PROCESS") return;
+
+    try {
+      setReplacingTokenIndex(resultIndex);
+      const payload = await replaceDcordBoostToken(uniqid, resultIndex);
+      setStatus(payload.order);
+      toast.success("Replacement token tried.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Token could not be replaced.");
+    } finally {
+      setReplacingTokenIndex(null);
     }
   }
 
@@ -600,6 +647,46 @@ export default function PublicOrderPage() {
                   <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
                 </div>
               </div>
+
+              {isBoostOrder ? (
+                <div className="public-token-results-card">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="app-kicker">Token results</p>
+                      <h2>Per-token boost log</h2>
+                    </div>
+                    <span className="public-secure-mark">{dcordTokenResults.length}/{status?.tokenCount ?? "-"} tokens</span>
+                  </div>
+
+                  {dcordTokenResults.length ? (
+                    <div className="public-token-results-list">
+                      {dcordTokenResults.map((item, index) => (
+                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.successful ? "success" : "error"}>
+                          <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="public-token-result-main">
+                            <strong>{item.token}</strong>
+                            <small>{item.boostMessage || item.status}</small>
+                          </span>
+                          <span className="public-token-result-status">{item.successful ? "Boosted" : item.status}</span>
+                          {!item.successful ? (
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="xs"
+                              onClick={() => void handleReplaceDcordToken(item.index)}
+                              disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
+                            >
+                              {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
+                            </Button>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="public-token-results-empty">Waiting for the first token result.</p>
+                  )}
+                </div>
+              ) : null}
               </div>
 
               <aside className="public-radial-card">
