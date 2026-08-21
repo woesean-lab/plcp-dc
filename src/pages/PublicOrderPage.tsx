@@ -648,20 +648,22 @@ export default function PublicOrderPage() {
 
               {delayUpdatePanel}
 
-              <div className="public-progress-card">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className="app-kicker">Progress</p>
-                    <h2>Live delivery state</h2>
+              {!isBoostOrder ? (
+                <div className="public-progress-card">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="app-kicker">Progress</p>
+                      <h2>Live delivery state</h2>
+                    </div>
+                    <span className="public-secure-mark"><ShieldCheck className="h-4 w-4" /> Verified feed</span>
                   </div>
-                  <span className="public-secure-mark"><ShieldCheck className="h-4 w-4" /> Verified feed</span>
-                </div>
 
-                <div className="public-progress-copy"><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>completed</span></div>
-                <div className="public-progress-track">
-                  <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+                  <div className="public-progress-copy"><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>completed</span></div>
+                  <div className="public-progress-track">
+                    <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
               {isBoostOrder ? (
                 <div className="public-token-results-card">
