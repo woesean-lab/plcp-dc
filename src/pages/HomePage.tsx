@@ -30,26 +30,40 @@ import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
-import { SERVICE_OPTIONS } from "../lib/services";
+import { isBoostService, SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
   clearIntegrationApiKey,
+  clearDcordApiKey,
   createOrder,
   getBalance,
   getOrderStatus,
   getIntegrationConfig,
   restartOrder,
+  saveBoostStock,
+  saveDcordApiKey,
   saveIntegrationApiKey,
   updateOrderDelay
 } from "../lib/integration";
-import type { OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
   serverId: "",
   amount: 100,
   delay: 1,
-  billingCycle: 1
+  billingCycle: 1,
+  duration: 1 as const
+};
+
+const EMPTY_BOOST_STOCK: BoostStock = {
+  oneMonth: 0,
+  threeMonth: 0
+};
+
+const EMPTY_BOOST_TOKEN_DRAFTS: BoostTokenStockInput = {
+  oneMonthTokens: "",
+  threeMonthTokens: ""
 };
 
 const labelClass = "app-kicker";
@@ -324,8 +338,14 @@ export default function HomePage() {
 
   const [apiKey, setApiKey] = useState("");
   const [apiConfigured, setApiConfigured] = useState(false);
+  const [dcordApiKey, setDcordApiKey] = useState("");
+  const [dcordConfigured, setDcordConfigured] = useState(false);
+  const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
+  const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
   const [balance, setBalance] = useState<number | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
+  const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
+  const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -349,6 +369,8 @@ export default function HomePage() {
     [orders]
   );
   const orderPageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
+  const selectedIsBoost = isBoostService(form.service);
+  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
     return orders.slice(start, start + ORDER_PAGE_SIZE);
@@ -374,7 +396,7 @@ export default function HomePage() {
           if (!order.uniqid) return order;
 
           try {
-            const status = await getOrderStatus(order.uniqid);
+            const status = await getOrderStatus(order.uniqid, order.provider);
             return mergeTrackedOrder(order, status);
           } catch {
             return order;
@@ -431,8 +453,11 @@ export default function HomePage() {
   async function loadIntegrationConnection() {
     try {
       const config = await getIntegrationConfig();
-      setApiConfigured(config.configured);
-      if (config.configured) await refreshBalance();
+      const tokenuConfigured = config.tokenuConfigured ?? config.configured;
+      setApiConfigured(tokenuConfigured);
+      setDcordConfigured(config.dcordConfigured);
+      setBoostStock(config.boostStock);
+      if (tokenuConfigured) await refreshBalance();
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Connection could not be checked.");
     }
@@ -491,7 +516,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId]);
+  }, [activeTab, form.service, form.serverId, form.duration]);
 
   async function refreshBalance() {
     try {
@@ -508,8 +533,8 @@ export default function HomePage() {
   async function refreshAvailability() {
     try {
       setCheckingAvailability(true);
-      const serverId = await resolveDiscordGuildId(form.serverId);
-      const data = await checkAvailableAmount(form.service, serverId);
+      const serverId = selectedIsBoost ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
+      const data = await checkAvailableAmount(form.service, serverId, form.duration);
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
     } catch {
       setAvailability("");
@@ -555,6 +580,61 @@ export default function HomePage() {
     }
   }
 
+  async function handleSaveDcordApiKey(event: FormEvent) {
+    event.preventDefault();
+    const value = dcordApiKey.trim();
+    if (!value) {
+      notifyError("Dcord API key is required.");
+      return;
+    }
+
+    try {
+      setSavingDcordApiKey(true);
+      await saveDcordApiKey(value);
+      setDcordConfigured(true);
+      setDcordApiKey("");
+      notifySuccess("Dcord API key saved securely.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord API key could not be saved.");
+    } finally {
+      setSavingDcordApiKey(false);
+    }
+  }
+
+  async function handleClearDcordApiKey() {
+    try {
+      setSavingDcordApiKey(true);
+      await clearDcordApiKey();
+      setDcordConfigured(false);
+      setDcordApiKey("");
+      notifySuccess("Dcord API key removed from the server.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
+    } finally {
+      setSavingDcordApiKey(false);
+    }
+  }
+
+  async function handleSaveBoostStock(event: FormEvent) {
+    event.preventDefault();
+    if (!boostTokenDrafts.oneMonthTokens.trim() && !boostTokenDrafts.threeMonthTokens.trim()) {
+      notifyError("Paste at least one boost token.");
+      return;
+    }
+
+    try {
+      setSavingBoostStock(true);
+      const result = await saveBoostStock(boostTokenDrafts);
+      setBoostStock(result.stock);
+      setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS);
+      notifySuccess("Boost stock updated.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Boost stock could not be saved.");
+    } finally {
+      setSavingBoostStock(false);
+    }
+  }
+
   function persistOrders(nextOrders: TrackedOrder[]) {
     setOrders(nextOrders);
     void saveTrackedOrders(nextOrders).catch((error) => {
@@ -588,6 +668,7 @@ export default function HomePage() {
       amount: typeof resolvedAmount === "number" ? resolvedAmount : order.amount,
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
       serverName: typeof status.serverName === "string" ? status.serverName : order.serverName,
+      duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details
     };
@@ -606,7 +687,9 @@ export default function HomePage() {
       a.serverId === b.serverId &&
       a.serverInvite === b.serverInvite &&
       a.serverMemberCount === b.serverMemberCount &&
-      a.service === b.service
+      a.service === b.service &&
+      a.provider === b.provider &&
+      a.duration === b.duration
     );
   }
 
@@ -648,7 +731,7 @@ export default function HomePage() {
       notifySuccess(`Continue request sent for ${order.uniqid}.`);
 
       try {
-        const status = await getOrderStatus(order.uniqid);
+        const status = await getOrderStatus(order.uniqid, order.provider);
         updateLocalOrder(mergeTrackedOrder(order, status));
       } catch {
         // The regular Manage refresh can verify the status if the upstream service needs more time.
@@ -729,22 +812,33 @@ export default function HomePage() {
     try {
       const serverInfo = await resolveDiscordGuildInfo(form.serverId);
       const serverId = serverInfo.guildId;
+      if (selectedIsBoost && form.amount % 2 !== 0) {
+        throw new Error("Boost amount must be an even number.");
+      }
       const created = await createOrder({
         service: form.service,
-        id: serverId,
+        id: selectedIsBoost ? form.serverId.trim() : serverId,
         amount: form.amount,
-        delay: form.delay,
-        billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined
+        delay: selectedIsBoost ? undefined : form.delay,
+        billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
+        duration: selectedIsBoost ? form.duration : undefined
       });
+      const createdStock = (created as { stock?: BoostStock }).stock;
+      if (createdStock) {
+        setBoostStock(createdStock);
+        setBoostStockDraft(createdStock);
+      }
 
       const nextOrder: TrackedOrder = {
         uniqid: created.uniqid,
+        provider: selectedIsBoost ? "dcord" : "tokenu",
         service: form.service,
         serverId,
         amount: form.amount,
         added: 0,
-        delay: form.delay,
+        delay: selectedIsBoost ? undefined : form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
+        duration: selectedIsBoost ? form.duration : undefined,
         cost: created.cost,
         botInvite: created.bot_invite,
         serverInvite: extractDiscordInviteCode(form.serverId) ? form.serverId.trim() : undefined,
@@ -755,7 +849,7 @@ export default function HomePage() {
 
       persistOrders([nextOrder, ...orders]);
       notifySuccess(`Order created: ${created.uniqid}`);
-      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}`);
+      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${selectedIsBoost ? "&provider=dcord" : ""}`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Order could not be created.");
     } finally {
@@ -801,7 +895,7 @@ export default function HomePage() {
                 <h1 className="page-title">New order</h1>
                 <p className="app-copy page-copy">Choose a service and configure the delivery details.</p>
               </div>
-              <Badge variant={apiConfigured ? "success" : "destructive"}>{apiConfigured ? "API connected" : "API key required"}</Badge>
+              <Badge variant={selectedApiConfigured ? "success" : "destructive"}>{selectedApiConfigured ? "API connected" : "API key required"}</Badge>
             </header>
 
             <section className={`${shell} p-5 sm:p-6`}>
@@ -824,7 +918,7 @@ export default function HomePage() {
                     <div className="service-selector-heading">
                       <div>
                         <span className={fieldLabelClass}>Choose service</span>
-                        <p className="service-selector-copy">Select the authorization mode for this order.</p>
+                        <p className="service-selector-copy">Select a members mode or create a Dcord boost order.</p>
                       </div>
                       <span className="service-selector-count">{SERVICE_OPTIONS.length} services</span>
                     </div>
@@ -841,7 +935,13 @@ export default function HomePage() {
                               name="service"
                               value={option.value}
                               checked={selected}
-                              onChange={() => setForm((current) => ({ ...current, service: option.value }))}
+                              onChange={() =>
+                                setForm((current) => ({
+                                  ...current,
+                                  service: option.value,
+                                  amount: isBoostService(option.value) && current.amount % 2 !== 0 ? current.amount + 1 : current.amount
+                                }))
+                              }
                             />
                             <span className="service-option-head" aria-hidden="true">
                               <span className="service-option-icon">
@@ -868,15 +968,17 @@ export default function HomePage() {
                   </fieldset>
 
                   <label className="grid gap-2 md:col-span-2">
-                    <span className={fieldLabelClass}>Server ID</span>
+                    <span className={fieldLabelClass}>{selectedIsBoost ? "Invite link or code" : "Server ID"}</span>
                     <Input
                       value={form.serverId}
                       onChange={(event) => setForm((current) => ({ ...current, serverId: event.target.value }))}
-                      placeholder="Discord server ID or invite link"
+                      placeholder={selectedIsBoost ? "Discord invite link or code" : "Discord server ID or invite link"}
                       required
                     />
                     <p className="text-xs text-[var(--app-muted)]">
-                      Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically.
+                      {selectedIsBoost
+                        ? "Boost orders need an invite because Dcord joins the server before applying boosts."
+                        : "Paste a Discord server ID, invite link, or invite code. Invite links are resolved automatically."}
                     </p>
                   </label>
 
@@ -884,12 +986,18 @@ export default function HomePage() {
                     <span className={fieldLabelClass}>Amount</span>
                     <Input
                       type="number"
-                      min={1}
+                      min={selectedIsBoost ? 2 : 1}
+                      step={selectedIsBoost ? 2 : 1}
                       value={form.amount}
-                      onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 0 }))}
+                      onChange={(event) => {
+                        const nextAmount = Number(event.target.value) || 0;
+                        setForm((current) => ({ ...current, amount: selectedIsBoost && nextAmount % 2 !== 0 ? nextAmount + 1 : nextAmount }));
+                      }}
                     />
+                    {selectedIsBoost ? <p className="text-xs text-[var(--app-muted)]">Boost orders use even quantities only.</p> : null}
                   </label>
 
+                  {!selectedIsBoost ? (
                   <label className="grid gap-2">
                     <span className={fieldLabelClass}>Delay</span>
                     <Input
@@ -900,6 +1008,29 @@ export default function HomePage() {
                       onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
                     />
                   </label>
+                  ) : (
+                    <fieldset className="grid gap-2">
+                      <legend className={fieldLabelClass}>Duration</legend>
+                      <div className="grid grid-cols-2 gap-2">
+                        {[1, 3].map((duration) => {
+                          const selected = form.duration === duration;
+                          return (
+                            <button
+                              key={duration}
+                              type="button"
+                              className={`app-panel-soft px-4 py-3 text-left text-sm font-semibold transition ${selected ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] text-[var(--app-text)]" : "text-[var(--app-text-secondary)]"}`}
+                              onClick={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
+                            >
+                              {duration} month
+                              <span className="mt-1 block text-xs font-medium text-[var(--app-muted)]">
+                                Stock {duration === 3 ? boostStock.threeMonth : boostStock.oneMonth}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  )}
 
                   {form.service === "OAUTH-ONLINE" ? (
                     <label className="grid gap-2 md:col-span-2">
@@ -916,15 +1047,15 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !apiConfigured}>
+                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !selectedApiConfigured}>
                     {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                     {creating ? "Creating..." : "Create order"}
                   </Button>
-                  {!apiConfigured ? (
+                  {!selectedApiConfigured ? (
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
-                        Configure API key
+                        Configure {selectedIsBoost ? "Dcord" : "Tokenu"} key
                       </Link>
                     </Button>
                   ) : null}
@@ -1028,6 +1159,7 @@ export default function HomePage() {
                       const orderTitleId = `tracked-order-${orderIndex}`;
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
+                      const boostOrder = order.provider === "dcord" || isBoostService(order.service);
                       const botInvite = extractBotInvite(order);
                       const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                       const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
@@ -1051,6 +1183,7 @@ export default function HomePage() {
                               <div className="tracked-order-context">
                                 {order.serverName ? <span>{order.serverName}</span> : null}
                                 <span>{order.serverId ? `ID ${order.serverId}` : "Added locally"}</span>
+                                {boostOrder && order.duration ? <span>{order.duration} month boosts</span> : null}
                               </div>
                               {botInviteRequired ? (
                                 <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-2">
@@ -1095,7 +1228,7 @@ export default function HomePage() {
                               ) : null}
                               {progress ? (
                                 <div className="tracked-order-metric">
-                                  <dt>Users</dt>
+                                  <dt>{boostOrder ? "Boosts" : "Users"}</dt>
                                   <dd className="grid gap-1">
                                     <span>{`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}</span>
                                     <span className="text-xs text-[var(--app-muted)]">{`${formatNumber(progress.remaining)} left`}</span>
@@ -1117,7 +1250,7 @@ export default function HomePage() {
                             </dl>
 
                               <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
-                              {!completed ? (
+                              {!completed && !boostOrder ? (
                                 <div className="tracked-order-delay-control grid gap-2">
                                   <span className="tracked-order-label">Update delay</span>
                                   <div className="flex gap-2 max-sm:flex-col">
@@ -1148,7 +1281,7 @@ export default function HomePage() {
                                   </div>
                                 </div>
                               ) : null}
-                              {isInvitesPaused ? (
+                              {isInvitesPaused && !boostOrder ? (
                                 <Button
                                   type="button"
                                   variant="destructive"
@@ -1160,6 +1293,7 @@ export default function HomePage() {
                                   {restartingOrderId === order.uniqid ? "Continuing..." : "Continue"}
                                 </Button>
                               ) : null}
+                              {!boostOrder ? (
                               <Button
                                 type="button"
                                 variant="secondary"
@@ -1170,9 +1304,10 @@ export default function HomePage() {
                                 <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                                 Copy link
                               </Button>
+                              ) : null}
                               <Button asChild variant="secondary" size="sm" title="View order">
                                 <Link
-                                  to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}`}
+                                  to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${boostOrder ? "&provider=dcord" : ""}`}
                                   aria-label={`View order ${order.uniqid}`}
                                 >
                                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1280,10 +1415,14 @@ export default function HomePage() {
                 <h1 className="page-title">Integration connection</h1>
                 <p className="app-copy page-copy">Configure the server-side integration connection and review its balance.</p>
               </div>
-              <Badge variant={apiConfigured ? "success" : "destructive"}>{apiConfigured ? "Connected" : "Not connected"}</Badge>
+              <div className="page-heading-meta">
+                <Badge variant={apiConfigured ? "success" : "destructive"}>Tokenu {apiConfigured ? "Connected" : "Missing"}</Badge>
+                <Badge variant={dcordConfigured ? "success" : "destructive"}>Dcord {dcordConfigured ? "Connected" : "Missing"}</Badge>
+              </div>
             </header>
 
-            <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+              <div className="grid gap-5">
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
@@ -1322,6 +1461,45 @@ export default function HomePage() {
                 </form>
               </section>
 
+              <section className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true">
+                    <KeyRound className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className={labelClass}>Dcord boosts</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Dcord API key</h2>
+                  </div>
+                </div>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
+                  Used only for Boosts orders. The key is stored server-side and sent to Dcord with X-API-Key.
+                </p>
+                <form onSubmit={handleSaveDcordApiKey} className="mt-6 grid gap-5">
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>{dcordConfigured ? "Replace Dcord key" : "Dcord API key"}</span>
+                    <Input
+                      type="password"
+                      value={dcordApiKey}
+                      onChange={(event) => setDcordApiKey(event.target.value)}
+                      placeholder={dcordConfigured ? "Enter a new Dcord key" : "Paste Dcord API key"}
+                      autoComplete="new-password"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-3">
+                    <Button className="min-w-[132px] max-sm:w-full" type="submit" disabled={savingDcordApiKey || !dcordApiKey.trim()}>
+                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+                      {savingDcordApiKey ? "Saving..." : dcordConfigured ? "Replace key" : "Save key"}
+                    </Button>
+                    {dcordConfigured ? (
+                      <Button className="min-w-[132px] max-sm:w-full" variant="destructive" type="button" disabled={savingDcordApiKey} onClick={() => void handleClearDcordApiKey()}>
+                        Remove key
+                      </Button>
+                    ) : null}
+                  </div>
+                </form>
+              </section>
+              </div>
+
               <aside className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
@@ -1340,7 +1518,16 @@ export default function HomePage() {
                     </span>
                     <span>
                       <span className="settings-status-label">API access</span>
-                      <strong>{apiConfigured ? "Configured" : "Missing"}</strong>
+                      <strong>{apiConfigured ? "Tokenu configured" : "Tokenu missing"}</strong>
+                    </span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true">
+                      <KeyRound className="h-4 w-4" />
+                    </span>
+                    <span>
+                      <span className="settings-status-label">Dcord access</span>
+                      <strong>{dcordConfigured ? "Configured" : "Missing"}</strong>
                     </span>
                   </div>
                   <div className="settings-status-row">
@@ -1371,6 +1558,37 @@ export default function HomePage() {
                   <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh balance
                 </Button>
+
+                <form onSubmit={handleSaveBoostStock} className="mt-5 grid gap-4 border-t border-[var(--app-divider)] pt-5">
+                  <div>
+                    <p className={labelClass}>Boost stock</p>
+                    <h3 className="app-title mt-1 text-base font-semibold">Available inventory</h3>
+                  </div>
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>1 month tokens</span>
+                    <textarea
+                      className="ui-input min-h-32 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                      value={boostTokenDrafts.oneMonthTokens}
+                      onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, oneMonthTokens: event.target.value }))}
+                      placeholder="One token per line"
+                    />
+                    <span className="text-xs text-[var(--app-muted)]">{boostStock.oneMonth} tokens in stock = {boostStock.oneMonth * 2} boosts</span>
+                  </label>
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>3 month tokens</span>
+                    <textarea
+                      className="ui-input min-h-32 resize-y rounded-xl px-3.5 py-3 font-mono text-xs"
+                      value={boostTokenDrafts.threeMonthTokens}
+                      onChange={(event) => setBoostTokenDrafts((current) => ({ ...current, threeMonthTokens: event.target.value }))}
+                      placeholder="One token per line"
+                    />
+                    <span className="text-xs text-[var(--app-muted)]">{boostStock.threeMonth} tokens in stock = {boostStock.threeMonth * 2} boosts</span>
+                  </label>
+                  <Button className="w-full" type="submit" disabled={savingBoostStock}>
+                    {savingBoostStock ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Settings2 className="h-4 w-4" aria-hidden="true" />}
+                    {savingBoostStock ? "Saving..." : "Save stock"}
+                  </Button>
+                </form>
               </aside>
             </div>
           </>

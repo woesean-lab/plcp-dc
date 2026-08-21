@@ -7,7 +7,7 @@ import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Ref
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, updateOrderDelay } from "../lib/integration";
-import type { OrderStatusResponse } from "../types";
+import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
@@ -137,6 +137,7 @@ function LookupPreloader({ uniqid }: { uniqid?: string }) {
 export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
+  const provider = (params.get("provider") === "dcord" ? "dcord" : "tokenu") as OrderProvider;
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
@@ -198,11 +199,11 @@ export default function OrderPage() {
     setLoading(true);
 
     try {
-      const data = await getOrderStatus(target);
+      const data = await getOrderStatus(target, provider);
       setResult(data);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       toast.success(`Loaded ${target}.`);
-      setParams({ uniqid: target });
+      setParams(provider === "dcord" ? { uniqid: target, provider } : { uniqid: target });
     } catch (error) {
       setResult(null);
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
@@ -306,6 +307,7 @@ export default function OrderPage() {
   }
 
   const terminal = isTerminalStatus(result?.status);
+  const isDcordProvider = provider === "dcord";
 
   return (
     <section className="tab-slide-in relative grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
@@ -413,9 +415,11 @@ export default function OrderPage() {
               >
                 <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Copy delivery template
               </Button>
+              {!isDcordProvider ? (
               <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
                 <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
               </Button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -483,7 +487,7 @@ export default function OrderPage() {
               )}
             </div>
 
-            {!terminal ? (
+            {!terminal && !isDcordProvider ? (
               <div className="app-panel-soft p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>

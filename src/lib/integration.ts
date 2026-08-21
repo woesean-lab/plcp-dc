@@ -1,4 +1,5 @@
-import type { BalanceResponse, CreateOrderPayload, CreateOrderResponse, OrderStatusResponse } from "../types";
+import type { BalanceResponse, BoostStock, BoostTokenStockInput, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
+import { isBoostService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
   let response: Response;
@@ -34,7 +35,7 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
 }
 
 export function getIntegrationConfig() {
-  return requestJson<{ configured: boolean }>("/api/integration/config");
+  return requestJson<{ tokenuConfigured: boolean; dcordConfigured: boolean; configured: boolean; boostStock: BoostStock }>("/api/integration/config");
 }
 
 export function saveIntegrationApiKey(apiKey: string) {
@@ -58,6 +59,16 @@ export async function getBalance() {
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
+  if (isBoostService(payload.service)) {
+    return requestJson<CreateOrderResponse>("/api/dcord/boost-orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(payload)
+    });
+  }
+
   return requestJson<CreateOrderResponse>("/api/integration/orders", {
     method: "POST",
     headers: {
@@ -67,8 +78,9 @@ export async function createOrder(payload: CreateOrderPayload) {
   });
 }
 
-export async function getOrderStatus(uniqid: string) {
-  return requestJson<OrderStatusResponse>(`/api/integration/orders/${encodeURIComponent(uniqid)}/status`);
+export async function getOrderStatus(uniqid: string, provider: OrderProvider = "tokenu") {
+  const prefix = provider === "dcord" ? "/api/dcord/boost-orders" : "/api/integration/orders";
+  return requestJson<OrderStatusResponse>(`${prefix}/${encodeURIComponent(uniqid)}/status`);
 }
 
 export async function restartOrder(uniqid: string) {
@@ -105,7 +117,13 @@ export function restartPublicOrder(uniqid: string) {
   return requestPublicOrderApi<unknown>(uniqid, "restart", { method: "POST" });
 }
 
-export async function checkAvailableAmount(service: string, id: string) {
+export async function checkAvailableAmount(service: string, id: string, duration = 1) {
+  if (isBoostService(service)) {
+    return requestJson<{ available: number; maximum: number }>(
+      `/api/dcord/boost-stock?duration=${encodeURIComponent(duration)}`
+    );
+  }
+
   return requestJson<{ available: number; maximum: number }>(
     `/api/integration/check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
   );
@@ -118,5 +136,29 @@ export async function updateOrderDelay(uniqid: string, delay: number) {
       "Content-Type": "application/json"
     },
     body: JSON.stringify({ delay })
+  });
+}
+
+export function saveDcordApiKey(apiKey: string) {
+  return requestJson<{ configured: true }>("/api/dcord/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ apiKey })
+  });
+}
+
+export async function clearDcordApiKey() {
+  const response = await fetch("/api/dcord/config", { method: "DELETE", cache: "no-store" });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message ?? `Request failed with ${response.status}`);
+  }
+}
+
+export function saveBoostStock(stock: BoostTokenStockInput) {
+  return requestJson<{ stock: BoostStock }>("/api/dcord/boost-stock", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(stock)
   });
 }

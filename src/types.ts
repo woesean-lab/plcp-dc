@@ -1,4 +1,8 @@
-export type ServiceType = "OAUTH-OFFLINE" | "OAUTH-ONLINE" | "OAUTH-PREMIUM" | "OAUTH-NFT";
+export type MemberServiceType = "OAUTH-OFFLINE" | "OAUTH-ONLINE" | "OAUTH-PREMIUM" | "OAUTH-NFT";
+export type BoostServiceType = "DCORD-BOOSTS";
+export type ServiceType = MemberServiceType | BoostServiceType;
+export type OrderProvider = "tokenu" | "dcord";
+export type BoostDuration = 1 | 3;
 
 export type OrderStatus =
   | "NEW"
@@ -15,6 +19,7 @@ export interface CreateOrderPayload {
   amount: number;
   delay?: number;
   billingCycle?: number;
+  duration?: BoostDuration;
 }
 
 export interface CreateOrderResponse {
@@ -52,6 +57,7 @@ export interface OrderStatusResponse {
 
 export interface TrackedOrder {
   uniqid: string;
+  provider?: OrderProvider;
   service?: ServiceType;
   serverId?: string;
   serverName?: string;
@@ -62,9 +68,20 @@ export interface TrackedOrder {
   delay?: number;
   statusDelay?: number;
   billingCycle?: number;
+  duration?: BoostDuration;
   cost?: number;
   botInvite?: string;
   createdAt: string;
   status?: string;
   details?: string;
+}
+
+export interface BoostStock {
+  oneMonth: number;
+  threeMonth: number;
+}
+
+export interface BoostTokenStockInput {
+  oneMonthTokens: string;
+  threeMonthTokens: string;
 }

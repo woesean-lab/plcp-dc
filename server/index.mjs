@@ -16,6 +16,8 @@ const integrationApiPrefix = "/api/integration";
 const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
 const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
 const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
+const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://app.dcord.co/api";
+const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
@@ -161,6 +163,67 @@ async function loadTokenuApiKey() {
   return decryptCredential(result.rows[0].encrypted_value);
 }
 
+async function loadEncryptedSetting(settingKey) {
+  const result = await pool.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 LIMIT 1", [settingKey]);
+  return result.rowCount ? decryptCredential(result.rows[0].encrypted_value) : null;
+}
+
+async function saveEncryptedSetting(settingKey, value) {
+  await pool.query(
+    `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
+     VALUES ($1, $2, NOW())
+     ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+    [settingKey, encryptCredential(value)]
+  );
+}
+
+async function loadDcordApiKey() {
+  const apiKey = await loadEncryptedSetting("dcord_api_key");
+  if (!apiKey) {
+    const error = new Error("Dcord API key has not been configured in Admin settings.");
+    error.statusCode = 503;
+    throw error;
+  }
+  return apiKey;
+}
+
+function normalizeBoostTokenList(value) {
+  const items = Array.isArray(value) ? value : String(value ?? "").split(/\r?\n/);
+  return Array.from(new Set(items.map((item) => String(item ?? "").trim()).filter(Boolean)));
+}
+
+function normalizeBoostTokenStock(value) {
+  const stock = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  return {
+    oneMonth: normalizeBoostTokenList(stock.oneMonthTokens ?? stock.oneMonth),
+    threeMonth: normalizeBoostTokenList(stock.threeMonthTokens ?? stock.threeMonth)
+  };
+}
+
+function summarizeBoostTokenStock(stock) {
+  return {
+    oneMonth: stock.oneMonth.length,
+    threeMonth: stock.threeMonth.length
+  };
+}
+
+async function loadBoostTokenStock() {
+  const raw = await loadEncryptedSetting("dcord_boost_token_stock");
+  if (!raw) return { oneMonth: [], threeMonth: [] };
+
+  try {
+    return normalizeBoostTokenStock(JSON.parse(raw));
+  } catch {
+    return { oneMonth: [], threeMonth: [] };
+  }
+}
+
+async function saveBoostTokenStock(stock) {
+  const normalized = normalizeBoostTokenStock(stock);
+  await saveEncryptedSetting("dcord_boost_token_stock", JSON.stringify(normalized));
+  return normalized;
+}
+
 async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
 
   const response = await fetch(new URL(pathname, `${baseUrl.replace(/\/$/, "")}/`), {
@@ -196,6 +259,129 @@ async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
 
 async function requestTokenu(baseUrl, pathname, init = {}) {
   return requestTokenuWithKey(await loadTokenuApiKey(), baseUrl, pathname, init);
+}
+
+async function requestDcord(pathname, init = {}) {
+  const response = await fetch(new URL(pathname, `${dcordApiBase.replace(/\/$/, "")}/`), {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(620_000),
+    headers: {
+      "X-API-Key": await loadDcordApiKey(),
+      ...(init.headers ?? {})
+    }
+  });
+  const text = await response.text();
+  let payload = text;
+
+  try {
+    payload = text ? JSON.parse(text) : {};
+  } catch {
+    // Preserve non-JSON upstream error messages.
+  }
+
+  if (!response.ok) {
+    const error = new Error(
+      typeof payload === "object" && payload && "message" in payload
+        ? String(payload.message)
+        : typeof payload === "string" && payload
+          ? payload
+          : `Dcord request failed with ${response.status}.`
+    );
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return payload;
+}
+
+function getOrderIdFromPayload(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  for (const key of ["uniqid", "orderId", "order_id", "id"]) {
+    const value = payload[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  }
+  if (payload.data && typeof payload.data === "object") return getOrderIdFromPayload(payload.data);
+  return null;
+}
+
+function redactToken(token) {
+  const value = String(token ?? "");
+  return value.length <= 10 ? "***" : `${value.slice(0, 4)}...${value.slice(-6)}`;
+}
+
+function createDcordOrderId() {
+  return `dcord_${Date.now().toString(36)}_${crypto.randomBytes(5).toString("hex")}`;
+}
+
+async function saveTrackedOrderPayload(payload) {
+  await pool.query(
+    `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
+     VALUES ($1, $2::jsonb, COALESCE(($2::jsonb->>'createdAt')::timestamptz, NOW()), NOW())
+     ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+    [payload.uniqid, JSON.stringify(payload)]
+  );
+}
+
+function normalizeDcordJoinResult(result, token) {
+  const boostMessage = String(result?.boost_message ?? "").trim();
+  const boosted = result?.boost === true || boostMessage.toLowerCase().includes("boosted");
+  return {
+    token: redactToken(token),
+    success: Boolean(result?.success),
+    status: typeof result?.status === "string" ? result.status : boosted ? "boosted" : "unknown",
+    boost: Boolean(result?.boost),
+    boostMessage,
+    httpStatus: Number.isFinite(result?.http_status) ? result.http_status : undefined,
+    boosted
+  };
+}
+
+async function processDcordBoostOrder(order, tokens, invite) {
+  const results = [];
+  let added = 0;
+
+  for (const token of tokens) {
+    try {
+      const result = await requestDcord(dcordJoinPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, invite, boost: true })
+      });
+      const normalized = normalizeDcordJoinResult(result, token);
+      results.push(normalized);
+      if (normalized.boosted) added += 2;
+    } catch (error) {
+      results.push({
+        token: redactToken(token),
+        success: false,
+        status: "error",
+        boost: false,
+        boostMessage: error instanceof Error ? error.message : "Dcord join failed.",
+        boosted: false
+      });
+    }
+
+    const inProgress = {
+      ...order,
+      added,
+      status: added >= order.amount ? "COMPLETED" : "PROCESS",
+      details: `${added}/${order.amount} boosts completed.`,
+      dcordResults: results
+    };
+    await saveTrackedOrderPayload(inProgress);
+  }
+
+  const completed = added >= order.amount;
+  await saveTrackedOrderPayload({
+    ...order,
+    added,
+    status: completed ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
+    details: completed
+      ? `${added}/${order.amount} boosts completed.`
+      : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`,
+    dcordResults: results
+  });
 }
 
 async function requestTokenuPublicData(pathname, init = {}) {
@@ -421,8 +607,19 @@ app.post("/api/auth/logout", async (req, res, next) => {
 
 app.get([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (_req, res, next) => {
   try {
-    const result = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'tokenu_api_key' LIMIT 1");
-    res.json({ configured: Boolean(result.rowCount) });
+    const result = await pool.query(
+      "SELECT setting_key FROM app_settings WHERE setting_key = ANY($1::text[])",
+      [["tokenu_api_key", "dcord_api_key"]]
+    );
+    const configuredKeys = new Set(result.rows.map((row) => row.setting_key));
+    const tokenuConfigured = configuredKeys.has("tokenu_api_key");
+    const dcordConfigured = configuredKeys.has("dcord_api_key");
+    res.json({
+      configured: tokenuConfigured,
+      tokenuConfigured,
+      dcordConfigured,
+      boostStock: summarizeBoostTokenStock(await loadBoostTokenStock())
+    });
   } catch (error) {
     next(error);
   }
@@ -452,6 +649,55 @@ app.delete([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requ
   try {
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'tokenu_api_key'");
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/dcord/config", requireSession, async (req, res, next) => {
+  try {
+    const apiKey = String(req.body?.apiKey ?? "").trim();
+    if (!apiKey || apiKey.length > 2000) {
+      return res.status(400).json({ message: "A valid Dcord API key is required." });
+    }
+
+    await saveEncryptedSetting("dcord_api_key", apiKey);
+    res.json({ configured: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
+  try {
+    await pool.query("DELETE FROM app_settings WHERE setting_key = 'dcord_api_key'");
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
+  try {
+    const duration = Number.parseInt(req.query.duration, 10);
+    const stock = await loadBoostTokenStock();
+    const summary = summarizeBoostTokenStock(stock);
+    const availableTokens = duration === 3 ? summary.threeMonth : summary.oneMonth;
+    res.json({ ...summary, available: availableTokens * 2, maximum: availableTokens * 2 });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
+  try {
+    const existing = await loadBoostTokenStock();
+    const incoming = normalizeBoostTokenStock(req.body);
+    const stock = await saveBoostTokenStock({
+      oneMonth: [...existing.oneMonth, ...incoming.oneMonth],
+      threeMonth: [...existing.threeMonth, ...incoming.threeMonth]
+    });
+    res.json({ stock: summarizeBoostTokenStock(stock) });
   } catch (error) {
     next(error);
   }
@@ -506,6 +752,59 @@ app.post([`${legacyApiPrefix}/orders`, `${integrationApiPrefix}/orders`], requir
   }
 });
 
+app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
+  try {
+    const invite = extractDiscordInviteCode(req.body?.id);
+    const amount = Number.parseInt(req.body?.amount, 10);
+    const duration = Number.parseInt(req.body?.duration, 10);
+
+    if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
+      return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
+    }
+
+    const serverInfo = await resolveDiscordInvite(invite);
+    const stock = await loadBoostTokenStock();
+    const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+    const requiredTokens = amount / 2;
+    if (stock[stockKey].length < requiredTokens) {
+      return res.status(409).json({ message: `Only ${stock[stockKey].length * 2} ${duration} month boosts are in stock.` });
+    }
+
+    const selectedTokens = stock[stockKey].slice(0, requiredTokens);
+    const nextStock = await saveBoostTokenStock({
+      ...stock,
+      [stockKey]: stock[stockKey].slice(requiredTokens)
+    });
+    const uniqid = createDcordOrderId();
+    const order = {
+      uniqid,
+      provider: "dcord",
+      service: "DCORD-BOOSTS",
+      serverId: serverInfo.guildId,
+      serverInvite: String(req.body?.id ?? "").trim(),
+      serverMemberCount: serverInfo.approximateMemberCount,
+      amount,
+      added: 0,
+      duration,
+      tokenCount: requiredTokens,
+      createdAt: new Date().toISOString(),
+      status: "PROCESS",
+      details: `0/${amount} boosts completed.`
+    };
+
+    await saveTrackedOrderPayload(order);
+    void processDcordBoostOrder(order, selectedTokens, invite).catch((error) => {
+      console.error(error);
+    });
+    res.json({
+      uniqid,
+      stock: summarizeBoostTokenStock(nextStock)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/orders/:uniqid/status`], requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -548,6 +847,24 @@ app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/or
         ? { ...trackedPayload, ...payload }
         : payload;
     res.set("Cache-Control", "no-store").json(responsePayload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    if (!tracked.rowCount) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+
+    res.set("Cache-Control", "no-store").json(tracked.rows[0].payload);
   } catch (error) {
     next(error);
   }
