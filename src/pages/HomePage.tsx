@@ -1175,7 +1175,7 @@ export default function HomePage() {
                         </div>
                         <span className="service-selector-count">2 durations</span>
                       </div>
-                      <div className="service-grid service-grid-compact">
+                      <div className="service-grid boost-duration-grid">
                         {[1, 3].map((duration, index) => {
                           const selected = form.duration === duration;
                           const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
