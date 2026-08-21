@@ -2072,12 +2072,14 @@
   .public-stats-body {
     display: grid;
     grid-template-columns: minmax(0,1fr) 300px;
+    align-items: start;
     gap: 1rem;
     padding: clamp(1.25rem, 4vw, 2rem);
   }
 
   .public-stats-overview {
     display: grid;
+    align-content: start;
     gap: 1rem;
   }
 
@@ -2088,6 +2090,7 @@
   .public-metrics-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
     gap: 1rem;
   }
 
@@ -2097,6 +2100,11 @@
 
   .public-stats-body.is-boost-monitor .public-metrics-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+  }
+
+  .public-stats-body.is-boost-monitor .public-metric-card {
+    min-height: 150px;
   }
 
   .public-metric-card,

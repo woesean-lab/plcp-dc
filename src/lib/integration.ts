@@ -190,10 +190,18 @@ export function deleteBoostStockTokens(payload: { duration: 1 | 3; tokens: strin
   });
 }
 
-export function returnUsedBoostToken(id: string) {
+export function returnUsedBoostToken(ids: string | string[]) {
   return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock/return-used", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id })
+    body: JSON.stringify({ ids: Array.isArray(ids) ? ids : [ids] })
+  });
+}
+
+export function deleteUsedBoostTokens(ids: string[]) {
+  return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock/delete-used", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids })
   });
 }

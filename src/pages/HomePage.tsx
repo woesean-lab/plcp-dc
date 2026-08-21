@@ -38,6 +38,7 @@ import {
   clearDcordApiKey,
   createOrder,
   deleteBoostStockTokens,
+  deleteUsedBoostTokens,
   getBalance,
   getBoostStockTokens,
   getDcordBalance,
@@ -353,6 +354,7 @@ export default function HomePage() {
   });
   const [usedBoostTokens, setUsedBoostTokens] = useState<BoostUsedToken[]>([]);
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
+  const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
@@ -361,6 +363,7 @@ export default function HomePage() {
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
   const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
+  const [deletingUsedTokens, setDeletingUsedTokens] = useState(false);
   const [returningUsedTokenId, setReturningUsedTokenId] = useState<string | null>(null);
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -390,6 +393,7 @@ export default function HomePage() {
   const selectedIsBoost = isBoostService(form.service);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+  const selectedUsedTokenIds = usedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
@@ -520,6 +524,7 @@ export default function HomePage() {
     });
     setUsedBoostTokens(snapshot.usedTokens ?? []);
     setSelectedBoostTokens({});
+    setSelectedUsedBoostTokens({});
   }
 
   async function refreshBoostStockTokens() {
@@ -785,15 +790,94 @@ export default function HomePage() {
     }
   }
 
-  async function handleReturnUsedBoostToken(item: BoostUsedToken) {
+  function toggleUsedBoostToken(id: string, checked: boolean) {
+    setSelectedUsedBoostTokens((current) => ({
+      ...current,
+      [id]: checked
+    }));
+  }
+
+  function setAllUsedBoostTokens(checked: boolean) {
+    setSelectedUsedBoostTokens((current) => {
+      const next = { ...current };
+      usedBoostTokens.forEach((item) => {
+        next[item.id] = checked;
+      });
+      return next;
+    });
+  }
+
+  function getUsedTokenDownloadRows(onlySelected = false) {
+    const source = onlySelected ? usedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]) : usedBoostTokens;
+    return source.map((item) =>
+      [
+        item.token,
+        `${item.duration} month`,
+        item.orderId ?? "",
+        formatTrackedDate(item.resultAt ?? item.usedAt),
+        item.boosted ? "boosted" : item.status ?? "pending",
+        item.boostMessage ?? ""
+      ]
+        .map((value) => String(value).replace(/\t/g, " ").replace(/\r?\n/g, " "))
+        .join("\t")
+    );
+  }
+
+  function downloadUsedBoostTokens(onlySelected = false) {
+    const rows = getUsedTokenDownloadRows(onlySelected);
+    if (!rows.length) {
+      notifyError("No used tokens to download.");
+      return;
+    }
+
+    const header = "token\tduration\torder_id\tused_at\tstatus\tmessage";
+    const blob = new Blob([[header, ...rows].join("\n") + "\n"], { type: "text/tab-separated-values;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = onlySelected ? "used-boost-tokens-selected.tsv" : "used-boost-tokens.tsv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleReturnUsedBoostTokens(ids: string[]) {
+    if (!ids.length) {
+      notifyError("Select used tokens first.");
+      return;
+    }
+
     try {
-      setReturningUsedTokenId(item.id);
-      applyBoostStockSnapshot(await returnUsedBoostToken(item.id));
-      notifySuccess("Token returned to stock.");
+      setReturningUsedTokenId(ids.length === 1 ? ids[0] : "__bulk__");
+      applyBoostStockSnapshot(await returnUsedBoostToken(ids));
+      notifySuccess(`${ids.length} token returned to stock.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Token could not be returned to stock.");
     } finally {
       setReturningUsedTokenId(null);
+    }
+  }
+
+  async function handleReturnUsedBoostToken(item: BoostUsedToken) {
+    await handleReturnUsedBoostTokens([item.id]);
+  }
+
+  async function handleDeleteUsedBoostTokens(ids: string[]) {
+    if (!ids.length) {
+      notifyError("Select used tokens first.");
+      return;
+    }
+
+    const confirmed = window.confirm(`${ids.length} used token record will be deleted. Tokens will not return to stock.`);
+    if (!confirmed) return;
+
+    try {
+      setDeletingUsedTokens(true);
+      applyBoostStockSnapshot(await deleteUsedBoostTokens(ids));
+      notifySuccess(`${ids.length} used token record deleted.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Used token records could not be deleted.");
+    } finally {
+      setDeletingUsedTokens(false);
     }
   }
 
@@ -1831,16 +1915,57 @@ export default function HomePage() {
                         <p className={labelClass}>Used tokens</p>
                         <strong className="mt-1 block text-sm text-[var(--app-text)]">Usage history and Dcord result</strong>
                       </div>
-                      <Badge variant="secondary">{usedBoostTokens.length} used</Badge>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="secondary">{usedBoostTokens.length} used</Badge>
+                        <Badge variant="secondary">{selectedUsedTokenIds.length} selected</Badge>
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-b border-[var(--app-divider)] p-3">
+                      <Button type="button" size="xs" variant="secondary" onClick={() => setAllUsedBoostTokens(true)} disabled={!usedBoostTokens.length}>
+                        Select all
+                      </Button>
+                      <Button type="button" size="xs" variant="secondary" onClick={() => setAllUsedBoostTokens(false)} disabled={!selectedUsedTokenIds.length}>
+                        Clear
+                      </Button>
+                      <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens()} disabled={!usedBoostTokens.length}>
+                        Download all
+                      </Button>
+                      <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens(true)} disabled={!selectedUsedTokenIds.length}>
+                        Download selected
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="secondary"
+                        onClick={() => void handleReturnUsedBoostTokens(selectedUsedTokenIds)}
+                        disabled={!selectedUsedTokenIds.length || returningUsedTokenId !== null || deletingUsedTokens}
+                      >
+                        {returningUsedTokenId === "__bulk__" ? "Returning..." : "Return selected"}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="destructive"
+                        onClick={() => void handleDeleteUsedBoostTokens(selectedUsedTokenIds)}
+                        disabled={!selectedUsedTokenIds.length || deletingUsedTokens || returningUsedTokenId !== null}
+                      >
+                        {deletingUsedTokens ? "Deleting..." : "Delete selected"}
+                      </Button>
                     </div>
                     <div className="max-h-96 overflow-auto p-3">
                       {usedBoostTokens.length ? (
                         <ol className="grid gap-2">
                           {usedBoostTokens.map((item, index) => (
-                            <li key={item.id} className="grid gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-3 lg:grid-cols-[32px_minmax(0,1.2fr)_88px_minmax(0,1fr)_130px_auto_auto] lg:items-center">
+                            <li key={item.id} className="grid gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-3 lg:grid-cols-[24px_32px_minmax(0,1.2fr)_96px_minmax(0,1fr)_130px_auto_auto] lg:items-center">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(selectedUsedBoostTokens[item.id])}
+                                onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)}
+                                aria-label={`Select used token ${index + 1}`}
+                              />
                               <span className="text-xs text-[var(--app-muted)]">{index + 1}</span>
                               <code className="min-w-0 truncate text-xs text-[var(--app-text-secondary)]" title={item.token}>{item.token}</code>
-                              <Badge variant="secondary">{item.duration} Month</Badge>
+                              <Badge className="min-w-20" variant="secondary">{item.duration} Month</Badge>
                               <span className="min-w-0 truncate text-xs text-[var(--app-muted)]" title={item.orderId ?? ""}>
                                 {item.orderId ? `Order ${item.orderId}` : "No order"}
                               </span>
@@ -1852,13 +1977,13 @@ export default function HomePage() {
                                 type="button"
                                 size="xs"
                                 variant="secondary"
-                                disabled={returningUsedTokenId !== null}
+                                disabled={returningUsedTokenId !== null || deletingUsedTokens}
                                 onClick={() => void handleReturnUsedBoostToken(item)}
                               >
                                 {returningUsedTokenId === item.id ? "Returning..." : "Return to stock"}
                               </Button>
                               {item.boostMessage ? (
-                                <span className="min-w-0 truncate text-xs text-[var(--app-muted)] lg:col-start-2 lg:col-end-8" title={item.boostMessage}>
+                                <span className="min-w-0 truncate text-xs text-[var(--app-muted)] lg:col-start-3 lg:col-end-9" title={item.boostMessage}>
                                   {item.boostMessage}
                                 </span>
                               ) : null}

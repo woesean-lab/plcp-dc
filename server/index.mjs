@@ -308,6 +308,16 @@ async function updateUsedBoostTokenResult(id, result) {
   await saveUsedBoostTokenHistory(nextHistory);
 }
 
+async function getBoostTokenStockSnapshot() {
+  const stock = await loadBoostTokenStock();
+  return {
+    stock: summarizeBoostTokenStock(stock),
+    oneMonthTokens: stock.oneMonth,
+    threeMonthTokens: stock.threeMonth,
+    usedTokens: await loadUsedBoostTokenHistory()
+  };
+}
+
 async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
 
   const response = await fetch(new URL(pathname, `${baseUrl.replace(/\/$/, "")}/`), {
@@ -922,24 +932,34 @@ app.post("/api/dcord/boost-stock/delete", requireSession, async (req, res, next)
 
 app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, next) => {
   try {
-    const usageId = String(req.body?.id ?? "").trim();
-    if (!usageId) {
-      return res.status(400).json({ message: "A valid used token row is required." });
+    const usageIds = normalizeBoostTokenList(req.body?.ids ?? req.body?.id);
+    if (!usageIds.length) {
+      return res.status(400).json({ message: "At least one used token row is required." });
     }
 
     const history = await loadUsedBoostTokenHistory();
-    const usedToken = history.find((item) => item.id === usageId);
-    if (!usedToken) {
+    const usageIdSet = new Set(usageIds);
+    const usedTokens = history.filter((item) => usageIdSet.has(item.id));
+    if (!usedTokens.length) {
       return res.status(404).json({ message: "Used token could not be found." });
     }
 
     const stock = await loadBoostTokenStock();
-    const stockKey = usedToken.duration === 3 ? "threeMonth" : "oneMonth";
+    const nextStockInput = {
+      oneMonth: [...stock.oneMonth],
+      threeMonth: [...stock.threeMonth]
+    };
+    for (const usedToken of usedTokens) {
+      const stockKey = usedToken.duration === 3 ? "threeMonth" : "oneMonth";
+      if (!nextStockInput[stockKey].includes(usedToken.token)) {
+        nextStockInput[stockKey].unshift(usedToken.token);
+      }
+    }
     const nextStock = await saveBoostTokenStock({
-      ...stock,
-      [stockKey]: stock[stockKey].includes(usedToken.token) ? stock[stockKey] : [usedToken.token, ...stock[stockKey]]
+      oneMonth: nextStockInput.oneMonth,
+      threeMonth: nextStockInput.threeMonth
     });
-    const nextHistory = await saveUsedBoostTokenHistory(history.filter((item) => item.id !== usageId));
+    const nextHistory = await saveUsedBoostTokenHistory(history.filter((item) => !usageIdSet.has(item.id)));
 
     res.json({
       stock: summarizeBoostTokenStock(nextStock),
@@ -947,6 +967,22 @@ app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, 
       threeMonthTokens: nextStock.threeMonth,
       usedTokens: nextHistory
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-stock/delete-used", requireSession, async (req, res, next) => {
+  try {
+    const usageIds = normalizeBoostTokenList(req.body?.ids);
+    if (!usageIds.length) {
+      return res.status(400).json({ message: "At least one used token row is required." });
+    }
+
+    const usageIdSet = new Set(usageIds);
+    const history = await loadUsedBoostTokenHistory();
+    await saveUsedBoostTokenHistory(history.filter((item) => !usageIdSet.has(item.id)));
+    res.json(await getBoostTokenStockSnapshot());
   } catch (error) {
     next(error);
   }
