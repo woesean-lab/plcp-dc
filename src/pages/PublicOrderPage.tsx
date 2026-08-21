@@ -181,6 +181,10 @@ export default function PublicOrderPage() {
     }),
     [searchParams]
   );
+  const refreshStatusService = typeof status?.service === "string" ? status.service : undefined;
+  const refreshServiceType = seed.service ?? refreshStatusService ?? status?.type;
+  const isBoostRefresh = status?.provider === "dcord" || isBoostService(refreshServiceType);
+  const refreshSeconds = isBoostRefresh ? 2 : AUTO_REFRESH_SECONDS;
 
   useEffect(() => {
     if (!uniqid) {
@@ -233,13 +237,13 @@ export default function PublicOrderPage() {
     if (!uniqid) return;
 
     let active = true;
-    countdownRef.current = AUTO_REFRESH_SECONDS;
-    setSecondsUntilRefresh(AUTO_REFRESH_SECONDS);
+    countdownRef.current = refreshSeconds;
+    setSecondsUntilRefresh(refreshSeconds);
 
     const timer = window.setInterval(() => {
       countdownRef.current -= 1;
       if (countdownRef.current <= 0) {
-        countdownRef.current = AUTO_REFRESH_SECONDS;
+        countdownRef.current = refreshSeconds;
         if (!refreshInFlightRef.current) {
           refreshInFlightRef.current = true;
           setAutoRefreshing(true);
@@ -267,7 +271,7 @@ export default function PublicOrderPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [uniqid]);
+  }, [uniqid, refreshSeconds]);
 
   const isInitialLoading = loading && !status && !error;
   const statusService = typeof status?.service === "string" ? status.service : undefined;
@@ -299,6 +303,7 @@ export default function PublicOrderPage() {
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
+  const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -591,6 +596,16 @@ export default function PublicOrderPage() {
                   <small>{unitLabel} left in queue</small>
                   {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
                 </div>
+                {isBoostOrder ? (
+                  <div className="public-metric-card">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="app-kicker">Duration</p>
+                      <span className="public-metric-icon"><CalendarDays className="h-4 w-4" aria-hidden="true" /></span>
+                    </div>
+                    <strong>{boostDuration}</strong>
+                    <small>Boost subscription length</small>
+                  </div>
+                ) : null}
                 {!isBoostOrder && !isCompleted ? (
                   <div className="public-metric-card">
                     <div className="flex items-center justify-between gap-3">
@@ -701,7 +716,6 @@ export default function PublicOrderPage() {
                 {isBoostOrder ? (
                   <div className="public-radial-countdown">
                     <RefreshCw className={`h-3.5 w-3.5 ${autoRefreshing ? "animate-spin" : ""}`} aria-hidden="true" />
-                    <span>{autoRefreshing ? "Refreshing now" : "Next refresh"}</span>
                     <strong>{autoRefreshing ? "..." : `${secondsUntilRefresh}s`}</strong>
                   </div>
                 ) : null}

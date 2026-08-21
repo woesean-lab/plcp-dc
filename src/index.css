@@ -2096,7 +2096,7 @@
   }
 
   .public-stats-body.is-boost-monitor .public-metrics-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .public-metric-card,
@@ -2414,8 +2414,9 @@
   .public-radial-countdown {
     display: grid;
     width: 100%;
-    grid-template-columns: 18px minmax(0, 1fr) auto;
+    grid-template-columns: 18px auto;
     gap: .5rem;
+    justify-content: center;
     align-items: center;
     margin-top: 1rem;
     border: 1px solid var(--app-accent-border);
