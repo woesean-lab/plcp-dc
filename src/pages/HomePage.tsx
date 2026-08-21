@@ -1233,119 +1233,123 @@ export default function HomePage() {
                   ) : null}
 
                   {selectedIsBoost ? (
-                    <div className="boost-order-panel md:col-span-2">
-                      <div className="boost-order-panel-heading">
+                    <div className="boost-order-block md:col-span-2">
+                      <div className="boost-order-section-heading">
                         <div>
                           <span className={fieldLabelClass}>Boost details</span>
                           <p className="service-selector-copy">Set the boost amount and target server invite.</p>
                         </div>
                       </div>
-                      <div className="boost-order-grid">
-                        <div className="boost-order-field">
-                          <span className="boost-order-label">Number of Boosts</span>
-                          <div className="boost-amount-control">
-                            <button
-                              type="button"
-                              aria-label="Decrease boosts"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
-                            >
-                              <Minus className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
-                            <button
-                              type="button"
-                              aria-label="Increase boosts"
-                              disabled={selectedBoostCapacity <= 0 || form.amount >= selectedBoostCapacity}
-                              onClick={() =>
-                                setForm((current) => ({
-                                  ...current,
-                                  amount: Math.min(Math.max(2, selectedBoostCapacity), current.amount + 2)
-                                }))
-                              }
-                            >
-                              <Plus className="h-4 w-4" aria-hidden="true" />
-                            </button>
+                      <div className="boost-order-panel">
+                        <div className="boost-order-grid">
+                          <div className="boost-order-field">
+                            <span className="boost-order-label">Number of Boosts</span>
+                            <div className="boost-amount-control">
+                              <button
+                                type="button"
+                                aria-label="Decrease boosts"
+                                onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
+                              >
+                                <Minus className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                              <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
+                              <button
+                                type="button"
+                                aria-label="Increase boosts"
+                                disabled={selectedBoostCapacity <= 0 || form.amount >= selectedBoostCapacity}
+                                onClick={() =>
+                                  setForm((current) => ({
+                                    ...current,
+                                    amount: Math.min(Math.max(2, selectedBoostCapacity), current.amount + 2)
+                                  }))
+                                }
+                              >
+                                <Plus className="h-4 w-4" aria-hidden="true" />
+                              </button>
+                            </div>
                           </div>
-                        </div>
 
-                        <label className="boost-order-field">
-                          <span className="boost-order-label">Server Invite</span>
-                          <div className="boost-invite-control">
-                            <span>discord.gg/</span>
-                            <input
-                              value={form.serverId}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
-                              }}
-                              placeholder="yourcode"
-                              required
-                            />
-                          </div>
-                        </label>
+                          <label className="boost-order-field">
+                            <span className="boost-order-label">Server Invite</span>
+                            <div className="boost-invite-control">
+                              <span>discord.gg/</span>
+                              <input
+                                value={form.serverId}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
+                                }}
+                                placeholder="yourcode"
+                                required
+                              />
+                            </div>
+                          </label>
+                        </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="boost-order-panel md:col-span-2">
-                      <div className="boost-order-panel-heading">
+                    <div className="boost-order-block md:col-span-2">
+                      <div className="boost-order-section-heading">
                         <div>
                           <span className={fieldLabelClass}>Member details</span>
                           <p className="service-selector-copy">Set the member amount, invite, and delivery timing.</p>
                         </div>
                       </div>
-                      <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""}`}>
-                        <div className="boost-order-field">
-                          <span className="boost-order-label">Number of Members</span>
-                          <input
-                            className="boost-number-input"
-                            type="number"
-                            min={1}
-                            value={form.amount}
-                            onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 100 }))}
-                          />
-                        </div>
-
-                        <label className="boost-order-field">
-                          <span className="boost-order-label">Server Invite</span>
-                          <div className="boost-invite-control">
-                            <span>discord.gg/</span>
-                            <input
-                              value={form.serverId}
-                              onChange={(event) => {
-                                const value = event.target.value;
-                                setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
-                              }}
-                              placeholder="yourcode"
-                              required
-                            />
-                          </div>
-                        </label>
-
-                        <label className="boost-order-field">
-                          <span className="boost-order-label">Delay</span>
-                          <input
-                            className="boost-number-input"
-                            type="number"
-                            min={1}
-                            max={1200}
-                            value={form.delay}
-                            onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
-                          />
-                        </label>
-
-                        {form.service === "OAUTH-ONLINE" ? (
-                          <label className="boost-order-field">
-                            <span className="boost-order-label">Billing cycle</span>
+                      <div className="boost-order-panel">
+                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""}`}>
+                          <div className="boost-order-field">
+                            <span className="boost-order-label">Number of Members</span>
                             <input
                               className="boost-number-input"
                               type="number"
                               min={1}
-                              max={12}
-                              value={form.billingCycle}
-                              onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
+                              value={form.amount}
+                              onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 100 }))}
+                            />
+                          </div>
+
+                          <label className="boost-order-field">
+                            <span className="boost-order-label">Server Invite</span>
+                            <div className="boost-invite-control">
+                              <span>discord.gg/</span>
+                              <input
+                                value={form.serverId}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
+                                }}
+                                placeholder="yourcode"
+                                required
+                              />
+                            </div>
+                          </label>
+
+                          <label className="boost-order-field">
+                            <span className="boost-order-label">Delay</span>
+                            <input
+                              className="boost-number-input"
+                              type="number"
+                              min={1}
+                              max={1200}
+                              value={form.delay}
+                              onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
                             />
                           </label>
-                        ) : null}
+
+                          {form.service === "OAUTH-ONLINE" ? (
+                            <label className="boost-order-field">
+                              <span className="boost-order-label">Billing cycle</span>
+                              <input
+                                className="boost-number-input"
+                                type="number"
+                                min={1}
+                                max={12}
+                                value={form.billingCycle}
+                                onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
+                              />
+                            </label>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   )}

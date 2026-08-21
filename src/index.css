@@ -826,22 +826,25 @@
     color: #8af0cb;
   }
 
-  .boost-order-panel {
+  .boost-order-block {
     display: grid;
-    gap: 1.1rem;
     max-width: 860px;
     margin-top: 0.65rem;
-    border: 1px solid var(--app-border);
-    border-radius: 18px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
-    padding: 1.05rem;
   }
 
-  .boost-order-panel-heading {
+  .boost-order-section-heading {
     display: flex;
     align-items: flex-end;
     justify-content: space-between;
     gap: 1rem;
+    margin-bottom: 0.8rem;
+  }
+
+  .boost-order-panel {
+    border: 1px solid var(--app-border);
+    border-radius: 18px;
+    background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.01));
+    padding: 1.05rem;
   }
 
   .boost-order-grid {
