@@ -1086,7 +1086,7 @@ export default function HomePage() {
                                 setForm((current) => ({
                                   ...current,
                                   service: option.value === "boosts" ? "DCORD-BOOSTS" : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
-                                  amount: option.value === "boosts" ? 2 : current.amount
+                                  amount: option.value === "boosts" ? 2 : 100
                                 }))
                               }
                             />
@@ -1165,37 +1165,62 @@ export default function HomePage() {
                   ) : null}
 
                   {selectedIsBoost ? (
-                    <div className="boost-order-panel md:col-span-2">
-                      <fieldset className="boost-duration-field">
-                        <legend className="boost-order-label">Duration</legend>
-                        <div className="boost-duration-grid">
-                          {[1, 3].map((duration) => {
-                            const selected = form.duration === duration;
-                            const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
-                            const boostCapacity = tokenStock * 2;
-                            const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
-                            const enoughStock = tokenStock >= requiredTokens;
-                            return (
-                              <button
-                                key={duration}
-                                type="button"
-                                className={`boost-duration-card ${selected ? "is-selected" : ""}`}
-                                onClick={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
-                              >
-                                <span className="boost-duration-card-head">
-                                  <strong>{duration} Month</strong>
-                                  <Badge variant={enoughStock ? "success" : "destructive"}>{boostCapacity} boosts</Badge>
-                                </span>
-                                <span className="boost-duration-card-meta">
-                                  <span>{tokenStock} tokens available</span>
-                                  <span>{requiredTokens} tokens needed</span>
-                                </span>
-                              </button>
-                            );
-                          })}
+                    <fieldset className="service-selector md:col-span-2">
+                      <legend className="sr-only">Boost duration</legend>
+                      <div className="service-selector-heading">
+                        <div>
+                          <span className={fieldLabelClass}>Boost duration</span>
+                          <p className="service-selector-copy">Choose the stock bucket used for this boost order.</p>
                         </div>
-                      </fieldset>
+                        <span className="service-selector-count">2 durations</span>
+                      </div>
+                      <div className="service-grid service-grid-compact">
+                        {[1, 3].map((duration, index) => {
+                          const selected = form.duration === duration;
+                          const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
+                          const boostCapacity = tokenStock * 2;
+                          const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
+                          const enoughStock = tokenStock >= requiredTokens;
 
+                          return (
+                            <label key={duration} className={`service-option ${selected ? "is-selected" : ""}`} data-service="boosts">
+                              <input
+                                className="sr-only"
+                                type="radio"
+                                name="boostDuration"
+                                value={duration}
+                                checked={selected}
+                                onChange={() => setForm((current) => ({ ...current, duration: duration as 1 | 3 }))}
+                              />
+                              <span className="service-option-head" aria-hidden="true">
+                                <span className="service-option-icon">
+                                  <span className="text-sm font-semibold">{duration}M</span>
+                                </span>
+                                <span className="service-option-state">
+                                  {selected ? (
+                                    <>
+                                      <Check className="h-3 w-3" />
+                                      Selected
+                                    </>
+                                  ) : (
+                                    String(index + 1).padStart(2, "0")
+                                  )}
+                                </span>
+                              </span>
+                              <span className="service-option-title">{duration} Month</span>
+                              <span className="service-option-description">
+                                {tokenStock} tokens available · {requiredTokens} needed
+                              </span>
+                              <span className="service-option-code">{enoughStock ? `${boostCapacity} BOOSTS` : "LOW STOCK"}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </fieldset>
+                  ) : null}
+
+                  {selectedIsBoost ? (
+                    <div className="boost-order-panel md:col-span-2">
                       <div className="boost-order-grid">
                         <fieldset className="boost-order-field">
                           <legend className="boost-order-label">Number of Boosts</legend>
@@ -1240,23 +1265,13 @@ export default function HomePage() {
                       <div className="boost-order-grid">
                         <fieldset className="boost-order-field">
                           <legend className="boost-order-label">Number of Members</legend>
-                          <div className="boost-amount-control">
-                            <button
-                              type="button"
-                              aria-label="Decrease members"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(1, current.amount - 1) }))}
-                            >
-                              <Minus className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                            <div className="boost-amount-value" aria-live="polite">{form.amount}</div>
-                            <button
-                              type="button"
-                              aria-label="Increase members"
-                              onClick={() => setForm((current) => ({ ...current, amount: Math.max(1, current.amount + 1) }))}
-                            >
-                              <Plus className="h-4 w-4" aria-hidden="true" />
-                            </button>
-                          </div>
+                          <input
+                            className="boost-number-input"
+                            type="number"
+                            min={1}
+                            value={form.amount}
+                            onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 100 }))}
+                          />
                         </fieldset>
 
                         <label className="boost-order-field">

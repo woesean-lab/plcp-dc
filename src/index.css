@@ -814,13 +814,6 @@
     grid-template-columns: minmax(190px, 240px) minmax(280px, 1fr);
     gap: 1rem;
     align-items: end;
-    border-top: 1px solid var(--app-divider);
-    padding-top: 1rem;
-  }
-
-  .boost-order-panel > .boost-order-grid:first-child {
-    border-top: 0;
-    padding-top: 0;
   }
 
   .boost-order-field {
@@ -875,6 +868,27 @@
     font-size: 14px;
     font-weight: 600;
     font-variant-numeric: tabular-nums;
+  }
+
+  .boost-number-input {
+    min-height: 40px;
+    width: 100%;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    outline: 0;
+    color: var(--app-text);
+    background: var(--app-input-bg);
+    padding: 0 0.9rem;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  }
+
+  .boost-number-input:focus-visible {
+    border-color: var(--app-accent);
+    background: var(--app-input-focus-bg);
+    box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   .boost-invite-control {
