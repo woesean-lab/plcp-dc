@@ -19,6 +19,9 @@ type DcordTokenResult = {
   index: number;
   token: string;
   status: string;
+  joinStatus: string;
+  boostStatus: string;
+  slots: string;
   boostMessage: string;
   successful: boolean;
   state: "success" | "pending" | "error";
@@ -109,20 +112,44 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
       const row = item as Record<string, unknown>;
       const token = typeof row.token === "string" && row.token.trim() ? row.token.trim() : `Token ${index + 1}`;
       const status = typeof row.status === "string" && row.status.trim() ? row.status.trim() : "unknown";
+      const normalizedStatus = status.toLowerCase();
+      const successful = row.boosted === true || row.success === true || normalizedStatus.includes("boost");
+      const joinStatus = typeof row.joinStatus === "string" && row.joinStatus.trim()
+        ? row.joinStatus.trim()
+        : successful || normalizedStatus.includes("joined")
+          ? "joined"
+          : ["queued", "pending", "waiting"].some((value) => normalizedStatus.includes(value))
+            ? "waiting"
+            : normalizedStatus.includes("joining") || normalizedStatus.includes("process")
+              ? "joining"
+              : "failed";
+      const boostStatus = typeof row.boostStatus === "string" && row.boostStatus.trim()
+        ? row.boostStatus.trim()
+        : successful
+          ? "boosted"
+          : ["queued", "joining", "pending", "process", "waiting"].some((value) => normalizedStatus.includes(value))
+            ? "waiting"
+            : "failed";
+      const rawSlots = row.slots;
+      const slots = typeof rawSlots === "number" && Number.isFinite(rawSlots)
+        ? rawSlots > 0 ? `+${rawSlots}` : "-"
+        : typeof rawSlots === "string" && rawSlots.trim()
+          ? rawSlots.trim()
+          : successful
+            ? "+2"
+            : "-";
       const boostMessage = typeof row.boostMessage === "string" && row.boostMessage.trim()
         ? row.boostMessage.trim()
         : typeof row.boost_message === "string" && row.boost_message.trim()
           ? row.boost_message.trim()
           : "";
-      const successful = row.boosted === true || row.success === true || status.toLowerCase().includes("boost");
-      const normalizedStatus = status.toLowerCase();
       const state = successful
         ? "success"
-        : ["queued", "joining", "pending", "process"].some((value) => normalizedStatus.includes(value))
+        : [joinStatus, boostStatus, status].some((value) => ["queued", "joining", "pending", "process", "waiting"].some((stateValue) => value.toLowerCase().includes(stateValue)))
           ? "pending"
           : "error";
 
-      return { index, token, status, boostMessage, successful, state };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -686,6 +713,14 @@ export default function PublicOrderPage() {
 
                   {dcordTokenResults.length ? (
                     <div className="public-token-results-list">
+                      <div className="public-token-results-head" aria-hidden="true">
+                        <span />
+                        <span>Token</span>
+                        <span>Join</span>
+                        <span>Boost</span>
+                        <span>Slots</span>
+                        <span />
+                      </div>
                       {dcordTokenResults.map((item, index) => (
                         <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                           <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
@@ -693,7 +728,9 @@ export default function PublicOrderPage() {
                             <strong>{item.token}</strong>
                             <small>{item.boostMessage || item.status}</small>
                           </span>
-                          <span className="public-token-result-status">{item.successful ? "Boosted" : item.status}</span>
+                          <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                          <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                          <span className="public-token-result-slots">{item.slots}</span>
                           {item.state === "error" ? (
                             <Button
                               type="button"

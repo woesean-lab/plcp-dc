@@ -2232,9 +2232,22 @@
     margin-top: 1rem;
   }
 
+  .public-token-results-head {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px 78px;
+    gap: .8rem;
+    align-items: center;
+    padding: 0 .8rem .25rem;
+    color: rgba(105, 221, 178, .55);
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+
   .public-token-result-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) auto auto;
+    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px 78px;
     gap: .8rem;
     align-items: center;
     border: 1px solid var(--app-border);
@@ -2281,7 +2294,10 @@
     white-space: nowrap;
   }
 
-  .public-token-result-status {
+  .public-token-result-pill {
+    display: inline-flex;
+    min-width: 76px;
+    justify-content: center;
     border: 1px solid var(--app-danger-button-border);
     border-radius: 999px;
     padding: .34rem .55rem;
@@ -2294,16 +2310,32 @@
     white-space: nowrap;
   }
 
-  .public-token-result-row[data-result="success"] .public-token-result-status {
+  .public-token-result-pill[data-state="joined"],
+  .public-token-result-pill[data-state="boosted"] {
     border-color: rgba(105,221,178,.26);
     color: var(--app-success);
     background: var(--app-success-soft);
   }
 
-  .public-token-result-row[data-result="pending"] .public-token-result-status {
+  .public-token-result-pill[data-state="waiting"],
+  .public-token-result-pill[data-state="joining"],
+  .public-token-result-pill[data-state="queued"] {
     border-color: rgba(155, 140, 255, .3);
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
+  }
+
+  .public-token-result-pill[data-state="skipped"] {
+    border-color: var(--app-border);
+    color: var(--app-muted);
+    background: rgba(255,255,255,.035);
+  }
+
+  .public-token-result-slots {
+    color: var(--app-success);
+    font-size: 12px;
+    font-weight: 800;
+    text-align: center;
   }
 
   .public-token-results-empty {
@@ -3134,6 +3166,6 @@
 .landing-footer span:first-child { color: var(--app-text-secondary); font-weight: 700; }
 @media (max-width:1100px) { .landing-service-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:760px) { .boost-order-grid,.service-grid.boost-duration-grid { grid-template-columns:1fr; } .boost-order-panel { max-width:100%; } }
-@media (max-width:640px) { .public-token-result-row { grid-template-columns: 30px minmax(0, 1fr); } .public-token-result-status { width: fit-content; } .public-token-result-row .ui-button { width: 100%; grid-column: 1 / -1; } }
+@media (max-width:640px) { .public-token-results-head { display:none; } .public-token-result-row { grid-template-columns: 30px minmax(0, 1fr); } .public-token-result-pill { width: fit-content; min-width: 0; } .public-token-result-slots { text-align: left; } .public-token-result-row .ui-button { width: 100%; grid-column: 1 / -1; } }
 @media (max-width:900px) { .landing-hero { grid-template-columns:1fr; min-height:auto; padding-top:4rem; } .landing-demo { width:min(620px,100%); margin-inline:auto; transform:none; } .landing-process ol { grid-template-columns:1fr; } .landing-service-card { min-height:240px; } .landing-section-heading,.landing-final-cta { align-items:flex-start; flex-direction:column; } }
 @media (max-width:640px) { .landing-nav { grid-template-columns:1fr auto; } .landing-nav-badge { display:none; } .landing-nav .ui-button { width:2.75rem; padding-inline:0; font-size:0; } .landing-nav .ui-button svg { width:1rem; height:1rem; } .landing-hero { gap:3.5rem; padding-block:3.5rem 4.5rem; } .landing-hero h1 { font-size:clamp(3rem,16vw,4.6rem); } .landing-actions .ui-button { width:100%; } .landing-demo { border-radius:22px; padding:1rem; } .landing-demo-grid,.landing-service-grid { grid-template-columns:1fr; } .landing-section,.landing-process { padding-block:4rem; } .landing-final-cta { margin-block:3rem; } .landing-final-cta .ui-button { width:100%; } .landing-footer { flex-direction:column; } }

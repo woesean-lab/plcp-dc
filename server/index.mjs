@@ -453,10 +453,14 @@ async function saveTrackedOrderPayload(payload) {
 function normalizeDcordJoinResult(result, token) {
   const boostMessage = String(result?.boost_message ?? "").trim();
   const boosted = result?.boost === true || boostMessage.toLowerCase().includes("boosted");
+  const joined = result?.success === true;
   return {
     token: redactToken(token),
-    success: Boolean(result?.success),
+    success: joined,
     status: boosted ? "joined + boosted" : result?.success === true ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
+    joinStatus: joined ? "joined" : "failed",
+    boostStatus: boosted ? "boosted" : joined ? "failed" : "waiting",
+    slots: boosted ? 2 : 0,
     boost: Boolean(result?.boost),
     boostMessage,
     httpStatus: Number.isFinite(result?.http_status) ? result.http_status : undefined,
@@ -469,6 +473,9 @@ function createQueuedDcordResult(token) {
     token: redactToken(token),
     success: false,
     status: "queued",
+    joinStatus: "waiting",
+    boostStatus: "waiting",
+    slots: null,
     boost: false,
     boostMessage: "Waiting for worker.",
     boosted: false
@@ -488,6 +495,9 @@ async function runDcordBoostToken(token, invite) {
       token: redactToken(token),
       success: false,
       status: "error",
+      joinStatus: "failed",
+      boostStatus: "skipped",
+      slots: 0,
       boost: false,
       boostMessage: error instanceof Error ? error.message : "Dcord join failed.",
       boosted: false
@@ -528,6 +538,8 @@ async function processDcordBoostOrder(order, tokens, invite) {
     results[index] = {
       ...results[index],
       status: "joining",
+      joinStatus: "joining",
+      boostStatus: "waiting",
       boostMessage: "Join + boost request is running."
     };
     await saveCurrentProgress();
