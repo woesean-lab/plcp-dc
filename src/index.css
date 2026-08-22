@@ -2355,7 +2355,7 @@
 
   .public-token-result-slots {
     justify-self: center;
-    color: #8be0bf;
+    color: var(--app-text-secondary);
     font-size: 12px;
     font-weight: 800;
     text-align: center;
