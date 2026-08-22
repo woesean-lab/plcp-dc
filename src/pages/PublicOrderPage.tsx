@@ -27,6 +27,10 @@ type DcordTokenResult = {
   state: "success" | "pending" | "error";
 };
 
+function getDcordTokenResultKey(item: Pick<DcordTokenResult, "index" | "token">) {
+  return `${item.index}:${item.token}`;
+}
+
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
     ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
@@ -169,6 +173,7 @@ export default function PublicOrderPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
+  const [revealedBoostTokens, setRevealedBoostTokens] = useState<Record<string, boolean>>({});
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
@@ -178,7 +183,7 @@ export default function PublicOrderPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Pulcip Discord";
+    document.title = "Pulcip Monitor";
     return () => {
       document.title = previousTitle;
     };
@@ -339,8 +344,24 @@ export default function PublicOrderPage() {
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const boostRevealSignature = dcordTokenResults.map((item) => `${getDcordTokenResultKey(item)}:${item.successful}`).join("|");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
+
+  useEffect(() => {
+    const timers = dcordTokenResults
+      .filter((item) => item.successful && !revealedBoostTokens[getDcordTokenResultKey(item)])
+      .map((item) =>
+        window.setTimeout(() => {
+          const key = getDcordTokenResultKey(item);
+          setRevealedBoostTokens((current) => (current[key] ? current : { ...current, [key]: true }));
+        }, 700)
+      );
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [boostRevealSignature, revealedBoostTokens]);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -724,34 +745,40 @@ export default function PublicOrderPage() {
                           <span>Slots</span>
                         </span>
                       </div>
-                      {dcordTokenResults.map((item, index) => (
-                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
-                          <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
-                          <span className="public-token-result-main">
-                            <strong>{item.token}</strong>
-                            <small>{item.boostMessage || item.status}</small>
-                          </span>
-                          <span className="public-token-result-flow">
-                            <span className="public-token-result-action">
-                              {item.state === "error" ? (
-                                <Button
-                                type="button"
-                                variant="ghost"
-                                size="xs"
-                                className="public-token-replace-button"
-                                onClick={() => void handleReplaceDcordToken(item.index)}
-                                  disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
-                                >
-                                  {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
-                                </Button>
-                              ) : null}
+                      {dcordTokenResults.map((item, index) => {
+                        const boostRevealed = !item.successful || revealedBoostTokens[getDcordTokenResultKey(item)];
+                        const visibleBoostStatus = boostRevealed ? item.boostStatus : "waiting";
+                        const visibleSlots = boostRevealed ? item.slots : "-";
+
+                        return (
+                          <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
+                            <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
+                            <span className="public-token-result-main">
+                              <strong>{item.token}</strong>
+                              <small>{item.boostMessage || item.status}</small>
                             </span>
-                            <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                            <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
-                            <span className="public-token-result-slots">{item.slots}</span>
-                          </span>
-                        </div>
-                      ))}
+                            <span className="public-token-result-flow">
+                              <span className="public-token-result-action">
+                                {item.state === "error" ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="xs"
+                                    className="public-token-replace-button"
+                                    onClick={() => void handleReplaceDcordToken(item.index)}
+                                    disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
+                                  >
+                                    {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
+                                  </Button>
+                                ) : null}
+                              </span>
+                              <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                              <span className="public-token-result-pill" data-state={visibleBoostStatus.toLowerCase()}>{visibleBoostStatus}</span>
+                              <span className="public-token-result-slots">{visibleSlots}</span>
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <p className="public-token-results-empty">Waiting for the first token result.</p>
