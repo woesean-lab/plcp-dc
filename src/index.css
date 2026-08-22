@@ -2234,7 +2234,7 @@
 
   .public-token-results-head {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px 78px;
+    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px auto;
     gap: .8rem;
     align-items: center;
     padding: 0 .8rem .25rem;
@@ -2251,7 +2251,7 @@
 
   .public-token-result-row {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px 78px;
+    grid-template-columns: 34px minmax(0, 1fr) 94px 94px 58px auto;
     gap: .8rem;
     align-items: center;
     border: 1px solid var(--app-border);
@@ -2300,6 +2300,7 @@
 
   .public-token-result-pill {
     display: inline-flex;
+    justify-self: center;
     min-width: 76px;
     justify-content: center;
     border: 1px solid var(--app-danger-button-border);
@@ -2336,6 +2337,7 @@
   }
 
   .public-token-result-slots {
+    justify-self: center;
     color: var(--app-success);
     font-size: 12px;
     font-weight: 800;
