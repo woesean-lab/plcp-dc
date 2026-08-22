@@ -2300,6 +2300,12 @@
     background: var(--app-success-soft);
   }
 
+  .public-token-result-row[data-result="pending"] .public-token-result-status {
+    border-color: rgba(155, 140, 255, .3);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+  }
+
   .public-token-results-empty {
     margin: 1rem 0 0;
     border: 1px dashed var(--app-border);

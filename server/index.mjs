@@ -456,11 +456,22 @@ function normalizeDcordJoinResult(result, token) {
   return {
     token: redactToken(token),
     success: Boolean(result?.success),
-    status: typeof result?.status === "string" ? result.status : boosted ? "boosted" : "unknown",
+    status: boosted ? "joined + boosted" : result?.success === true ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
     boost: Boolean(result?.boost),
     boostMessage,
     httpStatus: Number.isFinite(result?.http_status) ? result.http_status : undefined,
     boosted
+  };
+}
+
+function createQueuedDcordResult(token) {
+  return {
+    token: redactToken(token),
+    success: false,
+    status: "queued",
+    boost: false,
+    boostMessage: "Waiting for worker.",
+    boosted: false
   };
 }
 
@@ -485,15 +496,14 @@ async function runDcordBoostToken(token, invite) {
 }
 
 async function processDcordBoostOrder(order, tokens, invite) {
-  const results = Array.from({ length: tokens.length });
+  const results = tokens.map(createQueuedDcordResult);
   let nextIndex = 0;
   let progressSave = Promise.resolve();
 
   async function saveCurrentProgress() {
     progressSave = progressSave.then(async () => {
-      const completedResults = results.filter(Boolean);
-      const added = completedResults.reduce((total, item) => total + (item.boosted ? 2 : 0), 0);
-      const finished = completedResults.length >= tokens.length;
+      const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
+      const finished = results.every((item) => !["queued", "joining"].includes(String(item?.status ?? "").toLowerCase()));
       await saveTrackedOrderPayload({
         ...order,
         added,
@@ -503,7 +513,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
             ? `${added}/${order.amount} boosts completed.`
             : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
           : `${added}/${order.amount} boosts completed.`,
-        dcordResults: completedResults
+        dcordResults: results
       });
     });
     await progressSave;
@@ -515,6 +525,13 @@ async function processDcordBoostOrder(order, tokens, invite) {
     if (index >= tokens.length) return;
 
     const token = tokens[index];
+    results[index] = {
+      ...results[index],
+      status: "joining",
+      boostMessage: "Join + boost request is running."
+    };
+    await saveCurrentProgress();
+
     const usageEntry = await recordUsedBoostToken({ token, duration: order.duration, order });
     const normalized = await runDcordBoostToken(token, invite);
     await updateUsedBoostTokenResult(usageEntry.id, normalized);
@@ -1087,7 +1104,8 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       tokenCount: requiredTokens,
       createdAt: new Date().toISOString(),
       status: "PROCESS",
-      details: `0/${amount} boosts completed.`
+      details: `0/${amount} boosts completed.`,
+      dcordResults: selectedTokens.map(createQueuedDcordResult)
     };
 
     await saveTrackedOrderPayload(order);

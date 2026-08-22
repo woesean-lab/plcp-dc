@@ -21,6 +21,7 @@ type DcordTokenResult = {
   status: string;
   boostMessage: string;
   successful: boolean;
+  state: "success" | "pending" | "error";
 };
 
 function formatNumber(value?: number) {
@@ -114,8 +115,14 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
           ? row.boost_message.trim()
           : "";
       const successful = row.boosted === true || row.success === true || status.toLowerCase().includes("boost");
+      const normalizedStatus = status.toLowerCase();
+      const state = successful
+        ? "success"
+        : ["queued", "joining", "pending", "process"].some((value) => normalizedStatus.includes(value))
+          ? "pending"
+          : "error";
 
-      return { index, token, status, boostMessage, successful };
+      return { index, token, status, boostMessage, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -303,6 +310,7 @@ export default function PublicOrderPage() {
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
+  const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
 
@@ -673,20 +681,20 @@ export default function PublicOrderPage() {
                       <p className="app-kicker">Token results</p>
                       <h2>Per-token boost log</h2>
                     </div>
-                    <span className="public-secure-mark">{dcordTokenResults.length}/{status?.tokenCount ?? "-"} tokens</span>
+                    <span className="public-secure-mark">{dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} completed</span>
                   </div>
 
                   {dcordTokenResults.length ? (
                     <div className="public-token-results-list">
                       {dcordTokenResults.map((item, index) => (
-                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.successful ? "success" : "error"}>
+                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                           <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
                           <span className="public-token-result-main">
                             <strong>{item.token}</strong>
                             <small>{item.boostMessage || item.status}</small>
                           </span>
                           <span className="public-token-result-status">{item.successful ? "Boosted" : item.status}</span>
-                          {!item.successful ? (
+                          {item.state === "error" ? (
                             <Button
                               type="button"
                               variant="secondary"
@@ -717,7 +725,7 @@ export default function PublicOrderPage() {
                   <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
                 {isBoostOrder && canManageDcordTokens ? (
-                  <p className="public-radial-note"><span aria-hidden="true" /> {dcordTokenResults.length}/{status?.tokenCount ?? "-"} token results received.</p>
+                  <p className="public-radial-note"><span aria-hidden="true" /> {dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} token results completed.</p>
                 ) : (
                   <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
                 )}
