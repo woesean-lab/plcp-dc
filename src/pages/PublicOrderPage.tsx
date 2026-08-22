@@ -113,10 +113,11 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
       const token = typeof row.token === "string" && row.token.trim() ? row.token.trim() : `Token ${index + 1}`;
       const status = typeof row.status === "string" && row.status.trim() ? row.status.trim() : "unknown";
       const normalizedStatus = status.toLowerCase();
-      const successful = row.boosted === true || row.success === true || normalizedStatus.includes("boost");
+      const successful = row.boosted === true || normalizedStatus.includes("boosted");
+      const joined = row.success === true || successful || normalizedStatus.includes("joined");
       const joinStatus = typeof row.joinStatus === "string" && row.joinStatus.trim()
         ? row.joinStatus.trim()
-        : successful || normalizedStatus.includes("joined")
+        : joined
           ? "joined"
           : ["queued", "pending", "waiting"].some((value) => normalizedStatus.includes(value))
             ? "waiting"
