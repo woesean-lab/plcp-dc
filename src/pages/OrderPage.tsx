@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,12 +6,81 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { getOrderStatus, updateOrderDelay } from "../lib/integration";
+import { getOrderStatus, replaceDcordBoostToken, updateOrderDelay } from "../lib/integration";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
+
+type DcordTokenResult = {
+  index: number;
+  token: string;
+  status: string;
+  joinStatus: string;
+  boostStatus: string;
+  slots: string;
+  boostMessage: string;
+  successful: boolean;
+  state: "success" | "pending" | "error";
+};
+
+function getDcordTokenResultKey(item: Pick<DcordTokenResult, "index" | "token">) {
+  return `${item.index}:${item.token}`;
+}
+
+function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
+  const results = source?.dcordResults;
+  if (!Array.isArray(results)) return [];
+
+  return results
+    .map((item, index) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+      const row = item as Record<string, unknown>;
+      const token = typeof row.token === "string" && row.token.trim() ? row.token.trim() : `Token ${index + 1}`;
+      const status = typeof row.status === "string" && row.status.trim() ? row.status.trim() : "unknown";
+      const normalizedStatus = status.toLowerCase();
+      const successful = row.boosted === true || normalizedStatus.includes("boosted");
+      const joined = row.success === true || successful || normalizedStatus.includes("joined");
+      const joinStatus = typeof row.joinStatus === "string" && row.joinStatus.trim()
+        ? row.joinStatus.trim()
+        : joined
+          ? "joined"
+          : ["queued", "pending", "waiting"].some((value) => normalizedStatus.includes(value))
+            ? "waiting"
+            : normalizedStatus.includes("joining") || normalizedStatus.includes("process")
+              ? "joining"
+              : "failed";
+      const boostStatus = typeof row.boostStatus === "string" && row.boostStatus.trim()
+        ? row.boostStatus.trim()
+        : successful
+          ? "boosted"
+          : ["queued", "joining", "pending", "process", "waiting"].some((value) => normalizedStatus.includes(value))
+            ? "waiting"
+            : "failed";
+      const rawSlots = row.slots;
+      const slots = typeof rawSlots === "number" && Number.isFinite(rawSlots)
+        ? rawSlots > 0 ? `+${rawSlots}` : "-"
+        : typeof rawSlots === "string" && rawSlots.trim()
+          ? rawSlots.trim()
+          : successful
+            ? "+2"
+            : "-";
+      const boostMessage = typeof row.boostMessage === "string" && row.boostMessage.trim()
+        ? row.boostMessage.trim()
+        : typeof row.boost_message === "string" && row.boost_message.trim()
+          ? row.boost_message.trim()
+          : "";
+      const state = successful
+        ? "success"
+        : [joinStatus, boostStatus, status].some((value) => ["queued", "joining", "pending", "process", "waiting"].some((stateValue) => value.toLowerCase().includes(stateValue)))
+          ? "pending"
+          : "error";
+
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
+    })
+    .filter((item): item is DcordTokenResult => Boolean(item));
+}
 
 function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
@@ -141,8 +210,13 @@ export default function OrderPage() {
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
+  const [revealedBoostTokens, setRevealedBoostTokens] = useState<Record<string, boolean>>({});
+  const boostRevealInitializedRef = useRef(false);
+  const refreshInFlightRef = useRef(false);
+  const isDcordProvider = provider === "dcord";
 
   const summary = useMemo(() => {
     if (!result) return [];
@@ -171,6 +245,11 @@ export default function OrderPage() {
     ];
   }, [result]);
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
+  const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
+  const terminal = isTerminalStatus(result?.status);
+  const dcordTokenResults = getDcordTokenResults(result);
+  const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const boostRevealSignature = dcordTokenResults.map((item) => `${getDcordTokenResultKey(item)}:${item.successful}`).join("|");
 
   useEffect(() => {
     const incoming = params.get("uniqid");
@@ -188,6 +267,58 @@ export default function OrderPage() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    boostRevealInitializedRef.current = false;
+    setRevealedBoostTokens({});
+  }, [result?.uniqid]);
+
+  useEffect(() => {
+    if (!dcordTokenResults.length) return;
+
+    if (!boostRevealInitializedRef.current) {
+      const initiallyRevealed = dcordTokenResults.reduce<Record<string, boolean>>((next, item) => {
+        if (item.successful) next[getDcordTokenResultKey(item)] = true;
+        return next;
+      }, {});
+      setRevealedBoostTokens(initiallyRevealed);
+      boostRevealInitializedRef.current = true;
+      return;
+    }
+
+    const timers = dcordTokenResults
+      .filter((item) => item.successful && !revealedBoostTokens[getDcordTokenResultKey(item)])
+      .map((item) =>
+        window.setTimeout(() => {
+          const key = getDcordTokenResultKey(item);
+          setRevealedBoostTokens((current) => (current[key] ? current : { ...current, [key]: true }));
+        }, 700)
+      );
+
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [boostRevealSignature, revealedBoostTokens]);
+
+  useEffect(() => {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isDcordProvider || terminal) return;
+
+    const timer = window.setInterval(() => {
+      if (refreshInFlightRef.current) return;
+      refreshInFlightRef.current = true;
+      void getOrderStatus(target, "dcord")
+        .then((data) => setResult(data))
+        .catch(() => {
+          // Keep the last loaded admin order visible and retry on the next tick.
+        })
+        .finally(() => {
+          refreshInFlightRef.current = false;
+        });
+    }, 2000);
+
+    return () => window.clearInterval(timer);
+  }, [isDcordProvider, result?.uniqid, terminal, uniqid]);
 
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
@@ -236,6 +367,25 @@ export default function OrderPage() {
       void lookup(target);
     } finally {
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleReplaceDcordToken(resultIndex: number) {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target) {
+      toast.error("Order ID is required.");
+      return;
+    }
+
+    try {
+      setReplacingTokenIndex(resultIndex);
+      const payload = await replaceDcordBoostToken(target, resultIndex);
+      setResult(payload.order);
+      toast.success("Replacement token started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Token could not be replaced.");
+    } finally {
+      setReplacingTokenIndex(null);
     }
   }
 
@@ -311,9 +461,6 @@ export default function OrderPage() {
       </section>
     );
   }
-
-  const terminal = isTerminalStatus(result?.status);
-  const isDcordProvider = provider === "dcord";
 
   return (
     <section className="tab-slide-in relative grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
@@ -527,6 +674,69 @@ export default function OrderPage() {
                   />
                   <p className="app-copy self-center text-sm">Update the current delay for this order.</p>
                 </div>
+              </div>
+            ) : null}
+
+            {isDcordProvider ? (
+              <div className="public-token-results-card">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="app-kicker">Token results</p>
+                    <h2>Per-token boost log</h2>
+                  </div>
+                  <span className="public-secure-mark">{dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
+                </div>
+
+                {dcordTokenResults.length ? (
+                  <div className="public-token-results-list">
+                    <div className="public-token-results-head" aria-hidden="true">
+                      <span />
+                      <span>Token</span>
+                      <span className="public-token-result-flow">
+                        <span />
+                        <span>Join</span>
+                        <span>Boost</span>
+                        <span>Slots</span>
+                      </span>
+                    </div>
+                    {dcordTokenResults.map((item, index) => {
+                      const boostRevealed = !item.successful || revealedBoostTokens[getDcordTokenResultKey(item)];
+                      const visibleBoostStatus = boostRevealed ? item.boostStatus : "waiting";
+                      const visibleSlots = boostRevealed ? item.slots : "-";
+
+                      return (
+                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
+                          <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
+                          <span className="public-token-result-main">
+                            <strong>{item.token}</strong>
+                            <small>{item.boostMessage || item.status}</small>
+                          </span>
+                          <span className="public-token-result-flow">
+                            <span className="public-token-result-action">
+                              {item.state === "error" ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="xs"
+                                  className="public-token-replace-button"
+                                  onClick={() => void handleReplaceDcordToken(item.index)}
+                                  disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
+                                >
+                                  {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
+                                </Button>
+                              ) : null}
+                            </span>
+                            <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                            <span className="public-token-result-pill" data-state={visibleBoostStatus.toLowerCase()}>{visibleBoostStatus}</span>
+                            <span className="public-token-result-slots">{visibleSlots}</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="public-token-results-empty">Waiting for token results.</p>
+                )}
               </div>
             ) : null}
 
