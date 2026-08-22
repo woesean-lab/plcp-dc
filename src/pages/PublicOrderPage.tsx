@@ -716,9 +716,11 @@ export default function PublicOrderPage() {
                       <div className="public-token-results-head" aria-hidden="true">
                         <span />
                         <span>Token</span>
-                        <span>Join</span>
-                        <span>Boost</span>
-                        <span>Slots</span>
+                        <span className="public-token-result-flow">
+                          <span>Join</span>
+                          <span>Boost</span>
+                          <span>Slots</span>
+                        </span>
                         <span />
                       </div>
                       {dcordTokenResults.map((item, index) => (
@@ -728,9 +730,11 @@ export default function PublicOrderPage() {
                             <strong>{item.token}</strong>
                             <small>{item.boostMessage || item.status}</small>
                           </span>
-                          <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                          <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
-                          <span className="public-token-result-slots">{item.slots}</span>
+                          <span className="public-token-result-flow">
+                            <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                            <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                            <span className="public-token-result-slots">{item.slots}</span>
+                          </span>
                           {item.state === "error" ? (
                             <Button
                               type="button"
