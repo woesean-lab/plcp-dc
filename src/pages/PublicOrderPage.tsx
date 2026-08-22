@@ -178,7 +178,7 @@ export default function PublicOrderPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "Members Monitor";
+    document.title = "Pulcip Discord";
     return () => {
       document.title = previousTitle;
     };
