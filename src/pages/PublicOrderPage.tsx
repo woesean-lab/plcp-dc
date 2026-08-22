@@ -718,11 +718,11 @@ export default function PublicOrderPage() {
                         <span />
                         <span>Token</span>
                         <span className="public-token-result-flow">
+                          <span />
                           <span>Join</span>
                           <span>Boost</span>
                           <span>Slots</span>
                         </span>
-                        <span />
                       </div>
                       {dcordTokenResults.map((item, index) => (
                         <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
@@ -732,22 +732,22 @@ export default function PublicOrderPage() {
                             <small>{item.boostMessage || item.status}</small>
                           </span>
                           <span className="public-token-result-flow">
+                            <span className="public-token-result-action">
+                              {item.state === "error" ? (
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="xs"
+                                  onClick={() => void handleReplaceDcordToken(item.index)}
+                                  disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
+                                >
+                                  {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
+                                </Button>
+                              ) : null}
+                            </span>
                             <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
                             <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
                             <span className="public-token-result-slots">{item.slots}</span>
-                          </span>
-                          <span className="public-token-result-action">
-                            {item.state === "error" ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="xs"
-                                onClick={() => void handleReplaceDcordToken(item.index)}
-                                disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
-                              >
-                                {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
-                              </Button>
-                            ) : null}
                           </span>
                         </div>
                       ))}
