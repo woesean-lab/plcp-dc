@@ -180,6 +180,7 @@ export default function PublicOrderPage() {
   const delayUpdateCooldownUntilRef = useRef(0);
   const restartInFlightRef = useRef(false);
   const restartCooldownUntilRef = useRef(0);
+  const boostRevealInitializedRef = useRef(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -349,6 +350,23 @@ export default function PublicOrderPage() {
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
 
   useEffect(() => {
+    boostRevealInitializedRef.current = false;
+    setRevealedBoostTokens({});
+  }, [uniqid]);
+
+  useEffect(() => {
+    if (!dcordTokenResults.length) return;
+
+    if (!boostRevealInitializedRef.current) {
+      const initiallyRevealed = dcordTokenResults.reduce<Record<string, boolean>>((next, item) => {
+        if (item.successful) next[getDcordTokenResultKey(item)] = true;
+        return next;
+      }, {});
+      setRevealedBoostTokens(initiallyRevealed);
+      boostRevealInitializedRef.current = true;
+      return;
+    }
+
     const timers = dcordTokenResults
       .filter((item) => item.successful && !revealedBoostTokens[getDcordTokenResultKey(item)])
       .map((item) =>
