@@ -2238,11 +2238,15 @@
     gap: .8rem;
     align-items: center;
     padding: 0 .8rem .25rem;
-    color: rgba(105, 221, 178, .55);
+    color: var(--app-muted);
     font-size: 10px;
     font-weight: 800;
     letter-spacing: .12em;
     text-transform: uppercase;
+  }
+
+  .public-token-results-head span:nth-child(n + 3) {
+    text-align: center;
   }
 
   .public-token-result-row {
