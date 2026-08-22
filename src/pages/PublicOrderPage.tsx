@@ -735,10 +735,11 @@ export default function PublicOrderPage() {
                             <span className="public-token-result-action">
                               {item.state === "error" ? (
                                 <Button
-                                  type="button"
-                                  variant="secondary"
-                                  size="xs"
-                                  onClick={() => void handleReplaceDcordToken(item.index)}
+                                type="button"
+                                variant="ghost"
+                                size="xs"
+                                className="public-token-replace-button"
+                                onClick={() => void handleReplaceDcordToken(item.index)}
                                   disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
                                 >
                                   {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}

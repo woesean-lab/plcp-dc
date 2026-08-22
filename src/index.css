@@ -2263,10 +2263,10 @@
     grid-template-columns: 34px minmax(0, 1fr) auto;
     gap: .8rem;
     align-items: center;
-    border: 1px solid var(--app-border);
+    border: 1px solid rgba(255,255,255,.075);
     border-radius: var(--app-radius-md);
-    background: rgba(8, 9, 18, .42);
-    padding: .7rem .8rem;
+    background: rgba(12, 13, 24, .5);
+    padding: .64rem .75rem;
   }
 
   .public-token-result-index {
@@ -2309,8 +2309,8 @@
 
   .public-token-result-flow {
     display: grid;
-    grid-template-columns: 78px 94px 94px 58px;
-    gap: .8rem;
+    grid-template-columns: 76px 88px 88px 52px;
+    gap: .7rem;
     align-items: center;
     justify-self: end;
   }
@@ -2318,33 +2318,33 @@
   .public-token-result-pill {
     display: inline-flex;
     justify-self: center;
-    min-width: 76px;
+    min-width: 72px;
     justify-content: center;
-    border: 1px solid var(--app-danger-button-border);
+    border: 1px solid rgba(255, 119, 145, .28);
     border-radius: 999px;
-    padding: .34rem .55rem;
-    color: var(--app-danger);
-    background: var(--app-danger-soft);
+    padding: .3rem .52rem;
+    color: #ff9bad;
+    background: rgba(255, 91, 122, .09);
     font-size: 9px;
     font-weight: 800;
-    letter-spacing: .08em;
+    letter-spacing: .06em;
     text-transform: uppercase;
     white-space: nowrap;
   }
 
   .public-token-result-pill[data-state="joined"],
   .public-token-result-pill[data-state="boosted"] {
-    border-color: rgba(105,221,178,.26);
-    color: var(--app-success);
-    background: var(--app-success-soft);
+    border-color: rgba(105, 221, 178, .18);
+    color: #8be0bf;
+    background: rgba(105, 221, 178, .085);
   }
 
   .public-token-result-pill[data-state="waiting"],
   .public-token-result-pill[data-state="joining"],
   .public-token-result-pill[data-state="queued"] {
-    border-color: rgba(155, 140, 255, .3);
-    color: var(--app-accent-bright);
-    background: var(--app-accent-soft);
+    border-color: rgba(155, 140, 255, .2);
+    color: #bab2f3;
+    background: rgba(155, 140, 255, .08);
   }
 
   .public-token-result-pill[data-state="skipped"] {
@@ -2355,7 +2355,7 @@
 
   .public-token-result-slots {
     justify-self: center;
-    color: var(--app-success);
+    color: #8be0bf;
     font-size: 12px;
     font-weight: 800;
     text-align: center;
@@ -2365,6 +2365,23 @@
     display: flex;
     justify-content: flex-start;
     min-width: 78px;
+  }
+
+  .public-token-replace-button {
+    height: 28px;
+    border-color: rgba(255,255,255,.105);
+    border-radius: 10px;
+    background: rgba(255,255,255,.045);
+    color: var(--app-text-secondary);
+    font-size: 11px;
+    font-weight: 650;
+    box-shadow: none;
+  }
+
+  .public-token-replace-button:hover:not(:disabled) {
+    border-color: var(--app-accent-border);
+    background: rgba(155,140,255,.1);
+    color: var(--app-text);
   }
 
   .public-token-results-empty {
