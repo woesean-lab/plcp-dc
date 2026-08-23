@@ -383,13 +383,44 @@ export default function HomePage() {
   const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
   const [delaySyncLocks, setDelaySyncLocks] = useState<Record<string, number>>({});
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
+  const [orderSearch, setOrderSearch] = useState("");
+  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
+  const [orderTypeFilter, setOrderTypeFilter] = useState("all");
 
   const activeOrders = useMemo(
     () =>
       orders.filter((order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())),
     [orders]
   );
-  const orderPageCount = Math.max(1, Math.ceil(orders.length / ORDER_PAGE_SIZE));
+  const filteredOrders = useMemo(() => {
+    const query = orderSearch.trim().toLowerCase();
+    return orders.filter((order) => {
+      const normalizedStatus = String(order.status ?? "NEW").trim().toUpperCase();
+      const boostOrder = order.provider === "dcord" || isBoostService(order.service);
+      const terminal = isTerminalOrder(order.status);
+      const matchesSearch = !query || [
+        order.uniqid,
+        order.serverName,
+        order.serverId,
+        order.service,
+        order.status,
+        order.details
+      ].some((value) => String(value ?? "").toLowerCase().includes(query));
+      const matchesStatus =
+        orderStatusFilter === "all" ||
+        (orderStatusFilter === "active" && !terminal) ||
+        (orderStatusFilter === "completed" && normalizedStatus === "COMPLETED") ||
+        (orderStatusFilter === "failed" && ["ERROR", "INVALID", "TERMINATED", "CANCELED", "CANCELLED"].some((value) => normalizedStatus.includes(value))) ||
+        (orderStatusFilter === "waiting" && ["NEW", "WAITING"].includes(normalizedStatus));
+      const matchesType =
+        orderTypeFilter === "all" ||
+        (orderTypeFilter === "boosts" && boostOrder) ||
+        (orderTypeFilter === "members" && !boostOrder);
+
+      return matchesSearch && matchesStatus && matchesType;
+    });
+  }, [orderSearch, orderStatusFilter, orderTypeFilter, orders]);
+  const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -398,14 +429,14 @@ export default function HomePage() {
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
-    return orders.slice(start, start + ORDER_PAGE_SIZE);
-  }, [currentOrderPage, orders]);
+    return filteredOrders.slice(start, start + ORDER_PAGE_SIZE);
+  }, [currentOrderPage, filteredOrders]);
 
   useEffect(() => {
     if (activeTab === "manage") {
       setCurrentOrderPage(1);
     }
-  }, [activeTab]);
+  }, [activeTab, orderSearch, orderStatusFilter, orderTypeFilter]);
 
   useEffect(() => {
     setCurrentOrderPage((current) => Math.min(Math.max(current, 1), orderPageCount));
@@ -1497,6 +1528,7 @@ export default function HomePage() {
               </div>
               <div className="page-heading-meta">
                 <Badge variant="outline">{orders.length} tracked</Badge>
+                <Badge variant="secondary">{filteredOrders.length} shown</Badge>
                 <Badge variant="secondary">{activeOrders.length} active</Badge>
                 <Badge variant="secondary">
                   Page {currentOrderPage}/{orderPageCount}
@@ -1532,10 +1564,51 @@ export default function HomePage() {
 
                 {orders.length ? (
                   <>
+                  <div className="tracked-order-filterbar border-b border-[var(--app-divider)] px-5 py-4 sm:px-6">
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Search</span>
+                      <Input
+                        value={orderSearch}
+                        onChange={(event) => setOrderSearch(event.target.value)}
+                        placeholder="Order ID, server, service..."
+                      />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Status</span>
+                      <select className="app-select" value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
+                        <option value="all">All statuses</option>
+                        <option value="active">Active</option>
+                        <option value="waiting">Waiting</option>
+                        <option value="completed">Completed</option>
+                        <option value="failed">Failed</option>
+                      </select>
+                    </label>
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Type</span>
+                      <select className="app-select" value={orderTypeFilter} onChange={(event) => setOrderTypeFilter(event.target.value)}>
+                        <option value="all">All types</option>
+                        <option value="members">Members</option>
+                        <option value="boosts">Boosts</option>
+                      </select>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      disabled={!orderSearch && orderStatusFilter === "all" && orderTypeFilter === "all"}
+                      onClick={() => {
+                        setOrderSearch("");
+                        setOrderStatusFilter("all");
+                        setOrderTypeFilter("all");
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] px-5 py-3 text-sm text-[var(--app-text-secondary)] sm:px-6">
                     <span>
-                      Showing {Math.min((currentOrderPage - 1) * ORDER_PAGE_SIZE + 1, orders.length)}-
-                      {Math.min(currentOrderPage * ORDER_PAGE_SIZE, orders.length)} of {orders.length}
+                      Showing {filteredOrders.length ? Math.min((currentOrderPage - 1) * ORDER_PAGE_SIZE + 1, filteredOrders.length) : 0}-
+                      {Math.min(currentOrderPage * ORDER_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length}
                     </span>
                     <div className="flex items-center gap-2">
                       <Button
@@ -1560,6 +1633,8 @@ export default function HomePage() {
                       </Button>
                     </div>
                   </div>
+                  {filteredOrders.length ? (
+                    <>
                   <ol className="tracked-order-list" aria-labelledby="tracked-orders-title">
                     {paginatedOrders.map((order, index) => {
                       const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
@@ -1764,6 +1839,18 @@ export default function HomePage() {
                       </Button>
                     </div>
                   </div>
+                    </>
+                  ) : (
+                    <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
+                      <div>
+                        <span className="stat-icon mx-auto" aria-hidden="true">
+                          <Search className="h-4 w-4" />
+                        </span>
+                        <p className="mt-4 text-sm font-medium text-[var(--app-text-secondary)]">No orders match these filters</p>
+                        <p className="app-copy mt-1 text-sm">Clear filters or search another order detail.</p>
+                      </div>
+                    </div>
+                  )}
                   </>
                 ) : (
                   <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
