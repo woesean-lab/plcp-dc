@@ -531,12 +531,12 @@ export default function PublicOrderPage() {
   ) : null;
 
   return (
-    <section className="app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
+    <section className={`app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8 ${isBoostOrder ? "public-monitor-compact" : ""}`}>
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <div className="mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
-        <article className="public-stats-card app-panel w-full overflow-hidden">
+      <div className="public-monitor-shell mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
+        <article className={`public-stats-card app-panel w-full overflow-hidden ${isBoostOrder ? "is-boost-monitor" : ""}`}>
           <div className="public-stats-hero">
             <div className="public-stats-topline">
               <div className="public-stats-brand">
