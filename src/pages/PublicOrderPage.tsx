@@ -540,15 +540,18 @@ export default function PublicOrderPage() {
           </div>
 
           <div className="monitor-topbar-actions">
-            <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
-              <span className="monitor-live-stock-title"><Boxes className="h-3.5 w-3.5" aria-hidden="true" /><span><i aria-hidden="true" /> Live stock</span></span>
-              <span><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)}</strong></span>
-              <span><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)}</strong></span>
-            </div>
             <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{autoRefreshing ? "Syncing live data" : "Live data synced"}</span>
               <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
+            </div>
+            <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
+              <span className="monitor-live-stock-title">
+                <span className="monitor-live-stock-icon"><Boxes className="h-3.5 w-3.5" aria-hidden="true" /></span>
+                <span className="monitor-live-stock-copy"><small><i aria-hidden="true" /> Live</small><strong>Boost stock</strong></span>
+              </span>
+              <span className="monitor-live-stock-value"><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)} <em>Boosts</em></strong></span>
+              <span className="monitor-live-stock-value"><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)} <em>Boosts</em></strong></span>
             </div>
             <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
               <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
