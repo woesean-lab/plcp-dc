@@ -626,11 +626,16 @@
     transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
   }
 
-  .filter-dropdown-trigger:hover,
-  .filter-dropdown-trigger.is-open {
+  .filter-dropdown-trigger:hover {
     border-color: var(--app-accent-border);
     background: linear-gradient(180deg, rgba(155,140,255,.08), rgba(255,255,255,.018)), var(--app-input-focus-bg);
     box-shadow: 0 0 0 4px rgba(155,140,255,.09), inset 0 1px 0 rgba(255,255,255,.055);
+  }
+
+  .filter-dropdown-trigger.is-open {
+    border-color: var(--app-accent-border);
+    background: var(--app-input-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.045), inset 0 1px 3px rgba(0,0,0,.14);
   }
 
   .filter-dropdown-trigger svg {
