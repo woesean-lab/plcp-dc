@@ -531,12 +531,12 @@ export default function PublicOrderPage() {
   ) : null;
 
   return (
-    <section className={`app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8 ${isBoostOrder ? "public-monitor-compact" : ""}`}>
+    <section className="app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
       <div className="public-monitor-shell mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
-        <article className={`public-stats-card app-panel w-full overflow-hidden ${isBoostOrder ? "is-boost-monitor" : ""}`}>
+        <article className="public-stats-card app-panel w-full overflow-hidden">
           <div className="public-stats-hero">
             <div className="public-stats-topline">
               <div className="public-stats-brand">
@@ -636,7 +636,7 @@ export default function PublicOrderPage() {
               </div>
             </div>
           ) : (
-            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""} ${isBoostOrder && canManageDcordTokens ? "has-token-log" : ""}`}>
+            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""}`}>
               {isWaiting && botInvite ? (
                 <div className="public-bot-required-card app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
                   <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
