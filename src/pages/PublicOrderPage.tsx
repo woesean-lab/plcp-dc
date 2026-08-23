@@ -492,8 +492,7 @@ export default function PublicOrderPage() {
           <p className="app-kicker">Delay update</p>
           <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
           <p className="public-delay-description">
-            Delay determines how many seconds the system waits before the next member joins your server. For example, a
-            30-second delay means each member will join 30 seconds after the previous one.
+            Seconds between each member joining your server.
           </p>
         </div>
       </div>
@@ -531,7 +530,7 @@ export default function PublicOrderPage() {
   ) : null;
 
   return (
-    <section className="app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
+    <section className="public-monitor-page app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 

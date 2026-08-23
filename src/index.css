@@ -2918,6 +2918,164 @@
   }
 }
 
+@media (min-width: 900px) {
+  .public-monitor-page {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .public-monitor-page .public-monitor-shell {
+    min-height: calc(100vh - 2rem);
+    gap: .65rem;
+  }
+
+  .public-monitor-page .public-stats-hero {
+    padding: 1rem 1.5rem 0;
+  }
+
+  .public-monitor-page .public-stats-heading {
+    align-items: center;
+    margin-top: .85rem;
+  }
+
+  .public-monitor-page .public-stats-heading h1 {
+    margin-top: .4rem;
+    font-size: 2rem;
+  }
+
+  .public-monitor-page .public-stats-heading p {
+    display: none;
+  }
+
+  .public-monitor-page .public-stats-meta {
+    margin-top: .8rem;
+  }
+
+  .public-monitor-page .public-stats-meta > div {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: .6rem;
+    padding: .65rem 0;
+  }
+
+  .public-monitor-page .public-meta-icon,
+  .public-monitor-page .public-metric-icon {
+    width: 30px;
+    height: 30px;
+    border-radius: 9px;
+  }
+
+  .public-monitor-page .public-stats-body {
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: .75rem;
+    padding: 1rem;
+  }
+
+  .public-monitor-page .public-stats-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(0, .9fr);
+    gap: .75rem;
+  }
+
+  .public-monitor-page .public-metrics-grid,
+  .public-monitor-page .public-restart-warning,
+  .public-monitor-page .public-token-results-card {
+    grid-column: 1 / -1;
+  }
+
+  .public-monitor-page .public-metrics-grid {
+    gap: .75rem;
+  }
+
+  .public-monitor-page .public-metric-card,
+  .public-monitor-page .public-stats-body.is-boost-monitor .public-metric-card {
+    min-height: 108px;
+    padding: .75rem;
+  }
+
+  .public-monitor-page .public-metric-card > strong {
+    margin-top: .55rem;
+    font-size: 1.45rem;
+  }
+
+  .public-monitor-page .public-delay-estimate {
+    margin-top: .4rem;
+    padding: .22rem .45rem;
+  }
+
+  .public-monitor-page .public-delay-card,
+  .public-monitor-page .public-progress-card,
+  .public-monitor-page .public-token-results-card {
+    padding: .9rem;
+  }
+
+  .public-monitor-page .public-delay-card {
+    grid-column: 1;
+  }
+
+  .public-monitor-page .public-progress-card {
+    grid-column: 2;
+  }
+
+  .public-monitor-page .public-delay-description {
+    margin-top: .25rem;
+    line-height: 1.4;
+  }
+
+  .public-monitor-page .public-delay-card > .mt-4 {
+    margin-top: .65rem;
+  }
+
+  .public-monitor-page .public-delay-warning {
+    margin-top: .65rem;
+    padding: .55rem .65rem;
+  }
+
+  .public-monitor-page .public-progress-copy {
+    margin-top: .75rem;
+  }
+
+  .public-monitor-page .public-progress-copy strong {
+    font-size: 1.75rem;
+  }
+
+  .public-monitor-page .public-radial-card {
+    padding: 1rem;
+  }
+
+  .public-monitor-page .public-radial {
+    width: 132px;
+    height: 132px;
+    margin-top: .75rem;
+  }
+
+  .public-monitor-page .public-radial::before {
+    width: 108px;
+    height: 108px;
+  }
+
+  .public-monitor-page .public-radial strong {
+    font-size: 1.9rem;
+  }
+
+  .public-monitor-page .public-radial-stats {
+    margin-top: .8rem;
+    padding: .65rem 0;
+  }
+
+  .public-monitor-page .public-radial-note {
+    margin-top: .7rem;
+  }
+
+  .public-monitor-page .public-token-results-list {
+    max-height: 230px;
+    overflow-y: auto;
+    padding-right: .25rem;
+  }
+
+  .public-monitor-page .app-footer {
+    padding: .25rem .75rem 0;
+  }
+}
+
 @media (max-width: 899px) {
   .public-stats-body {
     grid-template-columns: 1fr;
