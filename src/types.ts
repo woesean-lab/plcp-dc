@@ -53,6 +53,10 @@ export interface OrderStatusResponse {
   canManageDcordTokens?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
+  liveBoostStock?: {
+    oneMonth: number;
+    threeMonth: number;
+  };
   [key: string]: unknown;
 }
 

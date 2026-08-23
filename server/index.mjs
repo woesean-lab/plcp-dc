@@ -652,6 +652,12 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
 
+    const boostTokenStock = summarizeBoostTokenStock(await loadBoostTokenStock());
+    const liveBoostStock = {
+      oneMonth: boostTokenStock.oneMonth * 2,
+      threeMonth: boostTokenStock.threeMonth * 2
+    };
+
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     let trackedPayload = tracked.rows[0]?.payload;
     if (
@@ -676,11 +682,11 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       }
       const canManageDcordTokens = await hasActiveSession(req);
       if (canManageDcordTokens) {
-        return res.set("Cache-Control", "no-store").json({ ...trackedPayload, canManageDcordTokens });
+        return res.set("Cache-Control", "no-store").json({ ...trackedPayload, liveBoostStock, canManageDcordTokens });
       }
 
       const { dcordResults, ...publicPayload } = trackedPayload;
-      return res.set("Cache-Control", "no-store").json({ ...publicPayload, canManageDcordTokens });
+      return res.set("Cache-Control", "no-store").json({ ...publicPayload, liveBoostStock, canManageDcordTokens });
     }
 
     const cacheBuster = Date.now();
@@ -695,8 +701,8 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     const restartCooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
     const restartCooldownSeconds = Math.max(0, Math.ceil((restartCooldownUntil - Date.now()) / 1000));
     const responsePayload = typeof payload === "object" && payload && !Array.isArray(payload)
-      ? { ...payload, delayUpdateCooldownSeconds, restartCooldownSeconds }
-      : { data: payload, delayUpdateCooldownSeconds, restartCooldownSeconds };
+      ? { ...payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds }
+      : { data: payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds };
     res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);

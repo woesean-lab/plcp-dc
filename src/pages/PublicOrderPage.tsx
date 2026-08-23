@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -356,6 +356,7 @@ export default function PublicOrderPage() {
   const boostRevealSignature = dcordTokenResults.map((item) => `${getDcordTokenResultKey(item)}:${item.successful}`).join("|");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
+  const liveBoostStock = status?.liveBoostStock;
 
   useEffect(() => {
     boostRevealInitializedRef.current = false;
@@ -539,6 +540,11 @@ export default function PublicOrderPage() {
           </div>
 
           <div className="monitor-topbar-actions">
+            <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
+              <span className="monitor-live-stock-title"><Boxes className="h-3.5 w-3.5" aria-hidden="true" /><span><i aria-hidden="true" /> Live stock</span></span>
+              <span><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)}</strong></span>
+              <span><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)}</strong></span>
+            </div>
             <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
               <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{autoRefreshing ? "Syncing live data" : "Live data synced"}</span>
