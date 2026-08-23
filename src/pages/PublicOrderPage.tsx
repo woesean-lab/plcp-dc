@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -486,26 +486,25 @@ export default function PublicOrderPage() {
   }
 
   const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
-    <div className="public-delay-card">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="monitor-control-panel">
+      <div className="monitor-panel-heading">
+        <span className="monitor-panel-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
         <div>
-          <p className="app-kicker">Delay update</p>
-          <h2 className="mt-1 text-lg font-semibold text-[var(--app-text)]">Adjust current delay</h2>
-          <p className="public-delay-description">
-            Seconds between each member joining your server.
-          </p>
+          <p className="app-kicker">Delivery control</p>
+          <h2>Join delay</h2>
         </div>
+        <strong className="monitor-current-delay">{typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
       </div>
 
-      <div className="mt-4 flex gap-3 max-sm:flex-col">
+      <div className="monitor-delay-controls">
         <Input
           type="number"
           min={1}
           max={1200}
           value={delayDraft}
           onChange={(event) => setDelayDraft(event.target.value)}
-          placeholder="Delay"
-          className="w-36 shrink-0"
+          placeholder="Seconds"
+          aria-label="Delay in seconds"
         />
         <Button
           type="button"
@@ -518,130 +517,76 @@ export default function PublicOrderPage() {
         </Button>
       </div>
 
-      <div className="public-delay-warning" role="note">
+      <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
         <p>
-          For new or small servers, we recommend a minimum <strong>700-second delay</strong> between joins when purchasing over
-          <strong> 500 members</strong> to avoid the risk of server limitation.
+          Over 500 members on a new server? <strong>700s delay is recommended.</strong>
         </p>
       </div>
-
     </div>
   ) : null;
 
   return (
-    <section className="public-monitor-page app-shell min-h-screen px-4 py-6 text-[var(--app-text)] sm:px-6 sm:py-8">
+    <section className="monitor-page app-shell min-h-screen text-[var(--app-text)]">
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <div className="public-monitor-shell mx-auto flex min-h-[calc(100vh-3rem)] w-full max-w-6xl flex-col justify-center gap-5">
-        <article className="public-stats-card app-panel w-full overflow-hidden">
-          <div className="public-stats-hero">
-            <div className="public-stats-topline">
-              <div className="public-stats-brand">
-                <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-                <span>
-                  <span className="brand-eyebrow">Pulcip</span>
-                  <strong>{isBoostOrder ? "Boosts Monitor" : "Members Monitor"}</strong>
-                </span>
-              </div>
+      <main className="monitor-frame">
+        <header className="monitor-topbar">
+          <div className="monitor-brand">
+            <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+            <span><span className="brand-eyebrow">Pulcip</span><strong>{isBoostOrder ? "Boosts Monitor" : "Members Monitor"}</strong></span>
+          </div>
 
-              <a className="public-stats-store-badge" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-                <span className="public-store-star" aria-hidden="true">
-                  <Star className="h-3.5 w-3.5" fill="currentColor" />
-                </span>
-                <span className="public-store-copy">
-                  <span className="public-store-title">Eldorado Top Seller</span>
-                  <span className="public-store-meta">
-                    <span>25,000+ Sales</span>
-                    <i aria-hidden="true" />
-                    <span className="public-store-feedback">
-                      <span className="public-store-stars" aria-hidden="true">
-                        {Array.from({ length: 5 }).map((_, index) => (
-                          <Star key={index} className="h-2.5 w-2.5" fill="currentColor" />
-                        ))}
-                      </span>
-                      99.7% Positive Feedback
-                    </span>
-                  </span>
-                  <span className="public-store-explore">Explore our other member products</span>
-                </span>
-                <span className="public-store-cta">
-                  Buy now <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                </span>
-              </a>
+          <div className="monitor-topbar-actions">
+            <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
+              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{autoRefreshing ? "Syncing live data" : "Live data synced"}</span>
+              <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
             </div>
+            <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+              <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+              <span><strong>Eldorado Top Seller</strong><small>25,000+ sales · 99.7% positive</small></span>
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
+          </div>
+        </header>
 
-            <div className="public-stats-heading">
-              <div className="min-w-0">
-                <div className="public-live-label"><span aria-hidden="true" /> Live public stats</div>
-                <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
-                <p>Real-time delivery visibility for your order, securely shared with you.</p>
-              </div>
-
-              <div className="public-stats-actions">
+        <article className="monitor-surface">
+          <div className="monitor-identity">
+            <div className="monitor-server-copy">
+              <div className="public-live-label"><span aria-hidden="true" /> Live order monitor</div>
+              <h1>{isInitialLoading ? <Skeleton className="h-12 w-72 max-w-[70vw]" /> : serverName}</h1>
+              <div className="monitor-order-meta">
                 {isInitialLoading ? (
-                  <>
-                    <Skeleton className="h-8 w-20 rounded-full" />
-                    <Skeleton className="h-8 w-28 rounded-full" />
-                  </>
+                  <><Skeleton className="h-8 w-20 rounded-full" /><Skeleton className="h-8 w-28 rounded-full" /></>
                 ) : (
-                  <>
-                    <Badge variant={getStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge>
-                    <Badge variant="outline">{serviceName}</Badge>
-                  </>
+                  <><Badge variant={getStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge><Badge variant="outline">{serviceName}</Badge></>
                 )}
-                <div className={`auto-refresh-pill ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite" aria-label={autoRefreshing ? "Refreshing live stats" : `Next automatic refresh in ${secondsUntilRefresh} seconds`}>
-                  <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{autoRefreshing ? "Refreshing" : "Next refresh"}</span>
-                  <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
-                </div>
+                <span><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</span>
               </div>
             </div>
 
-            <div className="public-stats-meta">
-              <div>
-                <span className="public-meta-icon"><CalendarDays className="h-4 w-4" /></span>
-                <span><small>Created</small>{isInitialLoading ? <Skeleton className="mt-2 h-4 w-28" /> : <strong>{formatDateTime(createdAt)}</strong>}</span>
-              </div>
-              <div>
-                <span className="public-meta-icon"><Activity className="h-4 w-4" /></span>
-                <span><small>Service</small>{isInitialLoading ? <Skeleton className="mt-2 h-4 w-24" /> : <strong>{serviceName}</strong>}</span>
-              </div>
+            <div className="monitor-trust-mark">
+              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+              <span><strong>Verified live feed</strong><small>Securely linked to the delivery network</small></span>
             </div>
           </div>
 
           {loading && !status ? (
-            <div className="grid gap-5 p-5 sm:p-7">
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="app-panel-soft p-4">
-                    <Skeleton className="h-3 w-20" />
-                    <Skeleton className="mt-3 h-7 w-24" />
-                  </div>
-                ))}
-              </div>
-              <div className="app-panel-soft p-4">
-                <Skeleton className="h-4 w-28" />
-                <Skeleton className="mt-3 h-4 w-full" />
-                <Skeleton className="mt-2 h-4 w-5/6" />
-              </div>
+            <div className="monitor-loading-grid">
+              {Array.from({ length: 3 }).map((_, index) => <Skeleton key={index} className="h-28 w-full" />)}
             </div>
           ) : error ? (
-            <div className="p-5 sm:p-7">
-              <div className="app-panel-soft border-[var(--app-danger-button-border)] bg-[var(--app-danger-soft)] p-5 text-[var(--app-text)]">
-                <p className="app-kicker text-[var(--app-danger)]">Unable to load</p>
-                <p className="mt-2 text-sm leading-6 text-[var(--app-text-secondary)]">{error}</p>
-              </div>
+            <div className="monitor-error">
+              <TriangleAlert className="h-5 w-5" aria-hidden="true" />
+              <div><strong>Unable to load this order</strong><p>{error}</p></div>
             </div>
           ) : (
-            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""}`}>
+            <div className={`monitor-content ${isBoostOrder ? "is-boost-monitor" : ""}`}>
               {isWaiting && botInvite ? (
-                <div className="public-bot-required-card app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
-                  <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
-                    <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-                    Bot required to start
-                  </span>
+                <div className="monitor-bot-alert">
+                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot required to start delivery</strong></span>
                   <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
                     <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
                   </Button>
@@ -654,109 +599,60 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              <div className="public-stats-overview">
-                <div className={`public-metrics-grid ${isCompleted ? "is-completed" : ""}`}>
-                <div className="public-metric-card">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="app-kicker">{unitLabel}</p>
-                    <span className="public-metric-icon is-success"><Users className="h-4 w-4" aria-hidden="true" /></span>
-                  </div>
-                  <strong>
-                    {typeof membersAdded === "number" && typeof totalMembers === "number"
-                      ? `${formatNumber(membersAdded)}/${formatNumber(totalMembers)}`
-                      : "-"}
-                  </strong>
-                  <small>Successfully delivered</small>
+              <div className="monitor-stat-strip">
+                <div className="monitor-stat is-primary">
+                  <span className="monitor-stat-icon"><Users className="h-4 w-4" aria-hidden="true" /></span>
+                  <span><small>Delivered {unitLabel}</small><strong>{formatNumber(membersAdded)}</strong><em>of {formatNumber(totalMembers)}</em></span>
                 </div>
-                <div className="public-metric-card">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="app-kicker">Remaining</p>
-                    <span className="public-metric-icon"><Server className="h-4 w-4" aria-hidden="true" /></span>
-                  </div>
-                  <strong>
-                    {typeof membersRemaining === "number" ? formatNumber(membersRemaining) : "-"}
-                  </strong>
-                  <small>{unitLabel} left in queue</small>
-                  {estimatedCompletion ? <span className="public-delay-estimate"><Timer className="h-3 w-3" aria-hidden="true" /> {estimatedCompletion}</span> : null}
+                <div className="monitor-stat">
+                  <span className="monitor-stat-icon"><Server className="h-4 w-4" aria-hidden="true" /></span>
+                  <span><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong><em>still in queue</em></span>
                 </div>
-                {isBoostOrder ? (
-                  <div className="public-metric-card">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="app-kicker">Duration</p>
-                      <span className="public-metric-icon"><CalendarDays className="h-4 w-4" aria-hidden="true" /></span>
-                    </div>
-                    <strong>{boostDuration}</strong>
-                    <small>Boost subscription length</small>
-                  </div>
-                ) : null}
-                {!isBoostOrder && !isCompleted ? (
-                  <div className="public-metric-card">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="app-kicker">Delay</p>
-                      <span className="public-metric-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
-                    </div>
-                    <strong>
-                      {typeof currentDelay === "number" ? `${currentDelay}s` : "-"}
-                    </strong>
-                    <small>Current delivery interval</small>
-                  </div>
-                ) : null}
+                <div className="monitor-stat">
+                  <span className="monitor-stat-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
+                  <span><small>{isBoostOrder ? "Duration" : "Current delay"}</small><strong>{isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong><em>{isBoostOrder ? "subscription length" : "between joins"}</em></span>
                 </div>
+              </div>
 
               {isInvitesPaused ? (
-                <div className="public-restart-warning" role="alert">
-                  <span className="public-restart-warning-icon" aria-hidden="true">
-                    <TriangleAlert className="h-5 w-5" />
-                  </span>
+                <div className="monitor-restart-warning" role="alert">
+                  <span className="monitor-warning-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
                   <div>
                     <p className="app-kicker">Invites paused</p>
                     <h2>Check your Discord server restriction</h2>
-                    <p>
-                      Have you received a warning from Discord? Try joining your server using its Discord invite link.
-                      If you see a warning, wait until the server restriction has been lifted before continuing.
-                    </p>
-                    <p className="public-restart-action-copy">Click here to start again if you've fixed the issues</p>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => void handleRestartOrder()}
-                      disabled={restartingOrder || restartCooldown > 0}
-                    >
-                      <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
-                      {restartingOrder ? "Continuing..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Continue"}
-                    </Button>
+                    <p>Confirm that your invite works before continuing the order.</p>
                   </div>
+                  <Button type="button" variant="destructive" onClick={() => void handleRestartOrder()} disabled={restartingOrder || restartCooldown > 0}>
+                    <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {restartingOrder ? "Continuing..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Continue"}
+                  </Button>
                 </div>
               ) : null}
 
-              {delayUpdatePanel}
-
-              {!isBoostOrder ? (
-                <div className="public-progress-card">
-                  <div className="flex items-center justify-between gap-3">
+              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`}>
+                <div className="monitor-progress-panel">
+                  <div className="monitor-progress-heading">
                     <div>
-                      <p className="app-kicker">Progress</p>
-                      <h2>Live delivery state</h2>
+                      <p className="app-kicker">Delivery progress</p>
+                      <h2>{isCompleted ? "Order completed" : "Order is moving"}</h2>
                     </div>
-                    <span className="public-secure-mark"><ShieldCheck className="h-4 w-4" /> Verified feed</span>
+                    <span className="monitor-progress-percent">{progress === null ? "—" : `${progressPercent}%`}</span>
                   </div>
-
-                  <div className="public-progress-copy"><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>completed</span></div>
-                  <div className="public-progress-track">
-                    <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+                  <div className="monitor-progress-track"><div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} /></div>
+                  <div className="monitor-progress-foot">
+                    <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersAdded)} delivered so far`}</span>
+                    {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
                   </div>
                 </div>
-              ) : null}
 
-              {isBoostOrder && canManageDcordTokens ? (
-                <div className="public-token-results-card">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="app-kicker">Token results</p>
-                      <h2>Per-token boost log</h2>
+                {delayUpdatePanel}
+
+                {isBoostOrder && canManageDcordTokens ? (
+                  <div className="monitor-token-panel">
+                    <div className="monitor-token-heading">
+                      <div><p className="app-kicker">Token results</p><h2>Per-token boost log</h2></div>
+                      <span>{dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} completed</span>
                     </div>
-                    <span className="public-secure-mark">{dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} completed</span>
-                  </div>
 
                   {dcordTokenResults.length ? (
                     <div className="public-token-results-list">
@@ -808,36 +704,18 @@ export default function PublicOrderPage() {
                   ) : (
                     <p className="public-token-results-empty">Waiting for the first token result.</p>
                   )}
-                </div>
-              ) : null}
+                  </div>
+                ) : null}
               </div>
-
-              <aside className="public-radial-card">
-                <p className="app-kicker">{isBoostOrder ? "Live refresh" : "Delivery overview"}</p>
-                <div className="public-radial" style={{ "--progress": `${progressPercent * 3.6}deg` } as CSSProperties}>
-                  <div><strong>{progress === null ? "—" : `${progressPercent}%`}</strong><span>{isCompleted ? "Complete" : "Delivered"}</span></div>
-                </div>
-                <div className="public-radial-stats">
-                  <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
-                  <div><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
-                </div>
-                {isBoostOrder && canManageDcordTokens ? (
-                  <p className="public-radial-note"><span aria-hidden="true" /> {dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} token results completed.</p>
-                ) : (
-                  <p className="public-radial-note"><span aria-hidden="true" /> Stats update live from the delivery network.</p>
-                )}
-              </aside>
-
             </div>
           )}
         </article>
 
-        <footer className="app-footer" aria-label="Pulcip Members">
-          <span>Pulcip Members</span>
-          <span className="app-footer-divider" aria-hidden="true" />
-          <span>Private operations suite</span>
+        <footer className="monitor-footer" aria-label="Pulcip Members">
+          <span><ShieldCheck className="h-3.5 w-3.5" /> Secure public link</span>
+          <span>Order #{uniqid ? uniqid.slice(-8).toUpperCase() : "-"}</span>
         </footer>
-      </div>
+      </main>
     </section>
   );
 }
