@@ -422,6 +422,7 @@ export default function HomePage() {
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
   const [stockView, setStockView] = useState<"active" | "used">("active");
+  const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
@@ -492,7 +493,11 @@ export default function HomePage() {
   const selectedIsBoost = isBoostService(form.service);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
-  const selectedUsedTokenIds = usedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
+  const filteredUsedBoostTokens = useMemo(
+    () => usedTokenDurationFilter === "all" ? usedBoostTokens : usedBoostTokens.filter((item) => item.duration === usedTokenDurationFilter),
+    [usedBoostTokens, usedTokenDurationFilter]
+  );
+  const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
@@ -917,7 +922,7 @@ export default function HomePage() {
   function setAllUsedBoostTokens(checked: boolean) {
     setSelectedUsedBoostTokens((current) => {
       const next = { ...current };
-      usedBoostTokens.forEach((item) => {
+      filteredUsedBoostTokens.forEach((item) => {
         next[item.id] = checked;
       });
       return next;
@@ -925,7 +930,7 @@ export default function HomePage() {
   }
 
   function getUsedTokensForDownload(onlySelected = false) {
-    const source = onlySelected ? usedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]) : usedBoostTokens;
+    const source = onlySelected ? filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]) : filteredUsedBoostTokens;
     return source.map((item) => item.token);
   }
 
@@ -2090,14 +2095,37 @@ export default function HomePage() {
                 </div>
               ) : (
                 <div className="stock-used-view" role="tabpanel">
+                  <div className="stock-used-filterbar">
+                    <span>Duration</span>
+                    <div className="stock-duration-filter" role="group" aria-label="Filter used tokens by duration">
+                      {[
+                        { value: "all" as const, label: "All", count: usedBoostTokens.length },
+                        { value: 1 as const, label: "1 Month", count: usedBoostTokens.filter((item) => item.duration === 1).length },
+                        { value: 3 as const, label: "3 Month", count: usedBoostTokens.filter((item) => item.duration === 3).length }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          className={usedTokenDurationFilter === option.value ? "is-active" : ""}
+                          aria-pressed={usedTokenDurationFilter === option.value}
+                          onClick={() => {
+                            setUsedTokenDurationFilter(option.value);
+                            setSelectedUsedBoostTokens({});
+                          }}
+                        >
+                          {option.label}<span>{option.count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <div className={`stock-selection-bar stock-used-actions ${selectedUsedTokenIds.length ? "has-selection" : ""}`}>
                     <label className="stock-select-all">
-                      <input type="checkbox" checked={Boolean(usedBoostTokens.length && selectedUsedTokenIds.length === usedBoostTokens.length)} onChange={(event) => setAllUsedBoostTokens(event.target.checked)} disabled={!usedBoostTokens.length} />
-                      <span>{selectedUsedTokenIds.length ? `${selectedUsedTokenIds.length} selected` : "Select all used tokens"}</span>
+                      <input type="checkbox" checked={Boolean(filteredUsedBoostTokens.length && selectedUsedTokenIds.length === filteredUsedBoostTokens.length)} onChange={(event) => setAllUsedBoostTokens(event.target.checked)} disabled={!filteredUsedBoostTokens.length} />
+                      <span>{selectedUsedTokenIds.length ? `${selectedUsedTokenIds.length} selected` : `Select all ${usedTokenDurationFilter === "all" ? "used tokens" : `${usedTokenDurationFilter} month`}`}</span>
                     </label>
                     <div className="stock-selection-actions">
                       {selectedUsedTokenIds.length ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllUsedBoostTokens(false)}>Clear</Button> : null}
-                      <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens()} disabled={!usedBoostTokens.length}>
+                      <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens()} disabled={!filteredUsedBoostTokens.length}>
                         <Download className="h-3.5 w-3.5" /> Download all
                       </Button>
                       <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens(true)} disabled={!selectedUsedTokenIds.length}>
@@ -2113,9 +2141,9 @@ export default function HomePage() {
                   </div>
 
                   <div className="stock-used-scroll">
-                    {usedBoostTokens.length ? (
+                    {filteredUsedBoostTokens.length ? (
                       <ol className="stock-used-list">
-                        {usedBoostTokens.map((item, index) => (
+                        {filteredUsedBoostTokens.map((item, index) => (
                           <li key={item.id} className={selectedUsedBoostTokens[item.id] ? "is-selected" : ""}>
                             <input type="checkbox" checked={Boolean(selectedUsedBoostTokens[item.id])} onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)} aria-label={`Select used token ${index + 1}`} />
                             <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
@@ -2133,7 +2161,7 @@ export default function HomePage() {
                         ))}
                       </ol>
                     ) : (
-                      <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No used tokens yet</strong><span>Tokens moved from inventory or consumed by orders will appear here.</span></div>
+                      <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No {usedTokenDurationFilter === "all" ? "used" : `${usedTokenDurationFilter} month`} tokens</strong><span>Tokens moved from inventory or consumed by orders will appear here.</span></div>
                     )}
                   </div>
                 </div>
