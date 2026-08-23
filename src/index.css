@@ -616,7 +616,7 @@
     gap: 0.75rem;
     border: 1px solid var(--app-border);
     border-radius: var(--app-radius-md);
-    background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(255,255,255,.018)), var(--app-input-bg);
+    background: var(--app-input-bg);
     padding: 0.78rem 0.82rem 0.78rem 0.95rem;
     color: var(--app-text);
     font-size: 0.9rem;
@@ -628,8 +628,8 @@
 
   .filter-dropdown-trigger:hover {
     border-color: var(--app-accent-border);
-    background: linear-gradient(180deg, rgba(155,140,255,.08), rgba(255,255,255,.018)), var(--app-input-focus-bg);
-    box-shadow: 0 0 0 4px rgba(155,140,255,.09), inset 0 1px 0 rgba(255,255,255,.055);
+    background: var(--app-input-bg);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.045), inset 0 1px 3px rgba(0,0,0,.14);
   }
 
   .filter-dropdown-trigger.is-open {
