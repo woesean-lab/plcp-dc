@@ -13,6 +13,7 @@ import {
   ExternalLink,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   KeyRound,
   ListChecks,
   LoaderCircle,
@@ -71,6 +72,68 @@ const EMPTY_BOOST_TOKEN_DRAFTS: BoostTokenStockInput = {
   oneMonthTokens: "",
   threeMonthTokens: ""
 };
+
+type FilterOption = {
+  value: string;
+  label: string;
+};
+
+function FilterDropdown({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <div className="filter-dropdown">
+      <span className={fieldLabelClass}>{label}</span>
+      <button
+        type="button"
+        className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
+        onClick={() => setOpen((current) => !current)}
+        onBlur={(event) => {
+          if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
+            setOpen(false);
+          }
+        }}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span>{selected?.label ?? value}</span>
+        <ChevronDown className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="filter-dropdown-menu" role="listbox" tabIndex={-1}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`filter-dropdown-option ${option.value === value ? "is-selected" : ""}`}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+              role="option"
+              aria-selected={option.value === value}
+            >
+              {option.label}
+              {option.value === value ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
@@ -1573,24 +1636,28 @@ export default function HomePage() {
                         placeholder="Order ID, server, service..."
                       />
                     </label>
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Status</span>
-                      <select className="app-select" value={orderStatusFilter} onChange={(event) => setOrderStatusFilter(event.target.value)}>
-                        <option value="all">All statuses</option>
-                        <option value="active">Active</option>
-                        <option value="waiting">Waiting</option>
-                        <option value="completed">Completed</option>
-                        <option value="failed">Failed</option>
-                      </select>
-                    </label>
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Type</span>
-                      <select className="app-select" value={orderTypeFilter} onChange={(event) => setOrderTypeFilter(event.target.value)}>
-                        <option value="all">All types</option>
-                        <option value="members">Members</option>
-                        <option value="boosts">Boosts</option>
-                      </select>
-                    </label>
+                    <FilterDropdown
+                      label="Status"
+                      value={orderStatusFilter}
+                      onChange={setOrderStatusFilter}
+                      options={[
+                        { value: "all", label: "All statuses" },
+                        { value: "active", label: "Active" },
+                        { value: "waiting", label: "Waiting" },
+                        { value: "completed", label: "Completed" },
+                        { value: "failed", label: "Failed" }
+                      ]}
+                    />
+                    <FilterDropdown
+                      label="Type"
+                      value={orderTypeFilter}
+                      onChange={setOrderTypeFilter}
+                      options={[
+                        { value: "all", label: "All types" },
+                        { value: "members", label: "Members" },
+                        { value: "boosts", label: "Boosts" }
+                      ]}
+                    />
                     <Button
                       type="button"
                       variant="secondary"
