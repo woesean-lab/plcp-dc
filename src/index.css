@@ -2529,7 +2529,7 @@
   }
 
   .public-stats-card.is-boost-monitor .public-stats-hero {
-    padding: 0.9rem clamp(1rem, 3vw, 1.35rem) 0;
+    padding: 1.15rem clamp(1.25rem, 3vw, 1.6rem) 0;
   }
 
   .public-stats-card.is-boost-monitor .public-stats-hero::before {
@@ -2543,14 +2543,14 @@
   }
 
   .public-stats-card.is-boost-monitor .public-stats-brand .brand-mark {
-    width: 30px;
-    height: 30px;
-    border-radius: 9px;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
   }
 
   .public-stats-card.is-boost-monitor .public-stats-heading {
     align-items: center;
-    margin-top: 0.85rem;
+    margin-top: 1rem;
   }
 
   .public-stats-card.is-boost-monitor .public-live-label {
@@ -2558,8 +2558,8 @@
   }
 
   .public-stats-card.is-boost-monitor .public-stats-heading h1 {
-    margin-top: .35rem;
-    font-size: clamp(1.55rem, 3.5vw, 2.35rem);
+    margin-top: .4rem;
+    font-size: clamp(1.8rem, 3.5vw, 2.5rem);
     letter-spacing: -.04em;
   }
 
@@ -2568,51 +2568,72 @@
   }
 
   .public-stats-card.is-boost-monitor .auto-refresh-pill {
-    min-height: 32px;
-    padding-inline: .6rem;
+    display: none;
   }
 
   .public-stats-card.is-boost-monitor .public-stats-meta {
-    margin-top: .75rem;
+    margin-top: 1rem;
   }
 
   .public-stats-card.is-boost-monitor .public-stats-meta > div {
-    grid-template-columns: 28px minmax(0,1fr);
-    gap: .55rem;
-    padding: .65rem 0;
+    grid-template-columns: 30px minmax(0,1fr);
+    gap: .65rem;
+    padding: .75rem 0;
   }
 
   .public-stats-card.is-boost-monitor .public-meta-icon {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 9px;
   }
 
   .public-stats-card.is-boost-monitor .public-stats-body {
     grid-template-columns: minmax(0, 1fr);
-    gap: .7rem;
-    padding: .85rem;
+    gap: 1rem;
+    padding: 1rem;
   }
 
-  .public-stats-card.is-boost-monitor .public-stats-overview,
+  .public-stats-card.is-boost-monitor .public-stats-overview {
+    gap: 1rem;
+  }
+
   .public-stats-card.is-boost-monitor .public-metrics-grid {
-    gap: .7rem;
+    gap: .75rem;
+  }
+
+  .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-stats-overview {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    align-items: stretch;
+  }
+
+  .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-metrics-grid {
+    grid-column: 2;
+    grid-row: 1;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(3, minmax(108px, 1fr));
+    align-content: stretch;
+  }
+
+  .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-token-results-card {
+    grid-column: 1;
+    grid-row: 1;
   }
 
   .public-stats-card.is-boost-monitor .public-metric-card {
-    min-height: 92px;
-    padding: .75rem;
+    min-height: 108px;
+    padding: .9rem;
+    background: rgba(255,255,255,.025);
   }
 
   .public-stats-card.is-boost-monitor .public-metric-icon {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
     border-radius: 9px;
   }
 
   .public-stats-card.is-boost-monitor .public-metric-card > strong {
-    margin-top: .55rem;
-    font-size: clamp(1.25rem, 2.4vw, 1.65rem);
+    margin-top: .7rem;
+    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
   }
 
   .public-stats-card.is-boost-monitor .public-metric-card > small {
@@ -2621,12 +2642,14 @@
   }
 
   .public-stats-card.is-boost-monitor .public-token-results-card {
-    padding: .85rem;
+    min-width: 0;
+    padding: 1rem;
+    background: rgba(255,255,255,.018);
   }
 
   .public-stats-card.is-boost-monitor .public-token-results-card h2 {
-    margin-top: .15rem;
-    font-size: 15px;
+    margin-top: .2rem;
+    font-size: 16px;
   }
 
   .public-stats-card.is-boost-monitor .public-secure-mark {
@@ -2635,11 +2658,13 @@
   }
 
   .public-stats-card.is-boost-monitor .public-token-results-list {
-    max-height: clamp(210px, 36vh, 430px);
+    max-height: clamp(280px, 48vh, 450px);
     overflow: auto;
-    gap: .42rem;
-    margin-top: .65rem;
-    padding-right: .25rem;
+    gap: .5rem;
+    margin-top: .85rem;
+    padding-right: .35rem;
+    scrollbar-color: rgba(155,140,255,.55) rgba(255,255,255,.035);
+    scrollbar-width: thin;
   }
 
   .public-stats-card.is-boost-monitor .public-token-results-head {
@@ -2647,25 +2672,27 @@
     top: 0;
     z-index: 2;
     border-bottom: 1px solid var(--app-divider);
-    background: rgba(18, 19, 32, .96);
-    padding: 0 .65rem .35rem;
+    background: rgba(22, 23, 38, .97);
+    padding: .2rem .7rem .55rem;
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-row {
-    grid-template-columns: 28px minmax(0, 1fr) auto;
-    gap: .55rem;
-    padding: .46rem .6rem;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: .65rem;
+    min-height: 48px;
+    padding: .5rem .65rem;
+    background: rgba(10,11,21,.36);
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-index {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     border-radius: 8px;
     font-size: 9px;
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-main strong {
-    font-size: 11px;
+    font-size: 11.5px;
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-main small {
@@ -2673,8 +2700,8 @@
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-flow {
-    grid-template-columns: 70px 78px 78px 44px;
-    gap: .48rem;
+    grid-template-columns: 72px 80px 80px 44px;
+    gap: .55rem;
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-action {
@@ -2682,9 +2709,9 @@
   }
 
   .public-stats-card.is-boost-monitor .public-token-result-pill {
-    min-width: 66px;
-    padding: .26rem .42rem;
-    font-size: 8px;
+    min-width: 68px;
+    padding: .28rem .45rem;
+    font-size: 8.5px;
   }
 
   .public-stats-card.is-boost-monitor .public-token-replace-button {
@@ -2695,6 +2722,27 @@
 
   .public-stats-card.is-boost-monitor .public-radial-card {
     display: none;
+  }
+
+  @media (max-width: 900px) {
+    .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-stats-overview {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-metrics-grid,
+    .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-token-results-card {
+      grid-column: 1;
+    }
+
+    .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-metrics-grid {
+      grid-row: 1;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-rows: auto;
+    }
+
+    .public-stats-card.is-boost-monitor .public-stats-body.has-token-log .public-token-results-card {
+      grid-row: 2;
+    }
   }
 
   .public-progress-details {

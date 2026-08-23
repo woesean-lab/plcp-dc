@@ -636,7 +636,7 @@ export default function PublicOrderPage() {
               </div>
             </div>
           ) : (
-            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""}`}>
+            <div className={`public-stats-body ${isBoostOrder ? "is-boost-monitor" : ""} ${isBoostOrder && canManageDcordTokens ? "has-token-log" : ""}`}>
               {isWaiting && botInvite ? (
                 <div className="public-bot-required-card app-panel-soft flex flex-wrap items-center gap-3 border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-4">
                   <span className="mr-auto inline-flex items-center gap-2 text-sm font-semibold text-[var(--app-text)]">
