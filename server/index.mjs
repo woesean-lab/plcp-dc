@@ -971,6 +971,56 @@ app.post("/api/dcord/boost-stock/delete", requireSession, async (req, res, next)
   }
 });
 
+app.post("/api/dcord/boost-stock/mark-used", requireSession, async (req, res, next) => {
+  try {
+    const duration = Number.parseInt(req.body?.duration, 10);
+    if (![1, 3].includes(duration)) {
+      return res.status(400).json({ message: "A valid boost duration is required." });
+    }
+
+    const requestedTokens = new Set(normalizeBoostTokenList(req.body?.tokens));
+    if (!requestedTokens.size) {
+      return res.status(400).json({ message: "At least one token is required." });
+    }
+
+    const stock = await loadBoostTokenStock();
+    const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+    const tokensToMove = stock[stockKey].filter((token) => requestedTokens.has(token));
+    if (!tokensToMove.length) {
+      return res.status(404).json({ message: "Selected tokens could not be found in active stock." });
+    }
+
+    const usedAt = new Date().toISOString();
+    const manualUsageRows = tokensToMove.map((token) => ({
+      id: crypto.randomUUID(),
+      token,
+      redactedToken: redactToken(token),
+      duration,
+      usedAt,
+      resultAt: usedAt,
+      status: "used",
+      success: false,
+      boosted: false,
+      boostMessage: "Moved manually from active stock."
+    }));
+    const history = await loadUsedBoostTokenHistory();
+    const nextHistory = await saveUsedBoostTokenHistory([...manualUsageRows, ...history]);
+    const nextStock = await saveBoostTokenStock({
+      ...stock,
+      [stockKey]: stock[stockKey].filter((token) => !requestedTokens.has(token))
+    });
+
+    res.json({
+      stock: summarizeBoostTokenStock(nextStock),
+      oneMonthTokens: nextStock.oneMonth,
+      threeMonthTokens: nextStock.threeMonth,
+      usedTokens: nextHistory
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, next) => {
   try {
     const usageIds = normalizeBoostTokenList(req.body?.ids ?? req.body?.id);

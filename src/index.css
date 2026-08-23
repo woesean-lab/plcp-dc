@@ -4142,3 +4142,484 @@
 @media (max-width:760px) { .tracked-order-filterbar { grid-template-columns: 1fr; } }
 @media (max-width:900px) { .landing-hero { grid-template-columns:1fr; min-height:auto; padding-top:4rem; } .landing-demo { width:min(620px,100%); margin-inline:auto; transform:none; } .landing-process ol { grid-template-columns:1fr; } .landing-service-card { min-height:240px; } .landing-section-heading,.landing-final-cta { align-items:flex-start; flex-direction:column; } }
 @media (max-width:640px) { .landing-nav { grid-template-columns:1fr auto; } .landing-nav-badge { display:none; } .landing-nav .ui-button { width:2.75rem; padding-inline:0; font-size:0; } .landing-nav .ui-button svg { width:1rem; height:1rem; } .landing-hero { gap:3.5rem; padding-block:3.5rem 4.5rem; } .landing-hero h1 { font-size:clamp(3rem,16vw,4.6rem); } .landing-actions .ui-button { width:100%; } .landing-demo { border-radius:22px; padding:1rem; } .landing-demo-grid,.landing-service-grid { grid-template-columns:1fr; } .landing-section,.landing-process { padding-block:4rem; } .landing-final-cta { margin-block:3rem; } .landing-final-cta .ui-button { width:100%; } .landing-footer { flex-direction:column; } }
+
+/* Boost token inventory */
+.stock-page-heading {
+  align-items: flex-end;
+}
+
+.stock-heading-actions,
+.stock-overview,
+.stock-overview-lead,
+.stock-workbench-header,
+.stock-view-tabs,
+.stock-storage-mark,
+.stock-duration-header,
+.stock-duration-identity,
+.stock-selection-bar,
+.stock-select-all,
+.stock-selection-actions {
+  display: flex;
+  align-items: center;
+}
+
+.stock-heading-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.stock-overview {
+  display: grid;
+  grid-template-columns: 1.35fr repeat(4, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.stock-overview-lead,
+.stock-overview-metric {
+  min-width: 0;
+  min-height: 112px;
+  padding: 20px 22px;
+}
+
+.stock-overview-lead {
+  gap: 14px;
+  background: linear-gradient(120deg, rgba(155,140,255,.11), rgba(255,255,255,.015));
+}
+
+.stock-overview-metric {
+  border-left: 1px solid var(--app-divider);
+}
+
+.stock-overview-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 13px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.stock-overview-lead > div,
+.stock-overview-metric {
+  display: grid;
+  align-content: center;
+}
+
+.stock-overview small {
+  color: var(--app-subtle);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.stock-overview strong {
+  margin-top: 5px;
+  color: var(--app-text);
+  font-size: 1.75rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stock-overview span:not(.stock-overview-icon) {
+  margin-top: 5px;
+  color: var(--app-muted);
+  font-size: 10px;
+}
+
+.stock-workbench {
+  overflow: hidden;
+}
+
+.stock-workbench-header {
+  min-height: 66px;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--app-divider);
+  padding: 10px 14px;
+  background: rgba(5,6,13,.25);
+}
+
+.stock-view-tabs {
+  gap: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 4px;
+  background: var(--app-nav-bg);
+}
+
+.stock-view-tabs button {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  padding: 0 12px;
+  color: var(--app-muted);
+  font-size: 11px;
+  font-weight: 700;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.stock-view-tabs button:hover {
+  color: var(--app-text-secondary);
+  background: var(--app-hover);
+}
+
+.stock-view-tabs button.is-active {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-text);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
+}
+
+.stock-view-tabs button > span {
+  display: grid;
+  min-width: 22px;
+  height: 20px;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(255,255,255,.06);
+  color: var(--app-text-secondary);
+  font-size: 9px;
+}
+
+.stock-storage-mark {
+  gap: 7px;
+  color: var(--app-subtle);
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.stock-storage-mark svg {
+  color: var(--app-success);
+}
+
+.stock-inventory-groups {
+  display: grid;
+}
+
+.stock-duration-section + .stock-duration-section {
+  border-top: 1px solid var(--app-border-strong);
+}
+
+.stock-duration-header {
+  min-height: 78px;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+}
+
+.stock-duration-identity {
+  min-width: 0;
+  gap: 13px;
+}
+
+.stock-duration-identity > span {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 12px;
+  background: rgba(255,255,255,.035);
+  color: var(--app-accent-bright);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stock-duration-identity h2 {
+  margin: 4px 0 0;
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.stock-duration-identity h2 em {
+  margin-left: 8px;
+  color: var(--app-muted);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.stock-selection-bar {
+  min-height: 54px;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--app-divider);
+  border-bottom: 1px solid var(--app-divider);
+  padding: 9px 18px;
+  background: rgba(4,5,11,.22);
+}
+
+.stock-selection-bar.has-selection {
+  background: rgba(155,140,255,.055);
+}
+
+.stock-select-all {
+  flex: 0 0 auto;
+  gap: 9px;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.stock-select-all input,
+.stock-token-list input,
+.stock-used-list input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--app-accent);
+}
+
+.stock-selection-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.stock-token-scroll,
+.stock-used-scroll {
+  max-height: 340px;
+  overflow: auto;
+  padding: 10px;
+}
+
+.stock-token-list,
+.stock-used-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.stock-token-list > li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  padding: 11px 12px;
+  background: rgba(5,6,13,.38);
+  transition: border-color .15s ease, background .15s ease;
+}
+
+.stock-token-list > li:hover {
+  border-color: var(--app-border-strong);
+  background: rgba(255,255,255,.035);
+}
+
+.stock-token-list > li.is-selected,
+.stock-used-list > li.is-selected {
+  border-color: var(--app-accent-border);
+  background: rgba(155,140,255,.075);
+}
+
+.stock-token-index {
+  color: var(--app-subtle);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.stock-token-list code,
+.stock-used-token-main code {
+  min-width: 0;
+  color: var(--app-text-secondary);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.stock-empty-state {
+  display: grid;
+  min-height: 140px;
+  place-items: center;
+  align-content: center;
+  gap: 7px;
+  color: var(--app-subtle);
+  text-align: center;
+}
+
+.stock-empty-state strong {
+  color: var(--app-text-secondary);
+  font-size: 12px;
+}
+
+.stock-empty-state span {
+  color: var(--app-muted);
+  font-size: 10px;
+}
+
+.stock-used-actions {
+  border-top: 0;
+}
+
+.stock-used-list > li {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 18px 32px minmax(240px, 1fr) 88px 138px auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  padding: 12px;
+  background: rgba(5,6,13,.38);
+}
+
+.stock-used-token-main {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.stock-used-token-main > span {
+  color: var(--app-muted);
+  font-size: 9.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.stock-used-date {
+  color: var(--app-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .stock-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stock-overview-lead {
+    grid-column: 1 / -1;
+  }
+
+  .stock-overview-metric:nth-child(4) {
+    border-top: 1px solid var(--app-divider);
+    border-left: 0;
+  }
+
+  .stock-overview-metric:nth-child(5) {
+    border-top: 1px solid var(--app-divider);
+  }
+
+  .stock-used-list > li {
+    grid-template-columns: 18px 32px minmax(0, 1fr) auto;
+  }
+
+  .stock-used-list > li > .ui-badge,
+  .stock-used-list > li > .stock-used-date,
+  .stock-used-list > li > .ui-button {
+    grid-column: auto;
+  }
+
+  .stock-used-token-main {
+    grid-column: 3 / -1;
+  }
+}
+
+@media (max-width: 639px) {
+  .stock-page-heading {
+    align-items: stretch;
+  }
+
+  .stock-heading-actions,
+  .stock-heading-actions .ui-button {
+    width: 100%;
+  }
+
+  .stock-heading-actions .ui-button {
+    flex: 1 1 0;
+  }
+
+  .stock-overview {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stock-overview-lead,
+  .stock-overview-metric {
+    min-height: 96px;
+    padding: 15px;
+  }
+
+  .stock-overview strong {
+    font-size: 1.45rem;
+  }
+
+  .stock-workbench-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stock-view-tabs {
+    width: 100%;
+  }
+
+  .stock-view-tabs button {
+    min-width: 0;
+    flex: 1 1 0;
+    justify-content: center;
+    padding-inline: 8px;
+  }
+
+  .stock-storage-mark {
+    padding-inline: 4px;
+  }
+
+  .stock-duration-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .stock-selection-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .stock-selection-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stock-selection-actions .ui-button {
+    width: 100%;
+  }
+
+  .stock-token-list > li {
+    grid-template-columns: 18px 28px minmax(0, 1fr);
+  }
+
+  .stock-token-list > li > .ui-badge {
+    grid-column: 3;
+    justify-self: start;
+  }
+
+  .stock-used-list > li {
+    grid-template-columns: 18px 28px minmax(0, 1fr);
+  }
+
+  .stock-used-token-main {
+    grid-column: 3;
+  }
+
+  .stock-used-list > li > .ui-badge,
+  .stock-used-list > li > .stock-used-date,
+  .stock-used-list > li > .ui-button {
+    grid-column: 3;
+    justify-self: start;
+  }
+}

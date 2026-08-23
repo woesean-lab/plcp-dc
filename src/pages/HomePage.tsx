@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  Download,
+  History,
   KeyRound,
   ListChecks,
   LoaderCircle,
@@ -45,6 +47,7 @@ import {
   getDcordBalance,
   getOrderStatus,
   getIntegrationConfig,
+  markBoostStockTokensUsed,
   restartOrder,
   returnUsedBoostToken,
   saveBoostStock,
@@ -418,6 +421,7 @@ export default function HomePage() {
   const [usedBoostTokens, setUsedBoostTokens] = useState<BoostUsedToken[]>([]);
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
+  const [stockView, setStockView] = useState<"active" | "used">("active");
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
@@ -426,6 +430,7 @@ export default function HomePage() {
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
   const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
+  const [markingBoostTokensUsed, setMarkingBoostTokensUsed] = useState(false);
   const [deletingUsedTokens, setDeletingUsedTokens] = useState(false);
   const [returningUsedTokenId, setReturningUsedTokenId] = useState<string | null>(null);
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
@@ -884,6 +889,24 @@ export default function HomePage() {
     }
   }
 
+  async function markSelectedBoostTokensUsed(duration: 1 | 3) {
+    const tokens = getSelectedTokens(duration);
+    if (!tokens.length) {
+      notifyError("Select tokens to mark as used.");
+      return;
+    }
+
+    try {
+      setMarkingBoostTokensUsed(true);
+      applyBoostStockSnapshot(await markBoostStockTokensUsed({ duration, tokens }));
+      notifySuccess(`${tokens.length} token moved to used tokens.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected tokens could not be marked as used.");
+    } finally {
+      setMarkingBoostTokensUsed(false);
+    }
+  }
+
   function toggleUsedBoostToken(id: string, checked: boolean) {
     setSelectedUsedBoostTokens((current) => ({
       ...current,
@@ -901,35 +924,23 @@ export default function HomePage() {
     });
   }
 
-  function getUsedTokenDownloadRows(onlySelected = false) {
+  function getUsedTokensForDownload(onlySelected = false) {
     const source = onlySelected ? usedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]) : usedBoostTokens;
-    return source.map((item) =>
-      [
-        item.token,
-        `${item.duration} month`,
-        item.orderId ?? "",
-        formatTrackedDate(item.resultAt ?? item.usedAt),
-        item.boosted ? "boosted" : item.status ?? "pending",
-        item.boostMessage ?? ""
-      ]
-        .map((value) => String(value).replace(/\t/g, " ").replace(/\r?\n/g, " "))
-        .join("\t")
-    );
+    return source.map((item) => item.token);
   }
 
   function downloadUsedBoostTokens(onlySelected = false) {
-    const rows = getUsedTokenDownloadRows(onlySelected);
-    if (!rows.length) {
+    const tokens = getUsedTokensForDownload(onlySelected);
+    if (!tokens.length) {
       notifyError("No used tokens to download.");
       return;
     }
 
-    const header = "token\tduration\torder_id\tused_at\tstatus\tmessage";
-    const blob = new Blob([[header, ...rows].join("\n") + "\n"], { type: "text/tab-separated-values;charset=utf-8" });
+    const blob = new Blob([`${tokens.join("\n")}\n`], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = onlySelected ? "used-boost-tokens-selected.tsv" : "used-boost-tokens.tsv";
+    link.download = onlySelected ? "used-boost-tokens-selected.txt" : "used-boost-tokens.txt";
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -1972,229 +1983,162 @@ export default function HomePage() {
 
         {activeTab === "stock" ? (
           <>
-            <header className="page-heading">
+            <header className="page-heading stock-page-heading">
               <div>
                 <p className={labelClass}>Stock</p>
-                <h1 className="page-title">Boost token stock</h1>
-                <p className="app-copy page-copy">Add 1 month and 3 month boost tokens. One token equals 2 boosts.</p>
+                <h1 className="page-title">Token inventory</h1>
+                <p className="app-copy page-copy">Manage available boost tokens and usage history.</p>
               </div>
-              <div className="page-heading-meta">
-                <Badge variant="secondary">{boostStock.oneMonth} 1 month tokens</Badge>
-                <Badge variant="secondary">{boostStock.threeMonth} 3 month tokens</Badge>
+              <div className="stock-heading-actions">
+                <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
+                  <Plus className="h-4 w-4" aria-hidden="true" />
+                  Add tokens
+                </Button>
+                <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
+                  <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
+                  Refresh
+                </Button>
               </div>
             </header>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px] xl:items-start">
-              <section className={`${shell} p-5 sm:p-6`}>
-                <div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] pb-5">
-                    <div>
-                      <p className={labelClass}>Token list</p>
-                      <h2 className="app-title mt-1 text-lg font-semibold">Current inventory</h2>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
-                        <Plus className="h-4 w-4" aria-hidden="true" />
-                        Add tokens
-                      </Button>
-                      <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
-                        <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
-                        Refresh
-                      </Button>
-                    </div>
-                  </div>
+            <section className={`${shell} stock-overview`}>
+              <div className="stock-overview-lead">
+                <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>
+                <div><small>Total capacity</small><strong>{(boostStock.oneMonth + boostStock.threeMonth) * 2}</strong><span>boosts ready</span></div>
+              </div>
+              <div className="stock-overview-metric"><small>Active tokens</small><strong>{boostStock.oneMonth + boostStock.threeMonth}</strong><span>encrypted inventory</span></div>
+              <div className="stock-overview-metric"><small>1 month</small><strong>{boostStock.oneMonth}</strong><span>{boostStock.oneMonth * 2} boosts</span></div>
+              <div className="stock-overview-metric"><small>3 month</small><strong>{boostStock.threeMonth}</strong><span>{boostStock.threeMonth * 2} boosts</span></div>
+              <div className="stock-overview-metric"><small>Used history</small><strong>{usedBoostTokens.length}</strong><span>recorded tokens</span></div>
+            </section>
 
-                  <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <section className={`${shell} stock-workbench`}>
+              <div className="stock-workbench-header">
+                <div className="stock-view-tabs" role="tablist" aria-label="Token stock views">
+                  <button type="button" role="tab" aria-selected={stockView === "active"} className={stockView === "active" ? "is-active" : ""} onClick={() => setStockView("active")}>
+                    <ListChecks className="h-4 w-4" aria-hidden="true" />
+                    Active inventory
+                    <span>{boostStock.oneMonth + boostStock.threeMonth}</span>
+                  </button>
+                  <button type="button" role="tab" aria-selected={stockView === "used"} className={stockView === "used" ? "is-active" : ""} onClick={() => setStockView("used")}>
+                    <History className="h-4 w-4" aria-hidden="true" />
+                    Used history
+                    <span>{usedBoostTokens.length}</span>
+                  </button>
+                </div>
+                <span className="stock-storage-mark"><ShieldCheck className="h-4 w-4" /> Encrypted server storage</span>
+              </div>
+
+              {stockView === "active" ? (
+                <div className="stock-inventory-groups" role="tabpanel">
                     {[
                       { duration: 1 as const, label: "1 month", tokens: boostTokenLists.oneMonthTokens },
                       { duration: 3 as const, label: "3 month", tokens: boostTokenLists.threeMonthTokens }
                     ].map((group) => {
                       const selectedCount = getSelectedTokens(group.duration).length;
                       return (
-                        <section key={group.duration} className="app-panel-soft overflow-hidden">
-                          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] p-4">
-                            <div>
-                              <p className={labelClass}>{group.label}</p>
-                              <strong className="mt-1 block text-sm text-[var(--app-text)]">{group.tokens.length} tokens / {group.tokens.length * 2} boosts</strong>
+                        <section key={group.duration} className="stock-duration-section">
+                          <header className="stock-duration-header">
+                            <div className="stock-duration-identity">
+                              <span>0{group.duration}</span>
+                              <div><p className={labelClass}>{group.label} inventory</p><h2>{group.tokens.length} tokens <em>{group.tokens.length * 2} boosts</em></h2></div>
                             </div>
-                            <Badge variant="secondary">{selectedCount} selected</Badge>
-                          </div>
-                          <div className="flex flex-wrap gap-2 border-b border-[var(--app-divider)] p-3">
-                            <Button type="button" size="xs" variant="secondary" onClick={() => setAllBoostTokens(group.duration, true)} disabled={!group.tokens.length}>
-                              Select all
-                            </Button>
-                            <Button type="button" size="xs" variant="secondary" onClick={() => setAllBoostTokens(group.duration, false)} disabled={!selectedCount}>
-                              Clear
-                            </Button>
                             <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration)} disabled={!group.tokens.length}>
-                              Download all
+                              <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download all
                             </Button>
-                            <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration, true)} disabled={!selectedCount}>
-                              Download selected
-                            </Button>
-                            <Button type="button" size="xs" variant="destructive" onClick={() => void removeSelectedBoostTokens(group.duration)} disabled={!selectedCount || deletingBoostTokens}>
-                              Remove selected
-                            </Button>
+                          </header>
+
+                          <div className={`stock-selection-bar ${selectedCount ? "has-selection" : ""}`}>
+                            <label className="stock-select-all">
+                              <input type="checkbox" checked={Boolean(group.tokens.length && selectedCount === group.tokens.length)} onChange={(event) => setAllBoostTokens(group.duration, event.target.checked)} disabled={!group.tokens.length} />
+                              <span>{selectedCount ? `${selectedCount} selected` : "Select all"}</span>
+                            </label>
+                            <div className="stock-selection-actions">
+                              {selectedCount ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllBoostTokens(group.duration, false)}>Clear</Button> : null}
+                              <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration, true)} disabled={!selectedCount}>
+                                <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
+                              </Button>
+                              <Button type="button" size="xs" variant="secondary" onClick={() => void markSelectedBoostTokensUsed(group.duration)} disabled={!selectedCount || markingBoostTokensUsed || deletingBoostTokens}>
+                                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                                {markingBoostTokensUsed ? "Moving..." : "Mark used"}
+                              </Button>
+                              <Button type="button" size="xs" variant="dangerGhost" onClick={() => void removeSelectedBoostTokens(group.duration)} disabled={!selectedCount || deletingBoostTokens || markingBoostTokensUsed}>
+                                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                              </Button>
+                            </div>
                           </div>
-                          <div className="max-h-80 overflow-auto p-3">
+
+                          <div className="stock-token-scroll">
                             {group.tokens.length ? (
-                              <ol className="grid gap-2">
+                              <ol className="stock-token-list">
                                 {group.tokens.map((token, index) => (
-                                  <li key={`${group.duration}-${token}`} className="flex min-w-0 items-center gap-2 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-2">
-                                    <input
-                                      type="checkbox"
-                                      checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])}
-                                      onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)}
-                                      aria-label={`Select token ${index + 1}`}
-                                    />
-                                    <span className="w-6 shrink-0 text-xs text-[var(--app-muted)]">{index + 1}</span>
-                                    <code className="min-w-0 flex-1 truncate text-xs text-[var(--app-text-secondary)]" title={token}>{token}</code>
+                                  <li key={`${group.duration}-${token}`} className={selectedBoostTokens[`${group.duration}:${token}`] ? "is-selected" : ""}>
+                                    <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
+                                    <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
+                                    <code title={token}>{token}</code>
+                                    <Badge variant="secondary">{group.duration} Month</Badge>
                                   </li>
                                 ))}
                               </ol>
                             ) : (
-                              <div className="grid min-h-32 place-items-center text-center">
-                                <p className="app-copy text-sm">No {group.label} tokens in stock.</p>
-                              </div>
+                              <div className="stock-empty-state"><ListChecks className="h-5 w-5" /><strong>No tokens in this inventory</strong><span>Add {group.label} tokens to make them available for orders.</span></div>
                             )}
                           </div>
                         </section>
                       );
                     })}
-                  </div>
-
-                  <section className="app-panel-soft mt-5 overflow-hidden">
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] p-4">
-                      <div>
-                        <p className={labelClass}>Used tokens</p>
-                        <strong className="mt-1 block text-sm text-[var(--app-text)]">Usage history and Dcord result</strong>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="secondary">{usedBoostTokens.length} used</Badge>
-                        <Badge variant="secondary">{selectedUsedTokenIds.length} selected</Badge>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 border-b border-[var(--app-divider)] p-3">
-                      <Button type="button" size="xs" variant="secondary" onClick={() => setAllUsedBoostTokens(true)} disabled={!usedBoostTokens.length}>
-                        Select all
-                      </Button>
-                      <Button type="button" size="xs" variant="secondary" onClick={() => setAllUsedBoostTokens(false)} disabled={!selectedUsedTokenIds.length}>
-                        Clear
-                      </Button>
+                </div>
+              ) : (
+                <div className="stock-used-view" role="tabpanel">
+                  <div className={`stock-selection-bar stock-used-actions ${selectedUsedTokenIds.length ? "has-selection" : ""}`}>
+                    <label className="stock-select-all">
+                      <input type="checkbox" checked={Boolean(usedBoostTokens.length && selectedUsedTokenIds.length === usedBoostTokens.length)} onChange={(event) => setAllUsedBoostTokens(event.target.checked)} disabled={!usedBoostTokens.length} />
+                      <span>{selectedUsedTokenIds.length ? `${selectedUsedTokenIds.length} selected` : "Select all used tokens"}</span>
+                    </label>
+                    <div className="stock-selection-actions">
+                      {selectedUsedTokenIds.length ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllUsedBoostTokens(false)}>Clear</Button> : null}
                       <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens()} disabled={!usedBoostTokens.length}>
-                        Download all
+                        <Download className="h-3.5 w-3.5" /> Download all
                       </Button>
                       <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens(true)} disabled={!selectedUsedTokenIds.length}>
-                        Download selected
+                        <Download className="h-3.5 w-3.5" /> Download selected
                       </Button>
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="secondary"
-                        onClick={() => void handleReturnUsedBoostTokens(selectedUsedTokenIds)}
-                        disabled={!selectedUsedTokenIds.length || returningUsedTokenId !== null || deletingUsedTokens}
-                      >
-                        {returningUsedTokenId === "__bulk__" ? "Returning..." : "Return selected"}
+                      <Button type="button" size="xs" variant="secondary" onClick={() => void handleReturnUsedBoostTokens(selectedUsedTokenIds)} disabled={!selectedUsedTokenIds.length || returningUsedTokenId !== null || deletingUsedTokens}>
+                        <RotateCcw className="h-3.5 w-3.5" /> {returningUsedTokenId === "__bulk__" ? "Returning..." : "Return to stock"}
                       </Button>
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="destructive"
-                        onClick={() => void handleDeleteUsedBoostTokens(selectedUsedTokenIds)}
-                        disabled={!selectedUsedTokenIds.length || deletingUsedTokens || returningUsedTokenId !== null}
-                      >
-                        {deletingUsedTokens ? "Deleting..." : "Delete selected"}
+                      <Button type="button" size="xs" variant="dangerGhost" onClick={() => void handleDeleteUsedBoostTokens(selectedUsedTokenIds)} disabled={!selectedUsedTokenIds.length || deletingUsedTokens || returningUsedTokenId !== null}>
+                        <Trash2 className="h-3.5 w-3.5" /> {deletingUsedTokens ? "Deleting..." : "Delete"}
                       </Button>
                     </div>
-                    <div className="max-h-96 overflow-auto p-3">
-                      {usedBoostTokens.length ? (
-                        <ol className="grid gap-2">
-                          {usedBoostTokens.map((item, index) => (
-                            <li key={item.id} className="grid gap-3 rounded-lg border border-[var(--app-border)] bg-[var(--app-input-bg)] px-3 py-3 lg:grid-cols-[24px_32px_minmax(0,1.2fr)_96px_minmax(0,1fr)_130px_auto_auto] lg:items-center">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(selectedUsedBoostTokens[item.id])}
-                                onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)}
-                                aria-label={`Select used token ${index + 1}`}
-                              />
-                              <span className="text-xs text-[var(--app-muted)]">{index + 1}</span>
-                              <code className="min-w-0 truncate text-xs text-[var(--app-text-secondary)]" title={item.token}>{item.token}</code>
-                              <Badge className="min-w-20" variant="secondary">{item.duration} Month</Badge>
-                              <span className="min-w-0 truncate text-xs text-[var(--app-muted)]" title={item.orderId ?? ""}>
-                                {item.orderId ? `Order ${item.orderId}` : "No order"}
-                              </span>
-                              <span className="text-xs text-[var(--app-muted)]">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
-                              <Badge variant={item.boosted ? "success" : item.status === "pending" ? "secondary" : "destructive"}>
-                                {item.boosted ? "Boosted" : item.status ?? "pending"}
-                              </Badge>
-                              <Button
-                                type="button"
-                                size="xs"
-                                variant="secondary"
-                                disabled={returningUsedTokenId !== null || deletingUsedTokens}
-                                onClick={() => void handleReturnUsedBoostToken(item)}
-                              >
-                                {returningUsedTokenId === item.id ? "Returning..." : "Return to stock"}
-                              </Button>
-                              {item.boostMessage ? (
-                                <span className="min-w-0 truncate text-xs text-[var(--app-muted)] lg:col-start-3 lg:col-end-9" title={item.boostMessage}>
-                                  {item.boostMessage}
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                        </ol>
-                      ) : (
-                        <div className="grid min-h-32 place-items-center text-center">
-                          <p className="app-copy text-sm">No used boost tokens yet.</p>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                </div>
-              </section>
+                  </div>
 
-              <aside className={`${shell} p-5 sm:p-6 xl:sticky xl:top-[108px]`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
-                    <ListChecks className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Available</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Boost capacity</h2>
+                  <div className="stock-used-scroll">
+                    {usedBoostTokens.length ? (
+                      <ol className="stock-used-list">
+                        {usedBoostTokens.map((item, index) => (
+                          <li key={item.id} className={selectedUsedBoostTokens[item.id] ? "is-selected" : ""}>
+                            <input type="checkbox" checked={Boolean(selectedUsedBoostTokens[item.id])} onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)} aria-label={`Select used token ${index + 1}`} />
+                            <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
+                            <div className="stock-used-token-main">
+                              <code title={item.token}>{item.token}</code>
+                              <span>{item.orderId ? `Order ${item.orderId}` : "Manually marked as used"}{item.boostMessage ? ` · ${item.boostMessage}` : ""}</span>
+                            </div>
+                            <Badge variant="secondary">{item.duration} Month</Badge>
+                            <span className="stock-used-date">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
+                            <Badge variant={item.boosted ? "success" : ["pending", "used"].includes(item.status ?? "") ? "secondary" : "destructive"}>{item.boosted ? "Boosted" : item.status ?? "pending"}</Badge>
+                            <Button type="button" size="xs" variant="secondary" disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
+                              <RotateCcw className="h-3.5 w-3.5" /> {returningUsedTokenId === item.id ? "Returning..." : "Return"}
+                            </Button>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : (
+                      <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No used tokens yet</strong><span>Tokens moved from inventory or consumed by orders will appear here.</span></div>
+                    )}
                   </div>
                 </div>
-
-                <div className="mt-5 grid gap-3">
-                  {[
-                    { label: "1 Month", tokens: boostStock.oneMonth },
-                    { label: "3 Month", tokens: boostStock.threeMonth }
-                  ].map((item) => (
-                    <div key={item.label} className="app-panel-soft p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className={labelClass}>{item.label}</span>
-                        <Badge variant="secondary">{item.tokens * 2} boosts</Badge>
-                      </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div>
-                          <span className="settings-status-label">Tokens</span>
-                          <strong className="mt-1 block text-xl font-semibold text-[var(--app-text)]">{item.tokens}</strong>
-                        </div>
-                        <div>
-                          <span className="settings-status-label">Capacity</span>
-                          <strong className="mt-1 block text-xl font-semibold text-[var(--app-text)]">{item.tokens * 2}</strong>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="app-panel-soft p-4">
-                    <span className={labelClass}>Storage</span>
-                    <strong className="mt-2 block text-sm font-semibold text-[var(--app-text)]">Encrypted PostgreSQL</strong>
-                    <span className="mt-1 block text-xs text-[var(--app-muted)]">Token values are stored server-side.</span>
-                  </div>
-                </div>
-              </aside>
-            </div>
+              )}
+            </section>
           </>
         ) : null}
 
