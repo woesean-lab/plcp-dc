@@ -71,11 +71,19 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
         : typeof row.boost_message === "string" && row.boost_message.trim()
           ? row.boost_message.trim()
           : "";
+      const isPending = [joinStatus, boostStatus, status].some((value) =>
+        ["queued", "joining", "pending", "process", "waiting"].some((stateValue) => value.toLowerCase().includes(stateValue))
+      );
+      const isFailed = [joinStatus, boostStatus, status].some((value) =>
+        ["failed", "error", "skipped"].some((stateValue) => value.toLowerCase().includes(stateValue))
+      );
       const state = successful
         ? "success"
-        : [joinStatus, boostStatus, status].some((value) => ["queued", "joining", "pending", "process", "waiting"].some((stateValue) => value.toLowerCase().includes(stateValue)))
-          ? "pending"
-          : "error";
+        : isFailed
+          ? "error"
+          : isPending
+            ? "pending"
+            : "error";
 
       return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
     })

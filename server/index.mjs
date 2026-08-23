@@ -1243,7 +1243,7 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     if (!currentResult || typeof currentResult !== "object" || Array.isArray(currentResult)) {
       return res.status(404).json({ message: "Token result could not be found." });
     }
-    if (currentResult.boosted === true || currentResult.success === true) {
+    if (currentResult.boosted === true) {
       return res.status(409).json({ message: "Only failed token results can be replaced." });
     }
 
