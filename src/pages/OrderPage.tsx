@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, updateOrderDelay } from "../lib/integration";
@@ -12,7 +12,7 @@ import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
-const fieldLabelClass = "field-label";
+const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 
 type DcordTokenResult = {
   index: number;
@@ -177,6 +177,17 @@ function normalizeOrderService(value: string, isDcordProvider: boolean) {
   return normalized || "UNKNOWN";
 }
 
+function getDiscordServerCreatedAt(serverId: string) {
+  if (!/^\d{17,20}$/.test(serverId)) return undefined;
+
+  try {
+    const timestamp = Number((BigInt(serverId) >> 22n) + DISCORD_EPOCH_MS);
+    return Number.isFinite(timestamp) ? timestamp : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return ["completed", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
@@ -242,6 +253,7 @@ export default function OrderPage() {
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
+  const serverCreatedAt = getDiscordServerCreatedAt(serverId);
   const serviceType = normalizeOrderService(getStringField(result, ["service", "type"]), isDcordProvider);
   const serviceName = getServiceTitle(serviceType);
   const serverMemberCount = getNumberField(result, [
@@ -270,7 +282,7 @@ export default function OrderPage() {
     { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
     { label: isDcordProvider ? "Progress" : "Expiration", value: isDcordProvider ? progress === null ? "-" : `${progressPercent}%` : formatTime(expiration) },
     { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
-    { label: "Server members", value: formatTemplateNumber(serverMemberCount) }
+    { label: "Order created", value: result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-" }
   ];
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
@@ -505,12 +517,12 @@ export default function OrderPage() {
           }}
         >
           <label className="lookup-search-field">
-            <span className={fieldLabelClass}>Order ID</span>
             <Input
               value={uniqid}
               onChange={(event) => setUniqid(event.target.value)}
               placeholder="XXX-XXXXX-XXX"
               className="font-mono"
+              aria-label="Order ID"
             />
           </label>
 
@@ -569,7 +581,7 @@ export default function OrderPage() {
                   </span>
                 </div>
                 <h2>{serverName || "Discord server"}</h2>
-                <p className="lookup-order-reference">{result.uniqid}{serverId ? ` · ${serverId}` : ""}</p>
+                <p className="lookup-order-reference">{result.uniqid}</p>
               </div>
             </div>
 
@@ -606,6 +618,21 @@ export default function OrderPage() {
               </div>
             ))}
           </div>
+
+          <section className="lookup-server-details" aria-label="Discord server details">
+            <div>
+              <span className="lookup-server-detail-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+              <span><small>Server members</small><strong>{formatTemplateNumber(serverMemberCount)}</strong></span>
+            </div>
+            <div>
+              <span className="lookup-server-detail-icon" aria-hidden="true"><Server className="h-4 w-4" /></span>
+              <span><small>Server ID</small><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></span>
+            </div>
+            <div>
+              <span className="lookup-server-detail-icon" aria-hidden="true"><CalendarDays className="h-4 w-4" /></span>
+              <span><small>Server created</small><strong>{formatTime(serverCreatedAt)}</strong></span>
+            </div>
+          </section>
 
           {isInvitesPaused && !isDcordProvider ? (
             <section className="lookup-invites-warning" role="alert">
