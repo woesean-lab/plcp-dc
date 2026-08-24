@@ -1018,9 +1018,15 @@
     .lookup-commandbar { gap: .85rem; padding: .85rem; }
     .lookup-search-form { grid-template-columns: 1fr; }
     .lookup-search-actions .ui-button:first-child { flex: 1; }
-    .lookup-workspace-header { align-items: flex-start; padding: .85rem; }
+    .lookup-workspace-header { flex-direction: column; align-items: stretch; padding: .85rem; }
+    .lookup-order-identity { width: 100%; align-items: flex-start; }
+    .lookup-order-identity > div { flex: 1; min-width: 0; }
+    .lookup-order-labels { flex-wrap: wrap; }
+    .lookup-status,
+    .lookup-service-name { flex: 0 0 auto; max-width: 100%; }
+    .lookup-service-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lookup-service-name code { display: none; }
-    .lookup-workspace-actions { flex-wrap: wrap; justify-content: flex-end; }
+    .lookup-workspace-actions { width: 100%; flex-wrap: wrap; justify-content: flex-start; padding-top: .15rem; }
     .lookup-workspace-actions .ui-button:not([data-slot="button"]) { width: auto; }
     .lookup-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lookup-metrics > div { padding: .7rem .8rem; border-bottom: 1px solid var(--app-divider); }
