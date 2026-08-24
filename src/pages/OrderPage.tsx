@@ -93,10 +93,15 @@ function formatJson(value: unknown) {
 
 function formatTime(value?: number | string) {
   if (!value) return "-";
+  const numericValue = typeof value === "number" ? value : /^\d+$/.test(value.trim()) ? Number(value) : null;
+  const normalizedValue = numericValue === null ? value : numericValue < 1_000_000_000_000 ? numericValue * 1000 : numericValue;
+  const date = new Date(normalizedValue);
+  if (Number.isNaN(date.getTime())) return "-";
+
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
     timeStyle: "short"
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function formatTemplateNumber(value?: number) {
@@ -165,6 +170,13 @@ function getNumberField(source: OrderStatusResponse | null, keys: string[]) {
   return undefined;
 }
 
+function normalizeOrderService(value: string, isDcordProvider: boolean) {
+  if (isDcordProvider) return "DCORD-BOOSTS";
+  const normalized = value.trim().toUpperCase().replace(/[\s_]+/g, "-");
+  if (["OFFLINE", "ONLINE", "PREMIUM", "NFT"].includes(normalized)) return `OAUTH-${normalized}`;
+  return normalized || "UNKNOWN";
+}
+
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return ["completed", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
@@ -229,8 +241,8 @@ export default function OrderPage() {
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
-  const serviceType = getStringField(result, ["service", "type"]);
-  const serviceName = getServiceTitle(serviceType || (isDcordProvider ? "DCORD-BOOSTS" : undefined));
+  const serviceType = normalizeOrderService(getStringField(result, ["service", "type"]), isDcordProvider);
+  const serviceName = getServiceTitle(serviceType);
   const serverMemberCount = getNumberField(result, [
     "serverMemberCount",
     "approximateMemberCount",
@@ -247,6 +259,7 @@ export default function OrderPage() {
     : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const currentDelay = getNumberField(result, ["delay"]);
+  const expiration = result?.expiredAt ?? result?.expired_at;
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused
     ? null
     : formatEstimatedDuration(remainingAmount, currentDelay);
@@ -254,7 +267,7 @@ export default function OrderPage() {
     { label: "Delivered", value: formatTemplateNumber(addedAmount) },
     { label: "Total", value: formatTemplateNumber(totalAmount) },
     { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
-    { label: "Progress", value: progress === null ? "-" : `${progressPercent}%` },
+    { label: isDcordProvider ? "Progress" : "Expiration", value: isDcordProvider ? progress === null ? "-" : `${progressPercent}%` : formatTime(expiration) },
     { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
     { label: "Server members", value: formatTemplateNumber(serverMemberCount) }
   ];
@@ -522,9 +535,15 @@ export default function OrderPage() {
               </span>
               <div className="min-w-0">
                 <div className="lookup-order-labels">
-                  <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>{result.status ?? "UNKNOWN"}</span>
-                  <span className="lookup-service-name">{serviceName}</span>
-                  <span className="lookup-service-code">{serviceType || (isDcordProvider ? "DCORD-BOOSTS" : "SERVICE")}</span>
+                  <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>
+                    <small>Order status</small>
+                    <strong>{result.status ?? "UNKNOWN"}</strong>
+                  </span>
+                  <span className="lookup-service-name">
+                    <small>Service</small>
+                    <strong>{serviceName}</strong>
+                    <code>{serviceType}</code>
+                  </span>
                 </div>
                 <h2>{serverName || "Discord server"}</h2>
                 <p className="lookup-order-reference">{result.uniqid}{serverId ? ` · ${serverId}` : ""}</p>
@@ -560,7 +579,7 @@ export default function OrderPage() {
             {summary.map((item) => (
               <div key={item.label}>
                 <span>{item.label}</span>
-                <strong>{item.value}</strong>
+                <strong title={item.value}>{item.value}</strong>
               </div>
             ))}
           </div>
