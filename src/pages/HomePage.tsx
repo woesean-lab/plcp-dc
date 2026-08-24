@@ -164,6 +164,12 @@ function formatTrackedDate(value: string) {
   }).format(date);
 }
 
+function getTrackedTimestamp(value?: string) {
+  if (!value) return Number.NEGATIVE_INFINITY;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
+}
+
 function getServiceLabel(service?: ServiceType) {
   return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
@@ -493,7 +499,16 @@ export default function HomePage() {
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
-    () => usedTokenDurationFilter === "all" ? usedBoostTokens : usedBoostTokens.filter((item) => item.duration === usedTokenDurationFilter),
+    () => {
+      const filtered = usedTokenDurationFilter === "all"
+        ? usedBoostTokens
+        : usedBoostTokens.filter((item) => item.duration === usedTokenDurationFilter);
+
+      return [...filtered].sort((left, right) => {
+        const dateDifference = getTrackedTimestamp(right.resultAt ?? right.usedAt) - getTrackedTimestamp(left.resultAt ?? left.usedAt);
+        return dateDifference || right.id.localeCompare(left.id);
+      });
+    },
     [usedBoostTokens, usedTokenDurationFilter]
   );
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
