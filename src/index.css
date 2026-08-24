@@ -942,6 +942,12 @@
   .lookup-token-panel .public-token-results-list { gap: .45rem; margin-top: .75rem; }
   .lookup-token-panel .public-token-result-row { padding-block: .48rem; border-radius: 7px; }
   .lookup-token-panel .public-token-result-index { width: 27px; height: 27px; border-radius: 7px; }
+  .lookup-token-panel .public-token-result-main strong {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal;
+  }
 
   .lookup-technical-details,
   .lookup-raw-payload {

@@ -180,6 +180,54 @@ async function saveEncryptedSetting(settingKey, value) {
   );
 }
 
+function getDcordOrderTokensSettingKey(uniqid) {
+  return `dcord_order_tokens_${hashToken(String(uniqid ?? "").trim())}`;
+}
+
+async function loadDcordOrderTokens(uniqid) {
+  if (!uniqid) return [];
+  const raw = await loadEncryptedSetting(getDcordOrderTokensSettingKey(uniqid));
+  if (!raw) return [];
+
+  try {
+    const tokens = JSON.parse(raw);
+    return Array.isArray(tokens) ? tokens.map((token) => String(token ?? "").trim()) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function saveDcordOrderTokens(uniqid, tokens) {
+  const normalized = Array.isArray(tokens) ? tokens.map((token) => String(token ?? "").trim()) : [];
+  await saveEncryptedSetting(getDcordOrderTokensSettingKey(uniqid), JSON.stringify(normalized));
+  return normalized;
+}
+
+async function revealDcordOrderTokens(order) {
+  if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.dcordResults)) return order;
+
+  const assignedTokens = await loadDcordOrderTokens(order.uniqid);
+  const usedTokenIds = order.dcordResults
+    .map((result) => result && typeof result === "object" && !Array.isArray(result) ? result.usedTokenId : null)
+    .filter(Boolean);
+  const usedTokenById = new Map();
+  if (usedTokenIds.length) {
+    const history = await loadUsedBoostTokenHistory();
+    history.forEach((item) => {
+      if (usedTokenIds.includes(item.id)) usedTokenById.set(item.id, item.token);
+    });
+  }
+
+  return {
+    ...order,
+    dcordResults: order.dcordResults.map((result, index) => {
+      if (!result || typeof result !== "object" || Array.isArray(result)) return result;
+      const fullToken = assignedTokens[index] || usedTokenById.get(result.usedTokenId);
+      return fullToken ? { ...result, token: fullToken } : result;
+    })
+  };
+}
+
 async function loadDcordApiKey() {
   const apiKey = await loadEncryptedSetting("dcord_api_key");
   if (!apiKey) {
@@ -682,7 +730,8 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       }
       const canManageDcordTokens = await hasActiveSession(req);
       if (canManageDcordTokens) {
-        return res.set("Cache-Control", "no-store").json({ ...trackedPayload, liveBoostStock, canManageDcordTokens });
+        const managedPayload = await revealDcordOrderTokens(trackedPayload);
+        return res.set("Cache-Control", "no-store").json({ ...managedPayload, liveBoostStock, canManageDcordTokens });
       }
 
       const { dcordResults, ...publicPayload } = trackedPayload;
@@ -1176,6 +1225,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       dcordResults: selectedTokens.map(createQueuedDcordResult)
     };
 
+    await saveDcordOrderTokens(uniqid, selectedTokens);
     await saveTrackedOrderPayload(order);
     void processDcordBoostOrder(order, selectedTokens, invite).catch((error) => {
       console.error(error);
@@ -1274,7 +1324,7 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
       }
     }
 
-    res.set("Cache-Control", "no-store").json(payload);
+    res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(payload));
   } catch (error) {
     next(error);
   }
@@ -1346,6 +1396,9 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
       previousToken: typeof currentResult.token === "string" ? currentResult.token : undefined
     };
     results[resultIndex] = replacementResult;
+    const assignedTokens = await loadDcordOrderTokens(uniqid);
+    assignedTokens[resultIndex] = replacementToken;
+    await saveDcordOrderTokens(uniqid, assignedTokens);
 
     const added = results.reduce((total, item) => {
       return total + (item && typeof item === "object" && !Array.isArray(item) && item.boosted === true ? 2 : 0);
@@ -1363,7 +1416,10 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     };
 
     await saveTrackedOrderPayload(nextOrder);
-    res.set("Cache-Control", "no-store").json({ order: nextOrder, stock: summarizeBoostTokenStock(await loadBoostTokenStock()) });
+    res.set("Cache-Control", "no-store").json({
+      order: await revealDcordOrderTokens(nextOrder),
+      stock: summarizeBoostTokenStock(await loadBoostTokenStock())
+    });
   } catch (error) {
     next(error);
   }
@@ -1490,10 +1546,12 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
       );
     }
 
-    if (ids.length) {
-      await client.query("DELETE FROM tracked_orders WHERE NOT (uniqid = ANY($1::text[]))", [ids]);
-    } else {
-      await client.query("DELETE FROM tracked_orders");
+    const deletedOrders = ids.length
+      ? await client.query("DELETE FROM tracked_orders WHERE NOT (uniqid = ANY($1::text[])) RETURNING uniqid", [ids])
+      : await client.query("DELETE FROM tracked_orders RETURNING uniqid");
+    const deletedTokenSettingKeys = deletedOrders.rows.map((row) => getDcordOrderTokensSettingKey(row.uniqid));
+    if (deletedTokenSettingKeys.length) {
+      await client.query("DELETE FROM app_settings WHERE setting_key = ANY($1::text[])", [deletedTokenSettingKeys]);
     }
     await client.query("COMMIT");
     res.json({ saved: orders.length });
