@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, Server, ShieldCheck, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, Server, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, updateOrderDelay } from "../lib/integration";
@@ -276,16 +276,14 @@ export default function OrderPage() {
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused
     ? null
     : formatEstimatedDuration(remainingAmount, currentDelay);
-  const summary = [
-    { label: "Delivered", value: formatTemplateNumber(addedAmount) },
-    { label: "Total", value: formatTemplateNumber(totalAmount) },
-    { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
-    { label: isDcordProvider ? "Progress" : "Expiration", value: isDcordProvider ? progress === null ? "-" : `${progressPercent}%` : formatTime(expiration) },
-    { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
-    { label: "Order created", value: result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-" }
-  ];
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const summary = [
+    { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
+    { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
+    { label: isDcordProvider ? "Token progress" : "Expiration", value: isDcordProvider ? `${dcordCompletedTokenCount}/${result?.tokenCount ?? "-"}` : formatTime(expiration) },
+    { label: "Server members", value: formatTemplateNumber(serverMemberCount) }
+  ];
 
   useEffect(() => {
     const incoming = params.get("uniqid");
@@ -569,6 +567,7 @@ export default function OrderPage() {
                 {isDcordProvider ? <Bot className="h-4 w-4" /> : <FileJson className="h-4 w-4" />}
               </span>
               <div className="min-w-0">
+                <h2>{serverName || "Discord server"}</h2>
                 <div className="lookup-order-labels">
                   <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>
                     <small>Order status</small>
@@ -580,8 +579,6 @@ export default function OrderPage() {
                     <code>{serviceType}</code>
                   </span>
                 </div>
-                <h2>{serverName || "Discord server"}</h2>
-                <p className="lookup-order-reference">{result.uniqid}</p>
               </div>
             </div>
 
@@ -610,6 +607,26 @@ export default function OrderPage() {
             </div>
           </header>
 
+          <section className="lookup-live-progress">
+            <div className="lookup-progress-heading">
+              <div>
+                <p className="app-kicker">Live delivery</p>
+                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : "Delivery in progress"}</h3>
+              </div>
+              <div className="lookup-progress-value">
+                <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
+                <span>{formatTemplateNumber(addedAmount)} of {formatTemplateNumber(totalAmount)} delivered</span>
+              </div>
+            </div>
+            <div className="lookup-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
+              <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+            </div>
+            <div className="lookup-progress-foot">
+              <span><Activity className="h-3.5 w-3.5" /> {formatTemplateNumber(remainingAmount)} remaining</span>
+              {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
+            </div>
+          </section>
+
           <div className="lookup-metrics" aria-label="Order summary">
             {summary.map((item) => (
               <div key={item.label}>
@@ -618,21 +635,6 @@ export default function OrderPage() {
               </div>
             ))}
           </div>
-
-          <section className="lookup-server-details" aria-label="Discord server details">
-            <div>
-              <span className="lookup-server-detail-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
-              <span><small>Server members</small><strong>{formatTemplateNumber(serverMemberCount)}</strong></span>
-            </div>
-            <div>
-              <span className="lookup-server-detail-icon" aria-hidden="true"><Server className="h-4 w-4" /></span>
-              <span><small>Server ID</small><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></span>
-            </div>
-            <div>
-              <span className="lookup-server-detail-icon" aria-hidden="true"><CalendarDays className="h-4 w-4" /></span>
-              <span><small>Server created</small><strong>{formatTime(serverCreatedAt)}</strong></span>
-            </div>
-          </section>
 
           {isInvitesPaused && !isDcordProvider ? (
             <section className="lookup-invites-warning" role="alert">
@@ -694,30 +696,8 @@ export default function OrderPage() {
                   {updatingDelay ? "Updating..." : "Update"}
                 </Button>
               </section>
-            ) : (
-              <section className="lookup-created-at">
-                <Clock3 className="h-4 w-4" aria-hidden="true" />
-                <div><span>Created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
-              </section>
-            )}
+            ) : null}
           </div>
-
-          <section className="lookup-live-progress">
-            <div className="lookup-progress-heading">
-              <div>
-                <p className="app-kicker">Live delivery</p>
-                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : "Delivery in progress"}</h3>
-              </div>
-              <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
-            </div>
-            <div className="lookup-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
-              <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
-            </div>
-            <div className="lookup-progress-foot">
-              <span><Activity className="h-3.5 w-3.5" /> {formatTemplateNumber(addedAmount)} delivered, {formatTemplateNumber(remainingAmount)} remaining</span>
-              {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
-            </div>
-          </section>
 
           {isDcordProvider ? (
             <section className="lookup-token-panel">
@@ -763,6 +743,19 @@ export default function OrderPage() {
               )}
             </section>
           ) : null}
+
+          <details className="lookup-technical-details">
+            <summary>
+              <span><Server className="h-4 w-4" aria-hidden="true" /> Order &amp; server details</span>
+              <small>IDs and timestamps</small>
+            </summary>
+            <div className="lookup-technical-grid">
+              <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
+              <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
+              <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
+              <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
+            </div>
+          </details>
 
           <details className="lookup-raw-payload">
             <summary>
