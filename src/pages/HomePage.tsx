@@ -142,8 +142,8 @@ const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
 const shell = "app-panel";
 const PAGE_SKELETON_DELAY = 300;
-const ACTIVE_SYNC_BATCH_SIZE = 16;
-const ACTIVE_SYNC_PAUSE_MS = 180;
+const ACTIVE_SYNC_BATCH_SIZE = 3;
+const ACTIVE_SYNC_PAUSE_MS = 1000;
 const ORDER_PAGE_SIZE = 20;
 
 function formatNumber(value?: number) {
@@ -439,7 +439,6 @@ export default function HomePage() {
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
-  const [syncingOrders, setSyncingOrders] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
@@ -641,44 +640,6 @@ export default function HomePage() {
       setLoadingBoostStock(false);
     }
   }
-
-  useEffect(() => {
-    const syncTargets = activeOrders.filter((order) => order.uniqid);
-    if (activeTab !== "manage" || !syncTargets.length) {
-      return;
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void syncTrackedOrders();
-    }, 200);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-
-    async function syncTrackedOrders() {
-      try {
-        setSyncingOrders(true);
-        const updates = await syncActiveOrders(syncTargets);
-
-        if (cancelled) return;
-
-        const updatesById = new Map(updates.map((order) => [order.uniqid, order]));
-        const nextOrders = orders.map((order) => updatesById.get(order.uniqid) ?? order);
-        const changed = nextOrders.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
-        if (changed) {
-          setOrders(nextOrders);
-        }
-      } finally {
-        if (!cancelled) {
-          setSyncingOrders(false);
-        }
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, activeOrders, orders]);
 
   useEffect(() => {
     if (activeTab !== "create") return;
@@ -1099,7 +1060,7 @@ export default function HomePage() {
     }
   }
 
-  async function refreshTrackedOrders() {
+  async function syncTrackedOrders() {
     const syncTargets = activeOrders.filter((order) => order.uniqid);
     if (!syncTargets.length) {
       notifyError("No tracked orders to refresh.");
@@ -1114,8 +1075,9 @@ export default function HomePage() {
       const changed = nextOrders.some((nextOrder, index) => !areTrackedOrdersEqual(nextOrder, orders[index]));
       if (changed) {
         setOrders(nextOrders);
+        await saveTrackedOrders(nextOrders);
       }
-      notifySuccess("Orders refreshed.");
+      notifySuccess("Orders synced.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Orders could not be refreshed.");
     } finally {
@@ -1237,7 +1199,7 @@ export default function HomePage() {
     notifySuccess("Order added.");
   }
 
-  const showManageSkeleton = refreshingManage;
+  const showManageSkeleton = refreshingManage && !orders.length;
 
   return (
     <div className="relative">
@@ -1613,16 +1575,15 @@ export default function HomePage() {
                 <Badge variant="secondary">
                   Page {currentOrderPage}/{orderPageCount}
                 </Badge>
-                {syncingOrders ? <Badge variant="secondary">Syncing...</Badge> : null}
                 <Button
                   type="button"
                   variant="secondary"
                   size="xs"
-                  onClick={() => void refreshTrackedOrders()}
-                  disabled={refreshingManage || syncingOrders || !activeOrders.length}
+                  onClick={() => void syncTrackedOrders()}
+                  disabled={refreshingManage || !activeOrders.length}
                 >
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshingManage ? "animate-spin" : ""}`} aria-hidden="true" />
-                  Refresh
+                  {refreshingManage ? "Syncing..." : "Sync orders"}
                 </Button>
               </div>
             </header>
