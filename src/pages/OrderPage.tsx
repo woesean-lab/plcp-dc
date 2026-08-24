@@ -424,7 +424,7 @@ export default function OrderPage() {
   }
 
   const shell = "app-panel";
-  if (pageLoading || loading) {
+  if (pageLoading || (loading && !result)) {
     return (
       <section className="relative">
         <LookupPreloader uniqid={uniqid} />
@@ -433,27 +433,24 @@ export default function OrderPage() {
   }
 
   return (
-    <section className="tab-slide-in relative grid min-w-0 gap-5 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-      <div className={`${shell} min-w-0 p-5 sm:p-6`}>
-        <div className="flex items-center gap-3">
-          <span className="stat-icon" aria-hidden="true">
-            <Search className="h-4 w-4" />
-          </span>
+    <section className="lookup-page tab-slide-in relative grid min-w-0 gap-4">
+      <header className={`${shell} lookup-commandbar`}>
+        <div className="lookup-commandbar-title">
+          <span className="lookup-commandbar-icon" aria-hidden="true"><Search className="h-4 w-4" /></span>
           <div>
-            <p className={labelClass}>Public tracker</p>
-            <h1 className="app-title mt-1 text-[2rem] font-semibold">Order lookup</h1>
+            <p className={labelClass}>Operations</p>
+            <h1>Order lookup</h1>
           </div>
         </div>
-        <p className="app-copy mt-4 max-w-md text-sm leading-6">Enter an order ID to open its latest status, delivery details, and raw payload.</p>
 
         <form
-          className="mt-6 grid gap-5"
+          className="lookup-search-form"
           onSubmit={(event) => {
             event.preventDefault();
             void lookup();
           }}
         >
-          <label className="grid gap-2">
+          <label className="lookup-search-field">
             <span className={fieldLabelClass}>Order ID</span>
             <Input
               value={uniqid}
@@ -463,25 +460,28 @@ export default function OrderPage() {
             />
           </label>
 
-          <div className="flex flex-wrap gap-3">
-            <Button className="min-w-[132px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={loading}>
+          <div className="lookup-search-actions">
+            <Button type="submit" disabled={loading}>
               <Search className="h-4 w-4" aria-hidden="true" />
               {loading ? "Loading..." : "Check"}
             </Button>
             <Button
               variant="secondary"
-              className="min-w-[132px] px-4 py-2.5 max-sm:w-full"
+              size="icon"
               type="button"
               disabled={loading || !uniqid.trim()}
               onClick={() => void lookup()}
+              title="Refresh order"
+              aria-label="Refresh order"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-              Refresh
             </Button>
             <Button
               variant="secondary"
-              className="min-w-[132px] px-4 py-2.5 max-sm:w-full"
+              size="icon"
               type="button"
+              title="Clear lookup"
+              aria-label="Clear lookup"
               onClick={() => {
                 setUniqid("");
                 setResult(null);
@@ -490,238 +490,175 @@ export default function OrderPage() {
               }}
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              Clear
             </Button>
           </div>
         </form>
+      </header>
 
-        <div className="mt-5 grid gap-4 sm:grid-cols-2">
-          <div className="app-panel-soft p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className={labelClass}>Protected</p>
-              <ShieldCheck className="h-4 w-4 text-[var(--app-success)]" aria-hidden="true" />
+      {result ? (
+        <article className={`${shell} lookup-workspace`}>
+          <header className="lookup-workspace-header">
+            <div className="lookup-order-identity">
+              <span className="lookup-provider-mark" aria-hidden="true">
+                {isDcordProvider ? <Bot className="h-4 w-4" /> : <FileJson className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0">
+                <div className="lookup-order-labels">
+                  <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>{result.status ?? "UNKNOWN"}</span>
+                  <span>{isDcordProvider ? "Boost order" : "Member order"}</span>
+                </div>
+                <h2>{result.uniqid}</h2>
+              </div>
             </div>
-            <p className="app-copy mt-2 text-sm">Status, details, payload.</p>
-          </div>
-          <div className="app-panel-soft p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className={labelClass}>Created</p>
-              <Clock3 className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-            </div>
-            <p className="app-copy mt-2 text-sm">
-              {result?.createdAt ? formatTime(result.createdAt) : result?.created_at ? formatTime(result.created_at) : "-"}
-            </p>
-          </div>
-        </div>
-      </div>
-      <div className={`${shell} min-w-0 p-5 sm:p-6`}>
-        <div className="flex min-w-0 flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <span className="stat-icon" aria-hidden="true">
-              <FileJson className="h-4 w-4" />
-            </span>
-            <div>
-              <p className={labelClass}>Order payload</p>
-              <h2 className="app-title mt-1 text-xl font-semibold">Summary and details</h2>
-            </div>
-          </div>
-          {result ? (
-            <div className="flex flex-wrap gap-2 max-sm:w-full">
+
+            <div className="lookup-workspace-actions">
               {!isDcordProvider ? (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
-                  className="max-sm:w-full"
                   disabled={!botInvite}
                   title={botInvite ? "Copy delivery template message" : "Delivery template requires a bot invite link"}
                   onClick={() => void copyDeliveryTemplate()}
                 >
-                  <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Copy delivery template
+                  <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Delivery template
                 </Button>
               ) : null}
-              <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={() => void copyPublicMonitorLink()}>
-                <Copy className="h-4 w-4" aria-hidden="true" /> Copy monitor link
+              <Button type="button" variant="secondary" size="sm" onClick={() => void copyPublicMonitorLink()}>
+                <Copy className="h-4 w-4" aria-hidden="true" /> Monitor link
               </Button>
-              <Button type="button" variant="secondary" size="sm" className="max-sm:w-full" onClick={openPublicMonitorLink}>
-                <ExternalLink className="h-4 w-4" aria-hidden="true" /> Open monitor
+              <Button type="button" variant="secondary" size="icon" onClick={openPublicMonitorLink} title="Open monitor" aria-label="Open monitor">
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </Button>
             </div>
-          ) : null}
-        </div>
+          </header>
 
-        {loading && !result ? (
-          <div className="mt-5 space-y-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="app-panel-soft p-4">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="mt-3 h-4 w-20" />
+          <div className="lookup-metrics" aria-label="Order summary">
+            {summary.map((item) => (
+              <div key={item.label}>
+                <span>{item.label}</span>
+                <strong>{item.value}</strong>
               </div>
-              <div className="app-panel-soft p-4">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="mt-3 h-4 w-14" />
-              </div>
-              <div className="app-panel-soft p-4">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="mt-3 h-4 w-14" />
-              </div>
-            </div>
-            <div className="app-panel-soft p-4">
-              <Skeleton className="h-4 w-32" />
-              <Skeleton className="mt-3 h-4 w-full" />
-              <Skeleton className="mt-2 h-4 w-5/6" />
-            </div>
-            <div className="app-panel-soft p-4">
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="mt-3 h-4 w-full" />
-              <Skeleton className="mt-2 h-4 w-11/12" />
-              <Skeleton className="mt-2 h-4 w-4/5" />
-            </div>
+            ))}
           </div>
-        ) : result ? (
-          <div className="mt-5 space-y-5">
-            <div className="grid gap-3 sm:grid-cols-3">
-              {summary.map((item) => (
-                <div key={item.label} className="app-panel-soft p-4">
-                  <span className={labelClass}>{item.label}</span>
-                  <strong className="mt-2 block text-lg font-semibold text-[var(--app-text)]">{item.value}</strong>
-                </div>
-              ))}
-            </div>
 
-            <div className={`app-panel-soft p-4 ${botInvite ? "border-[var(--app-accent-border)] bg-[var(--app-accent-soft)]" : ""}`}>
-              <div className="flex items-center gap-2 text-[var(--app-text)]">
-                {botInvite ? <Bot className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" /> : <Hash className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />}
-                <strong className="block text-sm font-semibold">{botInvite ? "Action required" : result.uniqid}</strong>
-              </div>
-              {botInvite ? (
-                <>
-                  <p className="app-copy mt-3 text-sm leading-6">Add the delivery bot to your Discord server to start this order. The bot only needs the <strong className="text-[var(--app-text)]">Create Invite</strong> permission.</p>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <Button type="button" variant="secondary" className="max-sm:w-full" onClick={() => void copyBotInvite()}>
-                      <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite link
-                    </Button>
-                    <Button asChild className="max-sm:w-full">
-                      <a href={botInvite} target="_blank" rel="noreferrer">
-                        <Bot className="h-4 w-4" aria-hidden="true" /> Add bot to server <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                      </a>
-                    </Button>
-                  </div>
-                </>
-              ) : (
-                <p className="app-copy mt-2 text-sm leading-6">{result.error ?? getPlainDetails(result.details)}</p>
-              )}
-            </div>
-
-            {!terminal && !isDcordProvider ? (
-              <div className="app-panel-soft p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <p className={labelClass}>Delay</p>
-                    <strong className="mt-2 block text-lg font-semibold text-[var(--app-text)]">
-                      {formatDelay(result.delay)}
-                    </strong>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="xs"
-                    onClick={() => void handleUpdateDelay()}
-                    disabled={updatingDelay}
-                  >
-                    {updatingDelay ? "Updating..." : "Update"}
-                  </Button>
-                </div>
-                <div className="mt-4 flex gap-2 max-sm:flex-col">
-                  <Input
-                    type="number"
-                    min={1}
-                    max={1200}
-                    value={delayDraft}
-                    onChange={(event) => setDelayDraft(event.target.value)}
-                    placeholder="Delay"
-                    className="w-28 shrink-0"
-                  />
-                  <p className="app-copy self-center text-sm">Update the current delay for this order.</p>
-                </div>
-              </div>
-            ) : null}
-
-            {isDcordProvider ? (
-              <div className="public-token-results-card">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="app-kicker">Token results</p>
-                    <h2>Per-token boost log</h2>
-                  </div>
-                  <span className="public-secure-mark">{dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
-                </div>
-
-                {dcordTokenResults.length ? (
-                  <div className="public-token-results-list">
-                    <div className="public-token-results-head" aria-hidden="true">
-                      <span />
-                      <span>Token</span>
-                      <span className="public-token-result-flow">
-                        <span />
-                        <span>Join</span>
-                        <span>Boost</span>
-                        <span>Slots</span>
-                      </span>
-                    </div>
-                    {dcordTokenResults.map((item, index) => {
-                      return (
-                        <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
-                          <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
-                          <span className="public-token-result-main">
-                            <strong>{item.token}</strong>
-                            <small>{item.boostMessage || item.status}</small>
-                          </span>
-                          <span className="public-token-result-flow">
-                            <span className="public-token-result-action">
-                              {item.state === "error" ? (
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="xs"
-                                  className="public-token-replace-button"
-                                  onClick={() => void handleReplaceDcordToken(item.index)}
-                                  disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}
-                                >
-                                  {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
-                                </Button>
-                              ) : null}
-                            </span>
-                            <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                            <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
-                            <span className="public-token-result-slots">{item.slots}</span>
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
+          <div className="lookup-context-row">
+            <section className={`lookup-order-note ${botInvite ? "is-action" : ""}`}>
+              <span className="lookup-note-icon" aria-hidden="true">
+                {botInvite ? <Bot className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
+              </span>
+              <div className="min-w-0">
+                <p className={labelClass}>{botInvite ? "Action required" : "Order details"}</p>
+                {botInvite ? (
+                  <p>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</p>
                 ) : (
-                  <p className="public-token-results-empty">Waiting for token results.</p>
+                  <p>{result.error ?? getPlainDetails(result.details)}</p>
                 )}
               </div>
-            ) : null}
+              {botInvite ? (
+                <div className="lookup-note-actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void copyBotInvite()}>
+                    <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite
+                  </Button>
+                  <Button asChild size="sm">
+                    <a href={botInvite} target="_blank" rel="noreferrer">
+                      <Bot className="h-4 w-4" aria-hidden="true" /> Add bot <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    </a>
+                  </Button>
+                </div>
+              ) : null}
+            </section>
 
+            {!terminal && !isDcordProvider ? (
+              <section className="lookup-delay-control">
+                <div>
+                  <p className={labelClass}>Join delay</p>
+                  <strong>{formatDelay(result.delay)}</strong>
+                </div>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1200}
+                  value={delayDraft}
+                  onChange={(event) => setDelayDraft(event.target.value)}
+                  placeholder="Delay"
+                />
+                <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay()} disabled={updatingDelay}>
+                  {updatingDelay ? "Updating..." : "Update"}
+                </Button>
+              </section>
+            ) : (
+              <section className="lookup-created-at">
+                <Clock3 className="h-4 w-4" aria-hidden="true" />
+                <div><span>Created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
+              </section>
+            )}
+          </div>
+
+          {isDcordProvider ? (
+            <section className="lookup-token-panel">
+              <div className="lookup-section-heading">
+                <div>
+                  <p className="app-kicker">Token results</p>
+                  <h3>Per-token boost log</h3>
+                </div>
+                <span className="public-secure-mark"><ShieldCheck className="h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
+              </div>
+
+              {dcordTokenResults.length ? (
+                <div className="public-token-results-list">
+                  <div className="public-token-results-head" aria-hidden="true">
+                    <span />
+                    <span>Token</span>
+                    <span className="public-token-result-flow"><span /><span>Join</span><span>Boost</span><span>Slots</span></span>
+                  </div>
+                  {dcordTokenResults.map((item, index) => (
+                    <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
+                      <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
+                      <span className="public-token-result-main">
+                        <strong>{item.token}</strong>
+                        <small>{item.boostMessage || item.status}</small>
+                      </span>
+                      <span className="public-token-result-flow">
+                        <span className="public-token-result-action">
+                          {item.state === "error" ? (
+                            <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}>
+                              {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
+                            </Button>
+                          ) : null}
+                        </span>
+                        <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                        <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                        <span className="public-token-result-slots">{item.slots}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="public-token-results-empty">Waiting for token results.</p>
+              )}
+            </section>
+          ) : null}
+
+          <details className="lookup-raw-payload">
+            <summary>
+              <span><FileJson className="h-4 w-4" aria-hidden="true" /> Raw order payload</span>
+              <small>JSON</small>
+            </summary>
             <div className="payload-panel overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-6 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
+              <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
             </div>
+          </details>
+        </article>
+      ) : (
+        <div className={`${shell} lookup-empty-state`}>
+          <span className="lookup-empty-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>
+          <div>
+            <strong>No order selected</strong>
+            <p>Enter an order ID above to load its operational status.</p>
           </div>
-        ) : (
-          <div className="app-panel-soft mt-5 grid min-h-64 place-items-center px-6 py-10 text-center">
-            <div>
-              <span className="stat-icon mx-auto" aria-hidden="true">
-                <FileJson className="h-4 w-4" />
-              </span>
-              <p className="mt-4 text-sm font-medium text-[var(--app-text-secondary)]">No payload loaded</p>
-              <p className="app-copy mt-1 text-sm">Search an order to reveal its summary and JSON response.</p>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
