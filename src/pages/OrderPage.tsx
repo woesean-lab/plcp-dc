@@ -218,6 +218,7 @@ export default function OrderPage() {
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "dcord" ? 2 : 10);
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
 
@@ -279,20 +280,30 @@ export default function OrderPage() {
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
+    const refreshEvery = isDcordProvider ? 2 : 10;
+    setSecondsUntilRefresh(terminal ? 0 : refreshEvery);
     if (!target || terminal) return;
 
+    let remaining = refreshEvery;
+
     const timer = window.setInterval(() => {
-      if (refreshInFlightRef.current) return;
-      refreshInFlightRef.current = true;
-      void getOrderStatus(target, provider)
-        .then((data) => setResult((current) => mergeOrderStatus(current, data)))
-        .catch(() => {
-          // Keep the last loaded admin order visible and retry on the next tick.
-        })
-        .finally(() => {
-          refreshInFlightRef.current = false;
-        });
-    }, isDcordProvider ? 2000 : 10_000);
+      remaining -= 1;
+      if (remaining <= 0) {
+        remaining = refreshEvery;
+        if (!refreshInFlightRef.current) {
+          refreshInFlightRef.current = true;
+          void getOrderStatus(target, provider)
+            .then((data) => setResult((current) => mergeOrderStatus(current, data)))
+            .catch(() => {
+              // Keep the last loaded admin order visible and retry on the next cycle.
+            })
+            .finally(() => {
+              refreshInFlightRef.current = false;
+            });
+        }
+      }
+      setSecondsUntilRefresh(remaining);
+    }, 1000);
 
     return () => window.clearInterval(timer);
   }, [isDcordProvider, provider, result?.uniqid, terminal, uniqid]);
@@ -523,7 +534,7 @@ export default function OrderPage() {
             <div className="lookup-workspace-actions">
               <span className="lookup-live-refresh" data-active={!terminal}>
                 <span aria-hidden="true" />
-                {terminal ? "Refresh complete" : `Live refresh · ${isDcordProvider ? "2s" : "10s"}`}
+                {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
               {!isDcordProvider && isWaitingForBot ? (
                 <Button
