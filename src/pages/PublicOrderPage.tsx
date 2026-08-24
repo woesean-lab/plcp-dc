@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
 import { getPublicOrderStatus, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
+import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -26,10 +27,6 @@ type DcordTokenResult = {
   successful: boolean;
   state: "success" | "pending" | "error";
 };
-
-function getDcordTokenResultKey(item: Pick<DcordTokenResult, "index" | "token">) {
-  return `${item.index}:${item.token}`;
-}
 
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
@@ -181,14 +178,12 @@ export default function PublicOrderPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
-  const [revealedBoostTokens, setRevealedBoostTokens] = useState<Record<string, boolean>>({});
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
   const delayUpdateCooldownUntilRef = useRef(0);
   const restartInFlightRef = useRef(false);
   const restartCooldownUntilRef = useRef(0);
-  const boostRevealInitializedRef = useRef(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -301,7 +296,7 @@ export default function PublicOrderPage() {
               if (active) {
                 syncDelayUpdateCooldown(data);
                 syncRestartCooldown(data);
-                setStatus(data);
+                setStatus((current) => mergeOrderStatus(current, data));
               }
             })
             .catch(() => {
@@ -353,42 +348,9 @@ export default function PublicOrderPage() {
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
-  const boostRevealSignature = dcordTokenResults.map((item) => `${getDcordTokenResultKey(item)}:${item.successful}`).join("|");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
   const liveBoostStock = status?.liveBoostStock;
-
-  useEffect(() => {
-    boostRevealInitializedRef.current = false;
-    setRevealedBoostTokens({});
-  }, [uniqid]);
-
-  useEffect(() => {
-    if (!dcordTokenResults.length) return;
-
-    if (!boostRevealInitializedRef.current) {
-      const initiallyRevealed = dcordTokenResults.reduce<Record<string, boolean>>((next, item) => {
-        if (item.successful) next[getDcordTokenResultKey(item)] = true;
-        return next;
-      }, {});
-      setRevealedBoostTokens(initiallyRevealed);
-      boostRevealInitializedRef.current = true;
-      return;
-    }
-
-    const timers = dcordTokenResults
-      .filter((item) => item.successful && !revealedBoostTokens[getDcordTokenResultKey(item)])
-      .map((item) =>
-        window.setTimeout(() => {
-          const key = getDcordTokenResultKey(item);
-          setRevealedBoostTokens((current) => (current[key] ? current : { ...current, [key]: true }));
-        }, 700)
-      );
-
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, [boostRevealSignature, revealedBoostTokens]);
 
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
@@ -418,7 +380,7 @@ export default function PublicOrderPage() {
       try {
         const verifiedStatus = await getPublicOrderStatus(uniqid);
         syncDelayUpdateCooldown(verifiedStatus);
-        setStatus(verifiedStatus);
+        setStatus((current) => mergeOrderStatus(current, verifiedStatus));
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.
       }
@@ -448,7 +410,7 @@ export default function PublicOrderPage() {
         const verifiedStatus = await getPublicOrderStatus(uniqid);
         syncDelayUpdateCooldown(verifiedStatus);
         syncRestartCooldown(verifiedStatus);
-        setStatus(verifiedStatus);
+        setStatus((current) => mergeOrderStatus(current, verifiedStatus));
       } catch {
         // Automatic refresh will verify the updated status shortly.
       }
@@ -477,7 +439,7 @@ export default function PublicOrderPage() {
     try {
       setReplacingTokenIndex(resultIndex);
       const payload = await replaceDcordBoostToken(uniqid, resultIndex);
-      setStatus(payload.order);
+      setStatus((current) => mergeOrderStatus(current, payload.order));
       toast.success("Replacement token tried.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Token could not be replaced.");
@@ -676,10 +638,6 @@ export default function PublicOrderPage() {
                         </span>
                       </div>
                       {dcordTokenResults.map((item, index) => {
-                        const boostRevealed = !item.successful || revealedBoostTokens[getDcordTokenResultKey(item)];
-                        const visibleBoostStatus = boostRevealed ? item.boostStatus : "waiting";
-                        const visibleSlots = boostRevealed ? item.slots : "-";
-
                         return (
                           <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                             <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
@@ -703,8 +661,8 @@ export default function PublicOrderPage() {
                                 ) : null}
                               </span>
                               <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                              <span className="public-token-result-pill" data-state={visibleBoostStatus.toLowerCase()}>{visibleBoostStatus}</span>
-                              <span className="public-token-result-slots">{visibleSlots}</span>
+                              <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                              <span className="public-token-result-slots">{item.slots}</span>
                             </span>
                           </div>
                         );

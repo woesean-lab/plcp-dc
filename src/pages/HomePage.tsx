@@ -2381,7 +2381,7 @@ export default function HomePage() {
             if (event.target === event.currentTarget && !savingBoostStock) setShowAddTokensModal(false);
           }}
         >
-          <div className="confirm-modal w-[min(920px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="add-tokens-title">
+          <div className="confirm-modal add-tokens-modal w-[min(920px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="add-tokens-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Plus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Stock</p>
             <h2 id="add-tokens-title">Add boost tokens</h2>

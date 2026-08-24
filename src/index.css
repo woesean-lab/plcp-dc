@@ -1795,6 +1795,49 @@
   .confirm-modal > p strong { color: var(--app-text); overflow-wrap: anywhere; }
   .confirm-modal-actions { display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1.35rem; }
 
+  .add-tokens-modal {
+    max-height: calc(100dvh - 2.5rem);
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
+
+  @media (max-width: 640px) {
+    .confirm-modal-backdrop:has(.add-tokens-modal) {
+      align-items: start;
+      overflow-y: auto;
+      padding: .75rem;
+    }
+
+    .add-tokens-modal {
+      width: 100%;
+      max-height: calc(100dvh - 1.5rem);
+      border-radius: 16px;
+      padding: 1rem;
+    }
+
+    .add-tokens-modal textarea {
+      min-height: 11rem;
+      resize: vertical;
+    }
+
+    .add-tokens-modal .confirm-modal-actions {
+      position: sticky;
+      bottom: -1rem;
+      z-index: 2;
+      flex-wrap: wrap;
+      margin-inline: -1rem;
+      padding: .85rem 1rem 1rem;
+      border-top: 1px solid var(--app-divider);
+      background: rgba(15, 15, 25, .98);
+    }
+
+    .add-tokens-modal .confirm-modal-actions .ui-button {
+      flex: 1 1 100%;
+    }
+  }
+
   .app-preloader {
     display: grid;
     width: min(100%, 320px);

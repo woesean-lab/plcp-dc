@@ -1470,11 +1470,20 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
     for (const order of orders) {
       const uniqid = order.uniqid.trim();
       ids.push(uniqid);
+      const existing = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+      const existingPayload = existing.rows[0]?.payload;
+      const isDcordOrder =
+        existingPayload &&
+        typeof existingPayload === "object" &&
+        !Array.isArray(existingPayload) &&
+        (existingPayload.provider === "dcord" || existingPayload.service === "DCORD-BOOSTS");
+      const nextPayload = isDcordOrder ? existingPayload : { ...order, uniqid };
+
       await client.query(
         `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
          VALUES ($1, $2::jsonb, COALESCE(($2::jsonb->>'createdAt')::timestamptz, NOW()), NOW())
          ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
-        [uniqid, JSON.stringify({ ...order, uniqid })]
+        [uniqid, JSON.stringify(nextPayload)]
       );
     }
 
