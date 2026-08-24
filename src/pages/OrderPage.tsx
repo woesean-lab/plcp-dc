@@ -278,12 +278,15 @@ export default function OrderPage() {
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
-  const summary = [
-    { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
-    { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
-    { label: isDcordProvider ? "Token progress" : "Expiration", value: isDcordProvider ? `${dcordCompletedTokenCount}/${result?.tokenCount ?? "-"}` : formatTime(expiration) },
-    { label: "Server members", value: formatTemplateNumber(serverMemberCount) }
-  ];
+  const summary = isDcordProvider
+    ? [
+        { label: "Duration", value: result?.duration === 1 || result?.duration === 3 ? `${result.duration} Month` : "-" },
+        { label: "Token progress", value: `${dcordCompletedTokenCount}/${result?.tokenCount ?? "-"}` }
+      ]
+    : [
+        { label: "Expiration", value: formatTime(expiration) },
+        { label: "Join delay", value: formatDelay(result?.delay) }
+      ];
 
   useEffect(() => {
     const incoming = params.get("uniqid");
@@ -615,7 +618,21 @@ export default function OrderPage() {
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
-                <span>{formatTemplateNumber(addedAmount)} of {formatTemplateNumber(totalAmount)} delivered</span>
+                <span>Order progress</span>
+              </div>
+            </div>
+            <div className="lookup-progress-stats">
+              <div>
+                <small>Delivered</small>
+                <strong>{formatTemplateNumber(addedAmount)}</strong>
+              </div>
+              <div>
+                <small>Total ordered</small>
+                <strong>{formatTemplateNumber(totalAmount)}</strong>
+              </div>
+              <div className="is-remaining">
+                <small>Remaining</small>
+                <strong>{formatTemplateNumber(remainingAmount)}</strong>
               </div>
             </div>
             <div className="lookup-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
@@ -752,6 +769,7 @@ export default function OrderPage() {
             <div className="lookup-technical-grid">
               <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
               <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
+              <div><span>Current members</span><strong>{formatTemplateNumber(serverMemberCount)}</strong></div>
               <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
               <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
             </div>
