@@ -536,6 +536,46 @@
     gap: .45rem;
   }
 
+  .lookup-live-refresh {
+    display: inline-flex;
+    height: 30px;
+    align-items: center;
+    gap: .4rem;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    padding: 0 .6rem;
+    color: var(--app-muted);
+    background: rgba(255, 255, 255, .025);
+    font-size: 9px;
+    font-weight: 750;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .lookup-live-refresh > span {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--app-muted);
+  }
+
+  .lookup-live-refresh[data-active="true"] {
+    border-color: rgba(105, 221, 178, .2);
+    color: var(--app-success);
+    background: var(--app-success-soft);
+  }
+
+  .lookup-live-refresh[data-active="true"] > span {
+    background: var(--app-success);
+    box-shadow: 0 0 8px rgba(105, 221, 178, .7);
+    animation: lookup-live-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes lookup-live-pulse {
+    0%, 100% { opacity: .45; }
+    50% { opacity: 1; }
+  }
+
   .lookup-workspace {
     min-width: 0;
     overflow: hidden;
@@ -559,12 +599,32 @@
 
   .lookup-order-labels {
     display: flex;
+    min-width: 0;
     align-items: center;
     gap: .55rem;
     color: var(--app-muted);
     font-size: 10px;
     font-weight: 700;
     text-transform: uppercase;
+  }
+
+  .lookup-service-name {
+    overflow: hidden;
+    color: var(--app-text-secondary);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lookup-service-code {
+    overflow: hidden;
+    max-width: 150px;
+    border-left: 1px solid var(--app-divider);
+    padding-left: .55rem;
+    color: var(--app-muted);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 8px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .lookup-status {
@@ -813,6 +873,7 @@
     .lookup-search-form { grid-template-columns: 1fr; }
     .lookup-search-actions .ui-button:first-child { flex: 1; }
     .lookup-workspace-header { align-items: flex-start; padding: .85rem; }
+    .lookup-service-code { display: none; }
     .lookup-workspace-actions { flex-wrap: wrap; justify-content: flex-end; }
     .lookup-workspace-actions .ui-button:not([data-slot="button"]) { width: auto; }
     .lookup-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }

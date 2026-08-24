@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, replaceDcordBoostToken, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
+import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
@@ -227,6 +228,8 @@ export default function OrderPage() {
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
+  const serviceType = getStringField(result, ["service", "type"]);
+  const serviceName = getServiceTitle(serviceType || (isDcordProvider ? "DCORD-BOOSTS" : undefined));
   const serverMemberCount = getNumberField(result, [
     "serverMemberCount",
     "approximateMemberCount",
@@ -509,7 +512,8 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <div className="lookup-order-labels">
                   <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>{result.status ?? "UNKNOWN"}</span>
-                  <span>{isDcordProvider ? "Boost order" : "Member order"}</span>
+                  <span className="lookup-service-name">{serviceName}</span>
+                  <span className="lookup-service-code">{serviceType || (isDcordProvider ? "DCORD-BOOSTS" : "SERVICE")}</span>
                 </div>
                 <h2>{serverName || "Discord server"}</h2>
                 <p className="lookup-order-reference">{result.uniqid}{serverId ? ` · ${serverId}` : ""}</p>
@@ -517,6 +521,10 @@ export default function OrderPage() {
             </div>
 
             <div className="lookup-workspace-actions">
+              <span className="lookup-live-refresh" data-active={!terminal}>
+                <span aria-hidden="true" />
+                {terminal ? "Refresh complete" : `Live refresh · ${isDcordProvider ? "2s" : "10s"}`}
+              </span>
               {!isDcordProvider && isWaitingForBot ? (
                 <Button
                   type="button"
