@@ -212,7 +212,34 @@ async function revealDcordOrderTokens(order) {
     .filter(Boolean);
   const usedTokenById = new Map();
   if (usedTokenIds.length) {
-    const history = await loadUsedBoostTokenHistory();
+    let history = await loadUsedBoostTokenHistory();
+    const existingIds = new Set(history.map((item) => item.id));
+    const recoveredRows = order.dcordResults.flatMap((result, index) => {
+      if (!result || typeof result !== "object" || Array.isArray(result) || !result.usedTokenId || existingIds.has(result.usedTokenId) || !assignedTokens[index]) {
+        return [];
+      }
+      return [{
+        id: result.usedTokenId,
+        token: assignedTokens[index],
+        redactedToken: redactToken(assignedTokens[index]),
+        duration: order.duration,
+        orderId: order.uniqid,
+        serverId: order.serverId,
+        serverName: order.serverName,
+        usedAt: typeof order.createdAt === "string" ? order.createdAt : new Date().toISOString(),
+        resultAt: new Date().toISOString(),
+        status: typeof result.status === "string" ? result.status : "unknown",
+        success: result.success === true,
+        boosted: result.boosted === true,
+        boostMessage: typeof result.boostMessage === "string" ? result.boostMessage : undefined
+      }];
+    });
+    if (recoveredRows.length) {
+      history = await mutateUsedBoostTokenHistory((current) => {
+        const currentIds = new Set(current.map((item) => item.id));
+        return [...recoveredRows.filter((item) => !currentIds.has(item.id)), ...current];
+      });
+    }
     history.forEach((item) => {
       if (usedTokenIds.includes(item.id)) usedTokenById.set(item.id, item.token);
     });
@@ -321,6 +348,18 @@ async function saveUsedBoostTokenHistory(history) {
   return normalized;
 }
 
+let usedBoostTokenHistoryMutation = Promise.resolve();
+
+async function mutateUsedBoostTokenHistory(mutator) {
+  const operation = usedBoostTokenHistoryMutation.then(async () => {
+    const history = await loadUsedBoostTokenHistory();
+    const nextHistory = await mutator(history);
+    return saveUsedBoostTokenHistory(nextHistory);
+  });
+  usedBoostTokenHistoryMutation = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+
 async function recordUsedBoostToken({ token, duration, order, replacementFor }) {
   const entry = {
     id: crypto.randomUUID(),
@@ -336,14 +375,12 @@ async function recordUsedBoostToken({ token, duration, order, replacementFor }) 
     boosted: false,
     replacementFor
   };
-  const history = await loadUsedBoostTokenHistory();
-  await saveUsedBoostTokenHistory([entry, ...history]);
+  await mutateUsedBoostTokenHistory((history) => [entry, ...history]);
   return entry;
 }
 
 async function updateUsedBoostTokenResult(id, result) {
-  const history = await loadUsedBoostTokenHistory();
-  const nextHistory = history.map((entry) => {
+  await mutateUsedBoostTokenHistory((history) => history.map((entry) => {
     if (entry.id !== id) return entry;
     return {
       ...entry,
@@ -353,8 +390,7 @@ async function updateUsedBoostTokenResult(id, result) {
       boosted: result.boosted === true,
       boostMessage: typeof result.boostMessage === "string" ? result.boostMessage : undefined
     };
-  });
-  await saveUsedBoostTokenHistory(nextHistory);
+  }));
 }
 
 async function getBoostTokenStockSnapshot() {
@@ -1058,8 +1094,7 @@ app.post("/api/dcord/boost-stock/mark-used", requireSession, async (req, res, ne
       boosted: false,
       boostMessage: "Moved manually from active stock."
     }));
-    const history = await loadUsedBoostTokenHistory();
-    const nextHistory = await saveUsedBoostTokenHistory([...manualUsageRows, ...history]);
+    const nextHistory = await mutateUsedBoostTokenHistory((history) => [...manualUsageRows, ...history]);
     const nextStock = await saveBoostTokenStock({
       ...stock,
       [stockKey]: stock[stockKey].filter((token) => !requestedTokens.has(token))
@@ -1105,7 +1140,7 @@ app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, 
       oneMonth: nextStockInput.oneMonth,
       threeMonth: nextStockInput.threeMonth
     });
-    const nextHistory = await saveUsedBoostTokenHistory(history.filter((item) => !usageIdSet.has(item.id)));
+    const nextHistory = await mutateUsedBoostTokenHistory((current) => current.filter((item) => !usageIdSet.has(item.id)));
 
     res.json({
       stock: summarizeBoostTokenStock(nextStock),
@@ -1126,8 +1161,7 @@ app.post("/api/dcord/boost-stock/delete-used", requireSession, async (req, res, 
     }
 
     const usageIdSet = new Set(usageIds);
-    const history = await loadUsedBoostTokenHistory();
-    await saveUsedBoostTokenHistory(history.filter((item) => !usageIdSet.has(item.id)));
+    await mutateUsedBoostTokenHistory((history) => history.filter((item) => !usageIdSet.has(item.id)));
     res.json(await getBoostTokenStockSnapshot());
   } catch (error) {
     next(error);
