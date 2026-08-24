@@ -670,14 +670,16 @@
 
   .lookup-status[data-status*="error"],
   .lookup-status[data-status*="invalid"],
-  .lookup-status[data-status*="terminated"] {
+  .lookup-status[data-status*="terminated"],
+  .lookup-status[data-status*="invite"] {
     border-color: var(--app-danger-button-border);
     background: var(--app-danger-soft);
   }
 
   .lookup-status[data-status*="error"] strong,
   .lookup-status[data-status*="invalid"] strong,
-  .lookup-status[data-status*="terminated"] strong { color: var(--app-danger); }
+  .lookup-status[data-status*="terminated"] strong,
+  .lookup-status[data-status*="invite"] strong { color: var(--app-danger); }
 
   .lookup-order-identity h2 {
     overflow: hidden;
@@ -740,6 +742,41 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: stretch;
     border-bottom: 1px solid var(--app-divider);
+  }
+
+  .lookup-invites-warning {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .8rem;
+    padding: .8rem 1.15rem;
+    border-bottom: 1px solid var(--app-danger-button-border);
+    background: var(--app-danger-soft);
+  }
+
+  .lookup-invites-warning-icon {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    border: 1px solid var(--app-danger-button-border);
+    border-radius: 8px;
+    color: var(--app-danger);
+    background: rgba(255, 91, 120, .08);
+  }
+
+  .lookup-invites-warning strong {
+    display: block;
+    margin-top: .15rem;
+    color: var(--app-text);
+    font-size: 12px;
+  }
+
+  .lookup-invites-warning div > span {
+    display: block;
+    margin-top: .15rem;
+    color: var(--app-text-secondary);
+    font-size: 10px;
   }
 
   .lookup-order-note {
@@ -919,6 +956,8 @@
     .lookup-metrics > div:nth-child(2n) { border-right: 0; }
     .lookup-metrics > div:nth-last-child(-n+2) { border-bottom: 0; }
     .lookup-order-note { grid-template-columns: auto minmax(0, 1fr); padding: .85rem; }
+    .lookup-invites-warning { grid-template-columns: auto minmax(0, 1fr); padding: .8rem .85rem; }
+    .lookup-invites-warning .ui-button { grid-column: 1 / -1; width: 100%; }
     .lookup-note-actions { grid-column: 1 / -1; flex-wrap: wrap; }
     .lookup-note-actions .ui-button { flex: 1; }
     .lookup-delay-control,

@@ -3,10 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck, Timer } from "lucide-react";
+import { Activity, Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { getOrderStatus, replaceDcordBoostToken, updateOrderDelay } from "../lib/integration";
+import { getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -227,6 +227,7 @@ export default function OrderPage() {
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -368,6 +369,28 @@ export default function OrderPage() {
       void lookup(target);
     } finally {
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleRestartOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isInvitesPaused || restartingOrder) return;
+
+    try {
+      setRestartingOrder(true);
+      await restartIntegrationOrder(target);
+      toast.success("Restart request sent.");
+
+      try {
+        const data = await getOrderStatus(target, provider);
+        setResult((current) => mergeOrderStatus(current, data));
+      } catch {
+        // Live refresh will verify the updated status on the next cycle.
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Order could not be restarted.");
+    } finally {
+      setRestartingOrder(false);
     }
   }
 
@@ -583,6 +606,21 @@ export default function OrderPage() {
               </div>
             ))}
           </div>
+
+          {isInvitesPaused && !isDcordProvider ? (
+            <section className="lookup-invites-warning" role="alert">
+              <span className="lookup-invites-warning-icon" aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
+              <div>
+                <p className="app-kicker">Invites paused</p>
+                <strong>Discord invites need attention</strong>
+                <span>Confirm that the server invite works, then restart the order.</span>
+              </div>
+              <Button type="button" variant="destructive" size="sm" onClick={() => void handleRestartOrder()} disabled={restartingOrder}>
+                <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                {restartingOrder ? "Restarting..." : "Restart order"}
+              </Button>
+            </section>
+          ) : null}
 
           <div className="lookup-context-row">
             <section className={`lookup-order-note ${isWaitingForBot ? "is-action" : ""}`}>
