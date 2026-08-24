@@ -1189,6 +1189,7 @@ export default function HomePage() {
         provider: selectedIsBoost ? "dcord" : "tokenu",
         service: form.service,
         serverId,
+        serverName: serverInfo.guildName,
         amount: form.amount,
         added: 0,
         delay: selectedIsBoost ? undefined : form.delay,

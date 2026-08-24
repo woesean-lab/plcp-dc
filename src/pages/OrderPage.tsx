@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck } from "lucide-react";
+import { Activity, Bot, Clock3, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, ShieldCheck, Timer } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, replaceDcordBoostToken, updateOrderDelay } from "../lib/integration";
@@ -12,7 +12,6 @@ import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
-const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 
 type DcordTokenResult = {
   index: number;
@@ -91,15 +90,7 @@ function formatJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
-function formatTime(value?: number) {
-  if (!value) return "-";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
-}
-
-function formatTemplateDate(value?: number) {
+function formatTime(value?: number | string) {
   if (!value) return "-";
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "medium",
@@ -117,6 +108,25 @@ function formatDelay(value?: string | number) {
   if (typeof value === "number" && !Number.isNaN(value)) return `${value}s`;
   if (typeof value === "string" && value.trim()) return value;
   return "-";
+}
+
+function formatEstimatedDuration(remaining?: number, delay?: number) {
+  if (typeof remaining !== "number" || typeof delay !== "number" || !Number.isFinite(remaining) || !Number.isFinite(delay)) {
+    return null;
+  }
+  if (remaining <= 0) return "Completion imminent";
+
+  const totalSeconds = Math.max(Math.ceil(remaining * delay), 0);
+  if (totalSeconds < 60) return "Less than 1 minute remaining";
+
+  const days = Math.floor(totalSeconds / 86_400);
+  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const parts: string[] = [];
+  if (days) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
+  if (hours) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
+  if (minutes || parts.length === 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
+  return `About ${parts.join(" ")} remaining`;
 }
 
 function formatTemplateDelay(value?: string | number) {
@@ -154,20 +164,9 @@ function getNumberField(source: OrderStatusResponse | null, keys: string[]) {
   return undefined;
 }
 
-function getDiscordServerCreatedAt(serverId: string) {
-  if (!/^\d{17,20}$/.test(serverId)) return undefined;
-
-  try {
-    const timestamp = Number((BigInt(serverId) >> 22n) + DISCORD_EPOCH_MS);
-    return Number.isFinite(timestamp) ? timestamp : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
-  return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
+  return ["completed", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
 }
 
 function LookupPreloader({ uniqid }: { uniqid?: string }) {
@@ -221,35 +220,40 @@ export default function OrderPage() {
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
 
-  const summary = useMemo(() => {
-    if (!result) return [];
-
-    const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
-    const serverCreatedAt = getDiscordServerCreatedAt(serverId);
-    const serverMemberCount = getNumberField(result, [
-      "serverMemberCount",
-      "approximateMemberCount",
-      "approximate_member_count",
-      "memberCount",
-      "member_count",
-      "members"
-    ]);
-
-    return [
-      { label: "Status", value: result.status ?? "UNKNOWN" },
-      { label: "Added", value: typeof result.added === "number" ? String(result.added) : "-" },
-      {
-        label: "Amount",
-        value: typeof result.amount === "number" ? String(result.amount) : typeof result.quantity === "number" ? String(result.quantity) : "-"
-      },
-      { label: "Server ID", value: serverId || "-" },
-      { label: "Server Created", value: formatTemplateDate(serverCreatedAt) },
-      { label: "Current members (being created)", value: formatTemplateNumber(serverMemberCount) }
-    ];
-  }, [result]);
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
   const terminal = isTerminalStatus(result?.status);
+  const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
+  const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
+  const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
+  const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
+  const serverMemberCount = getNumberField(result, [
+    "serverMemberCount",
+    "approximateMemberCount",
+    "approximate_member_count",
+    "memberCount",
+    "member_count",
+    "members"
+  ]);
+  const totalAmount = getNumberField(result, ["amount", "quantity"]);
+  const addedAmount = getNumberField(result, ["added"]);
+  const remainingAmount = typeof totalAmount === "number" && typeof addedAmount === "number" ? Math.max(totalAmount - addedAmount, 0) : undefined;
+  const progress = typeof totalAmount === "number" && typeof addedAmount === "number" && totalAmount > 0
+    ? Math.min(Math.max(addedAmount / totalAmount, 0), 1)
+    : null;
+  const progressPercent = progress === null ? 0 : Math.round(progress * 100);
+  const currentDelay = getNumberField(result, ["delay"]);
+  const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused
+    ? null
+    : formatEstimatedDuration(remainingAmount, currentDelay);
+  const summary = [
+    { label: "Delivered", value: formatTemplateNumber(addedAmount) },
+    { label: "Total", value: formatTemplateNumber(totalAmount) },
+    { label: "Remaining", value: formatTemplateNumber(remainingAmount) },
+    { label: "Progress", value: progress === null ? "-" : `${progressPercent}%` },
+    { label: isDcordProvider ? "Duration" : "Join delay", value: isDcordProvider && (result?.duration === 1 || result?.duration === 3) ? `${result.duration} Month` : formatDelay(result?.delay) },
+    { label: "Server members", value: formatTemplateNumber(serverMemberCount) }
+  ];
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
 
@@ -272,12 +276,12 @@ export default function OrderPage() {
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !isDcordProvider || terminal) return;
+    if (!target || terminal) return;
 
     const timer = window.setInterval(() => {
       if (refreshInFlightRef.current) return;
       refreshInFlightRef.current = true;
-      void getOrderStatus(target, "dcord")
+      void getOrderStatus(target, provider)
         .then((data) => setResult((current) => mergeOrderStatus(current, data)))
         .catch(() => {
           // Keep the last loaded admin order visible and retry on the next tick.
@@ -285,10 +289,10 @@ export default function OrderPage() {
         .finally(() => {
           refreshInFlightRef.current = false;
         });
-    }, 2000);
+    }, isDcordProvider ? 2000 : 10_000);
 
     return () => window.clearInterval(timer);
-  }, [isDcordProvider, result?.uniqid, terminal, uniqid]);
+  }, [isDcordProvider, provider, result?.uniqid, terminal, uniqid]);
 
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
@@ -507,18 +511,18 @@ export default function OrderPage() {
                   <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>{result.status ?? "UNKNOWN"}</span>
                   <span>{isDcordProvider ? "Boost order" : "Member order"}</span>
                 </div>
-                <h2>{result.uniqid}</h2>
+                <h2>{serverName || "Discord server"}</h2>
+                <p className="lookup-order-reference">{result.uniqid}{serverId ? ` · ${serverId}` : ""}</p>
               </div>
             </div>
 
             <div className="lookup-workspace-actions">
-              {!isDcordProvider ? (
+              {!isDcordProvider && isWaitingForBot ? (
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={!botInvite}
-                  title={botInvite ? "Copy delivery template message" : "Delivery template requires a bot invite link"}
+                  title="Copy delivery template message"
                   onClick={() => void copyDeliveryTemplate()}
                 >
                   <MessageSquareText className="h-4 w-4" aria-hidden="true" /> Delivery template
@@ -543,19 +547,19 @@ export default function OrderPage() {
           </div>
 
           <div className="lookup-context-row">
-            <section className={`lookup-order-note ${botInvite ? "is-action" : ""}`}>
+            <section className={`lookup-order-note ${isWaitingForBot ? "is-action" : ""}`}>
               <span className="lookup-note-icon" aria-hidden="true">
-                {botInvite ? <Bot className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
+                {isWaitingForBot ? <Bot className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
               </span>
               <div className="min-w-0">
-                <p className={labelClass}>{botInvite ? "Action required" : "Order details"}</p>
-                {botInvite ? (
+                <p className={labelClass}>{isWaitingForBot ? "Action required" : "Order details"}</p>
+                {isWaitingForBot ? (
                   <p>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</p>
                 ) : (
                   <p>{result.error ?? getPlainDetails(result.details)}</p>
                 )}
               </div>
-              {botInvite ? (
+              {isWaitingForBot ? (
                 <div className="lookup-note-actions">
                   <Button type="button" variant="secondary" size="sm" onClick={() => void copyBotInvite()}>
                     <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite
@@ -569,7 +573,7 @@ export default function OrderPage() {
               ) : null}
             </section>
 
-            {!terminal && !isDcordProvider ? (
+            {!terminal && !isInvitesPaused && !isDcordProvider ? (
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>
@@ -594,6 +598,23 @@ export default function OrderPage() {
               </section>
             )}
           </div>
+
+          <section className="lookup-live-progress">
+            <div className="lookup-progress-heading">
+              <div>
+                <p className="app-kicker">Live delivery</p>
+                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : "Delivery in progress"}</h3>
+              </div>
+              <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
+            </div>
+            <div className="lookup-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
+              <span style={{ width: progress === null ? "0%" : `${Math.max(progressPercent, progressPercent > 0 ? 3 : 0)}%` }} />
+            </div>
+            <div className="lookup-progress-foot">
+              <span><Activity className="h-3.5 w-3.5" /> {formatTemplateNumber(addedAmount)} delivered, {formatTemplateNumber(remainingAmount)} remaining</span>
+              {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
+            </div>
+          </section>
 
           {isDcordProvider ? (
             <section className="lookup-token-panel">

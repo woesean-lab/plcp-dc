@@ -1207,7 +1207,7 @@ app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/or
       trackedPayload &&
       typeof trackedPayload === "object" &&
       !Array.isArray(trackedPayload) &&
-      !Number.isFinite(trackedPayload.serverMemberCount) &&
+      (!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) &&
       typeof trackedPayload.serverInvite === "string" &&
       trackedPayload.serverInvite.trim()
     ) {
@@ -1216,7 +1216,10 @@ app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/or
         trackedPayload = {
           ...trackedPayload,
           serverId: trackedPayload.serverId ?? inviteInfo.guildId,
-          serverMemberCount: inviteInfo.approximateMemberCount
+          serverName: trackedPayload.serverName ?? inviteInfo.guildName,
+          serverMemberCount: Number.isFinite(trackedPayload.serverMemberCount)
+            ? trackedPayload.serverMemberCount
+            : inviteInfo.approximateMemberCount
         };
         await pool.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [
           uniqid,
