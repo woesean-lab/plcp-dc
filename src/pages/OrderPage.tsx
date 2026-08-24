@@ -627,7 +627,7 @@ export default function OrderPage() {
               <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
             </div>
             <div className="lookup-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
-              <span style={{ width: progress === null ? "0%" : `${Math.max(progressPercent, progressPercent > 0 ? 3 : 0)}%` }} />
+              <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
             </div>
             <div className="lookup-progress-foot">
               <span><Activity className="h-3.5 w-3.5" /> {formatTemplateNumber(addedAmount)} delivered, {formatTemplateNumber(remainingAmount)} remaining</span>

@@ -605,7 +605,7 @@ export default function PublicOrderPage() {
                   <div className="monitor-progress-heading">
                     <div>
                       <p className="app-kicker">Delivery progress</p>
-                      <h2>{isCompleted ? "Order completed" : "Order is moving"}</h2>
+                      <h2>{isCompleted ? "Order completed" : "Delivery in progress"}</h2>
                     </div>
                     <span className="monitor-progress-percent">{progress === null ? "—" : `${progressPercent}%`}</span>
                   </div>
