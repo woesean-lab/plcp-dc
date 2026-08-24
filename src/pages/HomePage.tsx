@@ -28,11 +28,13 @@ import {
   ShieldCheck,
   TriangleAlert,
   Trash2,
+  Users,
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
+import { addAuthorizedCommunityMembers, getCommunityAdminStatus, type CommunityAdminStatus } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { isBoostService, SERVICE_OPTIONS } from "../lib/services";
 import {
@@ -432,6 +434,7 @@ export default function HomePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
+  const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
@@ -444,6 +447,8 @@ export default function HomePage() {
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
+  const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
+  const [startingCommunityJoin, setStartingCommunityJoin] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
@@ -623,6 +628,7 @@ export default function HomePage() {
     if (activeTab !== "settings") return;
     if (apiConfigured && balance === null) void refreshBalance();
     if (dcordConfigured && dcordBalance === null) void refreshDcordBalance();
+    void refreshCommunityStatus();
     // Balances are loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
@@ -697,6 +703,47 @@ export default function HomePage() {
       setLoadingDcordBalance(false);
     }
   }
+
+  async function refreshCommunityStatus() {
+    try {
+      setLoadingCommunityStatus(true);
+      setCommunityStatus(await getCommunityAdminStatus());
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
+    } finally {
+      setLoadingCommunityStatus(false);
+    }
+  }
+
+  async function copyCommunityJoinLink() {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/join`);
+      notifySuccess("Community join link copied.");
+    } catch {
+      notifyError("Community join link could not be copied.");
+    }
+  }
+
+  async function handleAddCommunityMembers() {
+    try {
+      setStartingCommunityJoin(true);
+      const result = await addAuthorizedCommunityMembers();
+      notifySuccess(`Adding ${result.count} authorized members.`);
+      await refreshCommunityStatus();
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Authorized members could not be added.");
+    } finally {
+      setStartingCommunityJoin(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== "settings" || !communityStatus?.syncing) return;
+    const handle = window.setInterval(() => void refreshCommunityStatus(), 2_000);
+    return () => window.clearInterval(handle);
+    // Poll only while the local member worker is running.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, communityStatus?.syncing]);
 
   async function refreshAvailability() {
     try {
@@ -2163,6 +2210,84 @@ export default function HomePage() {
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
               <div className="grid gap-5">
+              <section className={`${shell} community-admin-panel p-5 sm:p-6`}>
+                <div className="community-admin-heading">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span className="stat-icon" aria-hidden="true">
+                      <Users className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className={labelClass}>Community OAuth</p>
+                      <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.guild?.name ?? "Discord member test"}</h2>
+                    </div>
+                  </div>
+                  <Badge variant={communityStatus?.configured ? "success" : "destructive"}>
+                    {communityStatus?.syncing ? "Adding members" : communityStatus?.configured ? "Ready" : "Setup required"}
+                  </Badge>
+                </div>
+
+                <div className="community-admin-progress">
+                  <div>
+                    <span>Authorized</span>
+                    <strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong>
+                  </div>
+                  <div>
+                    <span>Waiting</span>
+                    <strong>{communityStatus?.ready ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Added</span>
+                    <strong>{communityStatus?.joined ?? 0}</strong>
+                  </div>
+                  <div>
+                    <span>Failed</span>
+                    <strong>{communityStatus?.failed ?? 0}</strong>
+                  </div>
+                </div>
+
+                <div className="community-admin-track" aria-hidden="true">
+                  <span style={{ width: `${communityStatus?.goal ? Math.min(100, ((communityStatus.authorized ?? 0) / communityStatus.goal) * 100) : 0}%` }} />
+                </div>
+
+                {!communityStatus?.configured ? (
+                  <p className="community-admin-note">Add the Discord application, bot, callback address and target server settings to activate this test.</p>
+                ) : null}
+
+                {communityStatus?.recent?.length ? (
+                  <div className="community-recent-list">
+                    {communityStatus.recent.slice(0, 5).map((record, index) => (
+                      <div key={`${record.username}-${record.authorizedAt}-${index}`}>
+                        <span className="community-recent-avatar" aria-hidden="true">
+                          {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
+                        </span>
+                        <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
+                        <Badge variant={record.status === "joined" ? "success" : record.status === "failed" ? "destructive" : "secondary"}>
+                          {record.status === "authorized" ? "Waiting" : record.status === "joined" ? "Joined" : record.status === "failed" ? "Failed" : "Already inside"}
+                        </Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Button type="button" disabled={!communityStatus?.configured || !communityStatus?.ready || communityStatus?.syncing || startingCommunityJoin} onClick={() => void handleAddCommunityMembers()}>
+                    {communityStatus?.syncing || startingCommunityJoin ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+                    {communityStatus?.syncing ? "Adding members..." : "Add authorized members"}
+                  </Button>
+                  <Button type="button" disabled={!communityStatus?.configured} onClick={() => void copyCommunityJoinLink()}>
+                    <Copy className="h-4 w-4" /> Copy join link
+                  </Button>
+                  <Button asChild type="button" variant="secondary" disabled={!communityStatus?.configured}>
+                    {communityStatus?.configured ? (
+                      <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open join page</a>
+                    ) : <span><ExternalLink className="h-4 w-4" /> Open join page</span>}
+                  </Button>
+                  <Button type="button" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>
+                    <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
+                  </Button>
+                </div>
+              </section>
+
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">

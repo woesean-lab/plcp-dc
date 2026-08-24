@@ -20,10 +20,14 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https://app.dcord.co/api";
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
+const discordApiBase = "https://discord.com/api/v10";
+const communityJoinGoal = Math.min(Math.max(Number.parseInt(process.env.COMMUNITY_JOIN_GOAL ?? "50", 10) || 50, 1), 10_000);
+const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
+const communityOauthStartCooldowns = new Map();
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -121,6 +125,196 @@ function safeEqual(value, expected) {
   const left = Buffer.from(String(value));
   const right = Buffer.from(String(expected));
   return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function getCommunityOAuthConfig() {
+  const clientId = String(process.env.DISCORD_OAUTH_CLIENT_ID ?? "").trim();
+  const clientSecret = String(process.env.DISCORD_OAUTH_CLIENT_SECRET ?? "").trim();
+  const botToken = String(process.env.DISCORD_BOT_TOKEN ?? "").trim();
+  const redirectUri = String(process.env.DISCORD_OAUTH_REDIRECT_URI ?? "").trim();
+  const guildId = String(process.env.DISCORD_TARGET_GUILD_ID ?? "").trim();
+  const missing = [];
+
+  if (!clientId) missing.push("DISCORD_OAUTH_CLIENT_ID");
+  if (!clientSecret) missing.push("DISCORD_OAUTH_CLIENT_SECRET");
+  if (!botToken) missing.push("DISCORD_BOT_TOKEN");
+  if (!redirectUri) missing.push("DISCORD_OAUTH_REDIRECT_URI");
+  if (!isDiscordGuildId(guildId)) missing.push("DISCORD_TARGET_GUILD_ID");
+
+  if (redirectUri) {
+    try {
+      const url = new URL(redirectUri);
+      if (url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
+        missing.push("DISCORD_OAUTH_REDIRECT_URI_HTTPS");
+      }
+    } catch {
+      missing.push("DISCORD_OAUTH_REDIRECT_URI_VALID");
+    }
+  }
+
+  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, redirectUri, guildId };
+}
+
+async function requestDiscord(pathname, init = {}) {
+  const response = await fetch(`${discordApiBase}/${String(pathname).replace(/^\/+/, "")}`, {
+    ...init,
+    signal: AbortSignal.timeout(15_000)
+  });
+  const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
+  return { response, payload };
+}
+
+let communityGuildCache = null;
+let communityPoolRunPromise = null;
+
+async function loadCommunityGuild(config) {
+  if (communityGuildCache?.guildId === config.guildId && communityGuildCache.expiresAt > Date.now()) {
+    return communityGuildCache.value;
+  }
+
+  const { response, payload } = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}?with_counts=true`, {
+    headers: { Authorization: `Bot ${config.botToken}` }
+  });
+  if (!response.ok) {
+    const error = new Error("The community bot could not access the configured Discord server.");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const value = {
+    id: String(payload?.id ?? config.guildId),
+    name: String(payload?.name ?? "Discord Community"),
+    iconUrl: payload?.icon
+      ? `https://cdn.discordapp.com/icons/${encodeURIComponent(config.guildId)}/${encodeURIComponent(payload.icon)}.png?size=256`
+      : null,
+    memberCount: Number.isFinite(payload?.approximate_member_count)
+      ? payload.approximate_member_count
+      : Number.isFinite(payload?.member_count) ? payload.member_count : null
+  };
+  communityGuildCache = { guildId: config.guildId, expiresAt: Date.now() + 30_000, value };
+  return value;
+}
+
+async function loadCommunityJoinSummary(config) {
+  const result = await pool.query(
+    `SELECT
+       COUNT(*) FILTER (WHERE status = 'joined')::int AS joined,
+       COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
+       COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
+       COUNT(*)::int AS authorized,
+       COUNT(*) FILTER (WHERE status = 'authorized')::int AS ready
+     FROM community_oauth_joins
+     WHERE guild_id = $1`,
+    [config.guildId]
+  );
+  const row = result.rows[0] ?? {};
+  const joined = Number(row.joined ?? 0);
+  const authorized = Number(row.authorized ?? 0);
+  return {
+    goal: communityJoinGoal,
+    joined,
+    remaining: Math.max(0, communityJoinGoal - authorized),
+    authorized,
+    ready: Number(row.ready ?? 0),
+    alreadyMember: Number(row.already_member ?? 0),
+    failed: Number(row.failed ?? 0),
+    syncing: Boolean(communityPoolRunPromise)
+  };
+}
+
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
+  const refreshToken = decryptCredential(encryptedRefreshToken);
+  const body = new URLSearchParams({
+    grant_type: "refresh_token",
+    refresh_token: refreshToken
+  });
+  const result = await requestDiscord("oauth2/token", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+  const accessToken = String(result.payload?.access_token ?? "").trim();
+  const nextRefreshToken = String(result.payload?.refresh_token ?? "").trim();
+  if (!result.response.ok || !accessToken || !nextRefreshToken) {
+    const error = new Error("Discord authorization could not be refreshed.");
+    error.statusCode = 401;
+    throw error;
+  }
+  return { accessToken, refreshToken: nextRefreshToken };
+}
+
+async function addAuthorizedCommunityMember(config, member) {
+  const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
+  await pool.query(
+    "UPDATE community_oauth_joins SET encrypted_refresh_token = $3 WHERE discord_user_id = $1 AND guild_id = $2",
+    [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
+  );
+
+  let addResult = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(member.discord_user_id)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bot ${config.botToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ access_token: credentials.accessToken })
+  });
+  if (addResult.response.status === 429) {
+    const retryAfterMs = Math.min(Math.max(Number(addResult.payload?.retry_after ?? 1) * 1000, 1_000), 60_000);
+    await sleep(retryAfterMs);
+    addResult = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(member.discord_user_id)}`, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bot ${config.botToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ access_token: credentials.accessToken })
+    });
+  }
+
+  if (addResult.response.status === 201 || addResult.response.status === 204) {
+    const status = addResult.response.status === 201 ? "joined" : "already_member";
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET status = $3, details = NULL, joined_at = CASE WHEN $3 = 'joined' THEN NOW() ELSE joined_at END
+       WHERE discord_user_id = $1 AND guild_id = $2`,
+      [member.discord_user_id, config.guildId, status]
+    );
+    return;
+  }
+
+  const error = new Error(`Discord returned ${addResult.response.status}.`);
+  error.statusCode = addResult.response.status;
+  throw error;
+}
+
+async function runCommunityPool(config) {
+  const members = await pool.query(
+    `SELECT discord_user_id, encrypted_refresh_token
+     FROM community_oauth_joins
+     WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
+     ORDER BY authorized_at ASC`,
+    [config.guildId]
+  );
+
+  for (const member of members.rows) {
+    try {
+      await addAuthorizedCommunityMember(config, member);
+    } catch (error) {
+      await pool.query(
+        `UPDATE community_oauth_joins SET status = 'failed', details = $3
+         WHERE discord_user_id = $1 AND guild_id = $2`,
+        [member.discord_user_id, config.guildId, error instanceof Error ? error.message.slice(0, 200) : "Join failed."]
+      );
+    }
+    await sleep(350);
+  }
 }
 
 function getCredentialEncryptionKey() {
@@ -695,7 +889,32 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_oauth_states (
+      state_hash TEXT PRIMARY KEY,
+      expires_at TIMESTAMPTZ NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_states_expires_at_idx ON community_oauth_states (expires_at)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_oauth_joins (
+      discord_user_id TEXT NOT NULL,
+      guild_id TEXT NOT NULL,
+      username TEXT NOT NULL,
+      avatar_url TEXT,
+      encrypted_refresh_token TEXT,
+      status TEXT NOT NULL,
+      details TEXT,
+      authorized_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      joined_at TIMESTAMPTZ,
+      PRIMARY KEY (discord_user_id, guild_id)
+    )
+  `);
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT");
+  await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
+  await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
 }
 
 async function requireSession(req, res, next) {
@@ -728,6 +947,202 @@ async function hasActiveSession(req) {
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "2mb" }));
+
+app.get("/api/community/public", async (_req, res, next) => {
+  try {
+    const config = getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.set("Cache-Control", "no-store").json({
+        configured: false,
+        goal: communityJoinGoal,
+        joined: 0,
+        authorized: 0,
+        remaining: communityJoinGoal
+      });
+    }
+
+    const [guild, summary] = await Promise.all([
+      loadCommunityGuild(config),
+      loadCommunityJoinSummary(config)
+    ]);
+    res.set("Cache-Control", "no-store").json({ configured: true, guild, ...summary });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/community/oauth/start", async (req, res, next) => {
+  try {
+    const config = getCommunityOAuthConfig();
+    if (!config.configured) return res.redirect(303, "/join?result=unavailable");
+
+    const cooldownKey = req.ip;
+    const cooldownUntil = communityOauthStartCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) return res.redirect(303, "/join?result=wait");
+
+    const summary = await loadCommunityJoinSummary(config);
+    if (summary.remaining <= 0) return res.redirect(303, "/join?result=full");
+
+    const state = crypto.randomBytes(32).toString("base64url");
+    await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
+    await pool.query(
+      "INSERT INTO community_oauth_states (state_hash, expires_at) VALUES ($1, $2)",
+      [hashToken(state), new Date(Date.now() + communityOauthStateDurationMs)]
+    );
+    communityOauthStartCooldowns.set(cooldownKey, Date.now() + 2_000);
+
+    const authorizeUrl = new URL("https://discord.com/oauth2/authorize");
+    authorizeUrl.searchParams.set("client_id", config.clientId);
+    authorizeUrl.searchParams.set("response_type", "code");
+    authorizeUrl.searchParams.set("redirect_uri", config.redirectUri);
+    authorizeUrl.searchParams.set("scope", "identify guilds.join");
+    authorizeUrl.searchParams.set("state", state);
+    authorizeUrl.searchParams.set("prompt", "consent");
+    res.redirect(303, authorizeUrl.toString());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/community/oauth/callback", async (req, res) => {
+  const redirectWithResult = (result) => res.redirect(303, `/join?result=${encodeURIComponent(result)}`);
+  try {
+    const config = getCommunityOAuthConfig();
+    if (!config.configured) return redirectWithResult("unavailable");
+    if (req.query.error) return redirectWithResult("cancelled");
+
+    const code = String(req.query.code ?? "").trim();
+    const state = String(req.query.state ?? "").trim();
+    if (!code || !state || code.length > 2048 || state.length > 256) return redirectWithResult("invalid");
+
+    const consumedState = await pool.query(
+      "DELETE FROM community_oauth_states WHERE state_hash = $1 AND expires_at > NOW() RETURNING state_hash",
+      [hashToken(state)]
+    );
+    if (!consumedState.rowCount) return redirectWithResult("expired");
+
+    const tokenBody = new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: config.redirectUri
+    });
+    const tokenResult = await requestDiscord("oauth2/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: tokenBody
+    });
+    const accessToken = String(tokenResult.payload?.access_token ?? "").trim();
+    const refreshToken = String(tokenResult.payload?.refresh_token ?? "").trim();
+    const grantedScopes = String(tokenResult.payload?.scope ?? "").split(/\s+/).filter(Boolean);
+    if (!tokenResult.response.ok || !accessToken || !refreshToken || !grantedScopes.includes("guilds.join")) {
+      return redirectWithResult("authorization_failed");
+    }
+
+    const userResult = await requestDiscord("users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    const userId = String(userResult.payload?.id ?? "").trim();
+    if (!userResult.response.ok || !isDiscordGuildId(userId)) return redirectWithResult("profile_failed");
+
+    const username = String(userResult.payload?.global_name ?? userResult.payload?.username ?? "Discord member").slice(0, 100);
+    const avatarHash = String(userResult.payload?.avatar ?? "").trim();
+    const avatarUrl = avatarHash
+      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(userId)}/${encodeURIComponent(avatarHash)}.png?size=128`
+      : null;
+    await pool.query(
+      `INSERT INTO community_oauth_joins
+        (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, details, authorized_at, joined_at)
+       VALUES ($1, $2, $3, $4, $5, 'authorized', NULL, NOW(), NULL)
+       ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
+         username = EXCLUDED.username,
+         avatar_url = EXCLUDED.avatar_url,
+         encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
+         status = CASE
+           WHEN community_oauth_joins.status IN ('joined', 'already_member') THEN community_oauth_joins.status
+           ELSE 'authorized'
+         END,
+         details = NULL,
+         authorized_at = NOW()`,
+      [userId, config.guildId, username, avatarUrl, encryptCredential(refreshToken)]
+    );
+    return redirectWithResult("authorized");
+  } catch (error) {
+    console.error("Community OAuth callback failed:", error instanceof Error ? error.message : error);
+    return redirectWithResult("error");
+  }
+});
+
+app.get("/api/community/status", requireSession, async (_req, res, next) => {
+  try {
+    const config = getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.set("Cache-Control", "no-store").json({
+        configured: false,
+        missing: config.missing,
+        goal: communityJoinGoal,
+        joined: 0,
+        remaining: communityJoinGoal,
+        authorized: 0,
+        ready: 0,
+        alreadyMember: 0,
+        failed: 0,
+        syncing: false,
+        recent: []
+      });
+    }
+
+    const [guild, summary, recentResult] = await Promise.all([
+      loadCommunityGuild(config),
+      loadCommunityJoinSummary(config),
+      pool.query(
+        `SELECT username, avatar_url, status, details, authorized_at, joined_at
+         FROM community_oauth_joins
+         WHERE guild_id = $1
+         ORDER BY authorized_at DESC
+         LIMIT 50`,
+        [config.guildId]
+      )
+    ]);
+    res.set("Cache-Control", "no-store").json({
+      configured: true,
+      guild,
+      ...summary,
+      recent: recentResult.rows.map((row) => ({
+        username: row.username,
+        avatarUrl: row.avatar_url,
+        status: row.status,
+        details: row.details,
+        authorizedAt: row.authorized_at,
+        joinedAt: row.joined_at
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/add-members", requireSession, async (_req, res, next) => {
+  try {
+    const config = getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Community OAuth is not configured." });
+    if (communityPoolRunPromise) return res.status(409).json({ message: "Members are already being added." });
+
+    const summary = await loadCommunityJoinSummary(config);
+    if (!summary.ready) return res.status(409).json({ message: "There are no authorized members waiting to be added." });
+
+    communityPoolRunPromise = runCommunityPool(config)
+      .catch((error) => console.error("Community member run failed:", error instanceof Error ? error.message : error))
+      .finally(() => {
+        communityPoolRunPromise = null;
+      });
+    res.status(202).json({ started: true, count: summary.ready });
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
