@@ -38,7 +38,9 @@ import {
   clearCommunityConfig,
   getCommunityAdminStatus,
   getCommunityConfig,
+  removeCommunityAuthorization,
   saveCommunityConfig,
+  syncCommunityAuthorizations,
   type CommunityAdminStatus,
   type CommunityConfig
 } from "../lib/community";
@@ -485,6 +487,7 @@ export default function HomePage() {
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
+  const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
@@ -766,6 +769,39 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
     } finally {
       setLoadingCommunityStatus(false);
+    }
+  }
+
+  async function syncCommunityStatus() {
+    try {
+      setLoadingCommunityStatus(true);
+      const result = await syncCommunityAuthorizations();
+      setCommunityStatus(await getCommunityAdminStatus());
+      if (result.removed) {
+        notifySuccess(`${result.removed} disconnected user${result.removed === 1 ? "" : "s"} removed from Members Stock.`);
+      } else if (result.errors) {
+        notifyError(`${result.errors} authorization${result.errors === 1 ? "" : "s"} could not be checked. No records were removed.`);
+      } else {
+        notifySuccess(`${result.checked} connected user${result.checked === 1 ? "" : "s"} verified.`);
+      }
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Members Stock could not be synced.");
+    } finally {
+      setLoadingCommunityStatus(false);
+    }
+  }
+
+  async function removeConnectedCommunityUser(record: CommunityAdminStatus["recent"][number]) {
+    if (!window.confirm(`Remove ${record.username} from Members Stock?`)) return;
+    try {
+      setRemovingCommunityUserId(record.id);
+      await removeCommunityAuthorization(record.id);
+      setCommunityStatus(await getCommunityAdminStatus());
+      notifySuccess(`${record.username} disconnected and removed from Members Stock.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Connected user could not be removed.");
+    } finally {
+      setRemovingCommunityUserId(null);
     }
   }
 
@@ -1351,12 +1387,25 @@ export default function HomePage() {
       {communityStatus?.recent?.length ? (
         <div className="community-recent-list">
           {communityStatus.recent.map((record, index) => (
-            <div key={`${record.username}-${record.authorizedAt}-${index}`}>
+            <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`}>
               <span className="community-recent-avatar" aria-hidden="true">
                 {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
               <Badge variant="success">Connected</Badge>
+              <Button
+                type="button"
+                size="icon-sm"
+                variant="dangerGhost"
+                title={`Remove ${record.username} from Members Stock`}
+                aria-label={`Remove ${record.username} from Members Stock`}
+                disabled={removingCommunityUserId !== null}
+                onClick={() => void removeConnectedCommunityUser(record)}
+              >
+                {removingCommunityUserId === record.id
+                  ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                  : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+              </Button>
             </div>
           ))}
         </div>
@@ -1373,7 +1422,7 @@ export default function HomePage() {
             <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open authorization page</a>
           ) : <span><ExternalLink className="h-4 w-4" /> Open authorization page</span>}
         </Button>
-        <Button type="button" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>
+        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStatus?.configured} onClick={() => void syncCommunityStatus()}>
           <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>

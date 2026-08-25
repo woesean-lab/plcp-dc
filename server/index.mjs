@@ -796,12 +796,71 @@ async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
   if (!response.ok || typeof payload?.access_token !== "string") {
     const error = new Error("Discord authorization could not be renewed.");
     error.statusCode = response.status;
+    error.discordError = typeof payload?.error === "string" ? payload.error : null;
     throw error;
   }
   return {
     accessToken: payload.access_token,
     refreshToken: typeof payload.refresh_token === "string" ? payload.refresh_token : decryptCredential(encryptedRefreshToken)
   };
+}
+
+async function revokeCommunityAuthorization(config, encryptedRefreshToken) {
+  const body = new URLSearchParams({
+    token: decryptCredential(encryptedRefreshToken),
+    token_type_hint: "refresh_token"
+  });
+  const credentials = Buffer.from(`${config.clientId}:${config.clientSecret}`, "utf8").toString("base64");
+  const { response } = await requestDiscord("oauth2/token/revoke", {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${credentials}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body
+  });
+  if (!response.ok) {
+    const error = new Error("Discord authorization could not be revoked. The user was not removed from Members Stock.");
+    error.statusCode = 502;
+    throw error;
+  }
+}
+
+async function syncCommunityAuthorizations(config) {
+  const result = await pool.query(
+    `SELECT discord_user_id, encrypted_refresh_token
+     FROM community_oauth_joins
+     WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+     ORDER BY authorized_at ASC`,
+    [config.guildId]
+  );
+  const summary = { checked: 0, removed: 0, errors: 0 };
+
+  for (const member of result.rows) {
+    summary.checked += 1;
+    try {
+      const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
+      await pool.query(
+        `UPDATE community_oauth_joins
+         SET encrypted_refresh_token = $3, details = NULL
+         WHERE discord_user_id = $1 AND guild_id = $2 AND reserved_order_id IS NULL`,
+        [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
+      );
+    } catch (error) {
+      if (error?.statusCode === 400 && error?.discordError === "invalid_grant") {
+        const removed = await pool.query(
+          `DELETE FROM community_oauth_joins
+           WHERE discord_user_id = $1 AND guild_id = $2 AND reserved_order_id IS NULL`,
+          [member.discord_user_id, config.guildId]
+        );
+        summary.removed += removed.rowCount;
+      } else {
+        summary.errors += 1;
+      }
+    }
+  }
+
+  return summary;
 }
 
 async function addCommunityGuildMember(config, discordUserId, accessToken) {
@@ -1376,7 +1435,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityGuild(config),
       loadCommunityJoinSummary(config),
       pool.query(
-        `SELECT username, avatar_url, status, details, authorized_at, joined_at
+        `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at
          FROM community_oauth_joins
          WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed'
          ORDER BY authorized_at DESC
@@ -1390,6 +1449,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       guild,
       ...summary,
       recent: recentResult.rows.map((row) => ({
+        id: row.discord_user_id,
         username: row.username,
         avatarUrl: row.avatar_url,
         status: row.status,
@@ -1400,6 +1460,61 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     });
   } catch (error) {
     next(error);
+  }
+});
+
+app.post("/api/community/sync", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before syncing Members Stock." });
+    }
+    const result = await syncCommunityAuthorizations(config);
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/community/members/:discordUserId", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) {
+      return res.status(400).json({ message: "A valid connected user is required." });
+    }
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before managing Members Stock." });
+    }
+    await client.query("BEGIN");
+    const member = await client.query(
+      `SELECT username, encrypted_refresh_token, reserved_order_id
+       FROM community_oauth_joins
+       WHERE discord_user_id = $1 AND guild_id = $2
+       FOR UPDATE`,
+      [discordUserId, config.guildId]
+    );
+    if (!member.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "This user is no longer in Members Stock." });
+    }
+    if (member.rows[0].reserved_order_id) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This user is assigned to an active order and cannot be disconnected yet." });
+    }
+    await revokeCommunityAuthorization(config, member.rows[0].encrypted_refresh_token);
+    await client.query(
+      "DELETE FROM community_oauth_joins WHERE discord_user_id = $1 AND guild_id = $2",
+      [discordUserId, config.guildId]
+    );
+    await client.query("COMMIT");
+    res.json({ removed: true, username: member.rows[0].username, revoked: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 });
 

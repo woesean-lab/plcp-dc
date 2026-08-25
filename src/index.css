@@ -5495,7 +5495,7 @@
 
 .community-recent-list > div {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(0, 1fr) auto 32px;
   align-items: center;
   gap: 10px;
   border-top: 1px solid var(--app-divider);

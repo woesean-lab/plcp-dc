@@ -26,6 +26,7 @@ export type CommunityJoinSummary = {
 };
 
 export type CommunityJoinRecord = {
+  id: string;
   username: string;
   avatarUrl: string | null;
   status: "authorized" | "joined" | "already_member" | "failed";
@@ -67,6 +68,22 @@ export function getPublicCommunityStatus() {
 
 export function getCommunityAdminStatus() {
   return fetch("/api/community/status", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+}
+
+export function syncCommunityAuthorizations() {
+  return fetch("/api/community/sync", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ checked: number; removed: number; errors: number }>);
+}
+
+export function removeCommunityAuthorization(discordUserId: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}`, {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ removed: boolean; username: string; revoked: boolean }>);
 }
 
 export function getCommunityConfig() {
