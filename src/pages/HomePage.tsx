@@ -2181,11 +2181,11 @@ export default function HomePage() {
             <div className="stock-category-tabs" role="tablist" aria-label="Stock type">
               <button type="button" role="tab" aria-selected={stockCategory === "boosts"} className={stockCategory === "boosts" ? "is-active" : ""} onClick={() => setStockCategory("boosts")}>
                 <KeyRound className="h-4 w-4" aria-hidden="true" />
-                <span><strong>Boost Stock</strong><small>{boostStock.oneMonth + boostStock.threeMonth} tokens</small></span>
+                <span><strong>Boost Stock</strong><small>Manage boost inventory</small></span>
               </button>
               <button type="button" role="tab" aria-selected={stockCategory === "offline"} className={stockCategory === "offline" ? "is-active" : ""} onClick={() => setStockCategory("offline")}>
                 <Users className="h-4 w-4" aria-hidden="true" />
-                <span><strong>Members Stock</strong><small>{communityStatus?.authorized ?? 0} connected</small></span>
+                <span><strong>Members Stock</strong><small>Manage connected members</small></span>
               </button>
             </div>
 
