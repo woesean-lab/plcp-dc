@@ -1852,10 +1852,10 @@ export default function HomePage() {
                               <div className="orders-row-status">
                                 <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                               </div>
-                              <dl className="orders-row-delivery">
+                              <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
                                 <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
-                                <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div>
+                                {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
