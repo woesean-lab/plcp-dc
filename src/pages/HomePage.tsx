@@ -977,6 +977,20 @@ export default function HomePage() {
     URL.revokeObjectURL(url);
   }
 
+  async function copyBoostTokens(tokens: string[]) {
+    if (!tokens.length) {
+      notifyError("Select tokens to copy.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(tokens.join("\n"));
+      notifySuccess(`${tokens.length} token${tokens.length === 1 ? "" : "s"} copied.`);
+    } catch {
+      notifyError("Selected tokens could not be copied.");
+    }
+  }
+
   async function removeSelectedBoostTokens(duration: 1 | 3) {
     const tokens = getSelectedTokens(duration);
     if (!tokens.length) {
@@ -1981,6 +1995,9 @@ export default function HomePage() {
                               <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration, true)} disabled={!selectedCount}>
                                 <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
                               </Button>
+                              <Button type="button" size="xs" variant="secondary" onClick={() => void copyBoostTokens(getSelectedTokens(group.duration))} disabled={!selectedCount}>
+                                <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy
+                              </Button>
                               <Button type="button" size="xs" variant="secondary" onClick={() => void markSelectedBoostTokensUsed(group.duration)} disabled={!selectedCount || markingBoostTokensUsed || deletingBoostTokens}>
                                 <Check className="h-3.5 w-3.5" aria-hidden="true" />
                                 {markingBoostTokensUsed ? "Moving..." : "Mark used"}
@@ -2048,6 +2065,9 @@ export default function HomePage() {
                       </Button>
                       <Button type="button" size="xs" variant="secondary" onClick={() => downloadUsedBoostTokens(true)} disabled={!selectedUsedTokenIds.length}>
                         <Download className="h-3.5 w-3.5" /> Download selected
+                      </Button>
+                      <Button type="button" size="xs" variant="secondary" onClick={() => void copyBoostTokens(getUsedTokensForDownload(true))} disabled={!selectedUsedTokenIds.length}>
+                        <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy selected
                       </Button>
                       <Button type="button" size="xs" variant="secondary" onClick={() => void handleReturnUsedBoostTokens(selectedUsedTokenIds)} disabled={!selectedUsedTokenIds.length || returningUsedTokenId !== null || deletingUsedTokens}>
                         <RotateCcw className="h-3.5 w-3.5" /> {returningUsedTokenId === "__bulk__" ? "Returning..." : "Return to stock"}
