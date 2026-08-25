@@ -1532,7 +1532,7 @@ export default function HomePage() {
                             <span className="service-option-state"><Check className="h-3 w-3" /> Selected</span>
                           </span>
                           <span className="service-option-title">Offline</span>
-                          <span className="service-option-description">{communityStatus?.ready ?? 0} members available</span>
+                          <span className="service-option-description">{communityStatus?.ready ?? 0} connected members available</span>
                           <span className="service-option-code">COMMUNITY-OFFLINE</span>
                         </div>
                       </div>
@@ -1748,7 +1748,7 @@ export default function HomePage() {
                     </Button>
                   ) : null}
                   {selectedIsCommunity && selectedApiConfigured && (communityStatus?.ready ?? 0) === 0 ? (
-                    <span className="self-center text-sm text-[var(--app-muted)]">No unused connected members are available.</span>
+                    <span className="self-center text-sm text-[var(--app-muted)]">No connected members are available.</span>
                   ) : null}
                 </div>
 

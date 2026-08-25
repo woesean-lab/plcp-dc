@@ -220,7 +220,7 @@ async function loadCommunityJoinSummary(config) {
        COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
        COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed')::int AS authorized,
-       COUNT(*) FILTER (WHERE status = 'authorized')::int AS ready
+       COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed' AND reserved_order_id IS NULL)::int AS ready
      FROM community_oauth_joins
      WHERE guild_id = $1`,
     [config.guildId]
@@ -731,10 +731,11 @@ async function processCommunityOrder(order, members, config) {
     results[index] = { username: member.username, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = $3, details = $4, joined_at = CASE WHEN $3 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
+       SET status = 'authorized', details = $3,
+           joined_at = CASE WHEN $4 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
            reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId, state, details]
+      [member.discord_user_id, config.guildId, details, state]
     );
     await saveTrackedOrderPayload({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
@@ -1281,7 +1282,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
+       WHERE guild_id = $1 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
       [config.guildId]
     );
     const available = Number(result.rows[0]?.available ?? 0);
@@ -1306,7 +1307,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const selected = await client.query(
       `SELECT discord_user_id, username, encrypted_refresh_token
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+       WHERE guild_id = $1 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
        ORDER BY authorized_at ASC
        LIMIT $2
        FOR UPDATE SKIP LOCKED`,
