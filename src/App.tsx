@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, Search, Settings2, ShieldCheck } from "lucide-react";
+import { Boxes, ListChecks, Plus, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -68,25 +68,14 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 </button>
                 <button
                   type="button"
-                  aria-label="Manage orders"
-                  title="Manage orders"
-                  className={`app-nav-button ${isManage && tab === "manage" ? "is-active" : ""}`}
-                  aria-current={isManage && tab === "manage" ? "page" : undefined}
+                  aria-label="Orders"
+                  title="Orders"
+                  className={`app-nav-button ${(isManage && tab === "manage") || isOrders ? "is-active" : ""}`}
+                  aria-current={(isManage && tab === "manage") || isOrders ? "page" : undefined}
                   onClick={() => navigate("/manage?tab=manage")}
                 >
                   <ListChecks className="h-4 w-4" aria-hidden="true" />
-                  <span>Manage</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label="Order lookup"
-                  title="Order lookup"
-                  className={`app-nav-button ${isOrders ? "is-active" : ""}`}
-                  aria-current={isOrders ? "page" : undefined}
-                  onClick={() => navigate("/orders")}
-                >
-                  <Search className="h-4 w-4" aria-hidden="true" />
-                  <span>Lookup</span>
+                  <span>Orders</span>
                 </button>
                 <button
                   type="button"

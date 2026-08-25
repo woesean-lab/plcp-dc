@@ -484,8 +484,19 @@ export default function HomePage() {
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
 
   const activeOrders = useMemo(
-    () =>
-      orders.filter((order) => !["COMPLETED", "TERMINATED", "INVALID", "ERROR"].includes(String(order.status ?? "").toUpperCase())),
+    () => orders.filter((order) => !isTerminalOrder(order.status)),
+    [orders]
+  );
+  const completedOrderCount = useMemo(
+    () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("COMPLETED")).length,
+    [orders]
+  );
+  const processingOrderCount = useMemo(
+    () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("PROCESS")).length,
+    [orders]
+  );
+  const attentionOrderCount = useMemo(
+    () => orders.filter((order) => ["WAITING", "ERROR", "INVALID", "TERMINATED", "PAUSED"].some((value) => String(order.status ?? "").toUpperCase().includes(value))).length,
     [orders]
   );
   const filteredOrders = useMemo(() => {
@@ -1163,7 +1174,7 @@ export default function HomePage() {
         const status = await getOrderStatus(order.uniqid, order.provider);
         updateLocalOrder(mergeTrackedOrder(order, status));
       } catch {
-        // The regular Manage refresh can verify the status if the upstream service needs more time.
+        // The regular Orders refresh can verify the status if the upstream service needs more time.
       }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Order could not be continued.");
@@ -1775,389 +1786,133 @@ export default function HomePage() {
             <HomePageSkeleton tab="manage" />
           ) : (
             <>
-            <header className="page-heading">
-              <div>
-                <p className={labelClass}>Manage</p>
-                <h1 className="page-title">Order queue</h1>
-                <p className="app-copy page-copy">Review tracked orders and add an existing order to your local queue.</p>
-              </div>
-              <div className="page-heading-meta">
-                <Badge variant="outline">{orders.length} tracked</Badge>
-                <Badge variant="secondary">{filteredOrders.length} shown</Badge>
-                <Badge variant="secondary">{activeOrders.length} active</Badge>
-                <Badge variant="secondary">
-                  Page {currentOrderPage}/{orderPageCount}
-                </Badge>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="xs"
-                  onClick={() => void syncTrackedOrders()}
-                  disabled={refreshingManage || !activeOrders.length}
-                >
-                  <RefreshCw className={`h-3.5 w-3.5 ${refreshingManage ? "animate-spin" : ""}`} aria-hidden="true" />
-                  {refreshingManage ? "Syncing..." : "Sync orders"}
-                </Button>
-              </div>
-            </header>
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
-              <section className={`${shell} tracked-orders-panel overflow-hidden`}>
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[var(--app-divider)] px-5 py-4 sm:px-6">
-                  <div className="flex items-center gap-3">
-                    <span className="stat-icon" aria-hidden="true">
-                      <ListChecks className="h-4 w-4" />
-                    </span>
-                    <div>
-                      <p className={labelClass}>Local queue</p>
-                      <h2 id="tracked-orders-title" className="app-title mt-1 text-lg font-semibold">Tracked orders</h2>
-                    </div>
-                  </div>
-                  <span className="tracked-order-sorting">Sorted by newest</span>
+              <header className="page-heading orders-page-heading">
+                <div>
+                  <p className={labelClass}>Operations</p>
+                  <h1 className="page-title">Orders</h1>
+                  <p className="app-copy page-copy">Track delivery, spot blocked orders, and open the full order record.</p>
                 </div>
+                <div className="orders-heading-actions">
+                  <Button asChild size="sm"><Link to="/manage?tab=create"><Plus className="h-4 w-4" /> New order</Link></Button>
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void syncTrackedOrders()} disabled={refreshingManage || !activeOrders.length}>
+                    <RefreshCw className={`h-4 w-4 ${refreshingManage ? "animate-spin" : ""}`} />
+                    {refreshingManage ? "Syncing..." : "Sync active"}
+                  </Button>
+                </div>
+              </header>
 
-                {orders.length ? (
-                  <>
-                  <div className="tracked-order-filterbar border-b border-[var(--app-divider)] px-5 py-4 sm:px-6">
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Search</span>
-                      <Input
-                        value={orderSearch}
-                        onChange={(event) => setOrderSearch(event.target.value)}
-                        placeholder="Order ID, server, service..."
-                      />
-                    </label>
-                    <FilterDropdown
-                      label="Status"
-                      value={orderStatusFilter}
-                      onChange={setOrderStatusFilter}
-                      options={[
-                        { value: "all", label: "All statuses" },
-                        { value: "active", label: "Active" },
-                        { value: "waiting", label: "Waiting" },
-                        { value: "completed", label: "Completed" },
-                        { value: "failed", label: "Failed" }
-                      ]}
-                    />
-                    <FilterDropdown
-                      label="Type"
-                      value={orderTypeFilter}
-                      onChange={setOrderTypeFilter}
-                      options={[
-                        { value: "all", label: "All types" },
-                        { value: "members", label: "Members" },
-                        { value: "boosts", label: "Boosts" }
-                      ]}
-                    />
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      disabled={!orderSearch && orderStatusFilter === "all" && orderTypeFilter === "all"}
-                      onClick={() => {
-                        setOrderSearch("");
-                        setOrderStatusFilter("all");
-                        setOrderTypeFilter("all");
-                      }}
-                    >
-                      Clear filters
-                    </Button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--app-divider)] px-5 py-3 text-sm text-[var(--app-text-secondary)] sm:px-6">
-                    <span>
-                      Showing {filteredOrders.length ? Math.min((currentOrderPage - 1) * ORDER_PAGE_SIZE + 1, filteredOrders.length) : 0}-
-                      {Math.min(currentOrderPage * ORDER_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length}
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))}
-                        disabled={currentOrderPage <= 1}
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                        Prev
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))}
-                        disabled={currentOrderPage >= orderPageCount}
-                      >
-                        Next
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                  {filteredOrders.length ? (
-                    <>
-                  <ol className="tracked-order-list" aria-labelledby="tracked-orders-title">
-                    {paginatedOrders.map((order, index) => {
-                      const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
-                      const ServiceIcon = serviceOption?.icon ?? KeyRound;
-                      const orderIndex = (currentOrderPage - 1) * ORDER_PAGE_SIZE + index;
-                      const orderTitleId = `tracked-order-${orderIndex}`;
-                      const progress = getOrderProgress(order);
-                      const completed = isTerminalOrder(order.status);
-                      const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-                      const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
-                      const botInvite = extractBotInvite(order);
-                      const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
-                      const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
-
-                      return (
-                        <li key={order.uniqid}>
-                          <article
-                            className="tracked-order-card"
-                            data-status-tone={getOrderStatusTone(order.status)}
-                            aria-labelledby={orderTitleId}
-                          >
-                            <div className="tracked-order-identity">
-                              <div className="tracked-order-eyebrow">
-                                <span>Order ID</span>
-                                <Badge variant={getOrderStatusVariant(order.status)}>
-                                  <span className="sr-only">Status: </span>
-                                  {order.status ?? "NEW"}
-                                </Badge>
-                              </div>
-                              <h3 id={orderTitleId} className="tracked-order-id">{order.uniqid}</h3>
-                              <div className="tracked-order-context">
-                                {order.serverName ? <span>{order.serverName}</span> : null}
-                                <span>{order.serverId ? `ID ${order.serverId}` : "Added locally"}</span>
-                                {boostOrder && order.duration ? <span>{order.duration} month boosts</span> : null}
-                              </div>
-                              {botInviteRequired ? (
-                                <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-[var(--app-accent-border)] bg-[var(--app-accent-soft)] p-2">
-                                  <span className="mr-auto inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--app-text)]">
-                                    <Bot className="h-3.5 w-3.5 text-[var(--app-accent)]" aria-hidden="true" /> Bot required to start
-                                  </span>
-                                  <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink(botInviteRequired)}>
-                                    <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
-                                  </Button>
-                                  <Button asChild size="xs">
-                                    <a href={botInviteRequired} target="_blank" rel="noreferrer">
-                                      <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                                    </a>
-                                  </Button>
-                                </div>
-                              ) : !botInvite && order.details ? <p className="tracked-order-detail">{getPlainDetails(order.details)}</p> : null}
-                            </div>
-
-                            <div className="tracked-order-service">
-                              <span className="tracked-order-service-icon" aria-hidden="true">
-                                <ServiceIcon className="h-4 w-4" />
-                              </span>
-                              <span className="min-w-0">
-                                <span className="tracked-order-label">{serviceOption ? "Service" : "Tracking type"}</span>
-                                <strong>{serviceOption?.title ?? "Manual entry"}</strong>
-                                <span className="tracked-order-service-code">{order.service ?? "LOCAL QUEUE"}</span>
-                              </span>
-                            </div>
-
-                            <dl className="tracked-order-metrics">
-                              {typeof order.amount === "number" ? (
-                                <div className="tracked-order-metric">
-                                  <dt>Amount</dt>
-                                  <dd>{formatNumber(order.amount)}</dd>
-                                </div>
-                              ) : null}
-                              {!completed && typeof order.statusDelay === "number" ? (
-                                <div className="tracked-order-metric">
-                                  <dt>Delay</dt>
-                                  <dd>{formatDelay(order.statusDelay)}</dd>
-                                </div>
-                              ) : null}
-                              {progress ? (
-                                <div className="tracked-order-metric">
-                                  <dt>{boostOrder ? "Boosts" : "Users"}</dt>
-                                  <dd className="grid gap-1">
-                                    <span>{`${formatNumber(progress.used)}/${formatNumber(progress.total)}`}</span>
-                                    <span className="text-xs text-[var(--app-muted)]">{`${formatNumber(progress.remaining)} left`}</span>
-                                  </dd>
-                                </div>
-                              ) : null}
-                              {typeof order.cost === "number" ? (
-                                <div className="tracked-order-metric">
-                                  <dt>Cost</dt>
-                                  <dd>${formatNumber(order.cost)}</dd>
-                                </div>
-                              ) : null}
-                              <div className="tracked-order-metric">
-                                <dt>Added</dt>
-                                <dd>
-                                  <time dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
-                                </dd>
-                              </div>
-                            </dl>
-
-                              <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
-                              {!completed && !boostOrder ? (
-                                <div className="tracked-order-delay-control grid gap-2">
-                                  <span className="tracked-order-label">Update delay</span>
-                                  <div className="flex gap-2 max-sm:flex-col">
-                                    <Input
-                                      type="number"
-                                      min={1}
-                                      max={1200}
-                                      value={delayDrafts[order.uniqid] ?? String(order.statusDelay ?? "")}
-                                      onChange={(event) =>
-                                        setDelayDrafts((current) => ({
-                                          ...current,
-                                          [order.uniqid]: event.target.value
-                                        }))
-                                      }
-                                      placeholder="Delay"
-                                      className="w-24 shrink-0"
-                                    />
-                                    <Button
-                                      type="button"
-                                      size="xs"
-                                      variant="secondary"
-                                      className="max-sm:w-full"
-                                      disabled={updatingDelayId === order.uniqid}
-                                      onClick={() => void handleUpdateDelay(order)}
-                                    >
-                                      {updatingDelayId === order.uniqid ? "Updating..." : "Update"}
-                                    </Button>
-                                  </div>
-                                </div>
-                              ) : null}
-                              {isInvitesPaused && !boostOrder ? (
-                                <Button
-                                  type="button"
-                                  variant="destructive"
-                                  size="sm"
-                                  disabled={restartingOrderId !== null}
-                                  onClick={() => void handleRestartOrder(order)}
-                                >
-                                  <RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} aria-hidden="true" />
-                                  {restartingOrderId === order.uniqid ? "Continuing..." : "Continue"}
-                                </Button>
-                              ) : null}
-                              {!boostOrder ? (
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                title="Copy guest link"
-                                onClick={() => void copyGuestLink(order)}
-                              >
-                                <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-                                Copy link
-                              </Button>
-                              ) : null}
-                              <Button asChild variant="secondary" size="sm" title="View order">
-                                <Link
-                                  to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`}
-                                  aria-label={`View order ${order.uniqid}`}
-                                >
-                                  <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                                  View
-                                </Link>
-                              </Button>
-                              <Button
-                                variant="dangerGhost"
-                                size="icon"
-                                type="button"
-                                title="Remove from tracked orders"
-                                aria-label={`Remove ${order.uniqid} from tracked orders`}
-                                onClick={() => setOrderPendingDeletion(order)}
-                              >
-                                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                              </Button>
-                            </div>
-                          </article>
-                        </li>
-                      );
-                    })}
-                  </ol>
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-divider)] px-5 py-3 text-sm text-[var(--app-text-secondary)] sm:px-6">
-                    <span>Page {currentOrderPage} of {orderPageCount}</span>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))}
-                        disabled={currentOrderPage <= 1}
-                      >
-                        <ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
-                        Prev
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))}
-                        disabled={currentOrderPage >= orderPageCount}
-                      >
-                        Next
-                        <ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </div>
-                    </>
-                  ) : (
-                    <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
-                      <div>
-                        <span className="stat-icon mx-auto" aria-hidden="true">
-                          <Search className="h-4 w-4" />
-                        </span>
-                        <p className="mt-4 text-sm font-medium text-[var(--app-text-secondary)]">No orders match these filters</p>
-                        <p className="app-copy mt-1 text-sm">Clear filters or search another order detail.</p>
-                      </div>
-                    </div>
-                  )}
-                  </>
-                ) : (
-                  <div className="grid min-h-56 place-items-center px-5 py-10 text-center">
-                    <div>
-                      <span className="stat-icon mx-auto" aria-hidden="true">
-                        <ListChecks className="h-4 w-4" />
-                      </span>
-                      <p className="mt-4 text-sm font-medium text-[var(--app-text-secondary)]">No tracked orders yet</p>
-                      <p className="app-copy mt-1 text-sm">Create an order or add an existing ID.</p>
-                    </div>
-                  </div>
-                )}
+              <section className="orders-summary-strip" aria-label="Order overview">
+                <div><span>Total orders</span><strong>{orders.length}</strong><small>tracked records</small></div>
+                <div data-tone="active"><span>In progress</span><strong>{processingOrderCount}</strong><small>live deliveries</small></div>
+                <div data-tone="success"><span>Completed</span><strong>{completedOrderCount}</strong><small>finished orders</small></div>
+                <div data-tone={attentionOrderCount ? "danger" : "muted"}><span>Needs attention</span><strong>{attentionOrderCount}</strong><small>waiting or failed</small></div>
               </section>
 
-              <aside className={`${shell} p-5 sm:p-6 xl:sticky xl:top-[108px]`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
-                    <Search className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Manual tracking</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Add order ID</h2>
+              <section className={`${shell} orders-workspace`}>
+                <div className="orders-commandbar">
+                  <label className="orders-search-field">
+                    <Search className="h-4 w-4" aria-hidden="true" />
+                    <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, server or service" aria-label="Search orders" />
+                  </label>
+                  <FilterDropdown label="Status" value={orderStatusFilter} onChange={setOrderStatusFilter} options={[
+                    { value: "all", label: "All statuses" }, { value: "active", label: "Active" }, { value: "waiting", label: "Waiting" },
+                    { value: "completed", label: "Completed" }, { value: "failed", label: "Failed" }
+                  ]} />
+                  <FilterDropdown label="Type" value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
+                    { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
+                  ]} />
+                  <Button type="button" variant="secondary" size="icon" title="Clear filters" aria-label="Clear filters" disabled={!orderSearch && orderStatusFilter === "all" && orderTypeFilter === "all"} onClick={() => {
+                    setOrderSearch(""); setOrderStatusFilter("all"); setOrderTypeFilter("all");
+                  }}><RotateCcw className="h-4 w-4" /></Button>
+                  <div className="orders-import-control">
+                    <Input value={orderIdToTrack} onChange={(event) => setOrderIdToTrack(event.target.value)} placeholder="Add existing order ID" aria-label="Existing order ID" className="font-mono" />
+                    <Button type="button" variant="secondary" size="sm" onClick={trackOrderManually}><Plus className="h-4 w-4" /> Add</Button>
                   </div>
                 </div>
 
-                <div className="mt-5 grid gap-4">
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Order ID</span>
-                    <Input
-                      value={orderIdToTrack}
-                      onChange={(event) => setOrderIdToTrack(event.target.value)}
-                      placeholder="Enter order ID"
-                      className="font-mono"
-                    />
-                  </label>
-                  <Button className="w-full" type="button" onClick={trackOrderManually}>
-                    <Plus className="h-4 w-4" aria-hidden="true" />
-                    Add to queue
-                  </Button>
-                  <Button asChild variant="secondary" className="w-full">
-                    <Link to="/orders">
-                      <Search className="h-4 w-4" aria-hidden="true" />
-                      Open order lookup
-                    </Link>
-                  </Button>
+                <div className="orders-list-meta">
+                  <span>{filteredOrders.length} results · newest first</span>
+                  <span>Page {currentOrderPage} / {orderPageCount}</span>
                 </div>
-              </aside>
-            </div>
+
+                {filteredOrders.length ? (
+                  <div className="orders-table" role="table" aria-label="Tracked orders">
+                    <div className="orders-table-head" role="row">
+                      <span>Order</span><span>Service</span><span>Status &amp; progress</span><span>Delivery</span><span>Created</span><span>Actions</span>
+                    </div>
+                    <ol className="orders-row-list">
+                      {paginatedOrders.map((order, index) => {
+                        const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
+                        const ServiceIcon = serviceOption?.icon ?? KeyRound;
+                        const progress = getOrderProgress(order);
+                        const completed = isTerminalOrder(order.status);
+                        const boostOrder = order.provider === "dcord" || isBoostService(order.service);
+                        const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
+                        const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
+                        const botInvite = extractBotInvite(order);
+                        const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
+                        const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
+                        const progressPercent = progress?.total ? Math.min(100, Math.round((progress.used / progress.total) * 100)) : 0;
+                        const delayValue = order.statusDelay ?? order.delay;
+                        const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
+
+                        return (
+                          <li key={order.uniqid}>
+                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
+                              <div className="orders-row-identity">
+                                <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
+                                <span className="min-w-0">
+                                  <h2 id={titleId}>{order.serverName || "Discord server"}</h2>
+                                  <code title={order.uniqid}>{order.uniqid}</code>
+                                </span>
+                              </div>
+                              <div className="orders-row-service">
+                                <strong>{serviceOption?.title ?? "Manual"}</strong>
+                                <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? "Members 2" : "Members"}</span>
+                              </div>
+                              <div className="orders-row-progress">
+                                <Badge variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
+                                {progress ? <><span>{formatNumber(progress.used)} / {formatNumber(progress.total)}</span><div><i style={{ width: `${progressPercent}%` }} /></div></> : <small>Waiting for status</small>}
+                              </div>
+                              <dl className="orders-row-delivery">
+                                <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
+                                <div><dt>{boostOrder ? "Amount" : "Delay"}</dt><dd>{boostOrder ? formatNumber(order.amount) : formatDelay(delayValue)}</dd></div>
+                              </dl>
+                              <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
+                              <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
+                                {!completed && !boostOrder ? <div className="orders-inline-delay">
+                                  <Input type="number" min={1} max={1200} aria-label="Delay seconds" value={delayDrafts[order.uniqid] ?? String(delayValue ?? "")} onChange={(event) => setDelayDrafts((current) => ({ ...current, [order.uniqid]: event.target.value }))} />
+                                  <Button type="button" variant="secondary" size="icon" title="Update delay" aria-label="Update delay" disabled={updatingDelayId === order.uniqid} onClick={() => void handleUpdateDelay(order)}><RefreshCw className={`h-3.5 w-3.5 ${updatingDelayId === order.uniqid ? "animate-spin" : ""}`} /></Button>
+                                </div> : null}
+                                {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
+                                <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
+                                <Button variant="dangerGhost" size="icon" type="button" title="Remove order" aria-label={`Remove ${order.uniqid}`} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
+                              </div>
+
+                              {botInviteRequired ? <div className="orders-row-alert" data-tone="waiting">
+                                <span><Bot className="h-4 w-4" /><strong>Bot required</strong><small>Add the bot to start this order.</small></span>
+                                <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink(botInviteRequired)}><Copy className="h-3.5 w-3.5" /> Copy link</Button>
+                                <Button asChild size="xs"><a href={botInviteRequired} target="_blank" rel="noreferrer"><Bot className="h-3.5 w-3.5" /> Add bot</a></Button>
+                              </div> : null}
+                              {isInvitesPaused && !boostOrder ? <div className="orders-row-alert" data-tone="danger">
+                                <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
+                                <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
+                              </div> : null}
+                            </article>
+                          </li>
+                        );
+                      })}
+                    </ol>
+                    <div className="orders-pagination">
+                      <span>Showing {filteredOrders.length ? (currentOrderPage - 1) * ORDER_PAGE_SIZE + 1 : 0}-{Math.min(currentOrderPage * ORDER_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length}</span>
+                      <div>
+                        <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))} disabled={currentOrderPage <= 1}><ChevronLeft className="h-3.5 w-3.5" /> Prev</Button>
+                        <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))} disabled={currentOrderPage >= orderPageCount}>Next <ChevronRight className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    </div>
+                  </div>
+                ) : <div className="orders-empty-state"><Search className="h-5 w-5" /><strong>{orders.length ? "No matching orders" : "No orders yet"}</strong><span>{orders.length ? "Adjust the search or filters." : "Create an order to start tracking delivery."}</span></div>}
+              </section>
             </>
           )
         ) : null}
@@ -2605,7 +2360,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Remove order</p>
             <h2 id="delete-order-title">Stop tracking this order?</h2>
-            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Manage list and tracked orders database. It does not cancel the upstream order.</p>
+            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Orders list and tracked orders database. It does not cancel the upstream order.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={deletingTrackedOrder} onClick={() => setOrderPendingDeletion(null)}>Keep order</Button>
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>
