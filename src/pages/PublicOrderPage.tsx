@@ -37,6 +37,13 @@ type CommunityMemberResult = {
   completedAt?: string;
 };
 
+function maskUsername(value: string) {
+  const username = value.trim();
+  if (username.length <= 1) return "*";
+  if (username.length === 2) return `${username[0]}*`;
+  return `${username[0]}${"*".repeat(username.length - 2)}${username.at(-1)}`;
+}
+
 function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
   if (!Array.isArray(source?.communityResults)) return [];
   return source.communityResults.flatMap((item, index) => {
@@ -44,7 +51,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
     const row = item as Record<string, unknown>;
     return [{
       index,
-      username: typeof row.username === "string" && row.username.trim() ? row.username.trim() : `Member ${index + 1}`,
+      username: typeof row.username === "string" && row.username.trim() ? maskUsername(row.username) : `Member ${index + 1}`,
       avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
