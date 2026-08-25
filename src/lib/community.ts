@@ -37,7 +37,6 @@ export type CommunityConfig = {
   stored: boolean;
   clientId: string;
   redirectUri: string;
-  guildId: string;
   goal: number;
   hasClientSecret: boolean;
   hasBotToken: boolean;
@@ -49,7 +48,6 @@ export type CommunityConfigInput = {
   clientSecret: string;
   botToken: string;
   redirectUri: string;
-  guildId: string;
   goal: number;
 };
 

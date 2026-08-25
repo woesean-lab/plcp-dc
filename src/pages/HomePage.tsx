@@ -91,7 +91,6 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientSecret: "",
   botToken: "",
   redirectUri: "",
-  guildId: "",
   goal: 50
 };
 
@@ -746,7 +745,6 @@ export default function HomePage() {
         clientSecret: "",
         botToken: "",
         redirectUri: config.redirectUri,
-        guildId: config.guildId,
         goal: config.goal
       });
     } catch (error) {
@@ -2370,20 +2368,14 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Configure the bot used by Members Stock. Secrets are encrypted on the server and are never shown again after saving.
+                  Configure the bot used by Members Stock. Its Discord server is detected automatically. Secrets are encrypted and never shown again after saving.
                 </p>
 
                 <form onSubmit={handleSaveCommunityConfig} className="mt-6 grid gap-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Client ID</span>
-                      <Input value={communityConfigDraft.clientId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientId: event.target.value }))} placeholder="Discord application Client ID" inputMode="numeric" />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Server ID</span>
-                      <Input value={communityConfigDraft.guildId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, guildId: event.target.value }))} placeholder="Target Discord server ID" inputMode="numeric" />
-                    </label>
-                  </div>
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>Client ID</span>
+                    <Input value={communityConfigDraft.clientId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientId: event.target.value }))} placeholder="Discord application Client ID" inputMode="numeric" />
+                  </label>
 
                   <label className="grid gap-2">
                     <span className={fieldLabelClass}>OAuth callback address</span>
@@ -2406,7 +2398,7 @@ export default function HomePage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3 pt-1">
-                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || !communityConfigDraft.guildId.trim() || !communityConfigDraft.redirectUri.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
+                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || !communityConfigDraft.redirectUri.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
                       {savingCommunityConfig ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       {savingCommunityConfig ? "Verifying..." : communityConfig?.configured ? "Update Members bot" : "Verify & save"}
                     </Button>

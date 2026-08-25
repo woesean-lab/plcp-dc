@@ -982,7 +982,6 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       stored: Boolean(storedResult.rowCount),
       clientId: config.clientId,
       redirectUri: config.redirectUri,
-      guildId: config.guildId,
       goal: config.goal,
       hasClientSecret: Boolean(config.clientSecret),
       hasBotToken: Boolean(config.botToken)
@@ -996,28 +995,46 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
   try {
     if (communityPoolRunPromise) return res.status(409).json({ message: "Wait for the current member run to finish before changing bot settings." });
     const current = await getCommunityOAuthConfig();
-    const candidate = normalizeCommunityOAuthConfig({
+    const candidateWithoutDetectedGuild = normalizeCommunityOAuthConfig({
       clientId: req.body?.clientId || current.clientId,
       clientSecret: req.body?.clientSecret || current.clientSecret,
       botToken: req.body?.botToken || current.botToken,
       redirectUri: req.body?.redirectUri || current.redirectUri,
-      guildId: req.body?.guildId || current.guildId,
+      guildId: current.guildId,
       goal: req.body?.goal ?? current.goal
     });
-    if (!candidate.configured) {
+    if (candidateWithoutDetectedGuild.missing.some((item) => item !== "DISCORD_TARGET_GUILD_ID")) {
       return res.status(400).json({ message: "Complete all Discord bot and OAuth fields with valid values." });
     }
 
     const applicationResult = await requestDiscord("oauth2/applications/@me", {
-      headers: { Authorization: `Bot ${candidate.botToken}` }
+      headers: { Authorization: `Bot ${candidateWithoutDetectedGuild.botToken}` }
     });
     if (!applicationResult.response.ok) {
       return res.status(400).json({ message: "Bot token could not be verified." });
     }
-    if (String(applicationResult.payload?.id ?? "") !== candidate.clientId) {
+    if (String(applicationResult.payload?.id ?? "") !== candidateWithoutDetectedGuild.clientId) {
       return res.status(400).json({ message: "Bot token and Client ID belong to different Discord applications." });
     }
 
+    const guildsResult = await requestDiscord("users/@me/guilds?limit=200", {
+      headers: { Authorization: `Bot ${candidateWithoutDetectedGuild.botToken}` }
+    });
+    const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
+    if (!guildsResult.response.ok || !botGuilds.length) {
+      return res.status(400).json({ message: "Add the bot to your Discord server before saving these settings." });
+    }
+    const selectedGuild = botGuilds.length === 1
+      ? botGuilds[0]
+      : botGuilds.find((guild) => String(guild?.id ?? "") === current.guildId);
+    if (!selectedGuild) {
+      return res.status(400).json({ message: "This bot is in multiple servers. Keep it in the Members Stock server only, then save again." });
+    }
+
+    const candidate = normalizeCommunityOAuthConfig({
+      ...candidateWithoutDetectedGuild,
+      guildId: String(selectedGuild.id ?? "")
+    });
     const guildResult = await requestDiscord(`guilds/${encodeURIComponent(candidate.guildId)}?with_counts=true`, {
       headers: { Authorization: `Bot ${candidate.botToken}` }
     });
@@ -1039,7 +1056,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       stored: true,
       clientId: candidate.clientId,
       redirectUri: candidate.redirectUri,
-      guildId: candidate.guildId,
       goal: candidate.goal,
       hasClientSecret: true,
       hasBotToken: true,
@@ -1213,7 +1229,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       pool.query(
         `SELECT username, avatar_url, status, details, authorized_at, joined_at
          FROM community_oauth_joins
-         WHERE guild_id = $1
+         WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
          ORDER BY authorized_at DESC
          LIMIT 50`,
         [config.guildId]
