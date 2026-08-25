@@ -700,10 +700,17 @@ async function processCommunityOrder(order, members, config) {
   const results = members.map((member) => ({ username: member.username, state: "queued", details: "Waiting for delivery." }));
   let added = 0;
 
+  async function saveCommunityProgress(payload) {
+    const latest = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+    const latestDelay = Number.parseInt(latest.rows[0]?.delay, 10);
+    if (Number.isFinite(latestDelay) && latestDelay > 0) order.delay = latestDelay;
+    await saveTrackedOrderPayload({ ...payload, delay: order.delay });
+  }
+
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
     results[index] = { username: member.username, state: "joining", details: "Discord membership request is running." };
-    await saveTrackedOrderPayload({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+    await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
     let state = "failed";
     let details = "Member could not be added.";
@@ -737,15 +744,19 @@ async function processCommunityOrder(order, members, config) {
        WHERE discord_user_id = $1 AND guild_id = $2`,
       [member.discord_user_id, config.guildId, details, state]
     );
-    await saveTrackedOrderPayload({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+    await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
-    if (index < members.length - 1 && order.delay > 0) {
-      await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
+    if (index < members.length - 1) {
+      const latestOrder = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+      const currentDelay = Number.parseInt(latestOrder.rows[0]?.delay, 10);
+      if (Number.isFinite(currentDelay) && currentDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, currentDelay * 1000));
+      }
     }
   }
 
   const status = added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR";
-  await saveTrackedOrderPayload({
+  await saveCommunityProgress({
     ...order,
     added,
     status,
@@ -1535,6 +1546,27 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
   }
 });
 
+app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const delay = Number.parseInt(req.body?.delay, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
+      return res.status(400).json({ message: "A valid order ID and delay are required." });
+    }
+    const updated = await pool.query(
+      `UPDATE tracked_orders
+       SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
+       WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS')
+       RETURNING payload`,
+      [uniqid, delay]
+    );
+    if (!updated.rowCount) return res.status(409).json({ message: "This Members order is no longer active." });
+    res.json(updated.rows[0].payload);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -1552,8 +1584,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     let trackedPayload = tracked.rows[0]?.payload;
     if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
-      const { communityResults, ...publicPayload } = trackedPayload;
-      return res.set("Cache-Control", "no-store").json(publicPayload);
+      return res.set("Cache-Control", "no-store").json(trackedPayload);
     }
     if (
       trackedPayload &&
@@ -1619,6 +1650,21 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
       return res.status(429).json({
         message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before updating again.`
       });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const trackedPayload = tracked.rows[0]?.payload;
+    if (trackedPayload?.provider === "community") {
+      const updated = await pool.query(
+        `UPDATE tracked_orders
+         SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
+         WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS')
+         RETURNING payload`,
+        [uniqid, delay]
+      );
+      if (!updated.rowCount) return res.status(409).json({ message: "This Members order is no longer active." });
+      publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
+      return res.json({ delay, updated: true });
     }
 
     const payload = await requestTokenu(tokenuOauthApiBase, "delay", {

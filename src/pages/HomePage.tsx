@@ -1141,7 +1141,7 @@ export default function HomePage() {
       });
       setDelayDrafts((current) => ({ ...current, [order.uniqid]: String(delay) }));
 
-      await updateOrderDelay(order.uniqid, delay);
+      await updateOrderDelay(order.uniqid, delay, order.provider);
       notifySuccess(`Delay updated for ${order.uniqid}.`);
     } catch (error) {
       updateLocalOrder(order);
@@ -1898,7 +1898,6 @@ export default function HomePage() {
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
                       const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-                      const locallyManagedOrder = boostOrder || order.provider === "community";
                       const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
                       const botInvite = extractBotInvite(order);
                       const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
@@ -1990,7 +1989,7 @@ export default function HomePage() {
                             </dl>
 
                               <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
-                              {!completed && !locallyManagedOrder ? (
+                              {!completed && !boostOrder ? (
                                 <div className="tracked-order-delay-control grid gap-2">
                                   <span className="tracked-order-label">Update delay</span>
                                   <div className="flex gap-2 max-sm:flex-col">

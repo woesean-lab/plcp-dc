@@ -28,6 +28,29 @@ type DcordTokenResult = {
   state: "success" | "pending" | "error";
 };
 
+type CommunityMemberResult = {
+  index: number;
+  username: string;
+  state: string;
+  details: string;
+  completedAt?: string;
+};
+
+function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
+  if (!Array.isArray(source?.communityResults)) return [];
+  return source.communityResults.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    return [{
+      index,
+      username: typeof row.username === "string" && row.username.trim() ? row.username.trim() : `Member ${index + 1}`,
+      state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
+      details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
+      completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined
+    }];
+  });
+}
+
 function formatNumber(value?: number) {
   return typeof value === "number" && Number.isFinite(value)
     ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
@@ -349,6 +372,8 @@ export default function PublicOrderPage() {
   const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const communityMemberResults = getCommunityMemberResults(status);
+  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
   const liveBoostStock = status?.liveBoostStock;
@@ -449,7 +474,7 @@ export default function PublicOrderPage() {
     }
   }
 
-  const delayUpdatePanel = !isBoostOrder && !isCommunityOrder && !isTerminalStatus ? (
+  const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
       <div className="monitor-panel-heading">
         <span className="monitor-panel-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
@@ -618,6 +643,27 @@ export default function PublicOrderPage() {
                 </div>
 
                 {delayUpdatePanel}
+
+                {isCommunityOrder ? (
+                  <div className="monitor-token-panel community-order-log">
+                    <div className="monitor-token-heading">
+                      <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
+                      <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
+                    </div>
+                    {communityMemberResults.length ? (
+                      <div className="community-order-result-list">
+                        {communityMemberResults.map((item) => (
+                          <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
+                            <span className="public-token-result-index">{String(item.index + 1).padStart(2, "0")}</span>
+                            <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
+                            <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                            <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
+                          </div>
+                        ))}
+                      </div>
+                    ) : <p className="public-token-results-empty">Waiting for member results.</p>}
+                  </div>
+                ) : null}
 
                 {isBoostOrder && canManageDcordTokens ? (
                   <div className="monitor-token-panel">

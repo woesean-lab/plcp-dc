@@ -734,6 +734,72 @@
     border-bottom: 1px solid var(--app-divider);
   }
 
+  .community-order-result-list {
+    display: grid;
+    gap: .45rem;
+    padding: .75rem 1rem 1rem;
+  }
+
+  .community-order-result {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto 150px;
+    min-width: 0;
+    align-items: center;
+    gap: .75rem;
+    padding: .7rem .8rem;
+    border: 1px solid var(--app-divider);
+    border-radius: 7px;
+    background: rgba(255, 255, 255, .018);
+  }
+
+  .community-order-result[data-state="joined"] {
+    border-color: rgba(105, 221, 178, .18);
+    background: rgba(105, 221, 178, .035);
+  }
+
+  .community-order-result[data-state="failed"] {
+    border-color: var(--app-danger-button-border);
+    background: var(--app-danger-soft);
+  }
+
+  .community-order-result-copy {
+    display: grid;
+    min-width: 0;
+    gap: .2rem;
+  }
+
+  .community-order-result-copy strong,
+  .community-order-result-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-order-result-copy strong { color: var(--app-text); font-size: 12px; }
+  .community-order-result-copy small,
+  .community-order-result time { color: var(--app-muted); font-size: 10px; }
+  .community-order-result time { text-align: right; }
+
+  .monitor-workspace > .community-order-log {
+    grid-column: 1 / -1;
+  }
+
+  .monitor-token-panel .community-order-result-list {
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  @media (max-width: 639px) {
+    .community-order-result {
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+    }
+
+    .community-order-result time {
+      grid-column: 2 / -1;
+      text-align: left;
+    }
+  }
+
   .lookup-invites-warning {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;

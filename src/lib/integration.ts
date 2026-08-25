@@ -160,8 +160,9 @@ export async function checkAvailableAmount(service: string, id: string, duration
   );
 }
 
-export async function updateOrderDelay(uniqid: string, delay: number) {
-  return requestJson<unknown>(`/api/integration/orders/${encodeURIComponent(uniqid)}/delay`, {
+export async function updateOrderDelay(uniqid: string, delay: number, provider: OrderProvider = "tokenu") {
+  const prefix = provider === "community" ? "/api/community/orders" : "/api/integration/orders";
+  return requestJson<unknown>(`${prefix}/${encodeURIComponent(uniqid)}/delay`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"

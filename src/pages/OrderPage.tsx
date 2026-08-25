@@ -26,6 +26,29 @@ type DcordTokenResult = {
   state: "success" | "pending" | "error";
 };
 
+type CommunityMemberResult = {
+  index: number;
+  username: string;
+  state: string;
+  details: string;
+  completedAt?: string;
+};
+
+function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
+  if (!Array.isArray(source?.communityResults)) return [];
+  return source.communityResults.flatMap((item, index) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, unknown>;
+    return [{
+      index,
+      username: typeof row.username === "string" && row.username.trim() ? row.username.trim() : `Member ${index + 1}`,
+      state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
+      details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
+      completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined
+    }];
+  });
+}
+
 function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
   const results = source?.dcordResults;
   if (!Array.isArray(results)) return [];
@@ -280,6 +303,8 @@ export default function OrderPage() {
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const communityMemberResults = getCommunityMemberResults(result);
+  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
   const summary = isDcordProvider
     ? [
         { label: "Duration", value: result?.duration === 1 || result?.duration === 3 ? `${result.duration} Month` : "-" },
@@ -377,7 +402,7 @@ export default function OrderPage() {
     try {
       setUpdatingDelay(true);
       setResult((current) => (current ? { ...current, delay } : current));
-      await updateOrderDelay(target, delay);
+      await updateOrderDelay(target, delay, provider);
       toast.success("Delay updated.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Delay could not be updated.");
@@ -697,7 +722,7 @@ export default function OrderPage() {
               ) : null}
             </section>
 
-            {!terminal && !isInvitesPaused && !isDcordProvider && !isCommunityProvider ? (
+            {!terminal && !isInvitesPaused && !isDcordProvider ? (
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>
@@ -759,6 +784,36 @@ export default function OrderPage() {
                 </div>
               ) : (
                 <p className="public-token-results-empty">Waiting for token results.</p>
+              )}
+            </section>
+          ) : null}
+
+          {isCommunityProvider ? (
+            <section className="lookup-token-panel community-order-log">
+              <div className="lookup-section-heading">
+                <div>
+                  <p className="app-kicker">Member results</p>
+                  <h3>Per-member delivery log</h3>
+                </div>
+                <span className="public-secure-mark"><ShieldCheck className="h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
+              </div>
+
+              {communityMemberResults.length ? (
+                <div className="community-order-result-list">
+                  {communityMemberResults.map((item) => (
+                    <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
+                      <span className="public-token-result-index">{String(item.index + 1).padStart(2, "0")}</span>
+                      <span className="community-order-result-copy">
+                        <strong>{item.username}</strong>
+                        <small>{item.details}</small>
+                      </span>
+                      <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                      <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="public-token-results-empty">Waiting for member results.</p>
               )}
             </section>
           ) : null}
