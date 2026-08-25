@@ -2714,7 +2714,7 @@
     .orders-row-alert { grid-area: alert; }
   }
 
-  @media (max-width: 759px) {
+  @media (max-width: 899px) {
     .orders-heading-actions { width: 100%; }
     .orders-heading-actions .ui-button { flex: 1; }
     .orders-summary-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2751,7 +2751,20 @@
     .orders-row-status { align-self: start; justify-self: end; }
     .orders-status-badge { min-height: 24px; padding: .35rem .55rem; font-size: 10px; }
     .orders-row-service { align-self: center; }
-    .orders-row-date { align-self: center; justify-self: end; text-align: right; }
+    .orders-row-date {
+      display: grid;
+      align-self: center;
+      justify-self: end;
+      gap: .2rem;
+      text-align: right;
+    }
+    .orders-row-date::before {
+      content: "Created";
+      color: var(--app-subtle);
+      font-size: 7px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
     .orders-row-delivery,
     .orders-row-delivery.is-boosts {
       width: 100%;
@@ -2762,14 +2775,17 @@
       padding: .65rem 0;
       background: rgba(5,6,13,.32);
     }
+    .orders-row-delivery { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .orders-row-delivery.is-boosts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .orders-row-delivery > div { min-width: 0; padding: 0 .65rem; }
     .orders-row-delivery > div + div { border-left: 1px solid var(--app-divider); }
     .orders-row-delivery dt { font-size: 7.5px; }
     .orders-row-delivery dd { font-size: 13px; }
     .orders-row-actions {
+      min-height: 32px;
+      justify-self: end;
       justify-content: flex-end;
-      border-top: 1px solid var(--app-divider);
-      padding-top: .65rem;
+      padding-top: 0;
     }
     .orders-row-alert { align-items: flex-start; flex-wrap: wrap; }
     .orders-row-alert > span { flex-basis: 100%; }
