@@ -2607,7 +2607,26 @@
   .orders-status-badge {
     width: max-content !important;
     max-width: 100%;
+    min-height: 21px;
     justify-self: start;
+    gap: .4rem;
+    border: 0 !important;
+    border-radius: 5px;
+    padding: .3rem .55rem;
+    font-size: 9px;
+    letter-spacing: 0 !important;
+    text-transform: none !important;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+  }
+
+  .orders-status-badge::before {
+    content: "";
+    width: 5px;
+    height: 5px;
+    flex: 0 0 5px;
+    border-radius: 50%;
+    background: currentColor;
+    box-shadow: 0 0 7px currentColor;
   }
   .orders-row-progress > div {
     width: 100%;
@@ -2628,7 +2647,7 @@
 
   .orders-row-delivery {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 62px minmax(0, 1fr);
     gap: .5rem;
     margin: 0;
   }
@@ -2647,14 +2666,26 @@
 
   .orders-delivery-delay {
     display: grid;
-    grid-template-columns: 68px 30px;
+    grid-template-columns: 60px 28px;
     align-items: center;
     gap: .3rem;
   }
 
-  .orders-delivery-delay .ui-input { height: 30px; padding: .3rem .45rem; font-size: 10px; }
-  .orders-delivery-delay .ui-button-icon { width: 30px; height: 30px; }
-  .orders-row-actions .ui-button-icon { width: 32px; height: 32px; }
+  .orders-delivery-delay .ui-input {
+    height: 30px;
+    padding: .3rem .45rem;
+    font-size: 10px;
+    appearance: textfield;
+  }
+
+  .orders-delivery-delay .ui-input::-webkit-inner-spin-button,
+  .orders-delivery-delay .ui-input::-webkit-outer-spin-button { margin: 0; appearance: none; }
+  .orders-delivery-delay > .ui-button { width: 28px; height: 30px; }
+  .orders-row-actions > .ui-button { width: 32px; height: 32px; }
+  .orders-row-actions > .ui-button-danger-ghost {
+    border-color: var(--app-border);
+    background: var(--app-control-bg);
+  }
 
   .orders-row-alert {
     grid-column: 1 / -1;

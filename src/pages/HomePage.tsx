@@ -180,6 +180,11 @@ function formatTrackedDate(value: string) {
   }).format(date);
 }
 
+function formatOrderStatus(status?: string) {
+  const label = String(status ?? "New").trim().replace(/[_-]+/g, " ").toLowerCase();
+  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : "New";
+}
+
 function getTrackedTimestamp(value?: string) {
   if (!value) return Number.NEGATIVE_INFINITY;
   const timestamp = new Date(value).getTime();
@@ -1868,7 +1873,7 @@ export default function HomePage() {
                                 <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? "Members 2" : "Members"}</span>
                               </div>
                               <div className="orders-row-progress">
-                                <Badge className="orders-status-badge" variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
+                                <Badge className="orders-status-badge" variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                                 {progress ? <><span>{formatNumber(progress.used)} / {formatNumber(progress.total)}</span><div><i style={{ width: `${progressPercent}%` }} /></div></> : <small>Waiting for status</small>}
                               </div>
                               <dl className="orders-row-delivery">
