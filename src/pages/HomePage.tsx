@@ -1821,9 +1821,6 @@ export default function HomePage() {
                   <FilterDropdown label="Type" value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
-                  <Button type="button" variant="secondary" size="icon" title="Clear filters" aria-label="Clear filters" disabled={!orderSearch && orderStatusFilter === "all" && orderTypeFilter === "all"} onClick={() => {
-                    setOrderSearch(""); setOrderStatusFilter("all"); setOrderTypeFilter("all");
-                  }}><RotateCcw className="h-4 w-4" /></Button>
                   <div className="orders-import-control">
                     <Input value={orderIdToTrack} onChange={(event) => setOrderIdToTrack(event.target.value)} placeholder="Add existing order ID" aria-label="Existing order ID" className="font-mono" />
                     <Button type="button" variant="secondary" size="sm" onClick={trackOrderManually}><Plus className="h-4 w-4" /> Add</Button>
@@ -1871,19 +1868,21 @@ export default function HomePage() {
                                 <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? "Members 2" : "Members"}</span>
                               </div>
                               <div className="orders-row-progress">
-                                <Badge variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
+                                <Badge className="orders-status-badge" variant={getOrderStatusVariant(order.status)}>{order.status ?? "NEW"}</Badge>
                                 {progress ? <><span>{formatNumber(progress.used)} / {formatNumber(progress.total)}</span><div><i style={{ width: `${progressPercent}%` }} /></div></> : <small>Waiting for status</small>}
                               </div>
                               <dl className="orders-row-delivery">
                                 <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
-                                <div><dt>{boostOrder ? "Amount" : "Delay"}</dt><dd>{boostOrder ? formatNumber(order.amount) : formatDelay(delayValue)}</dd></div>
+                                <div>
+                                  <dt>{boostOrder ? "Amount" : "Delay"}</dt>
+                                  {!completed && !boostOrder ? <dd className="orders-delivery-delay">
+                                    <Input type="number" min={1} max={1200} aria-label="Delay seconds" value={delayDrafts[order.uniqid] ?? String(delayValue ?? "")} onChange={(event) => setDelayDrafts((current) => ({ ...current, [order.uniqid]: event.target.value }))} />
+                                    <Button type="button" variant="secondary" size="icon" title="Update delay" aria-label="Update delay" disabled={updatingDelayId === order.uniqid} onClick={() => void handleUpdateDelay(order)}><RefreshCw className={`h-3.5 w-3.5 ${updatingDelayId === order.uniqid ? "animate-spin" : ""}`} /></Button>
+                                  </dd> : <dd>{boostOrder ? formatNumber(order.amount) : formatDelay(delayValue)}</dd>}
+                                </div>
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
-                                {!completed && !boostOrder ? <div className="orders-inline-delay">
-                                  <Input type="number" min={1} max={1200} aria-label="Delay seconds" value={delayDrafts[order.uniqid] ?? String(delayValue ?? "")} onChange={(event) => setDelayDrafts((current) => ({ ...current, [order.uniqid]: event.target.value }))} />
-                                  <Button type="button" variant="secondary" size="icon" title="Update delay" aria-label="Update delay" disabled={updatingDelayId === order.uniqid} onClick={() => void handleUpdateDelay(order)}><RefreshCw className={`h-3.5 w-3.5 ${updatingDelayId === order.uniqid ? "animate-spin" : ""}`} /></Button>
-                                </div> : null}
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title="Remove order" aria-label={`Remove ${order.uniqid}`} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>

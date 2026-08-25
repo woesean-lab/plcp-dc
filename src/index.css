@@ -2459,7 +2459,7 @@
 
   .orders-commandbar {
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) 170px 170px auto minmax(280px, .75fr);
+    grid-template-columns: minmax(240px, 1fr) 170px 170px minmax(280px, .75fr);
     align-items: end;
     gap: .65rem;
     padding: .8rem;
@@ -2476,12 +2476,12 @@
   .orders-search-field > svg {
     position: absolute;
     z-index: 1;
-    left: .75rem;
+    left: .85rem;
     color: var(--app-muted);
     pointer-events: none;
   }
 
-  .orders-search-field .ui-input { padding-left: 2.2rem; }
+  .orders-search-field .ui-input { padding-left: 2.45rem !important; }
 
   .orders-import-control {
     display: grid;
@@ -2507,7 +2507,7 @@
   .orders-table-head,
   .orders-row {
     display: grid;
-    grid-template-columns: minmax(230px, 1.45fr) 120px minmax(155px, .85fr) 135px 105px minmax(210px, auto);
+    grid-template-columns: minmax(230px, 1.55fr) 120px minmax(170px, .9fr) 170px 105px 126px;
     align-items: center;
     column-gap: .8rem;
   }
@@ -2604,7 +2604,11 @@
   .orders-row-progress small,
   .orders-row-progress > span { color: var(--app-muted); font-size: 9px; }
 
-  .orders-row-progress .ui-badge { width: fit-content; }
+  .orders-status-badge {
+    width: max-content !important;
+    max-width: 100%;
+    justify-self: start;
+  }
   .orders-row-progress > div {
     width: 100%;
     height: 3px;
@@ -2637,12 +2641,19 @@
     display: flex;
     min-width: 0;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: .35rem;
   }
 
-  .orders-inline-delay { display: grid; grid-template-columns: 72px 32px; gap: .3rem; }
-  .orders-inline-delay .ui-input { height: 32px; padding: .35rem .5rem; font-size: 10px; }
+  .orders-delivery-delay {
+    display: grid;
+    grid-template-columns: 68px 30px;
+    align-items: center;
+    gap: .3rem;
+  }
+
+  .orders-delivery-delay .ui-input { height: 30px; padding: .3rem .45rem; font-size: 10px; }
+  .orders-delivery-delay .ui-button-icon { width: 30px; height: 30px; }
   .orders-row-actions .ui-button-icon { width: 32px; height: 32px; }
 
   .orders-row-alert {
@@ -2677,7 +2688,7 @@
   .orders-empty-state span { font-size: 11px; }
 
   @media (max-width: 1179px) {
-    .orders-commandbar { grid-template-columns: minmax(240px, 1fr) 160px 160px auto; }
+    .orders-commandbar { grid-template-columns: minmax(240px, 1fr) 160px 160px; }
     .orders-import-control { grid-column: 1 / -1; }
     .orders-table-head { display: none; }
     .orders-row {
