@@ -29,6 +29,7 @@ type DcordTokenResult = {
 type CommunityMemberResult = {
   index: number;
   username: string;
+  avatarUrl: string | null;
   state: string;
   details: string;
   completedAt?: string;
@@ -42,6 +43,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
     return [{
       index,
       username: typeof row.username === "string" && row.username.trim() ? row.username.trim() : `Member ${index + 1}`,
+      avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined
@@ -802,7 +804,9 @@ export default function OrderPage() {
                 <div className="community-order-result-list">
                   {communityMemberResults.map((item) => (
                     <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
-                      <span className="public-token-result-index">{String(item.index + 1).padStart(2, "0")}</span>
+                      <span className="community-order-avatar" aria-hidden="true">
+                        {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
+                      </span>
                       <span className="community-order-result-copy">
                         <strong>{item.username}</strong>
                         <small>{item.details}</small>

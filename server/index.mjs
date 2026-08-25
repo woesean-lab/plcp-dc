@@ -697,7 +697,12 @@ async function addCommunityGuildMember(config, discordUserId, accessToken) {
 }
 
 async function processCommunityOrder(order, members, config) {
-  const results = members.map((member) => ({ username: member.username, state: "queued", details: "Waiting for delivery." }));
+  const results = members.map((member) => ({
+    username: member.username,
+    avatarUrl: member.avatar_url ?? null,
+    state: "queued",
+    details: "Waiting for delivery."
+  }));
   let added = 0;
 
   async function saveCommunityProgress(payload) {
@@ -709,7 +714,7 @@ async function processCommunityOrder(order, members, config) {
 
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
-    results[index] = { username: member.username, state: "joining", details: "Discord membership request is running." };
+    results[index] = { username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
     let state = "failed";
@@ -735,7 +740,7 @@ async function processCommunityOrder(order, members, config) {
       details = error instanceof Error ? error.message : details;
     }
 
-    results[index] = { username: member.username, state, details, completedAt: new Date().toISOString() };
+    results[index] = { username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
        SET status = 'authorized', details = $3,
@@ -1389,7 +1394,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     await client.query("BEGIN");
     const selected = await client.query(
-      `SELECT discord_user_id, username, encrypted_refresh_token
+      `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
        WHERE guild_id = $1 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
        ORDER BY authorized_at ASC
@@ -1420,7 +1425,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       status: waitingForBot ? "WAITING" : "PROCESS",
       details: waitingForBot ? "Add the Members bot to this server to start delivery." : `0/${amount} members delivered.`,
       botInvite,
-      communityResults: selected.rows.map((row) => ({ username: row.username, state: "queued", details: "Waiting for delivery." }))
+      communityResults: selected.rows.map((row) => ({ username: row.username, avatarUrl: row.avatar_url ?? null, state: "queued", details: "Waiting for delivery." }))
     };
     await client.query(
       `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -1471,7 +1476,7 @@ async function activateWaitingCommunityOrder(order) {
     }
 
     let members = (await client.query(
-      `SELECT discord_user_id, username, encrypted_refresh_token
+      `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
        WHERE guild_id = $1 AND reserved_order_id = $2 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL
        ORDER BY authorized_at ASC
@@ -1482,7 +1487,7 @@ async function activateWaitingCommunityOrder(order) {
     const missing = Math.max(0, Number(current.amount) - members.length);
     if (missing > 0) {
       const extra = await client.query(
-        `SELECT discord_user_id, username, encrypted_refresh_token
+        `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
          FROM community_oauth_joins
          WHERE guild_id = $1 AND reserved_order_id IS NULL AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL
          ORDER BY authorized_at ASC
@@ -1531,6 +1536,31 @@ async function activateWaitingCommunityOrder(order) {
   }
 }
 
+async function hydrateCommunityOrderAvatars(order) {
+  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) return order;
+  const missingNames = order.communityResults
+    .filter((item) => item && typeof item === "object" && !Array.isArray(item) && !item.avatarUrl && typeof item.username === "string")
+    .map((item) => item.username);
+  if (!missingNames.length || !order.serverId) return order;
+
+  const avatars = await pool.query(
+    `SELECT username, avatar_url
+     FROM community_oauth_joins
+     WHERE guild_id = $1 AND username = ANY($2::text[]) AND avatar_url IS NOT NULL`,
+    [order.serverId, missingNames]
+  );
+  if (!avatars.rowCount) return order;
+  const avatarByUsername = new Map(avatars.rows.map((row) => [row.username, row.avatar_url]));
+  const communityResults = order.communityResults.map((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item) || item.avatarUrl) return item;
+    const avatarUrl = avatarByUsername.get(item.username);
+    return avatarUrl ? { ...item, avatarUrl } : item;
+  });
+  const hydrated = { ...order, communityResults };
+  await saveTrackedOrderPayload(hydrated);
+  return hydrated;
+}
+
 app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -1540,6 +1570,7 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
       return res.status(404).json({ message: "Members order could not be found." });
     }
     payload = await activateWaitingCommunityOrder(payload);
+    payload = await hydrateCommunityOrderAvatars(payload);
     res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
@@ -1584,7 +1615,8 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     let trackedPayload = tracked.rows[0]?.payload;
     if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
-      return res.set("Cache-Control", "no-store").json(trackedPayload);
+      trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
+      return res.set("Cache-Control", "no-store").json({ ...trackedPayload, liveBoostStock });
     }
     if (
       trackedPayload &&
