@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Search, Server, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, updateOrderDelay } from "../lib/integration";
@@ -530,67 +530,6 @@ export default function OrderPage() {
 
   return (
     <section className="lookup-page tab-slide-in relative grid min-w-0 gap-4">
-      <header className={`${shell} lookup-commandbar`}>
-        <div className="lookup-commandbar-title">
-          <span className="lookup-commandbar-icon" aria-hidden="true"><Search className="h-4 w-4" /></span>
-          <div>
-            <p className={labelClass}>Operations</p>
-            <h1>Order lookup</h1>
-          </div>
-        </div>
-
-        <form
-          className="lookup-search-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void lookup();
-          }}
-        >
-          <label className="lookup-search-field">
-            <Input
-              value={uniqid}
-              onChange={(event) => setUniqid(event.target.value)}
-              placeholder="XXX-XXXXX-XXX"
-              className="font-mono"
-              aria-label="Order ID"
-            />
-          </label>
-
-          <div className="lookup-search-actions">
-            <Button type="submit" disabled={loading}>
-              <Search className="h-4 w-4" aria-hidden="true" />
-              {loading ? "Loading..." : "Check"}
-            </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              type="button"
-              disabled={loading || !uniqid.trim()}
-              onClick={() => void lookup()}
-              title="Refresh order"
-              aria-label="Refresh order"
-            >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-            </Button>
-            <Button
-              variant="secondary"
-              size="icon"
-              type="button"
-              title="Clear lookup"
-              aria-label="Clear lookup"
-              onClick={() => {
-                setUniqid("");
-                setResult(null);
-                setParams({});
-                toast("Enter an order ID.");
-              }}
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-            </Button>
-          </div>
-        </form>
-      </header>
-
       {result ? (
         <article className={`${shell} lookup-workspace`}>
           <header className="lookup-workspace-header">
@@ -851,7 +790,7 @@ export default function OrderPage() {
           <span className="lookup-empty-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>
           <div>
             <strong>No order selected</strong>
-            <p>Enter an order ID above to load its operational status.</p>
+            <p>Open an order from the Orders page to view its operational status.</p>
           </div>
         </div>
       )}
