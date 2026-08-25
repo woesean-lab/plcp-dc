@@ -1283,10 +1283,9 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       headers: { Authorization: `Bot ${config.botToken}` }
     });
     const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
-    const botStillInFixedGuild = botGuilds.some((guild) => String(guild?.id ?? "") === config.guildId);
     const botInInvitedGuild = botGuilds.some((guild) => String(guild?.id ?? "") === serverInfo.guildId);
 
-    if (guildsResult.response.ok && !botStillInFixedGuild && !botInInvitedGuild && allowWaitingForBot) {
+    if (guildsResult.response.ok && !botInInvitedGuild && allowWaitingForBot) {
       return {
         config,
         invite,
@@ -1296,12 +1295,8 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       };
     }
 
-    if (!guildsResult.response.ok || botStillInFixedGuild || !botInInvitedGuild) {
-      const error = new Error(
-        botInInvitedGuild
-          ? "This invite does not belong to the fixed Members Stock server. Remove the bot from the old server before switching."
-          : "Add the Members bot to this new server before creating the order."
-      );
+    if (!guildsResult.response.ok || !botInInvitedGuild) {
+      const error = new Error("Add the Members bot from the order monitor to start delivery.");
       error.statusCode = 409;
       throw error;
     }
