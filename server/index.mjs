@@ -602,6 +602,13 @@ async function requestDcord(pathname, init = {}) {
     // Preserve non-JSON upstream error messages.
   }
 
+  if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
+    const error = new Error("Dcord request is awaiting upstream verification.");
+    error.statusCode = response.status;
+    error.uncertain = true;
+    throw error;
+  }
+
   if (!response.ok) {
     const error = new Error(
       typeof payload === "object" && payload && "message" in payload
@@ -652,20 +659,35 @@ async function requestDcordDashboard(pathname, init = {}) {
 function isUncertainDcordTransportResult(result) {
   if (!result || typeof result !== "object" || Array.isArray(result) || result.boosted === true) return false;
   const message = String(result.boostMessage ?? result.message ?? "").toLowerCase();
-  return ["fetch failed", "timeout", "timed out", "socket", "network", "connection"].some((value) => message.includes(value));
+  return [
+    "fetch failed",
+    "timeout",
+    "timed out",
+    "socket",
+    "network",
+    "connection",
+    "upstream verification",
+    "cloudflare",
+    "just a moment",
+    "<!doctype html",
+    "<html"
+  ].some((value) => message.includes(value));
 }
 
 function matchesDcordMaskedToken(token, maskedToken) {
   const full = String(token ?? "").trim().toLowerCase();
   const masked = String(maskedToken ?? "").trim().toLowerCase();
   if (!full || !masked) return false;
-  if (full === masked) return true;
+  const candidates = [full];
+  const credentialParts = full.split(":");
+  if (credentialParts.length > 1) candidates.push(credentialParts.at(-1));
+  if (candidates.includes(masked)) return true;
 
   const parts = masked.split(/\.{3}|…/);
   if (parts.length < 2) return false;
   const prefix = parts[0].trim();
   const suffix = parts.at(-1).trim();
-  return Boolean(prefix && suffix && full.startsWith(prefix) && full.endsWith(suffix));
+  return Boolean(prefix && suffix && candidates.some((candidate) => candidate.startsWith(prefix) && candidate.endsWith(suffix)));
 }
 
 function normalizeDcordDashboardResult(item, currentResult) {
