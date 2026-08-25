@@ -27,6 +27,7 @@ const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
 const communityOauthStartCooldowns = new Map();
+const dcordResultReconcileCooldowns = new Map();
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -646,6 +647,105 @@ async function requestDcordDashboard(pathname, init = {}) {
   }
 
   return payload;
+}
+
+function isUncertainDcordTransportResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result) || result.boosted === true) return false;
+  const message = String(result.boostMessage ?? result.message ?? "").toLowerCase();
+  return ["fetch failed", "timeout", "timed out", "socket", "network", "connection"].some((value) => message.includes(value));
+}
+
+function matchesDcordMaskedToken(token, maskedToken) {
+  const full = String(token ?? "").trim().toLowerCase();
+  const masked = String(maskedToken ?? "").trim().toLowerCase();
+  if (!full || !masked) return false;
+  if (full === masked) return true;
+
+  const parts = masked.split(/\.{3}|…/);
+  if (parts.length < 2) return false;
+  const prefix = parts[0].trim();
+  const suffix = parts.at(-1).trim();
+  return Boolean(prefix && suffix && full.startsWith(prefix) && full.endsWith(suffix));
+}
+
+function normalizeDcordDashboardResult(item, currentResult) {
+  const itemStatus = String(item?.status ?? "").trim().toLowerCase();
+  const message = String(item?.message ?? "").trim();
+  const boostMessage = String(item?.boost_message ?? "").trim();
+  const joined = itemStatus === "ok" || itemStatus === "joined" || message.toLowerCase().includes("joined");
+  const boosted = item?.boost === true || boostMessage.toLowerCase().includes("boosted");
+  if (!joined && !boosted) return null;
+
+  return {
+    ...currentResult,
+    success: joined || boosted,
+    status: boosted ? "joined + boosted" : "joined",
+    joinStatus: "joined",
+    boostStatus: boosted ? "boosted" : "failed",
+    slots: boosted ? 2 : 0,
+    boost: boosted,
+    boostMessage: boostMessage || message || (boosted ? "boosted" : "joined"),
+    boosted,
+    reconciledAt: new Date().toISOString()
+  };
+}
+
+async function reconcileDcordTransportResults(order) {
+  if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.dcordResults)) return order;
+  if (!order.dcordResults.some(isUncertainDcordTransportResult)) return order;
+
+  const uniqid = String(order.uniqid ?? "").trim();
+  const cooldownUntil = dcordResultReconcileCooldowns.get(uniqid) ?? 0;
+  if (!uniqid || cooldownUntil > Date.now()) return order;
+  dcordResultReconcileCooldowns.set(uniqid, Date.now() + 10_000);
+
+  try {
+    const dashboardStatus = await requestDcordDashboard("joiner/status", { cache: "no-store" });
+    const dashboardItems = Array.isArray(dashboardStatus?.job?.items) ? dashboardStatus.job.items : [];
+    if (!dashboardItems.length) return order;
+
+    const assignedTokens = await loadDcordOrderTokens(uniqid);
+    const invite = extractDiscordInviteCode(order.serverInvite);
+    let changed = false;
+    const dcordResults = order.dcordResults.map((result, index) => {
+      if (!isUncertainDcordTransportResult(result) || !assignedTokens[index]) return result;
+
+      const matchedItem = dashboardItems.find((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+        const itemInvite = extractDiscordInviteCode(item.invite);
+        if (invite && itemInvite && invite !== itemInvite) return false;
+        return matchesDcordMaskedToken(assignedTokens[index], item.token_masked ?? item.token);
+      });
+      const reconciled = normalizeDcordDashboardResult(matchedItem, result);
+      if (!reconciled) return result;
+      changed = true;
+      return reconciled;
+    });
+
+    if (!changed) return order;
+
+    for (const result of dcordResults) {
+      if (result?.reconciledAt && result?.usedTokenId) {
+        await updateUsedBoostTokenResult(result.usedTokenId, result);
+      }
+    }
+
+    const added = dcordResults.reduce((total, result) => total + (result?.boosted === true ? 2 : 0), 0);
+    const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
+    const nextOrder = {
+      ...order,
+      added,
+      status: added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : order.status,
+      details: added >= amount
+        ? `${added}/${amount} boosts completed.`
+        : `${added}/${amount} boosts completed. Review failed tokens in the payload.`,
+      dcordResults
+    };
+    await saveTrackedOrderPayload(nextOrder);
+    return nextOrder;
+  } catch {
+    return order;
+  }
 }
 
 function getOrderIdFromPayload(payload) {
@@ -1659,6 +1759,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       !Array.isArray(trackedPayload) &&
       (trackedPayload.provider === "dcord" || trackedPayload.service === "DCORD-BOOSTS")
     ) {
+      trackedPayload = await reconcileDcordTransportResults(trackedPayload);
       if ((!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) && typeof trackedPayload.serverInvite === "string" && trackedPayload.serverInvite.trim()) {
         try {
           const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
@@ -2259,7 +2360,7 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
       return res.status(404).json({ message: "Boost order could not be found." });
     }
 
-    let payload = tracked.rows[0].payload;
+    let payload = await reconcileDcordTransportResults(tracked.rows[0].payload);
     if (
       payload &&
       typeof payload === "object" &&
