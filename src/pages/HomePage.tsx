@@ -1343,11 +1343,8 @@ export default function HomePage() {
         </Badge>
       </div>
 
-      <div className="community-admin-progress">
-        <div><span>Authorized</span><strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong></div>
-        <div><span>Available</span><strong>{communityStatus?.ready ?? 0}</strong></div>
-        <div><span>Used</span><strong>{(communityStatus?.joined ?? 0) + (communityStatus?.alreadyMember ?? 0)}</strong></div>
-        <div><span>Failed</span><strong>{communityStatus?.failed ?? 0}</strong></div>
+      <div className="community-admin-progress members-connected-summary">
+        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong></div>
       </div>
 
       <div className="community-admin-track" aria-hidden="true">
@@ -1366,14 +1363,12 @@ export default function HomePage() {
                 {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
               </span>
               <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
-              <Badge variant={record.status === "joined" ? "success" : record.status === "failed" ? "destructive" : "secondary"}>
-                {record.status === "authorized" ? "Available" : record.status === "joined" ? "Used" : record.status === "failed" ? "Failed" : "Already inside"}
-              </Badge>
+              <Badge variant="success">Connected</Badge>
             </div>
           ))}
         </div>
       ) : communityStatus?.configured ? (
-        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No authorized members yet</strong><span>Share the join link to build your Members Stock.</span></div>
+        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members in stock yet</strong><span>Share the authorization link to build your Members Stock.</span></div>
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
@@ -2172,7 +2167,7 @@ export default function HomePage() {
               </button>
               <button type="button" role="tab" aria-selected={stockCategory === "offline"} className={stockCategory === "offline" ? "is-active" : ""} onClick={() => setStockCategory("offline")}>
                 <Users className="h-4 w-4" aria-hidden="true" />
-                <span><strong>Members Stock</strong><small>{communityStatus?.ready ?? 0} available</small></span>
+                <span><strong>Members Stock</strong><small>{communityStatus?.authorized ?? 0} connected</small></span>
               </button>
             </div>
 

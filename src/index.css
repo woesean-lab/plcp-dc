@@ -4964,6 +4964,14 @@
   border-left: 1px solid var(--app-divider);
 }
 
+.community-admin-progress.members-connected-summary {
+  grid-template-columns: 1fr;
+}
+
+.community-admin-progress.members-connected-summary > div {
+  min-height: 78px;
+}
+
 .community-admin-progress span {
   color: var(--app-muted);
   font-size: 9px;

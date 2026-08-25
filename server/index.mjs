@@ -223,7 +223,7 @@ async function loadCommunityJoinSummary(config) {
        COUNT(*) FILTER (WHERE status = 'joined')::int AS joined,
        COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
-       COUNT(*)::int AS authorized,
+       COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed')::int AS authorized,
        COUNT(*) FILTER (WHERE status = 'authorized')::int AS ready
      FROM community_oauth_joins
      WHERE guild_id = $1`,
@@ -306,7 +306,6 @@ async function addAuthorizedCommunityMember(config, member) {
       `UPDATE community_oauth_joins
        SET status = $3,
            details = NULL,
-           encrypted_refresh_token = NULL,
            joined_at = CASE WHEN $3 = 'joined' THEN NOW() ELSE joined_at END
        WHERE discord_user_id = $1 AND guild_id = $2`,
       [member.discord_user_id, config.guildId, status]
@@ -1229,7 +1228,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       pool.query(
         `SELECT username, avatar_url, status, details, authorized_at, joined_at
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
+         WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed'
          ORDER BY authorized_at DESC
          LIMIT 50`,
         [config.guildId]
