@@ -21,7 +21,7 @@ function getTokenProgress(result: TokenResult) {
   if (result.boosted === true || status.includes("boosted")) return 4;
   if (["failed", "error", "skipped"].some((value) => status.includes(value))) return 3;
   if (result.success === true || status.includes("joined")) return 2;
-  if (["joining", "process"].some((value) => status.includes(value))) return 1;
+  if (["joining", "process", "verifying"].some((value) => status.includes(value))) return 1;
   return 0;
 }
 

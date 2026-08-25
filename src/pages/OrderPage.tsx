@@ -77,7 +77,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
         ? row.boostStatus.trim()
         : successful
           ? "boosted"
-          : ["queued", "joining", "pending", "process", "waiting"].some((value) => normalizedStatus.includes(value))
+          : ["queued", "joining", "pending", "process", "waiting", "verifying"].some((value) => normalizedStatus.includes(value))
             ? "waiting"
             : "failed";
       const rawSlots = row.slots;
@@ -94,7 +94,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
           ? row.boost_message.trim()
           : "";
       const isPending = [joinStatus, boostStatus, status].some((value) =>
-        ["queued", "joining", "pending", "process", "waiting"].some((stateValue) => value.toLowerCase().includes(stateValue))
+        ["queued", "joining", "pending", "process", "waiting", "verifying"].some((stateValue) => value.toLowerCase().includes(stateValue))
       );
       const isFailed = [joinStatus, boostStatus, status].some((value) =>
         ["failed", "error", "skipped"].some((stateValue) => value.toLowerCase().includes(stateValue))

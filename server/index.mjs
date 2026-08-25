@@ -20,6 +20,7 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https://app.dcord.co/api";
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
+const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "120000", 10) || 120_000, 15_000), 620_000);
 const discordApiBase = "https://discord.com/api/v10";
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
@@ -28,6 +29,7 @@ const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
 const communityOauthStartCooldowns = new Map();
 const dcordResultReconcileCooldowns = new Map();
+const dcordResultReconcileJobs = new Set();
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -587,7 +589,7 @@ async function requestTokenu(baseUrl, pathname, init = {}) {
 async function requestDcord(pathname, init = {}) {
   const response = await fetch(new URL(pathname, `${dcordApiBase.replace(/\/$/, "")}/`), {
     ...init,
-    signal: init.signal ?? AbortSignal.timeout(620_000),
+    signal: init.signal ?? AbortSignal.timeout(dcordRequestTimeoutMs),
     headers: {
       "X-API-Key": await loadDcordApiKey(),
       ...(init.headers ?? {})
@@ -618,6 +620,7 @@ async function requestDcord(pathname, init = {}) {
           : `Dcord request failed with ${response.status}.`
     );
     error.statusCode = response.status;
+    error.uncertain = response.status >= 500;
     throw error;
   }
 
@@ -658,7 +661,9 @@ async function requestDcordDashboard(pathname, init = {}) {
 
 function isUncertainDcordTransportResult(result) {
   if (!result || typeof result !== "object" || Array.isArray(result) || result.boosted === true) return false;
+  if (result.transportUncertain === true) return true;
   const message = String(result.boostMessage ?? result.message ?? "").toLowerCase();
+  if (/dcord request failed with 5\d\d/.test(message)) return true;
   return [
     "fetch failed",
     "timeout",
@@ -768,6 +773,30 @@ async function reconcileDcordTransportResults(order) {
   } catch {
     return order;
   }
+}
+
+function scheduleDcordResultReconciliation(uniqid) {
+  const orderId = String(uniqid ?? "").trim();
+  if (!orderId || dcordResultReconcileJobs.has(orderId)) return;
+  dcordResultReconcileJobs.add(orderId);
+
+  void (async () => {
+    try {
+      for (let attempt = 0; attempt < 18; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 10_000));
+        const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
+        if (!tracked.rowCount) return;
+        const current = tracked.rows[0].payload;
+        if (!Array.isArray(current?.dcordResults) || !current.dcordResults.some(isUncertainDcordTransportResult)) return;
+        const reconciled = await reconcileDcordTransportResults(current);
+        if (!reconciled.dcordResults?.some(isUncertainDcordTransportResult)) return;
+      }
+    } catch (error) {
+      console.error("Dcord result reconciliation failed:", error instanceof Error ? error.message : error);
+    } finally {
+      dcordResultReconcileJobs.delete(orderId);
+    }
+  })();
 }
 
 function getOrderIdFromPayload(payload) {
@@ -1021,16 +1050,24 @@ async function runDcordBoostToken(token, invite) {
     });
     return normalizeDcordJoinResult(result, token);
   } catch (error) {
+    const statusCode = Number(error?.statusCode);
+    const message = error instanceof Error ? error.message : "Dcord join failed.";
+    const transportUncertain = error?.uncertain === true
+      || statusCode >= 500
+      || ["AbortError", "TimeoutError"].includes(String(error?.name))
+      || /fetch failed|timeout|timed out|socket|network|connection/i.test(message);
     return {
       token: redactToken(token),
       success: false,
-      status: "error",
-      joinStatus: "failed",
-      boostStatus: "skipped",
-      slots: 0,
+      status: transportUncertain ? "verifying" : "error",
+      joinStatus: transportUncertain ? "verifying" : "failed",
+      boostStatus: transportUncertain ? "verifying" : "skipped",
+      slots: transportUncertain ? null : 0,
       boost: false,
-      boostMessage: error instanceof Error ? error.message : "Dcord join failed.",
-      boosted: false
+      boostMessage: transportUncertain ? "Upstream response is uncertain. Verifying the Dcord result." : message,
+      httpStatus: Number.isFinite(statusCode) ? statusCode : undefined,
+      boosted: false,
+      transportUncertain
     };
   }
 }
@@ -1043,7 +1080,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   async function saveCurrentProgress() {
     progressSave = progressSave.then(async () => {
       const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
-      const finished = results.every((item) => !["queued", "joining"].includes(String(item?.status ?? "").toLowerCase()));
+      const finished = results.every((item) => !["queued", "joining", "verifying"].includes(String(item?.status ?? "").toLowerCase()));
       await saveTrackedOrderPayload({
         ...order,
         added,
@@ -1085,6 +1122,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   const workerCount = Math.min(tokens.length, dcordBoostConcurrency);
   await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
   await saveCurrentProgress();
+  if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(order.uniqid);
 }
 
 async function requestTokenuPublicData(pathname, init = {}) {
