@@ -35,7 +35,6 @@ import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import {
-  addAuthorizedCommunityMembers,
   clearCommunityConfig,
   getCommunityAdminStatus,
   getCommunityConfig,
@@ -44,7 +43,7 @@ import {
   type CommunityConfig
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
-import { isBoostService, SERVICE_OPTIONS } from "../lib/services";
+import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
   clearIntegrationApiKey,
@@ -236,7 +235,7 @@ function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
 
 function isTerminalOrder(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
-  return normalized.includes("completed") || normalized.includes("canceled") || normalized.includes("cancelled");
+  return ["completed", "partial", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
 }
 
 function sleep(ms: number) {
@@ -466,7 +465,6 @@ export default function HomePage() {
   const [loadingBalance, setLoadingBalance] = useState(false);
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
-  const [startingCommunityJoin, setStartingCommunityJoin] = useState(false);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
@@ -520,7 +518,9 @@ export default function HomePage() {
   }, [orderSearch, orderStatusFilter, orderTypeFilter, orders]);
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
-  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : apiConfigured;
+  const selectedIsCommunity = isCommunityService(form.service);
+  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
+  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || (communityStatus?.ready ?? 0) > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
     () => {
@@ -699,6 +699,12 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, form.service, form.serverId, form.duration]);
 
+  useEffect(() => {
+    if (activeTab === "create") void refreshCommunityStatus();
+    // Members Stock is loaded once when Create opens, not on every invite keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   async function refreshBalance() {
     try {
       setLoadingBalance(true);
@@ -789,31 +795,10 @@ export default function HomePage() {
     }
   }
 
-  async function handleAddCommunityMembers() {
-    try {
-      setStartingCommunityJoin(true);
-      const result = await addAuthorizedCommunityMembers();
-      notifySuccess(`Adding ${result.count} authorized members.`);
-      await refreshCommunityStatus();
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Authorized members could not be added.");
-    } finally {
-      setStartingCommunityJoin(false);
-    }
-  }
-
-  useEffect(() => {
-    if (activeTab !== "stock" || stockCategory !== "offline" || !communityStatus?.syncing) return;
-    const handle = window.setInterval(() => void refreshCommunityStatus(), 2_000);
-    return () => window.clearInterval(handle);
-    // Poll only while the local member worker is running.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, stockCategory, communityStatus?.syncing]);
-
   async function refreshAvailability() {
     try {
       setCheckingAvailability(true);
-      const serverId = selectedIsBoost ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
+      const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
       const data = await checkAvailableAmount(form.service, serverId, form.duration);
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
     } catch {
@@ -1262,7 +1247,7 @@ export default function HomePage() {
       }
       const created = await createOrder({
         service: form.service,
-        id: selectedIsBoost ? form.serverId.trim() : serverId,
+        id: selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : serverId,
         amount: form.amount,
         delay: selectedIsBoost ? undefined : form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
@@ -1275,7 +1260,7 @@ export default function HomePage() {
 
       const nextOrder: TrackedOrder = {
         uniqid: created.uniqid,
-        provider: selectedIsBoost ? "dcord" : "tokenu",
+        provider: selectedIsBoost ? "dcord" : selectedIsCommunity ? "community" : "tokenu",
         service: form.service,
         serverId,
         serverName: serverInfo.guildName,
@@ -1294,7 +1279,8 @@ export default function HomePage() {
 
       persistOrders([nextOrder, ...orders]);
       notifySuccess(`Order created: ${created.uniqid}`);
-      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${selectedIsBoost ? "&provider=dcord" : ""}`);
+      const providerQuery = selectedIsBoost ? "&provider=dcord" : selectedIsCommunity ? "&provider=community" : "";
+      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Order could not be created.");
     } finally {
@@ -1337,7 +1323,7 @@ export default function HomePage() {
           </div>
         </div>
         <Badge variant={communityStatus?.configured ? "success" : "destructive"}>
-          {communityStatus?.syncing ? "Adding members" : communityStatus?.configured ? "Ready" : "Setup required"}
+          {communityStatus?.configured ? "Ready" : "Setup required"}
         </Badge>
       </div>
 
@@ -1366,10 +1352,6 @@ export default function HomePage() {
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" disabled={!communityStatus?.configured || !communityStatus?.ready || communityStatus?.syncing || startingCommunityJoin} onClick={() => void handleAddCommunityMembers()}>
-          {communityStatus?.syncing || startingCommunityJoin ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-          {communityStatus?.syncing ? "Adding members..." : "Use available members"}
-        </Button>
         <Button type="button" disabled={!communityStatus?.configured} onClick={() => void copyCommunityJoinLink()}>
           <Copy className="h-4 w-4" /> Copy authorization link
         </Button>
@@ -1424,15 +1406,20 @@ export default function HomePage() {
                         <span className={fieldLabelClass}>Choose service</span>
                         <p className="service-selector-copy">Select members or boosts, then configure the order details.</p>
                       </div>
-                      <span className="service-selector-count">2 services</span>
+                      <span className="service-selector-count">3 services</span>
                     </div>
                     <div className="service-grid service-grid-compact">
                       {[
                         { value: "members", title: "Members", description: "Tokenu member delivery", icon: KeyRound },
+                        { value: "community", title: "Members 2", description: "Connected OAuth stock", icon: Users },
                         { value: "boosts", title: "Boosts", description: "Dcord join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
                       ].map((option, index) => {
                         const Icon = option.icon;
-                        const selected = option.value === "boosts" ? selectedIsBoost : !selectedIsBoost;
+                        const selected = option.value === "boosts"
+                          ? selectedIsBoost
+                          : option.value === "community"
+                            ? selectedIsCommunity
+                            : !selectedIsBoost && !selectedIsCommunity;
 
                         return (
                           <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
@@ -1445,8 +1432,12 @@ export default function HomePage() {
                               onChange={() =>
                                 setForm((current) => ({
                                   ...current,
-                                  service: option.value === "boosts" ? "DCORD-BOOSTS" : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
-                                  amount: option.value === "boosts" ? 2 : 100
+                                  service: option.value === "boosts"
+                                    ? "DCORD-BOOSTS"
+                                    : option.value === "community"
+                                      ? "COMMUNITY-OFFLINE"
+                                      : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
+                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.ready ?? 1)) : 100
                                 }))
                               }
                             />
@@ -1474,7 +1465,7 @@ export default function HomePage() {
                     </div>
                   </fieldset>
 
-                  {!selectedIsBoost ? (
+                  {!selectedIsBoost && !selectedIsCommunity ? (
                     <fieldset className="service-selector md:col-span-2">
                       <legend className="sr-only">Member service</legend>
                       <div className="service-selector-heading">
@@ -1520,6 +1511,30 @@ export default function HomePage() {
                             </label>
                           );
                         })}
+                      </div>
+                    </fieldset>
+                  ) : null}
+
+                  {selectedIsCommunity ? (
+                    <fieldset className="service-selector md:col-span-2">
+                      <legend className="sr-only">Members 2 service</legend>
+                      <div className="service-selector-heading">
+                        <div>
+                          <span className={fieldLabelClass}>Member mode</span>
+                          <p className="service-selector-copy">Members are delivered from your connected OAuth stock.</p>
+                        </div>
+                        <span className="service-selector-count">1 mode</span>
+                      </div>
+                      <div className="service-grid service-grid-compact">
+                        <div className="service-option is-selected" data-service="COMMUNITY-OFFLINE">
+                          <span className="service-option-head" aria-hidden="true">
+                            <span className="service-option-icon"><Users className="h-5 w-5" /></span>
+                            <span className="service-option-state"><Check className="h-3 w-3" /> Selected</span>
+                          </span>
+                          <span className="service-option-title">Offline</span>
+                          <span className="service-option-description">{communityStatus?.ready ?? 0} members available</span>
+                          <span className="service-option-code">COMMUNITY-OFFLINE</span>
+                        </div>
                       </div>
                     </fieldset>
                   ) : null}
@@ -1662,8 +1677,13 @@ export default function HomePage() {
                               className="boost-number-input"
                               type="number"
                               min={1}
+                              max={selectedIsCommunity ? Math.max(1, communityStatus?.ready ?? 0) : undefined}
                               value={form.amount}
-                              onChange={(event) => setForm((current) => ({ ...current, amount: Number(event.target.value) || 100 }))}
+                              onChange={(event) => {
+                                const requested = Number(event.target.value) || 1;
+                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, communityStatus?.ready ?? 0)) : requested;
+                                setForm((current) => ({ ...current, amount }));
+                              }}
                             />
                           </div>
 
@@ -1715,7 +1735,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !selectedApiConfigured}>
+                  <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !selectedCanCreate}>
                     {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                     {creating ? "Creating..." : "Create order"}
                   </Button>
@@ -1723,9 +1743,12 @@ export default function HomePage() {
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
-                        Configure {selectedIsBoost ? "Dcord" : "Tokenu"} key
+                        Configure {selectedIsBoost ? "Dcord" : selectedIsCommunity ? "Members bot" : "Tokenu"}
                       </Link>
                     </Button>
+                  ) : null}
+                  {selectedIsCommunity && selectedApiConfigured && (communityStatus?.ready ?? 0) === 0 ? (
+                    <span className="self-center text-sm text-[var(--app-muted)]">No unused connected members are available.</span>
                   ) : null}
                 </div>
 
@@ -1875,6 +1898,8 @@ export default function HomePage() {
                       const progress = getOrderProgress(order);
                       const completed = isTerminalOrder(order.status);
                       const boostOrder = order.provider === "dcord" || isBoostService(order.service);
+                      const locallyManagedOrder = boostOrder || order.provider === "community";
+                      const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
                       const botInvite = extractBotInvite(order);
                       const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                       const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
@@ -1965,7 +1990,7 @@ export default function HomePage() {
                             </dl>
 
                               <div className="tracked-order-actions" role="group" aria-label={`Actions for order ${order.uniqid}`}>
-                              {!completed && !boostOrder ? (
+                              {!completed && !locallyManagedOrder ? (
                                 <div className="tracked-order-delay-control grid gap-2">
                                   <span className="tracked-order-label">Update delay</span>
                                   <div className="flex gap-2 max-sm:flex-col">
@@ -2022,7 +2047,7 @@ export default function HomePage() {
                               ) : null}
                               <Button asChild variant="secondary" size="sm" title="View order">
                                 <Link
-                                  to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${boostOrder ? "&provider=dcord" : ""}`}
+                                  to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`}
                                   aria-label={`View order ${order.uniqid}`}
                                 >
                                   <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />

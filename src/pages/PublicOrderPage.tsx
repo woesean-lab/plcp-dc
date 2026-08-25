@@ -321,6 +321,7 @@ export default function PublicOrderPage() {
   const statusService = typeof status?.service === "string" ? status.service : undefined;
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
+  const isCommunityOrder = status?.provider === "community";
   const unitLabel = isBoostOrder ? "Boosts" : "Members";
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
   const serviceName = serviceType ? getServiceTitle(serviceType) : "Service unavailable";
@@ -336,7 +337,7 @@ export default function PublicOrderPage() {
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
-  const isTerminalStatus = ["COMPLETED", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
+  const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
   );
   const botInvite = useMemo(() => extractBotInvite(status), [status]);
@@ -448,7 +449,7 @@ export default function PublicOrderPage() {
     }
   }
 
-  const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
+  const delayUpdatePanel = !isBoostOrder && !isCommunityOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
       <div className="monitor-panel-heading">
         <span className="monitor-panel-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
@@ -585,7 +586,7 @@ export default function PublicOrderPage() {
                 </div>
               </div>
 
-              {isInvitesPaused ? (
+              {isInvitesPaused && !isCommunityOrder ? (
                 <div className="monitor-restart-warning" role="alert">
                   <span className="monitor-warning-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
                   <div>

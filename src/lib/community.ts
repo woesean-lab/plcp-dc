@@ -86,12 +86,3 @@ export async function clearCommunityConfig() {
     throw new Error(payload.message ?? `Request failed with ${response.status}`);
   }
 }
-
-export async function addAuthorizedCommunityMembers() {
-  const response = await fetch("/api/community/add-members", {
-    method: "POST",
-    cache: "no-store",
-    credentials: "same-origin"
-  });
-  return parseResponse<{ started: true; count: number }>(response);
-}

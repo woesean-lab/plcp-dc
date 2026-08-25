@@ -1,5 +1,5 @@
 import type { BalanceResponse, BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
-import { isBoostService } from "./services";
+import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
   let response: Response;
@@ -63,6 +63,13 @@ export async function getDcordBalance() {
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
+  if (isCommunityService(payload.service)) {
+    return requestJson<CreateOrderResponse>("/api/community/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  }
   if (isBoostService(payload.service)) {
     return requestJson<CreateOrderResponse>("/api/dcord/boost-orders", {
       method: "POST",
@@ -83,7 +90,11 @@ export async function createOrder(payload: CreateOrderPayload) {
 }
 
 export async function getOrderStatus(uniqid: string, provider: OrderProvider = "tokenu") {
-  const prefix = provider === "dcord" ? "/api/dcord/boost-orders" : "/api/integration/orders";
+  const prefix = provider === "dcord"
+    ? "/api/dcord/boost-orders"
+    : provider === "community"
+      ? "/api/community/orders"
+      : "/api/integration/orders";
   return requestJson<OrderStatusResponse>(`${prefix}/${encodeURIComponent(uniqid)}/status`);
 }
 
@@ -133,6 +144,11 @@ export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
 }
 
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
+  if (isCommunityService(service)) {
+    return requestJson<{ available: number; maximum: number }>(
+      `/api/community/availability?invite=${encodeURIComponent(id)}`
+    );
+  }
   if (isBoostService(service)) {
     return requestJson<{ available: number; maximum: number }>(
       `/api/dcord/boost-stock?duration=${encodeURIComponent(duration)}`

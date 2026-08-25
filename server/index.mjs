@@ -184,7 +184,6 @@ async function requestDiscord(pathname, init = {}) {
 }
 
 let communityGuildCache = null;
-let communityPoolRunPromise = null;
 
 async function loadCommunityGuild(config) {
   if (communityGuildCache?.guildId === config.guildId && communityGuildCache.expiresAt > Date.now()) {
@@ -234,106 +233,8 @@ async function loadCommunityJoinSummary(config) {
     authorized,
     ready: Number(row.ready ?? 0),
     alreadyMember: Number(row.already_member ?? 0),
-    failed: Number(row.failed ?? 0),
-    syncing: Boolean(communityPoolRunPromise)
+    failed: Number(row.failed ?? 0)
   };
-}
-
-function sleep(milliseconds) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
-async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
-  const refreshToken = decryptCredential(encryptedRefreshToken);
-  const body = new URLSearchParams({
-    grant_type: "refresh_token",
-    refresh_token: refreshToken
-  });
-  const result = await requestDiscord("oauth2/token", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body
-  });
-  const accessToken = String(result.payload?.access_token ?? "").trim();
-  const nextRefreshToken = String(result.payload?.refresh_token ?? "").trim();
-  if (!result.response.ok || !accessToken || !nextRefreshToken) {
-    const error = new Error("Discord authorization could not be refreshed.");
-    error.statusCode = 401;
-    throw error;
-  }
-  return { accessToken, refreshToken: nextRefreshToken };
-}
-
-async function addAuthorizedCommunityMember(config, member) {
-  const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
-  await pool.query(
-    "UPDATE community_oauth_joins SET encrypted_refresh_token = $3 WHERE discord_user_id = $1 AND guild_id = $2",
-    [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
-  );
-
-  let addResult = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(member.discord_user_id)}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bot ${config.botToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ access_token: credentials.accessToken })
-  });
-  if (addResult.response.status === 429) {
-    const retryAfterMs = Math.min(Math.max(Number(addResult.payload?.retry_after ?? 1) * 1000, 1_000), 60_000);
-    await sleep(retryAfterMs);
-    addResult = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(member.discord_user_id)}`, {
-      method: "PUT",
-      headers: {
-        Authorization: `Bot ${config.botToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ access_token: credentials.accessToken })
-    });
-  }
-
-  if (addResult.response.status === 201 || addResult.response.status === 204) {
-    const status = addResult.response.status === 201 ? "joined" : "already_member";
-    await pool.query(
-      `UPDATE community_oauth_joins
-       SET status = $3,
-           details = NULL,
-           joined_at = CASE WHEN $3 = 'joined' THEN NOW() ELSE joined_at END
-       WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId, status]
-    );
-    return;
-  }
-
-  const error = new Error(`Discord returned ${addResult.response.status}.`);
-  error.statusCode = addResult.response.status;
-  throw error;
-}
-
-async function runCommunityPool(config) {
-  const members = await pool.query(
-    `SELECT discord_user_id, encrypted_refresh_token
-     FROM community_oauth_joins
-     WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
-     ORDER BY authorized_at ASC`,
-    [config.guildId]
-  );
-
-  for (const member of members.rows) {
-    try {
-      await addAuthorizedCommunityMember(config, member);
-    } catch (error) {
-      await pool.query(
-        `UPDATE community_oauth_joins SET status = 'failed', details = $3
-         WHERE discord_user_id = $1 AND guild_id = $2`,
-        [member.discord_user_id, config.guildId, error instanceof Error ? error.message.slice(0, 200) : "Join failed."]
-      );
-    }
-    await sleep(350);
-  }
 }
 
 function getCredentialEncryptionKey() {
@@ -738,6 +639,10 @@ function createDcordOrderId() {
   return `dcord_${Date.now().toString(36)}_${crypto.randomBytes(5).toString("hex")}`;
 }
 
+function createCommunityOrderId() {
+  return `members_${Date.now().toString(36)}_${crypto.randomBytes(5).toString("hex")}`;
+}
+
 async function saveTrackedOrderPayload(payload) {
   await pool.query(
     `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -745,6 +650,107 @@ async function saveTrackedOrderPayload(payload) {
      ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
     [payload.uniqid, JSON.stringify(payload)]
   );
+}
+
+async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
+  const body = new URLSearchParams({
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: "refresh_token",
+    refresh_token: decryptCredential(encryptedRefreshToken)
+  });
+  const { response, payload } = await requestDiscord("oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
+  if (!response.ok || typeof payload?.access_token !== "string") {
+    const error = new Error("Discord authorization could not be renewed.");
+    error.statusCode = response.status;
+    throw error;
+  }
+  return {
+    accessToken: payload.access_token,
+    refreshToken: typeof payload.refresh_token === "string" ? payload.refresh_token : decryptCredential(encryptedRefreshToken)
+  };
+}
+
+async function addCommunityGuildMember(config, discordUserId, accessToken) {
+  let result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bot ${config.botToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ access_token: accessToken })
+  });
+  if (result.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 30);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`, {
+      method: "PUT",
+      headers: { Authorization: `Bot ${config.botToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: accessToken })
+    });
+  }
+  return result;
+}
+
+async function processCommunityOrder(order, members, config) {
+  const results = members.map((member) => ({ username: member.username, state: "queued", details: "Waiting for delivery." }));
+  let added = 0;
+
+  for (let index = 0; index < members.length; index += 1) {
+    const member = members[index];
+    results[index] = { username: member.username, state: "joining", details: "Discord membership request is running." };
+    await saveTrackedOrderPayload({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+
+    let state = "failed";
+    let details = "Member could not be added.";
+    try {
+      const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
+      await pool.query(
+        "UPDATE community_oauth_joins SET encrypted_refresh_token = $3 WHERE discord_user_id = $1 AND guild_id = $2",
+        [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
+      );
+      const joined = await addCommunityGuildMember(config, member.discord_user_id, credentials.accessToken);
+      if (joined.response.status === 201) {
+        state = "joined";
+        details = "Member joined the server.";
+        added += 1;
+      } else if (joined.response.status === 204) {
+        state = "already_member";
+        details = "User was already in the server.";
+      } else {
+        details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
+      }
+    } catch (error) {
+      details = error instanceof Error ? error.message : details;
+    }
+
+    results[index] = { username: member.username, state, details, completedAt: new Date().toISOString() };
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET status = $3, details = $4, joined_at = CASE WHEN $3 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
+           reserved_order_id = NULL
+       WHERE discord_user_id = $1 AND guild_id = $2`,
+      [member.discord_user_id, config.guildId, state, details]
+    );
+    await saveTrackedOrderPayload({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+
+    if (index < members.length - 1 && order.delay > 0) {
+      await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
+    }
+  }
+
+  const status = added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR";
+  await saveTrackedOrderPayload({
+    ...order,
+    added,
+    status,
+    details: added >= order.amount ? `${added}/${order.amount} members delivered.` : `${added}/${order.amount} members delivered. Review the member results.`,
+    communityResults: results
+  });
 }
 
 function normalizeDcordJoinResult(result, token) {
@@ -931,7 +937,19 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
+  await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_reservation_idx ON community_oauth_joins (guild_id, reserved_order_id)");
+  await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
+  await pool.query(`
+    UPDATE tracked_orders
+    SET payload = jsonb_set(
+      jsonb_set(payload, '{status}', '"ERROR"'::jsonb),
+      '{details}',
+      '"Delivery was interrupted by a server restart. Create a new order for the remaining members."'::jsonb
+    ), updated_at = NOW()
+    WHERE payload->>'provider' = 'community' AND payload->>'status' = 'PROCESS'
+  `);
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
   await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
 }
@@ -986,7 +1004,6 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
 
 app.put("/api/community/config", requireSession, async (req, res, next) => {
   try {
-    if (communityPoolRunPromise) return res.status(409).json({ message: "Wait for the current member run to finish before changing bot settings." });
     const current = await getCommunityOAuthConfig();
     const candidateWithoutDetectedGuild = normalizeCommunityOAuthConfig({
       clientId: req.body?.clientId || current.clientId,
@@ -1058,7 +1075,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
 
 app.delete("/api/community/config", requireSession, async (_req, res, next) => {
   try {
-    if (communityPoolRunPromise) return res.status(409).json({ message: "Wait for the current member run to finish before removing bot settings." });
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'community_oauth_config'");
     communityGuildCache = null;
     res.status(204).end();
@@ -1236,21 +1252,119 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
   }
 });
 
-app.post("/api/community/add-members", requireSession, async (_req, res, next) => {
+async function resolveConfiguredCommunityInvite(inviteValue) {
+  const config = await getCommunityOAuthConfig();
+  if (!config.configured) {
+    const error = new Error("Configure the Members bot before creating an order.");
+    error.statusCode = 503;
+    throw error;
+  }
+  const invite = extractDiscordInviteCode(inviteValue);
+  if (!invite) {
+    const error = new Error("A valid Discord invite is required.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const serverInfo = await resolveDiscordInvite(invite);
+  if (serverInfo.guildId !== config.guildId) {
+    const error = new Error("This invite does not belong to the fixed Members Stock server.");
+    error.statusCode = 409;
+    throw error;
+  }
+  await loadCommunityGuild(config);
+  return { config, invite, serverInfo };
+}
+
+app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    const config = await getCommunityOAuthConfig();
-    if (!config.configured) return res.status(503).json({ message: "Community OAuth is not configured." });
-    if (communityPoolRunPromise) return res.status(409).json({ message: "Members are already being added." });
+    const { config } = await resolveConfiguredCommunityInvite(req.query?.invite);
+    const result = await pool.query(
+      `SELECT COUNT(*)::int AS available
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
+      [config.guildId]
+    );
+    const available = Number(result.rows[0]?.available ?? 0);
+    res.set("Cache-Control", "no-store").json({ available, maximum: available });
+  } catch (error) {
+    next(error);
+  }
+});
 
-    const summary = await loadCommunityJoinSummary(config);
-    if (!summary.ready) return res.status(409).json({ message: "There are no authorized members waiting to be added." });
+app.post("/api/community/orders", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const amount = Number.parseInt(req.body?.amount, 10);
+    const delay = Number.parseInt(req.body?.delay, 10);
+    if (req.body?.service !== "COMMUNITY-OFFLINE" || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
+      return res.status(400).json({ message: "A valid Offline member amount and delay are required." });
+    }
 
-    communityPoolRunPromise = runCommunityPool(config)
-      .catch((error) => console.error("Community member run failed:", error instanceof Error ? error.message : error))
-      .finally(() => {
-        communityPoolRunPromise = null;
-      });
-    res.status(202).json({ started: true, count: summary.ready });
+    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.body?.id);
+    const uniqid = createCommunityOrderId();
+    await client.query("BEGIN");
+    const selected = await client.query(
+      `SELECT discord_user_id, username, encrypted_refresh_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+       ORDER BY authorized_at ASC
+       LIMIT $2
+       FOR UPDATE SKIP LOCKED`,
+      [config.guildId, amount]
+    );
+    if (selected.rowCount < amount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: `Only ${selected.rowCount} connected members are currently available.` });
+    }
+    await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
+      [uniqid, config.guildId, selected.rows.map((row) => row.discord_user_id)]
+    );
+    const order = {
+      uniqid,
+      provider: "community",
+      service: "COMMUNITY-OFFLINE",
+      serverId: serverInfo.guildId,
+      serverName: serverInfo.guildName,
+      serverInvite: String(req.body?.id ?? "").trim(),
+      serverMemberCount: serverInfo.approximateMemberCount,
+      amount,
+      added: 0,
+      delay,
+      createdAt: new Date().toISOString(),
+      status: "PROCESS",
+      details: `0/${amount} members delivered.`,
+      communityResults: selected.rows.map((row) => ({ username: row.username, state: "queued", details: "Waiting for delivery." }))
+    };
+    await client.query(
+      `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
+       VALUES ($1, $2::jsonb, NOW(), NOW())`,
+      [uniqid, JSON.stringify(order)]
+    );
+    await client.query("COMMIT");
+    void processCommunityOrder(order, selected.rows, config).catch(async (error) => {
+      console.error("Members order failed:", error instanceof Error ? error.message : error);
+      await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]).catch(() => {});
+      await saveTrackedOrderPayload({ ...order, status: "ERROR", details: error instanceof Error ? error.message : "Members order failed." }).catch(() => {});
+    });
+    res.json({ uniqid });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const payload = tracked.rows[0]?.payload;
+    if (!payload || payload.provider !== "community") {
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
   }
@@ -1271,6 +1385,10 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
 
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     let trackedPayload = tracked.rows[0]?.payload;
+    if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
+      const { communityResults, ...publicPayload } = trackedPayload;
+      return res.set("Cache-Control", "no-store").json(publicPayload);
+    }
     if (
       trackedPayload &&
       typeof trackedPayload === "object" &&
@@ -2092,12 +2210,12 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
       ids.push(uniqid);
       const existing = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
       const existingPayload = existing.rows[0]?.payload;
-      const isDcordOrder =
+      const isLocallyManagedOrder =
         existingPayload &&
         typeof existingPayload === "object" &&
         !Array.isArray(existingPayload) &&
-        (existingPayload.provider === "dcord" || existingPayload.service === "DCORD-BOOSTS");
-      const nextPayload = isDcordOrder ? existingPayload : { ...order, uniqid };
+        (existingPayload.provider === "dcord" || existingPayload.provider === "community" || existingPayload.service === "DCORD-BOOSTS");
+      const nextPayload = isLocallyManagedOrder ? existingPayload : { ...order, uniqid };
 
       await client.query(
         `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)

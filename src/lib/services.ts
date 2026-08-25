@@ -1,4 +1,4 @@
-import { CloudOff, Gem, Hexagon, Radio, Sparkles, type LucideIcon } from "lucide-react";
+import { CloudOff, Gem, Hexagon, Radio, Sparkles, Users, type LucideIcon } from "lucide-react";
 import type { MemberServiceType, ServiceType } from "../types";
 
 export type ServiceOption = {
@@ -6,7 +6,7 @@ export type ServiceOption = {
   title: string;
   description: string;
   icon: LucideIcon;
-  kind: "members" | "boosts";
+  kind: "members" | "community" | "boosts";
 };
 
 export const SERVICE_OPTIONS: ServiceOption[] = [
@@ -14,6 +14,7 @@ export const SERVICE_OPTIONS: ServiceOption[] = [
   { value: "OAUTH-ONLINE", title: "OAuth Online", description: "Live authorization", icon: Radio, kind: "members" },
   { value: "OAUTH-PREMIUM", title: "OAuth Premium", description: "Priority authorization", icon: Sparkles, kind: "members" },
   { value: "OAUTH-NFT", title: "OAuth NFT", description: "Token-based authorization", icon: Hexagon, kind: "members" },
+  { value: "COMMUNITY-OFFLINE", title: "Offline", description: "Connected OAuth members", icon: Users, kind: "community" },
   { value: "DCORD-BOOSTS", title: "Boosts", description: "Discord server boosts", icon: Gem, kind: "boosts" }
 ];
 
@@ -23,6 +24,10 @@ export function getServiceTitle(service?: string) {
 
 export function isBoostService(service?: string): service is "DCORD-BOOSTS" {
   return service === "DCORD-BOOSTS";
+}
+
+export function isCommunityService(service?: string): service is "COMMUNITY-OFFLINE" {
+  return service === "COMMUNITY-OFFLINE";
 }
 
 export function isMemberService(service?: string): service is MemberServiceType {

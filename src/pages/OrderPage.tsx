@@ -190,7 +190,7 @@ function getDiscordServerCreatedAt(serverId: string) {
 
 function isTerminalStatus(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
-  return ["completed", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
+  return ["completed", "partial", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
 }
 
 function LookupPreloader({ uniqid }: { uniqid?: string }) {
@@ -234,7 +234,8 @@ function LookupPreloader({ uniqid }: { uniqid?: string }) {
 export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
-  const provider = (params.get("provider") === "dcord" ? "dcord" : "tokenu") as OrderProvider;
+  const providerParam = params.get("provider");
+  const provider = (providerParam === "dcord" || providerParam === "community" ? providerParam : "tokenu") as OrderProvider;
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
@@ -242,9 +243,10 @@ export default function OrderPage() {
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "dcord" ? 2 : 10);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "tokenu" ? 10 : 2);
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
+  const isCommunityProvider = provider === "community";
 
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
@@ -307,7 +309,7 @@ export default function OrderPage() {
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
-    const refreshEvery = isDcordProvider ? 2 : 10;
+    const refreshEvery = provider === "tokenu" ? 10 : 2;
     setSecondsUntilRefresh(terminal ? 0 : refreshEvery);
     if (!target || terminal) return;
 
@@ -333,7 +335,7 @@ export default function OrderPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [isDcordProvider, provider, result?.uniqid, terminal, uniqid]);
+  }, [provider, result?.uniqid, terminal, uniqid]);
 
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
@@ -349,7 +351,7 @@ export default function OrderPage() {
       setResult(data);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       toast.success(`Loaded ${target}.`);
-      setParams(provider === "dcord" ? { uniqid: target, provider } : { uniqid: target });
+      setParams(provider === "tokenu" ? { uniqid: target } : { uniqid: target, provider });
     } catch (error) {
       setResult(null);
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
@@ -567,7 +569,7 @@ export default function OrderPage() {
           <header className="lookup-workspace-header">
             <div className="lookup-order-identity">
               <span className="lookup-provider-mark" aria-hidden="true">
-                {isDcordProvider ? <Bot className="h-4 w-4" /> : <FileJson className="h-4 w-4" />}
+                {isDcordProvider || isCommunityProvider ? <Bot className="h-4 w-4" /> : <FileJson className="h-4 w-4" />}
               </span>
               <div className="min-w-0">
                 <h2>{serverName || "Discord server"}</h2>
@@ -590,7 +592,7 @@ export default function OrderPage() {
                 <span aria-hidden="true" />
                 {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
-              {!isDcordProvider && isWaitingForBot ? (
+              {!isDcordProvider && !isCommunityProvider && isWaitingForBot ? (
                 <Button
                   type="button"
                   variant="secondary"
@@ -653,7 +655,7 @@ export default function OrderPage() {
             ))}
           </div>
 
-          {isInvitesPaused && !isDcordProvider ? (
+          {isInvitesPaused && !isDcordProvider && !isCommunityProvider ? (
             <section className="lookup-invites-warning" role="alert">
               <span className="lookup-invites-warning-icon" aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
               <div>
@@ -695,7 +697,7 @@ export default function OrderPage() {
               ) : null}
             </section>
 
-            {!terminal && !isInvitesPaused && !isDcordProvider ? (
+            {!terminal && !isInvitesPaused && !isDcordProvider && !isCommunityProvider ? (
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>

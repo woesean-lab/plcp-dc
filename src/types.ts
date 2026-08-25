@@ -1,7 +1,8 @@
 export type MemberServiceType = "OAUTH-OFFLINE" | "OAUTH-ONLINE" | "OAUTH-PREMIUM" | "OAUTH-NFT";
+export type CommunityServiceType = "COMMUNITY-OFFLINE";
 export type BoostServiceType = "DCORD-BOOSTS";
-export type ServiceType = MemberServiceType | BoostServiceType;
-export type OrderProvider = "tokenu" | "dcord";
+export type ServiceType = MemberServiceType | CommunityServiceType | BoostServiceType;
+export type OrderProvider = "tokenu" | "community" | "dcord";
 export type BoostDuration = 1 | 3;
 
 export type OrderStatus =
