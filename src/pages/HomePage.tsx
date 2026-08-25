@@ -309,7 +309,19 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
       <span className="sr-only">Loading {loadingLabel}</span>
-      <SkeletonHeading />
+      {tab === "manage" ? (
+        <header className="page-heading orders-page-heading" aria-hidden="true">
+          <div className="w-full max-w-2xl">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="mt-3 h-9 w-40" />
+            <Skeleton className="mt-3 h-4 w-96 max-w-full" />
+          </div>
+          <div className="orders-heading-actions">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-28" />
+          </div>
+        </header>
+      ) : <SkeletonHeading />}
 
       {tab === "create" ? (
         <div className={`${shell} p-5 sm:p-6`} aria-hidden="true">
@@ -342,56 +354,56 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
       ) : null}
 
       {tab === "manage" ? (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start" aria-hidden="true">
-          <div className={`${shell} overflow-hidden`}>
-            <div className="flex items-center gap-3 border-b border-[var(--app-divider)] p-5 sm:px-6">
-              <Skeleton className="h-8 w-8 shrink-0" />
-              <div className="w-44 max-w-full">
-                <Skeleton className="h-3 w-20" />
-                <Skeleton className="mt-2 h-5 w-36" />
+        <div className="grid gap-5" aria-hidden="true">
+          <div className="orders-summary-strip">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index}>
+                <span><Skeleton className="h-2.5 w-20" /></span>
+                <strong><Skeleton className="h-7 w-8" /></strong>
+                <small><Skeleton className="h-2.5 w-24" /></small>
+              </div>
+            ))}
+          </div>
+
+          <div className={`${shell} orders-workspace`}>
+            <div className="orders-commandbar">
+              <Skeleton className="h-11 w-full" />
+              <SkeletonField />
+              <SkeletonField />
+              <div className="orders-import-control">
+                <Skeleton className="h-11 w-full" />
+                <Skeleton className="h-10 w-16" />
               </div>
             </div>
-            <div className="tracked-order-list tracked-order-list-skeleton">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div key={index} className="tracked-order-card">
-                  <div className="tracked-order-identity">
-                    <div className="tracked-order-eyebrow">
-                      <Skeleton className="h-2.5 w-14" />
-                      <Skeleton className="h-6 w-16" />
-                    </div>
-                    <Skeleton className="mt-3 h-4 w-40 max-w-full" />
-                    <Skeleton className="mt-2 h-3 w-28 max-w-full" />
-                  </div>
-                  <div className="tracked-order-service">
-                    <Skeleton className="h-10 w-10 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <Skeleton className="h-2.5 w-12" />
-                      <Skeleton className="mt-2 h-4 w-24 max-w-full" />
-                      <Skeleton className="mt-2 h-2.5 w-20 max-w-full" />
-                    </div>
-                  </div>
-                  <div className="tracked-order-metrics">
-                    {Array.from({ length: 3 }).map((__, metricIndex) => (
-                      <div key={metricIndex} className="tracked-order-metric">
-                        <Skeleton className="h-2.5 w-10" />
-                        <Skeleton className="mt-2 h-4 w-14 max-w-full" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="tracked-order-actions">
-                    <Skeleton className="h-10 w-20" />
-                    <Skeleton className="h-10 w-10" />
-                  </div>
-                </div>
-              ))}
+            <div className="orders-list-meta">
+              <Skeleton className="h-2.5 w-28" />
+              <Skeleton className="h-2.5 w-16" />
             </div>
-          </div>
-          <div className={`${shell} p-5 sm:p-6`}>
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-3 h-6 w-36" />
-            <SkeletonField className="mt-6" />
-            <Skeleton className="mt-4 h-10 w-full" />
-            <Skeleton className="mt-4 h-10 w-full" />
+            <div className="orders-table">
+              <div className="orders-table-head">
+                <span>Order</span><span>Service</span><span>Status &amp; progress</span><span>Delivery</span><span>Created</span><span>Actions</span>
+              </div>
+              <ol className="orders-row-list">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <li key={index}>
+                    <div className="orders-row">
+                      <div className="orders-row-identity">
+                        <Skeleton className="h-[34px] w-[34px]" />
+                        <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-28 max-w-full" /></span>
+                      </div>
+                      <div className="orders-row-service"><Skeleton className="h-4 w-20" /><Skeleton className="h-2.5 w-14" /></div>
+                      <div className="orders-row-progress"><Skeleton className="h-5 w-20" /><Skeleton className="h-2.5 w-12" /><Skeleton className="h-[3px] w-full" /></div>
+                      <div className="orders-row-delivery">
+                        <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
+                        <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
+                      </div>
+                      <Skeleton className="orders-row-date h-3 w-20" />
+                      <div className="orders-row-actions"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </div>
       ) : null}
