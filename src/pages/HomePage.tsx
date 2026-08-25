@@ -34,7 +34,15 @@ import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
-import { addAuthorizedCommunityMembers, getCommunityAdminStatus, type CommunityAdminStatus } from "../lib/community";
+import {
+  addAuthorizedCommunityMembers,
+  clearCommunityConfig,
+  getCommunityAdminStatus,
+  getCommunityConfig,
+  saveCommunityConfig,
+  type CommunityAdminStatus,
+  type CommunityConfig
+} from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { isBoostService, SERVICE_OPTIONS } from "../lib/services";
 import {
@@ -76,6 +84,15 @@ const EMPTY_BOOST_STOCK: BoostStock = {
 const EMPTY_BOOST_TOKEN_DRAFTS: BoostTokenStockInput = {
   oneMonthTokens: "",
   threeMonthTokens: ""
+};
+
+const EMPTY_COMMUNITY_CONFIG_DRAFT = {
+  clientId: "",
+  clientSecret: "",
+  botToken: "",
+  redirectUri: "",
+  guildId: "",
+  goal: 50
 };
 
 type FilterOption = {
@@ -436,6 +453,8 @@ export default function HomePage() {
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
+  const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
+  const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
@@ -450,6 +469,7 @@ export default function HomePage() {
   const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [startingCommunityJoin, setStartingCommunityJoin] = useState(false);
+  const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
@@ -629,6 +649,7 @@ export default function HomePage() {
     if (activeTab !== "settings") return;
     if (apiConfigured && balance === null) void refreshBalance();
     if (dcordConfigured && dcordBalance === null) void refreshDcordBalance();
+    void loadCommunityConfiguration();
     // Balances are loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
@@ -713,6 +734,53 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
     } finally {
       setLoadingCommunityStatus(false);
+    }
+  }
+
+  async function loadCommunityConfiguration() {
+    try {
+      const config = await getCommunityConfig();
+      setCommunityConfig(config);
+      setCommunityConfigDraft({
+        clientId: config.clientId,
+        clientSecret: "",
+        botToken: "",
+        redirectUri: config.redirectUri,
+        guildId: config.guildId,
+        goal: config.goal
+      });
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Members bot settings could not be loaded.");
+    }
+  }
+
+  async function handleSaveCommunityConfig(event: FormEvent) {
+    event.preventDefault();
+    try {
+      setSavingCommunityConfig(true);
+      const config = await saveCommunityConfig(communityConfigDraft);
+      setCommunityConfig(config);
+      setCommunityConfigDraft((current) => ({ ...current, clientSecret: "", botToken: "" }));
+      setCommunityStatus(null);
+      notifySuccess(`${config.guildName ?? "Members bot"} verified and saved securely.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Members bot settings could not be saved.");
+    } finally {
+      setSavingCommunityConfig(false);
+    }
+  }
+
+  async function handleClearCommunityConfig() {
+    try {
+      setSavingCommunityConfig(true);
+      await clearCommunityConfig();
+      await loadCommunityConfiguration();
+      setCommunityStatus(null);
+      notifySuccess("Saved Members bot settings removed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Members bot settings could not be removed.");
+    } finally {
+      setSavingCommunityConfig(false);
     }
   }
 
@@ -2287,11 +2355,68 @@ export default function HomePage() {
               <div className="page-heading-meta">
                 <Badge variant={apiConfigured ? "success" : "destructive"}>Tokenu {apiConfigured ? "Connected" : "Missing"}</Badge>
                 <Badge variant={dcordConfigured ? "success" : "destructive"}>Dcord {dcordConfigured ? "Connected" : "Missing"}</Badge>
+                <Badge variant={communityConfig?.configured ? "success" : "destructive"}>Members bot {communityConfig?.configured ? "Connected" : "Missing"}</Badge>
               </div>
             </header>
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
               <div className="grid gap-5">
+              <section className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
+                  <div>
+                    <p className={labelClass}>Members stock</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Discord bot & OAuth</h2>
+                  </div>
+                </div>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
+                  Configure the bot used by Members Stock. Secrets are encrypted on the server and are never shown again after saving.
+                </p>
+
+                <form onSubmit={handleSaveCommunityConfig} className="mt-6 grid gap-4">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Client ID</span>
+                      <Input value={communityConfigDraft.clientId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientId: event.target.value }))} placeholder="Discord application Client ID" inputMode="numeric" />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Server ID</span>
+                      <Input value={communityConfigDraft.guildId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, guildId: event.target.value }))} placeholder="Target Discord server ID" inputMode="numeric" />
+                    </label>
+                  </div>
+
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>OAuth callback address</span>
+                    <Input value={communityConfigDraft.redirectUri} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, redirectUri: event.target.value }))} placeholder={`${window.location.origin}/api/community/oauth/callback`} />
+                  </label>
+
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_130px]">
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Client Secret</span>
+                      <Input type="password" value={communityConfigDraft.clientSecret} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientSecret: event.target.value }))} placeholder={communityConfig?.hasClientSecret ? "Saved - leave blank to keep" : "Discord Client Secret"} autoComplete="new-password" />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Bot Token</span>
+                      <Input type="password" value={communityConfigDraft.botToken} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder={communityConfig?.hasBotToken ? "Saved - leave blank to keep" : "Discord Bot Token"} autoComplete="new-password" />
+                    </label>
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>Stock goal</span>
+                      <Input type="number" min={1} max={10000} value={communityConfigDraft.goal} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, goal: Number.parseInt(event.target.value, 10) || 1 }))} />
+                    </label>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || !communityConfigDraft.guildId.trim() || !communityConfigDraft.redirectUri.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
+                      {savingCommunityConfig ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      {savingCommunityConfig ? "Verifying..." : communityConfig?.configured ? "Update Members bot" : "Verify & save"}
+                    </Button>
+                    {communityConfig?.stored ? (
+                      <Button type="button" variant="destructive" disabled={savingCommunityConfig} onClick={() => void handleClearCommunityConfig()}>Remove saved settings</Button>
+                    ) : null}
+                  </div>
+                </form>
+              </section>
+
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
@@ -2397,6 +2522,13 @@ export default function HomePage() {
                     <span>
                       <span className="settings-status-label">Dcord access</span>
                       <strong>{dcordConfigured ? "Configured" : "Missing"}</strong>
+                    </span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
+                    <span>
+                      <span className="settings-status-label">Members bot</span>
+                      <strong>{communityConfig?.configured ? "Configured" : "Missing"}</strong>
                     </span>
                   </div>
                   <div className="settings-status-row">

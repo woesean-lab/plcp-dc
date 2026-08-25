@@ -32,6 +32,27 @@ export type CommunityAdminStatus = CommunityJoinSummary & {
   recent: CommunityJoinRecord[];
 };
 
+export type CommunityConfig = {
+  configured: boolean;
+  stored: boolean;
+  clientId: string;
+  redirectUri: string;
+  guildId: string;
+  goal: number;
+  hasClientSecret: boolean;
+  hasBotToken: boolean;
+  guildName?: string;
+};
+
+export type CommunityConfigInput = {
+  clientId: string;
+  clientSecret: string;
+  botToken: string;
+  redirectUri: string;
+  guildId: string;
+  goal: number;
+};
+
 async function parseResponse<T>(response: Response) {
   const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(payload.message ?? `Request failed with ${response.status}`);
@@ -44,6 +65,32 @@ export function getPublicCommunityStatus() {
 
 export function getCommunityAdminStatus() {
   return fetch("/api/community/status", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+}
+
+export function getCommunityConfig() {
+  return fetch("/api/community/config", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityConfig>);
+}
+
+export function saveCommunityConfig(input: CommunityConfigInput) {
+  return fetch("/api/community/config", {
+    method: "PUT",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  }).then(parseResponse<CommunityConfig>);
+}
+
+export async function clearCommunityConfig() {
+  const response = await fetch("/api/community/config", {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "same-origin"
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message ?? `Request failed with ${response.status}`);
+  }
 }
 
 export async function addAuthorizedCommunityMembers() {
