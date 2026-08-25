@@ -5,9 +5,17 @@ export type CommunityGuild = {
   memberCount: number | null;
 };
 
+export type CommunityBot = {
+  id: string;
+  name: string;
+  username: string;
+  avatarUrl: string | null;
+};
+
 export type CommunityJoinSummary = {
   configured: boolean;
   missing?: string[];
+  bot?: CommunityBot;
   guild?: CommunityGuild;
   joined: number;
   authorized?: number;

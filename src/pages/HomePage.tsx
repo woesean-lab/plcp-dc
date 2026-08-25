@@ -1316,10 +1316,14 @@ export default function HomePage() {
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
       <div className="community-admin-heading">
         <div className="flex min-w-0 items-center gap-3">
-          <span className="stat-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+          <span className="stat-icon overflow-hidden" aria-hidden="true">
+            {communityStatus?.bot?.avatarUrl
+              ? <img className="h-full w-full object-cover" src={communityStatus.bot.avatarUrl} alt="" />
+              : <Bot className="h-4 w-4" />}
+          </span>
           <div className="min-w-0">
             <p className={labelClass}>Members stock</p>
-            <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.guild?.name ?? "OAuth member pool"}</h2>
+            <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.bot?.name ?? "Members Bot"}</h2>
           </div>
         </div>
         <Badge variant={communityStatus?.configured ? "success" : "destructive"}>

@@ -1,4 +1,4 @@
-import { ArrowRight, CheckCircle2, LoaderCircle, LockKeyhole, Server, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, LoaderCircle, LockKeyhole, ShieldCheck, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -47,11 +47,11 @@ export default function CommunityJoinPage() {
       <section className="community-join-shell" aria-labelledby="community-join-title">
         <header className="community-join-header">
           <div className="community-guild-avatar" aria-hidden="true">
-            {status?.guild?.iconUrl ? <img src={status.guild.iconUrl} alt="" /> : <Server className="h-7 w-7" />}
+            {status?.bot?.avatarUrl ? <img src={status.bot.avatarUrl} alt="" /> : <Bot className="h-7 w-7" />}
           </div>
           <div className="min-w-0">
-            <span className="community-kicker">Discord community</span>
-            <h1 id="community-join-title">{status?.guild?.name ?? "Join the server"}</h1>
+            <span className="community-kicker">Discord application</span>
+            <h1 id="community-join-title">{status?.bot?.name ?? "Members Bot"}</h1>
           </div>
           <span className="community-secure-mark"><ShieldCheck className="h-4 w-4" /> Secure OAuth</span>
         </header>

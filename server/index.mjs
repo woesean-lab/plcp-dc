@@ -184,6 +184,35 @@ async function requestDiscord(pathname, init = {}) {
 }
 
 let communityGuildCache = null;
+let communityBotCache = null;
+
+async function loadCommunityBot(config) {
+  if (communityBotCache?.clientId === config.clientId && communityBotCache.expiresAt > Date.now()) {
+    return communityBotCache.value;
+  }
+
+  const { response, payload } = await requestDiscord("users/@me", {
+    headers: { Authorization: `Bot ${config.botToken}` }
+  });
+  if (!response.ok) {
+    const error = new Error("The Members bot identity could not be loaded.");
+    error.statusCode = 502;
+    throw error;
+  }
+
+  const id = String(payload?.id ?? config.clientId);
+  const avatar = typeof payload?.avatar === "string" ? payload.avatar : null;
+  const value = {
+    id,
+    name: String(payload?.global_name ?? payload?.username ?? "Members Bot"),
+    username: String(payload?.username ?? "Members Bot"),
+    avatarUrl: avatar
+      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(id)}/${encodeURIComponent(avatar)}.png?size=256`
+      : null
+  };
+  communityBotCache = { clientId: config.clientId, expiresAt: Date.now() + 60_000, value };
+  return value;
+}
 
 async function loadCommunityGuild(config) {
   if (communityGuildCache?.guildId === config.guildId && communityGuildCache.expiresAt > Date.now()) {
@@ -1076,6 +1105,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       guildId: candidate.guildId
     }));
     communityGuildCache = null;
+    communityBotCache = null;
     res.json({
       configured: true,
       stored: true,
@@ -1094,6 +1124,7 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
   try {
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'community_oauth_config'");
     communityGuildCache = null;
+    communityBotCache = null;
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -1111,11 +1142,12 @@ app.get("/api/community/public", async (_req, res, next) => {
       });
     }
 
-    const [guild, summary] = await Promise.all([
+    const [bot, guild, summary] = await Promise.all([
+      loadCommunityBot(config),
       loadCommunityGuild(config),
       loadCommunityJoinSummary(config)
     ]);
-    res.set("Cache-Control", "no-store").json({ configured: true, guild, ...summary });
+    res.set("Cache-Control", "no-store").json({ configured: true, bot, guild, ...summary });
   } catch (error) {
     next(error);
   }
@@ -1239,7 +1271,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       });
     }
 
-    const [guild, summary, recentResult] = await Promise.all([
+    const [bot, guild, summary, recentResult] = await Promise.all([
+      loadCommunityBot(config),
       loadCommunityGuild(config),
       loadCommunityJoinSummary(config),
       pool.query(
@@ -1253,6 +1286,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     ]);
     res.set("Cache-Control", "no-store").json({
       configured: true,
+      bot,
       guild,
       ...summary,
       recent: recentResult.rows.map((row) => ({
@@ -1354,6 +1388,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       await client.query("COMMIT");
       config = nextConfig;
       communityGuildCache = null;
+      communityBotCache = null;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
