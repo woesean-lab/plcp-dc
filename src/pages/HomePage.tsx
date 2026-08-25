@@ -61,8 +61,7 @@ import {
   returnUsedBoostToken,
   saveBoostStock,
   saveDcordApiKey,
-  saveIntegrationApiKey,
-  updateOrderDelay
+  saveIntegrationApiKey
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
@@ -101,22 +100,25 @@ function FilterDropdown({
   label,
   value,
   options,
-  onChange
+  onChange,
+  showLabel = true
 }: {
   label: string;
   value: string;
   options: FilterOption[];
   onChange: (value: string) => void;
+  showLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value) ?? options[0];
 
   return (
     <div className="filter-dropdown">
-      <span className={fieldLabelClass}>{label}</span>
+      {showLabel ? <span className={fieldLabelClass}>{label}</span> : null}
       <button
         type="button"
         className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
+        aria-label={label}
         onClick={() => setOpen((current) => !current)}
         onBlur={(event) => {
           if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
@@ -195,10 +197,6 @@ function getServiceLabel(service?: ServiceType) {
   return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
 
-function formatDelay(value?: number) {
-  return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
-}
-
 function notifySuccess(message: string) {
   toast.success(message);
 }
@@ -223,7 +221,7 @@ function parseDelay(value?: string | number) {
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled"].some((value) => normalized.includes(value))) {
+  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
     return "destructive";
   }
   return "secondary";
@@ -232,7 +230,7 @@ function getOrderStatusVariant(status?: string): "success" | "destructive" | "se
 function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled"].some((value) => normalized.includes(value))) {
+  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
     return "danger";
   }
   return "active";
@@ -344,8 +342,8 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <SkeletonField className="md:col-span-2" />
-              <SkeletonField />
-              <SkeletonField />
+              <Skeleton className="h-11 w-full" />
+              <Skeleton className="h-11 w-full" />
               <SkeletonField className="md:col-span-2" />
             </div>
             <Skeleton className="h-10 w-40" />
@@ -381,7 +379,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
             </div>
             <div className="orders-table">
               <div className="orders-table-head">
-                <span>Order</span><span>Service</span><span>Status &amp; progress</span><span>Delivery</span><span>Created</span><span>Actions</span>
+                <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span>
               </div>
               <ol className="orders-row-list">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -392,7 +390,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                         <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-28 max-w-full" /></span>
                       </div>
                       <div className="orders-row-service"><Skeleton className="h-4 w-20" /><Skeleton className="h-2.5 w-14" /></div>
-                      <div className="orders-row-progress"><Skeleton className="h-5 w-20" /><Skeleton className="h-2.5 w-12" /><Skeleton className="h-[3px] w-full" /></div>
+                      <div className="orders-row-status"><Skeleton className="h-6 w-20" /></div>
                       <div className="orders-row-delivery">
                         <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
                         <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
@@ -485,7 +483,6 @@ export default function HomePage() {
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
-  const [updatingDelayId, setUpdatingDelayId] = useState<string | null>(null);
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
@@ -493,8 +490,6 @@ export default function HomePage() {
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
-  const [delayDrafts, setDelayDrafts] = useState<Record<string, string>>({});
-  const [delaySyncLocks, setDelaySyncLocks] = useState<Record<string, number>>({});
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -1106,12 +1101,8 @@ export default function HomePage() {
 
   function mergeTrackedOrder(order: TrackedOrder, status: OrderStatusResponse): TrackedOrder {
     const resolvedAmount = typeof status.amount === "number" ? status.amount : typeof status.quantity === "number" ? status.quantity : order.amount;
-    const lockedUntil = delaySyncLocks[order.uniqid] ?? 0;
     const parsedStatusDelay = parseDelay(status.delay);
-    const resolvedStatusDelay =
-      Date.now() < lockedUntil && typeof order.statusDelay === "number"
-        ? order.statusDelay
-        : parsedStatusDelay ?? order.statusDelay;
+    const resolvedStatusDelay = parsedStatusDelay ?? order.statusDelay;
     const resolvedAdded =
       typeof status.added === "number"
         ? status.added
@@ -1148,35 +1139,6 @@ export default function HomePage() {
       a.provider === b.provider &&
       a.duration === b.duration
     );
-  }
-
-  async function handleUpdateDelay(order: TrackedOrder) {
-    const draft = delayDrafts[order.uniqid] ?? "";
-    const delay = Number.parseInt(draft, 10);
-
-    if (!Number.isFinite(delay) || delay <= 0) {
-      notifyError("Delay must be a positive number.");
-      return;
-    }
-
-    try {
-      setUpdatingDelayId(order.uniqid);
-      setDelaySyncLocks((current) => ({ ...current, [order.uniqid]: Date.now() + 7000 }));
-
-      updateLocalOrder({
-        ...order,
-        statusDelay: delay
-      });
-      setDelayDrafts((current) => ({ ...current, [order.uniqid]: String(delay) }));
-
-      await updateOrderDelay(order.uniqid, delay, order.provider);
-      notifySuccess(`Delay updated for ${order.uniqid}.`);
-    } catch (error) {
-      updateLocalOrder(order);
-      notifyError(error instanceof Error ? error.message : "Delay could not be updated.");
-    } finally {
-      setUpdatingDelayId(null);
-    }
   }
 
   async function handleRestartOrder(order: TrackedOrder) {
@@ -1831,11 +1793,11 @@ export default function HomePage() {
                     <Search className="h-4 w-4" aria-hidden="true" />
                     <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, server or service" aria-label="Search orders" />
                   </label>
-                  <FilterDropdown label="Status" value={orderStatusFilter} onChange={setOrderStatusFilter} options={[
+                  <FilterDropdown label="Status" showLabel={false} value={orderStatusFilter} onChange={setOrderStatusFilter} options={[
                     { value: "all", label: "All statuses" }, { value: "active", label: "Active" }, { value: "waiting", label: "Waiting" },
                     { value: "completed", label: "Completed" }, { value: "failed", label: "Failed" }
                   ]} />
-                  <FilterDropdown label="Type" value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
+                  <FilterDropdown label="Type" showLabel={false} value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
                   <div className="orders-import-control">
@@ -1852,22 +1814,19 @@ export default function HomePage() {
                 {filteredOrders.length ? (
                   <div className="orders-table" role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Status &amp; progress</span><span>Delivery</span><span>Created</span><span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
                         const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
                         const ServiceIcon = serviceOption?.icon ?? KeyRound;
                         const progress = getOrderProgress(order);
-                        const completed = isTerminalOrder(order.status);
                         const boostOrder = order.provider === "dcord" || isBoostService(order.service);
                         const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
                         const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
-                        const progressPercent = progress?.total ? Math.min(100, Math.round((progress.used / progress.total) * 100)) : 0;
-                        const delayValue = order.statusDelay ?? order.delay;
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -1884,19 +1843,12 @@ export default function HomePage() {
                                 <strong>{serviceOption?.title ?? "Manual"}</strong>
                                 <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? "Members 2" : "Members"}</span>
                               </div>
-                              <div className="orders-row-progress">
-                                <Badge className="orders-status-badge" variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
-                                {progress ? <><span>{formatNumber(progress.used)} / {formatNumber(progress.total)}</span><div><i style={{ width: `${progressPercent}%` }} /></div></> : <small>Waiting for status</small>}
+                              <div className="orders-row-status">
+                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                               </div>
                               <dl className="orders-row-delivery">
+                                <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
                                 <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
-                                <div>
-                                  <dt>{boostOrder ? "Amount" : "Delay"}</dt>
-                                  {!completed && !boostOrder ? <dd className="orders-delivery-delay">
-                                    <Input type="number" min={1} max={1200} aria-label="Delay seconds" value={delayDrafts[order.uniqid] ?? String(delayValue ?? "")} onChange={(event) => setDelayDrafts((current) => ({ ...current, [order.uniqid]: event.target.value }))} />
-                                    <Button type="button" variant="secondary" size="icon" title="Update delay" aria-label="Update delay" disabled={updatingDelayId === order.uniqid} onClick={() => void handleUpdateDelay(order)}><RefreshCw className={`h-3.5 w-3.5 ${updatingDelayId === order.uniqid ? "animate-spin" : ""}`} /></Button>
-                                  </dd> : <dd>{boostOrder ? formatNumber(order.amount) : formatDelay(delayValue)}</dd>}
-                                </div>
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
