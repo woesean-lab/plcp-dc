@@ -21,7 +21,6 @@ const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const discordApiBase = "https://discord.com/api/v10";
-const defaultCommunityJoinGoal = Math.min(Math.max(Number.parseInt(process.env.COMMUNITY_JOIN_GOAL ?? "50", 10) || 50, 1), 10_000);
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -133,7 +132,6 @@ function normalizeCommunityOAuthConfig(value = {}) {
   const botToken = String(value.botToken ?? "").trim();
   const redirectUri = String(value.redirectUri ?? "").trim();
   const guildId = String(value.guildId ?? "").trim();
-  const goal = Math.min(Math.max(Number.parseInt(value.goal, 10) || defaultCommunityJoinGoal, 1), 10_000);
   const missing = [];
 
   if (!clientId) missing.push("DISCORD_OAUTH_CLIENT_ID");
@@ -153,7 +151,7 @@ function normalizeCommunityOAuthConfig(value = {}) {
     }
   }
 
-  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, redirectUri, guildId, goal };
+  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, redirectUri, guildId };
 }
 
 async function getCommunityOAuthConfig() {
@@ -172,8 +170,7 @@ async function getCommunityOAuthConfig() {
     clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET,
     botToken: process.env.DISCORD_BOT_TOKEN,
     redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI,
-    guildId: process.env.DISCORD_TARGET_GUILD_ID,
-    goal: process.env.COMMUNITY_JOIN_GOAL
+    guildId: process.env.DISCORD_TARGET_GUILD_ID
   });
 }
 
@@ -233,9 +230,7 @@ async function loadCommunityJoinSummary(config) {
   const joined = Number(row.joined ?? 0);
   const authorized = Number(row.authorized ?? 0);
   return {
-    goal: config.goal,
     joined,
-    remaining: Math.max(0, config.goal - authorized),
     authorized,
     ready: Number(row.ready ?? 0),
     alreadyMember: Number(row.already_member ?? 0),
@@ -981,7 +976,6 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       stored: Boolean(storedResult.rowCount),
       clientId: config.clientId,
       redirectUri: config.redirectUri,
-      goal: config.goal,
       hasClientSecret: Boolean(config.clientSecret),
       hasBotToken: Boolean(config.botToken)
     });
@@ -999,8 +993,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       clientSecret: req.body?.clientSecret || current.clientSecret,
       botToken: req.body?.botToken || current.botToken,
       redirectUri: req.body?.redirectUri || current.redirectUri,
-      guildId: current.guildId,
-      goal: req.body?.goal ?? current.goal
+      guildId: current.guildId
     });
     if (candidateWithoutDetectedGuild.missing.some((item) => item !== "DISCORD_TARGET_GUILD_ID")) {
       return res.status(400).json({ message: "Complete all Discord bot and OAuth fields with valid values." });
@@ -1046,8 +1039,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       clientSecret: candidate.clientSecret,
       botToken: candidate.botToken,
       redirectUri: candidate.redirectUri,
-      guildId: candidate.guildId,
-      goal: candidate.goal
+      guildId: candidate.guildId
     }));
     communityGuildCache = null;
     res.json({
@@ -1055,7 +1047,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       stored: true,
       clientId: candidate.clientId,
       redirectUri: candidate.redirectUri,
-      goal: candidate.goal,
       hasClientSecret: true,
       hasBotToken: true,
       guildName: String(guildResult.payload?.name ?? "Discord server")
@@ -1082,10 +1073,8 @@ app.get("/api/community/public", async (_req, res, next) => {
     if (!config.configured) {
       return res.set("Cache-Control", "no-store").json({
         configured: false,
-        goal: config.goal,
         joined: 0,
-        authorized: 0,
-        remaining: config.goal
+        authorized: 0
       });
     }
 
@@ -1107,9 +1096,6 @@ app.get("/api/community/oauth/start", async (req, res, next) => {
     const cooldownKey = req.ip;
     const cooldownUntil = communityOauthStartCooldowns.get(cooldownKey) ?? 0;
     if (cooldownUntil > Date.now()) return res.redirect(303, "/join?result=wait");
-
-    const summary = await loadCommunityJoinSummary(config);
-    if (summary.remaining <= 0) return res.redirect(303, "/join?result=full");
 
     const state = crypto.randomBytes(32).toString("base64url");
     await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
@@ -1210,9 +1196,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       return res.set("Cache-Control", "no-store").json({
         configured: false,
         missing: config.missing,
-        goal: config.goal,
         joined: 0,
-        remaining: config.goal,
         authorized: 0,
         ready: 0,
         alreadyMember: 0,

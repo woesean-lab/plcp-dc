@@ -90,8 +90,7 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
   clientSecret: "",
   botToken: "",
-  redirectUri: "",
-  goal: 50
+  redirectUri: ""
 };
 
 type FilterOption = {
@@ -744,8 +743,7 @@ export default function HomePage() {
         clientId: config.clientId,
         clientSecret: "",
         botToken: "",
-        redirectUri: config.redirectUri,
-        goal: config.goal
+        redirectUri: config.redirectUri
       });
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Members bot settings could not be loaded.");
@@ -1344,11 +1342,7 @@ export default function HomePage() {
       </div>
 
       <div className="community-admin-progress members-connected-summary">
-        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong></div>
-      </div>
-
-      <div className="community-admin-track" aria-hidden="true">
-        <span style={{ width: `${communityStatus?.goal ? Math.min(100, ((communityStatus.authorized ?? 0) / communityStatus.goal) * 100) : 0}%` }} />
+        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}</strong></div>
       </div>
 
       {!communityStatus?.configured ? (
@@ -2377,7 +2371,7 @@ export default function HomePage() {
                     <Input value={communityConfigDraft.redirectUri} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, redirectUri: event.target.value }))} placeholder={`${window.location.origin}/api/community/oauth/callback`} />
                   </label>
 
-                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_130px]">
+                  <div className="grid gap-4 md:grid-cols-2">
                     <label className="grid gap-2">
                       <span className={fieldLabelClass}>Client Secret</span>
                       <Input type="password" value={communityConfigDraft.clientSecret} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientSecret: event.target.value }))} placeholder={communityConfig?.hasClientSecret ? "Saved - leave blank to keep" : "Discord Client Secret"} autoComplete="new-password" />
@@ -2385,10 +2379,6 @@ export default function HomePage() {
                     <label className="grid gap-2">
                       <span className={fieldLabelClass}>Bot Token</span>
                       <Input type="password" value={communityConfigDraft.botToken} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder={communityConfig?.hasBotToken ? "Saved - leave blank to keep" : "Discord Bot Token"} autoComplete="new-password" />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Stock goal</span>
-                      <Input type="number" min={1} max={10000} value={communityConfigDraft.goal} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, goal: Number.parseInt(event.target.value, 10) || 1 }))} />
                     </label>
                   </div>
 

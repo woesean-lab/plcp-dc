@@ -1,5 +1,5 @@
 import { ArrowRight, CheckCircle2, LoaderCircle, LockKeyhole, Server, ShieldCheck, Users } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { getPublicCommunityStatus, type CommunityJoinSummary } from "../lib/community";
@@ -9,7 +9,6 @@ const resultMessages: Record<string, { title: string; copy: string; tone: "succe
   joined: { title: "You're in", copy: "Your Discord account joined the server successfully.", tone: "success" },
   already_member: { title: "Already a member", copy: "This Discord account is already in the server.", tone: "neutral" },
   cancelled: { title: "Authorization cancelled", copy: "No changes were made to your Discord account.", tone: "neutral" },
-  full: { title: "Authorization goal reached", copy: "This community has collected all planned authorizations.", tone: "success" },
   wait: { title: "Please wait", copy: "Wait a moment before opening Discord authorization again.", tone: "neutral" },
   unavailable: { title: "Join unavailable", copy: "This community invitation is not configured yet.", tone: "danger" },
   expired: { title: "Link expired", copy: "Start the Discord authorization again from this page.", tone: "danger" },
@@ -26,10 +25,6 @@ export default function CommunityJoinPage() {
   const [error, setError] = useState("");
   const result = searchParams.get("result") ?? "";
   const message = resultMessages[result];
-  const percent = useMemo(() => {
-    if (!status?.goal) return 0;
-    return Math.min(100, Math.round(((status.authorized ?? 0) / status.goal) * 100));
-  }, [status]);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +40,7 @@ export default function CommunityJoinPage() {
     };
   }, [result]);
 
-  const ready = Boolean(status?.configured && status.remaining > 0);
+  const ready = Boolean(status?.configured);
 
   return (
     <main className="community-join-page">
@@ -70,14 +65,10 @@ export default function CommunityJoinPage() {
 
         <div className="community-progress-block">
           <div className="community-progress-copy">
-            <span><Users className="h-4 w-4" /> Authorized friends</span>
-            <strong>{status ? `${status.authorized ?? 0} / ${status.goal}` : "Loading..."}</strong>
-          </div>
-          <div className="community-progress-track" aria-label={`${percent}% of member goal completed`}>
-            <span style={{ width: `${percent}%` }} />
+            <span><Users className="h-4 w-4" /> Connected users</span>
+            <strong>{status ? status.authorized ?? 0 : "Loading..."}</strong>
           </div>
           <div className="community-progress-meta">
-          <span>{status?.remaining ?? "-"} authorizations remaining</span>
             {status?.guild?.memberCount != null ? <span>{status.guild.memberCount.toLocaleString()} current members</span> : null}
           </div>
         </div>
@@ -94,7 +85,7 @@ export default function CommunityJoinPage() {
           {ready ? (
             <a href="/api/community/oauth/start">Authorize with Discord <ArrowRight className="h-4 w-4" /></a>
           ) : (
-            <span>{status?.remaining === 0 ? "Authorization goal reached" : "Authorization unavailable"}</span>
+            <span>Authorization unavailable</span>
           )}
         </Button>
       </section>

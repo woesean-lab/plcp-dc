@@ -9,9 +9,7 @@ export type CommunityJoinSummary = {
   configured: boolean;
   missing?: string[];
   guild?: CommunityGuild;
-  goal: number;
   joined: number;
-  remaining: number;
   authorized?: number;
   ready?: number;
   alreadyMember?: number;
@@ -37,7 +35,6 @@ export type CommunityConfig = {
   stored: boolean;
   clientId: string;
   redirectUri: string;
-  goal: number;
   hasClientSecret: boolean;
   hasBotToken: boolean;
   guildName?: string;
@@ -48,7 +45,6 @@ export type CommunityConfigInput = {
   clientSecret: string;
   botToken: string;
   redirectUri: string;
-  goal: number;
 };
 
 async function parseResponse<T>(response: Response) {
