@@ -282,7 +282,10 @@ async function addAuthorizedCommunityMember(config, member) {
     const status = addResult.response.status === 201 ? "joined" : "already_member";
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = $3, details = NULL, joined_at = CASE WHEN $3 = 'joined' THEN NOW() ELSE joined_at END
+       SET status = $3,
+           details = NULL,
+           encrypted_refresh_token = NULL,
+           joined_at = CASE WHEN $3 = 'joined' THEN NOW() ELSE joined_at END
        WHERE discord_user_id = $1 AND guild_id = $2`,
       [member.discord_user_id, config.guildId, status]
     );

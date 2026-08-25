@@ -429,6 +429,7 @@ export default function HomePage() {
   const [usedBoostTokens, setUsedBoostTokens] = useState<BoostUsedToken[]>([]);
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
+  const [stockCategory, setStockCategory] = useState<"boosts" | "offline">("boosts");
   const [stockView, setStockView] = useState<"active" | "used">("active");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [balance, setBalance] = useState<number | null>(null);
@@ -628,17 +629,17 @@ export default function HomePage() {
     if (activeTab !== "settings") return;
     if (apiConfigured && balance === null) void refreshBalance();
     if (dcordConfigured && dcordBalance === null) void refreshDcordBalance();
-    void refreshCommunityStatus();
     // Balances are loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
 
   useEffect(() => {
     if (activeTab !== "stock") return;
-    void refreshBoostStockTokens();
-    // Stock token lists are loaded only when the Stock page is opened.
+    if (stockCategory === "boosts") void refreshBoostStockTokens();
+    else void refreshCommunityStatus();
+    // Each inventory loads only when its Stock tab is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, stockCategory]);
 
   function applyBoostStockSnapshot(snapshot: BoostTokenStockSnapshot) {
     setBoostStock(snapshot.stock);
@@ -738,12 +739,12 @@ export default function HomePage() {
   }
 
   useEffect(() => {
-    if (activeTab !== "settings" || !communityStatus?.syncing) return;
+    if (activeTab !== "stock" || stockCategory !== "offline" || !communityStatus?.syncing) return;
     const handle = window.setInterval(() => void refreshCommunityStatus(), 2_000);
     return () => window.clearInterval(handle);
     // Poll only while the local member worker is running.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, communityStatus?.syncing]);
+  }, [activeTab, stockCategory, communityStatus?.syncing]);
 
   async function refreshAvailability() {
     try {
@@ -1260,6 +1261,74 @@ export default function HomePage() {
     setOrderIdToTrack("");
     notifySuccess("Order added.");
   }
+
+  const communityStockPanel = (
+    <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
+      <div className="community-admin-heading">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="stat-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+          <div className="min-w-0">
+            <p className={labelClass}>Members stock</p>
+            <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.guild?.name ?? "OAuth member pool"}</h2>
+          </div>
+        </div>
+        <Badge variant={communityStatus?.configured ? "success" : "destructive"}>
+          {communityStatus?.syncing ? "Adding members" : communityStatus?.configured ? "Ready" : "Setup required"}
+        </Badge>
+      </div>
+
+      <div className="community-admin-progress">
+        <div><span>Authorized</span><strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong></div>
+        <div><span>Available</span><strong>{communityStatus?.ready ?? 0}</strong></div>
+        <div><span>Used</span><strong>{(communityStatus?.joined ?? 0) + (communityStatus?.alreadyMember ?? 0)}</strong></div>
+        <div><span>Failed</span><strong>{communityStatus?.failed ?? 0}</strong></div>
+      </div>
+
+      <div className="community-admin-track" aria-hidden="true">
+        <span style={{ width: `${communityStatus?.goal ? Math.min(100, ((communityStatus.authorized ?? 0) / communityStatus.goal) * 100) : 0}%` }} />
+      </div>
+
+      {!communityStatus?.configured ? (
+        <p className="community-admin-note">Add the Discord application, bot, callback address and target server settings to activate Members Stock.</p>
+      ) : null}
+
+      {communityStatus?.recent?.length ? (
+        <div className="community-recent-list">
+          {communityStatus.recent.map((record, index) => (
+            <div key={`${record.username}-${record.authorizedAt}-${index}`}>
+              <span className="community-recent-avatar" aria-hidden="true">
+                {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
+              </span>
+              <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
+              <Badge variant={record.status === "joined" ? "success" : record.status === "failed" ? "destructive" : "secondary"}>
+                {record.status === "authorized" ? "Available" : record.status === "joined" ? "Used" : record.status === "failed" ? "Failed" : "Already inside"}
+              </Badge>
+            </div>
+          ))}
+        </div>
+      ) : communityStatus?.configured ? (
+        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No authorized members yet</strong><span>Share the join link to build your Members Stock.</span></div>
+      ) : null}
+
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" disabled={!communityStatus?.configured || !communityStatus?.ready || communityStatus?.syncing || startingCommunityJoin} onClick={() => void handleAddCommunityMembers()}>
+          {communityStatus?.syncing || startingCommunityJoin ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
+          {communityStatus?.syncing ? "Adding members..." : "Use available members"}
+        </Button>
+        <Button type="button" disabled={!communityStatus?.configured} onClick={() => void copyCommunityJoinLink()}>
+          <Copy className="h-4 w-4" /> Copy authorization link
+        </Button>
+        <Button asChild type="button" variant="secondary" disabled={!communityStatus?.configured}>
+          {communityStatus?.configured ? (
+            <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open authorization page</a>
+          ) : <span><ExternalLink className="h-4 w-4" /> Open authorization page</span>}
+        </Button>
+        <Button type="button" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>
+          <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
+        </Button>
+      </div>
+    </section>
+  );
 
   const showManageSkeleton = refreshingManage && !orders.length;
 
@@ -2015,10 +2084,10 @@ export default function HomePage() {
             <header className="page-heading stock-page-heading">
               <div>
                 <p className={labelClass}>Stock</p>
-                <h1 className="page-title">Token inventory</h1>
-                <p className="app-copy page-copy">Manage available boost tokens and usage history.</p>
+                <h1 className="page-title">Inventory</h1>
+                <p className="app-copy page-copy">Manage Boost Stock and Members Stock separately.</p>
               </div>
-              <div className="stock-heading-actions">
+              {stockCategory === "boosts" ? <div className="stock-heading-actions">
                 <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add tokens
@@ -2027,9 +2096,21 @@ export default function HomePage() {
                   <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh
                 </Button>
-              </div>
+              </div> : null}
             </header>
 
+            <div className="stock-category-tabs" role="tablist" aria-label="Stock type">
+              <button type="button" role="tab" aria-selected={stockCategory === "boosts"} className={stockCategory === "boosts" ? "is-active" : ""} onClick={() => setStockCategory("boosts")}>
+                <KeyRound className="h-4 w-4" aria-hidden="true" />
+                <span><strong>Boost Stock</strong><small>{boostStock.oneMonth + boostStock.threeMonth} tokens</small></span>
+              </button>
+              <button type="button" role="tab" aria-selected={stockCategory === "offline"} className={stockCategory === "offline" ? "is-active" : ""} onClick={() => setStockCategory("offline")}>
+                <Users className="h-4 w-4" aria-hidden="true" />
+                <span><strong>Members Stock</strong><small>{communityStatus?.ready ?? 0} available</small></span>
+              </button>
+            </div>
+
+            {stockCategory === "boosts" ? <>
             <section className={`${shell} stock-overview`}>
               <div className="stock-overview-lead">
                 <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>
@@ -2191,6 +2272,7 @@ export default function HomePage() {
                 </div>
               )}
             </section>
+            </> : communityStockPanel}
           </>
         ) : null}
 
@@ -2210,84 +2292,6 @@ export default function HomePage() {
 
             <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
               <div className="grid gap-5">
-              <section className={`${shell} community-admin-panel p-5 sm:p-6`}>
-                <div className="community-admin-heading">
-                  <div className="flex min-w-0 items-center gap-3">
-                    <span className="stat-icon" aria-hidden="true">
-                      <Users className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0">
-                      <p className={labelClass}>Community OAuth</p>
-                      <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.guild?.name ?? "Discord member test"}</h2>
-                    </div>
-                  </div>
-                  <Badge variant={communityStatus?.configured ? "success" : "destructive"}>
-                    {communityStatus?.syncing ? "Adding members" : communityStatus?.configured ? "Ready" : "Setup required"}
-                  </Badge>
-                </div>
-
-                <div className="community-admin-progress">
-                  <div>
-                    <span>Authorized</span>
-                    <strong>{communityStatus?.authorized ?? 0}<small> / {communityStatus?.goal ?? 50}</small></strong>
-                  </div>
-                  <div>
-                    <span>Waiting</span>
-                    <strong>{communityStatus?.ready ?? 0}</strong>
-                  </div>
-                  <div>
-                    <span>Added</span>
-                    <strong>{communityStatus?.joined ?? 0}</strong>
-                  </div>
-                  <div>
-                    <span>Failed</span>
-                    <strong>{communityStatus?.failed ?? 0}</strong>
-                  </div>
-                </div>
-
-                <div className="community-admin-track" aria-hidden="true">
-                  <span style={{ width: `${communityStatus?.goal ? Math.min(100, ((communityStatus.authorized ?? 0) / communityStatus.goal) * 100) : 0}%` }} />
-                </div>
-
-                {!communityStatus?.configured ? (
-                  <p className="community-admin-note">Add the Discord application, bot, callback address and target server settings to activate this test.</p>
-                ) : null}
-
-                {communityStatus?.recent?.length ? (
-                  <div className="community-recent-list">
-                    {communityStatus.recent.slice(0, 5).map((record, index) => (
-                      <div key={`${record.username}-${record.authorizedAt}-${index}`}>
-                        <span className="community-recent-avatar" aria-hidden="true">
-                          {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
-                        </span>
-                        <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
-                        <Badge variant={record.status === "joined" ? "success" : record.status === "failed" ? "destructive" : "secondary"}>
-                          {record.status === "authorized" ? "Waiting" : record.status === "joined" ? "Joined" : record.status === "failed" ? "Failed" : "Already inside"}
-                        </Badge>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="mt-5 flex flex-wrap gap-3">
-                  <Button type="button" disabled={!communityStatus?.configured || !communityStatus?.ready || communityStatus?.syncing || startingCommunityJoin} onClick={() => void handleAddCommunityMembers()}>
-                    {communityStatus?.syncing || startingCommunityJoin ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Users className="h-4 w-4" />}
-                    {communityStatus?.syncing ? "Adding members..." : "Add authorized members"}
-                  </Button>
-                  <Button type="button" disabled={!communityStatus?.configured} onClick={() => void copyCommunityJoinLink()}>
-                    <Copy className="h-4 w-4" /> Copy join link
-                  </Button>
-                  <Button asChild type="button" variant="secondary" disabled={!communityStatus?.configured}>
-                    {communityStatus?.configured ? (
-                      <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open join page</a>
-                    ) : <span><ExternalLink className="h-4 w-4" /> Open join page</span>}
-                  </Button>
-                  <Button type="button" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>
-                    <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
-                  </Button>
-                </div>
-              </section>
-
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">

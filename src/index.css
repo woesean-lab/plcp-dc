@@ -5288,6 +5288,68 @@
   gap: 9px;
 }
 
+.stock-category-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  border-bottom: 1px solid var(--app-divider);
+  padding-bottom: 14px;
+}
+
+.stock-category-tabs button {
+  display: grid;
+  min-width: 0;
+  min-height: 58px;
+  grid-template-columns: 32px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  padding: 9px 13px;
+  background: rgba(5, 6, 13, .32);
+  color: var(--app-muted);
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.stock-category-tabs button:hover {
+  border-color: var(--app-border-strong);
+  background: var(--app-hover);
+  color: var(--app-text-secondary);
+}
+
+.stock-category-tabs button.is-active {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.stock-category-tabs button > svg {
+  justify-self: center;
+}
+
+.stock-category-tabs button > span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.stock-category-tabs strong {
+  color: var(--app-text);
+  font-size: 11px;
+}
+
+.stock-category-tabs small {
+  color: var(--app-muted);
+  font-size: 9px;
+}
+
+.offline-stock-panel .community-recent-list {
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .stock-overview {
   display: grid;
   grid-template-columns: 1.35fr repeat(4, minmax(0, 1fr));
@@ -5722,6 +5784,10 @@
   .stock-heading-actions,
   .stock-heading-actions .ui-button {
     width: 100%;
+  }
+
+  .stock-category-tabs {
+    grid-template-columns: 1fr;
   }
 
   .stock-heading-actions .ui-button {
