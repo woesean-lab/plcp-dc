@@ -197,6 +197,10 @@ function getServiceLabel(service?: ServiceType) {
   return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
 
+function formatDelay(value?: number) {
+  return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
+}
+
 function notifySuccess(message: string) {
   toast.success(message);
 }
@@ -393,6 +397,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                       <div className="orders-row-status"><Skeleton className="h-6 w-20" /></div>
                       <div className="orders-row-delivery">
                         <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
+                        <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
                         <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
                       </div>
                       <Skeleton className="orders-row-date h-3 w-20" />
@@ -1827,6 +1832,7 @@ export default function HomePage() {
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
+                        const delayValue = order.statusDelay ?? order.delay;
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -1849,6 +1855,7 @@ export default function HomePage() {
                               <dl className="orders-row-delivery">
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
                                 <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
+                                <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div>
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
