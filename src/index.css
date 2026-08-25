@@ -1315,6 +1315,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .choose-service-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .service-grid.boost-duration-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
@@ -3539,6 +3543,10 @@
   }
 
   .service-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .choose-service-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

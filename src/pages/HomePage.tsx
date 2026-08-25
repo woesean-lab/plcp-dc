@@ -1408,7 +1408,7 @@ export default function HomePage() {
                       </div>
                       <span className="service-selector-count">3 services</span>
                     </div>
-                    <div className="service-grid service-grid-compact">
+                    <div className="service-grid service-grid-compact choose-service-grid">
                       {[
                         { value: "members", title: "Members", description: "Tokenu member delivery", icon: KeyRound },
                         { value: "community", title: "Members 2", description: "Connected OAuth stock", icon: Users },
