@@ -143,6 +143,20 @@ export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
   );
 }
 
+export function resumeDcordBoostOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/resume`,
+    { method: "POST" }
+  );
+}
+
+export function cancelDcordBoostOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/cancel`,
+    { method: "POST" }
+  );
+}
+
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(

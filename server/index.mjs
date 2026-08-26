@@ -21,6 +21,9 @@ const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "620000", 10) || 620_000, 15_000), 620_000);
+const dcordRetryBaseMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_BASE_MS ?? "30000", 10) || 30_000, 10_000), 300_000);
+const dcordRetryMaxMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_MAX_MS ?? "600000", 10) || 600_000, dcordRetryBaseMs), 3_600_000);
+const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCORD_MAX_RETRY_ATTEMPTS ?? "12", 10) || 12, 1), 100);
 const discordApiBase = "https://discord.com/api/v10";
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
@@ -30,6 +33,10 @@ const publicRestartCooldowns = new Map();
 const communityOauthStartCooldowns = new Map();
 const dcordResultReconcileCooldowns = new Map();
 const dcordResultReconcileJobs = new Set();
+const dcordOrderProcessingJobs = new Set();
+const dcordOrderRetryTimers = new Map();
+let dcordCircuitOpenUntil = 0;
+let dcordCircuitFailureCount = 0;
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -760,11 +767,14 @@ async function reconcileDcordTransportResults(order) {
 
     const added = dcordResults.reduce((total, result) => total + (result?.boosted === true ? 2 : 0), 0);
     const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
+    const cancelled = String(order.status ?? "").trim().toUpperCase() === "CANCELLED";
     const nextOrder = {
       ...order,
       added,
-      status: added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : order.status,
-      details: added >= amount
+      status: cancelled ? "CANCELLED" : added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : order.status,
+      details: cancelled
+        ? order.details
+        : added >= amount
         ? `${added}/${amount} boosts completed.`
         : `${added}/${amount} boosts completed. Review failed tokens in the payload.`,
       dcordResults
@@ -783,8 +793,9 @@ function scheduleDcordResultReconciliation(uniqid) {
 
   void (async () => {
     try {
-      for (let attempt = 0; attempt < 18; attempt += 1) {
-        await new Promise((resolve) => setTimeout(resolve, 10_000));
+      for (let attempt = 0; attempt < 30; attempt += 1) {
+        const delayMs = Math.min(15_000 * (2 ** Math.floor(attempt / 3)), 600_000);
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
         if (!tracked.rowCount) return;
         const current = tracked.rows[0].payload;
@@ -1042,6 +1053,60 @@ function createQueuedDcordResult(token) {
   };
 }
 
+function getDcordRetryDelay(retryCount) {
+  const exponent = Math.min(Math.max(Number(retryCount) || 0, 0), 6);
+  return Math.min(dcordRetryBaseMs * (2 ** exponent), dcordRetryMaxMs);
+}
+
+function markDcordProviderFailure() {
+  dcordCircuitFailureCount += 1;
+  const delay = getDcordRetryDelay(dcordCircuitFailureCount - 1);
+  dcordCircuitOpenUntil = Date.now() + delay;
+  return delay;
+}
+
+function markDcordProviderHealthy() {
+  dcordCircuitFailureCount = 0;
+  dcordCircuitOpenUntil = 0;
+}
+
+async function checkDcordProviderAvailability() {
+  if (dcordCircuitOpenUntil > Date.now()) {
+    return { available: false, recovering: true, retryAfterMs: dcordCircuitOpenUntil - Date.now() };
+  }
+  return { available: true, recovering: dcordCircuitFailureCount > 0, retryAfterMs: 0 };
+}
+
+function scheduleDcordOrderRetry(uniqid, delayMs) {
+  const orderId = String(uniqid ?? "").trim();
+  if (!orderId || dcordOrderRetryTimers.has(orderId)) return;
+  const timer = setTimeout(() => {
+    dcordOrderRetryTimers.delete(orderId);
+    void resumeDcordBoostOrder(orderId).catch((error) => {
+      console.error("Dcord order resume failed:", error instanceof Error ? error.message : error);
+      scheduleDcordOrderRetry(orderId, getDcordRetryDelay(1));
+    });
+  }, Math.max(Number(delayMs) || dcordRetryBaseMs, 1_000));
+  timer.unref?.();
+  dcordOrderRetryTimers.set(orderId, timer);
+}
+
+async function returnQueuedDcordTokensToStock(order, tokens, results) {
+  const duration = Number.parseInt(order?.duration, 10);
+  if (![1, 3].includes(duration)) return 0;
+  const queuedTokens = tokens.filter((_token, index) => String(results[index]?.status ?? "").toLowerCase() === "queued");
+  if (!queuedTokens.length) return 0;
+
+  const stock = await loadBoostTokenStock();
+  const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+  const existing = new Set([...stock.oneMonth, ...stock.threeMonth]);
+  const returned = queuedTokens.filter((token) => !existing.has(token));
+  if (returned.length) {
+    await saveBoostTokenStock({ ...stock, [stockKey]: [...stock[stockKey], ...returned] });
+  }
+  return queuedTokens.length;
+}
+
 async function runDcordBoostToken(token, invite) {
   try {
     const result = await requestDcord(dcordJoinPath, {
@@ -1054,6 +1119,7 @@ async function runDcordBoostToken(token, invite) {
     const statusCode = Number(error?.statusCode);
     const message = error instanceof Error ? error.message : "Dcord join failed.";
     const transportUncertain = error?.uncertain === true
+      || [408, 425, 429].includes(statusCode)
       || statusCode >= 500
       || ["AbortError", "TimeoutError"].includes(String(error?.name))
       || /fetch failed|timeout|timed out|socket|network|connection/i.test(message);
@@ -1074,33 +1140,93 @@ async function runDcordBoostToken(token, invite) {
 }
 
 async function processDcordBoostOrder(order, tokens, invite) {
-  const results = tokens.map(createQueuedDcordResult);
+  const orderId = String(order?.uniqid ?? "").trim();
+  if (!orderId || dcordOrderProcessingJobs.has(orderId)) return;
+  dcordOrderProcessingJobs.add(orderId);
+
+  const results = tokens.map((token, index) => {
+    const existing = order.dcordResults?.[index];
+    if (!existing || typeof existing !== "object" || Array.isArray(existing)) return createQueuedDcordResult(token);
+    if (String(existing.status ?? "").toLowerCase() !== "joining") return existing;
+    return {
+      ...existing,
+      status: "verifying",
+      joinStatus: "verifying",
+      boostStatus: "verifying",
+      boostMessage: "The server restarted while Dcord was responding. Verifying the result.",
+      transportUncertain: true
+    };
+  });
   let nextIndex = 0;
   let progressSave = Promise.resolve();
+  let providerPaused = false;
+  let providerRecovering = false;
+  let retryAfterMs = dcordRetryBaseMs;
+  let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
 
-  async function saveCurrentProgress() {
+  async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
       const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
-      const finished = results.every((item) => !["queued", "joining", "verifying"].includes(String(item?.status ?? "").toLowerCase()));
+      const hasQueued = results.some((item) => String(item?.status ?? "").toLowerCase() === "queued");
+      const hasRunning = results.some((item) => ["joining", "verifying"].includes(String(item?.status ?? "").toLowerCase()));
+      const finished = !hasQueued && !hasRunning;
+      const waitingForProvider = forceWaiting || providerPaused;
       await saveTrackedOrderPayload({
         ...order,
         added,
-        status: finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
-        details: finished
+        status: waitingForProvider ? "WAITING" : finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
+        providerStatus: waitingForProvider ? "unavailable" : "available",
+        dcordRetryCount: waitingForProvider ? retryCount : 0,
+        nextRetryAt: waitingForProvider ? new Date(Date.now() + retryAfterMs).toISOString() : null,
+        details: waitingForProvider
+          ? hasQueued
+            ? "Dcord is temporarily unavailable. Queued delivery will resume automatically."
+            : "Dcord response is uncertain. The submitted tokens are being verified without a duplicate request."
+          : finished
           ? added >= order.amount
             ? `${added}/${order.amount} boosts completed.`
             : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
-          : `${added}/${order.amount} boosts completed.`,
+          : hasRunning && !hasQueued
+            ? `${added}/${order.amount} boosts completed. Waiting for Dcord verification.`
+            : `${added}/${order.amount} boosts completed.`,
         dcordResults: results
       });
     });
     await progressSave;
   }
 
+  async function stopAfterOutage() {
+    const returnedCount = await returnQueuedDcordTokensToStock(order, tokens, results);
+    results.forEach((result, index) => {
+      if (String(result?.status ?? "").toLowerCase() !== "queued") return;
+      results[index] = {
+        ...result,
+        status: "returned",
+        joinStatus: "not submitted",
+        boostStatus: "not submitted",
+        boostMessage: "Dcord remained unavailable. This token was returned to stock."
+      };
+    });
+    const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
+    await saveTrackedOrderPayload({
+      ...order,
+      added,
+      status: results.some(isUncertainDcordTransportResult) ? "WAITING" : added > 0 ? "PARTIAL" : "ERROR",
+      providerStatus: "unavailable",
+      dcordRetryCount: retryCount,
+      nextRetryAt: null,
+      returnedTokenCount: returnedCount,
+      details: `${returnedCount} unsubmitted token${returnedCount === 1 ? " was" : "s were"} returned to stock after the Dcord outage.`,
+      dcordResults: results
+    });
+    if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(orderId);
+  }
+
   async function runNextToken() {
-    const index = nextIndex;
-    nextIndex += 1;
-    if (index >= tokens.length) return;
+    if (providerPaused) return;
+    while (nextIndex < tokens.length && String(results[nextIndex]?.status ?? "").toLowerCase() !== "queued") nextIndex += 1;
+    const index = nextIndex++;
+    if (index >= tokens.length || providerPaused) return;
 
     const token = tokens[index];
     results[index] = {
@@ -1116,14 +1242,82 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const normalized = await runDcordBoostToken(token, invite);
     await updateUsedBoostTokenResult(usageEntry.id, normalized);
     results[index] = { ...normalized, usedTokenId: usageEntry.id };
+    if (isUncertainDcordTransportResult(normalized)) {
+      providerPaused = true;
+      retryCount += 1;
+      retryAfterMs = markDcordProviderFailure();
+    } else {
+      markDcordProviderHealthy();
+    }
     await saveCurrentProgress();
     await runNextToken();
   }
 
-  const workerCount = Math.min(tokens.length, dcordBoostConcurrency);
-  await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
-  await saveCurrentProgress();
-  if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(order.uniqid);
+  try {
+    const hasQueued = results.some((item) => String(item?.status ?? "").toLowerCase() === "queued");
+    if (hasQueued) {
+      if (retryCount >= dcordMaxRetryAttempts) {
+        await stopAfterOutage();
+        return;
+      }
+      const availability = await checkDcordProviderAvailability();
+      if (!availability.available) {
+        providerPaused = true;
+        retryCount += 1;
+        retryAfterMs = Math.max(availability.retryAfterMs, getDcordRetryDelay(retryCount - 1));
+        if (retryCount >= dcordMaxRetryAttempts) {
+          await stopAfterOutage();
+          return;
+        }
+        await saveCurrentProgress(true);
+        scheduleDcordOrderRetry(orderId, retryAfterMs);
+        return;
+      }
+      providerRecovering = availability.recovering;
+    }
+
+    const workerCount = Math.min(tokens.length, providerRecovering ? 1 : dcordBoostConcurrency);
+    await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
+    await saveCurrentProgress();
+    if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(orderId);
+    if (providerPaused && results.some((item) => String(item?.status ?? "").toLowerCase() === "queued")) {
+      await saveCurrentProgress(true);
+      scheduleDcordOrderRetry(orderId, retryAfterMs);
+    }
+  } finally {
+    dcordOrderProcessingJobs.delete(orderId);
+  }
+}
+
+async function resumeDcordBoostOrder(uniqid) {
+  const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+  const order = tracked.rows[0]?.payload;
+  if (!order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) return;
+  if (!order.dcordResults.some((item) => ["queued", "joining"].includes(String(item?.status ?? "").toLowerCase()))) {
+    if (order.dcordResults.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(uniqid);
+    return;
+  }
+  const tokens = await loadDcordOrderTokens(uniqid);
+  const invite = extractDiscordInviteCode(order.serverInvite);
+  if (!tokens.length || !invite) return;
+  await processDcordBoostOrder(order, tokens, invite);
+}
+
+async function recoverPendingDcordOrders() {
+  const pending = await pool.query(
+    `SELECT uniqid, payload
+     FROM tracked_orders
+     WHERE payload->>'provider' = 'dcord'
+       AND payload->>'status' IN ('PROCESS', 'WAITING', 'CANCELLED')`
+  );
+  for (const row of pending.rows) {
+    const results = Array.isArray(row.payload?.dcordResults) ? row.payload.dcordResults : [];
+    if (results.some((item) => ["queued", "joining"].includes(String(item?.status ?? "").toLowerCase()))) {
+      const nextRetryAt = Date.parse(row.payload?.nextRetryAt ?? "");
+      scheduleDcordOrderRetry(row.uniqid, Number.isFinite(nextRetryAt) ? Math.max(nextRetryAt - Date.now(), 1_000) : 1_000);
+    }
+    if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(row.uniqid);
+  }
 }
 
 async function recoverBlockedDcordJobOrders() {
@@ -1253,6 +1447,7 @@ async function initializeDatabase() {
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
   await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
   await recoverBlockedDcordJobOrders();
+  await recoverPendingDcordOrders();
 }
 
 async function requireSession(req, res, next) {
@@ -2600,6 +2795,112 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
   }
 });
 
+app.post("/api/dcord/boost-orders/:uniqid/resume", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+    if (dcordOrderProcessingJobs.has(uniqid)) {
+      return res.status(409).json({ message: "This boost order is already running." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (!order.dcordResults.some((item) => String(item?.status ?? "").toLowerCase() === "queued")) {
+      return res.status(409).json({ message: "This order has no unsubmitted tokens to resume safely." });
+    }
+
+    const tokens = await loadDcordOrderTokens(uniqid);
+    const invite = extractDiscordInviteCode(order.serverInvite);
+    if (!tokens.length || !invite) {
+      return res.status(409).json({ message: "The assigned tokens or server invite are missing." });
+    }
+
+    const retryTimer = dcordOrderRetryTimers.get(uniqid);
+    if (retryTimer) clearTimeout(retryTimer);
+    dcordOrderRetryTimers.delete(uniqid);
+    dcordCircuitOpenUntil = 0;
+
+    const resumedOrder = {
+      ...order,
+      status: "PROCESS",
+      providerStatus: "checking",
+      dcordRetryCount: 0,
+      nextRetryAt: null,
+      details: "Manual Dcord delivery check started."
+    };
+    await saveTrackedOrderPayload(resumedOrder);
+    void processDcordBoostOrder(resumedOrder, tokens, invite).catch((error) => {
+      console.error("Manual Dcord resume failed:", error instanceof Error ? error.message : error);
+    });
+    res.json(await revealDcordOrderTokens(resumedOrder));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+    if (dcordOrderProcessingJobs.has(uniqid)) {
+      return res.status(409).json({ message: "Wait for the current Dcord request to finish before cancelling." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (String(order.status ?? "").trim().toUpperCase() !== "WAITING") {
+      return res.status(409).json({ message: "Only a waiting Dcord order can be cancelled." });
+    }
+    if (!order.dcordResults.some((item) => String(item?.status ?? "").toLowerCase() === "queued")) {
+      return res.status(409).json({ message: "This order has no unsubmitted tokens to return." });
+    }
+
+    const tokens = await loadDcordOrderTokens(uniqid);
+    const results = [...order.dcordResults];
+    const returnedTokenCount = await returnQueuedDcordTokensToStock(order, tokens, results);
+    results.forEach((result, index) => {
+      if (String(result?.status ?? "").toLowerCase() !== "queued") return;
+      results[index] = {
+        ...result,
+        status: "returned",
+        joinStatus: "not submitted",
+        boostStatus: "not submitted",
+        boostMessage: "Delivery was cancelled. This token was returned to stock."
+      };
+    });
+
+    const retryTimer = dcordOrderRetryTimers.get(uniqid);
+    if (retryTimer) clearTimeout(retryTimer);
+    dcordOrderRetryTimers.delete(uniqid);
+    const cancelledOrder = {
+      ...order,
+      status: "CANCELLED",
+      providerStatus: "cancelled",
+      nextRetryAt: null,
+      autoResumeDisabled: true,
+      cancelledAt: new Date().toISOString(),
+      returnedTokenCount,
+      details: `Delivery cancelled. ${returnedTokenCount} unsubmitted token${returnedTokenCount === 1 ? " was" : "s were"} returned to stock.`,
+      dcordResults: results
+    };
+    await saveTrackedOrderPayload(cancelledOrder);
+    if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(uniqid);
+    res.json(await revealDcordOrderTokens(cancelledOrder));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -2613,8 +2914,12 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     if (!order || typeof order !== "object" || Array.isArray(order) || (order.provider !== "dcord" && order.service !== "DCORD-BOOSTS")) {
       return res.status(404).json({ message: "Boost order could not be found." });
     }
-    if (String(order.status ?? "").trim().toUpperCase() === "PROCESS") {
+    const orderStatus = String(order.status ?? "").trim().toUpperCase();
+    if (orderStatus === "PROCESS") {
       return res.status(409).json({ message: "Wait until the boost order finishes before replacing failed tokens." });
+    }
+    if (orderStatus === "CANCELLED") {
+      return res.status(409).json({ message: "Cancelled order tokens cannot be replaced." });
     }
 
     const results = Array.isArray(order.dcordResults) ? [...order.dcordResults] : [];
@@ -2624,6 +2929,9 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     }
     if (currentResult.boosted === true) {
       return res.status(409).json({ message: "Only failed token results can be replaced." });
+    }
+    if (String(currentResult.status ?? "").trim().toLowerCase() === "returned") {
+      return res.status(409).json({ message: "This token has already been returned to stock." });
     }
 
     const duration = Number.parseInt(order.duration, 10);

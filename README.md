@@ -33,6 +33,10 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
   - `DCORD_API_BASE_URL`
   - `DCORD_DASHBOARD_API_BASE_URL`
   - `DCORD_JOIN_PATH`
+  - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `620000`)
+  - `DCORD_RETRY_BASE_MS` (varsayilan `30000`)
+  - `DCORD_RETRY_MAX_MS` (varsayilan `600000`)
+  - `DCORD_MAX_RETRY_ATTEMPTS` (varsayilan `12`)
 - Tokenu dokumani: [Reseller API Docs](https://tokenu.gitbook.io/reseller-api-docs/)
 
 ## Community OAuth testi

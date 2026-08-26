@@ -3,10 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, updateOrderDelay } from "../lib/integration";
+import { cancelDcordBoostOrder, getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -305,6 +305,8 @@ export default function OrderPage() {
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
+  const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
+  const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -317,6 +319,7 @@ export default function OrderPage() {
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
+  const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
@@ -344,6 +347,7 @@ export default function OrderPage() {
     ? null
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
+  const hasQueuedDcordTokens = dcordTokenResults.some((item) => item.status.toLowerCase() === "queued");
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(result);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
@@ -473,6 +477,40 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Order could not be restarted.");
     } finally {
       setRestartingOrder(false);
+    }
+  }
+
+  async function handleResumeDcordOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isWaitingForDcord || !hasQueuedDcordTokens || resumingDcordOrder) return;
+
+    try {
+      setResumingDcordOrder(true);
+      const data = await resumeDcordBoostOrder(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success("Dcord delivery check started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dcord delivery could not be resumed.");
+    } finally {
+      setResumingDcordOrder(false);
+    }
+  }
+
+  async function handleCancelDcordOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isWaitingForDcord || !hasQueuedDcordTokens || cancellingDcordOrder) return;
+    if (!window.confirm("Cancel this delivery and return all unsubmitted tokens to stock?")) return;
+
+    try {
+      setCancellingDcordOrder(true);
+      const data = await cancelDcordBoostOrder(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      const returnedCount = typeof data.returnedTokenCount === "number" ? data.returnedTokenCount : 0;
+      toast.success(`Delivery cancelled. ${returnedCount} token${returnedCount === 1 ? "" : "s"} returned to stock.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dcord delivery could not be cancelled.");
+    } finally {
+      setCancellingDcordOrder(false);
     }
   }
 
@@ -618,7 +656,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : "Delivery in progress"}</h3>
+                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -696,6 +734,17 @@ export default function OrderPage() {
                     </a>
                   </Button>
                 </div>
+              ) : isWaitingForDcord && hasQueuedDcordTokens ? (
+                <div className="lookup-note-actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleResumeDcordOrder()} disabled={resumingDcordOrder}>
+                    <RotateCcw className={`h-4 w-4 ${resumingDcordOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {resumingDcordOrder ? "Starting..." : "Resume delivery"}
+                  </Button>
+                  <Button type="button" variant="dangerGhost" size="sm" onClick={() => void handleCancelDcordOrder()} disabled={cancellingDcordOrder || resumingDcordOrder}>
+                    <X className="h-4 w-4" aria-hidden="true" />
+                    {cancellingDcordOrder ? "Cancelling..." : "Cancel delivery"}
+                  </Button>
+                </div>
               ) : null}
             </section>
 
@@ -746,7 +795,7 @@ export default function OrderPage() {
                       </span>
                       <span className="public-token-result-flow">
                         <span className="public-token-result-action">
-                          {item.state === "error" ? (
+                          {item.state === "error" && normalizedStatus !== "CANCELLED" ? (
                             <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}>
                               {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
                             </Button>
