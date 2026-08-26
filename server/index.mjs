@@ -360,6 +360,27 @@ async function revealDcordOrderTokens(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.dcordResults)) return order;
 
   const assignedTokens = await loadDcordOrderTokens(order.uniqid);
+  const returnedIndexes = order.dcordResults.flatMap((result, index) =>
+    String(result?.status ?? "").trim().toLowerCase() === "returned" ? [index] : []
+  );
+  if (returnedIndexes.length) {
+    const returnedUsageIds = new Set(returnedIndexes.map((index) => order.dcordResults[index]?.usedTokenId).filter(Boolean));
+    const returnedTokens = new Set(returnedIndexes.map((index) => assignedTokens[index]).filter(Boolean));
+    await mutateUsedBoostTokenHistory((history) => history.filter((item) => !(
+      item.orderId === order.uniqid
+      && (returnedUsageIds.has(item.id) || returnedTokens.has(item.token))
+    )));
+    const cleanedResults = order.dcordResults.map((result, index) => {
+      if (!returnedIndexes.includes(index) || !result || typeof result !== "object" || Array.isArray(result) || !result.usedTokenId) return result;
+      const cleaned = { ...result };
+      delete cleaned.usedTokenId;
+      return cleaned;
+    });
+    if (cleanedResults.some((result, index) => result !== order.dcordResults[index])) {
+      order = { ...order, dcordResults: cleanedResults };
+      await saveTrackedOrderPayload(order);
+    }
+  }
   const usedTokenIds = order.dcordResults
     .map((result) => result && typeof result === "object" && !Array.isArray(result) ? result.usedTokenId : null)
     .filter(Boolean);
@@ -2883,8 +2904,10 @@ app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, r
     results.forEach((result, index) => {
       if (!canReturnDcordTokenResult(result, true)) return;
       const wasSubmitted = isUncertainDcordTransportResult(result);
+      const cleanedResult = { ...result };
+      delete cleanedResult.usedTokenId;
       results[index] = {
-        ...result,
+        ...cleanedResult,
         previousStatus: result.status,
         status: "returned",
         joinStatus: wasSubmitted ? "verification stopped" : "not submitted",
