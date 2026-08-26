@@ -307,6 +307,7 @@ export default function OrderPage() {
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
+  const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -348,6 +349,8 @@ export default function OrderPage() {
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
   const hasQueuedDcordTokens = dcordTokenResults.some((item) => item.status.toLowerCase() === "queued");
+  const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
+  const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(result);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
@@ -377,6 +380,15 @@ export default function OrderPage() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (!showCancelDcordModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCancelDcordModal, cancellingDcordOrder]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -499,10 +511,6 @@ export default function OrderPage() {
   async function handleCancelDcordOrder() {
     const target = String(result?.uniqid ?? uniqid).trim();
     if (!target || !isWaitingForDcord || cancellingDcordOrder) return;
-    const confirmation = hasQueuedDcordTokens
-      ? "Cancel this delivery and return all unsubmitted tokens to stock?"
-      : "Cancel this order and force the submitted verifying tokens back to stock? Their Dcord result may still complete later.";
-    if (!window.confirm(confirmation)) return;
 
     try {
       setCancellingDcordOrder(true);
@@ -510,6 +518,7 @@ export default function OrderPage() {
       setResult((current) => mergeOrderStatus(current, data));
       const returnedCount = typeof data.returnedTokenCount === "number" ? data.returnedTokenCount : 0;
       toast.success(`Delivery cancelled. ${returnedCount} token${returnedCount === 1 ? "" : "s"} returned to stock.`);
+      setShowCancelDcordModal(false);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Dcord delivery could not be cancelled.");
     } finally {
@@ -745,7 +754,7 @@ export default function OrderPage() {
                       {resumingDcordOrder ? "Starting..." : "Resume delivery"}
                     </Button>
                   ) : null}
-                  <Button type="button" variant="destructive" size="sm" onClick={() => void handleCancelDcordOrder()} disabled={cancellingDcordOrder || resumingDcordOrder}>
+                  <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelDcordModal(true)} disabled={cancellingDcordOrder || resumingDcordOrder}>
                     <X className="h-4 w-4" aria-hidden="true" />
                     {cancellingDcordOrder ? "Cancelling..." : "Cancel delivery"}
                   </Button>
@@ -884,6 +893,32 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showCancelDcordModal ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !cancellingDcordOrder) setShowCancelDcordModal(false);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cancel-dcord-title" aria-describedby="cancel-dcord-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Cancel delivery</p>
+            <h2 id="cancel-dcord-title">Return reserved tokens to stock?</h2>
+            <p id="cancel-dcord-description">
+              {verifyingDcordTokenCount > 0
+                ? `Dcord already received ${verifyingDcordTokenCount} token${verifyingDcordTokenCount === 1 ? "" : "s"}. The upstream request cannot be cancelled and may still finish later. The token${verifyingDcordTokenCount === 1 ? "" : "s"} will be removed from Used and force-returned to stock.`
+                : `${queuedDcordTokenCount} unsubmitted token${queuedDcordTokenCount === 1 ? "" : "s"} will return to stock and automatic delivery will stop.`}
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={cancellingDcordOrder} onClick={() => setShowCancelDcordModal(false)}>Keep waiting</Button>
+              <Button type="button" variant="destructive" disabled={cancellingDcordOrder} onClick={() => void handleCancelDcordOrder()}>
+                <X className={`h-4 w-4 ${cancellingDcordOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                {cancellingDcordOrder ? "Cancelling..." : "Cancel and return"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </section>
   );
 }
