@@ -498,8 +498,11 @@ export default function OrderPage() {
 
   async function handleCancelDcordOrder() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !isWaitingForDcord || !hasQueuedDcordTokens || cancellingDcordOrder) return;
-    if (!window.confirm("Cancel this delivery and return all unsubmitted tokens to stock?")) return;
+    if (!target || !isWaitingForDcord || cancellingDcordOrder) return;
+    const confirmation = hasQueuedDcordTokens
+      ? "Cancel this delivery and return all unsubmitted tokens to stock?"
+      : "Cancel this order and force the submitted verifying tokens back to stock? Their Dcord result may still complete later.";
+    if (!window.confirm(confirmation)) return;
 
     try {
       setCancellingDcordOrder(true);
@@ -734,12 +737,14 @@ export default function OrderPage() {
                     </a>
                   </Button>
                 </div>
-              ) : isWaitingForDcord && hasQueuedDcordTokens ? (
+              ) : isWaitingForDcord ? (
                 <div className="lookup-note-actions">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleResumeDcordOrder()} disabled={resumingDcordOrder}>
-                    <RotateCcw className={`h-4 w-4 ${resumingDcordOrder ? "animate-spin" : ""}`} aria-hidden="true" />
-                    {resumingDcordOrder ? "Starting..." : "Resume delivery"}
-                  </Button>
+                  {hasQueuedDcordTokens ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => void handleResumeDcordOrder()} disabled={resumingDcordOrder}>
+                      <RotateCcw className={`h-4 w-4 ${resumingDcordOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {resumingDcordOrder ? "Starting..." : "Resume delivery"}
+                    </Button>
+                  ) : null}
                   <Button type="button" variant="dangerGhost" size="sm" onClick={() => void handleCancelDcordOrder()} disabled={cancellingDcordOrder || resumingDcordOrder}>
                     <X className="h-4 w-4" aria-hidden="true" />
                     {cancellingDcordOrder ? "Cancelling..." : "Cancel delivery"}

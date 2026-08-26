@@ -758,6 +758,10 @@ async function reconcileDcordTransportResults(order) {
     });
 
     if (!changed) return order;
+    const latest = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    if (String(latest.rows[0]?.payload?.status ?? "").trim().toUpperCase() === "CANCELLED") {
+      return latest.rows[0].payload;
+    }
 
     for (const result of dcordResults) {
       if (result?.reconciledAt && result?.usedTokenId) {
@@ -1091,20 +1095,32 @@ function scheduleDcordOrderRetry(uniqid, delayMs) {
   dcordOrderRetryTimers.set(orderId, timer);
 }
 
-async function returnQueuedDcordTokensToStock(order, tokens, results) {
+function canReturnDcordTokenResult(result, includeUncertain = false) {
+  return String(result?.status ?? "").toLowerCase() === "queued"
+    || (includeUncertain && isUncertainDcordTransportResult(result));
+}
+
+async function returnDcordTokensToStock(order, tokens, results, includeUncertain = false) {
   const duration = Number.parseInt(order?.duration, 10);
   if (![1, 3].includes(duration)) return 0;
-  const queuedTokens = tokens.filter((_token, index) => String(results[index]?.status ?? "").toLowerCase() === "queued");
-  if (!queuedTokens.length) return 0;
+  const returnedIndexes = results.flatMap((result, index) => canReturnDcordTokenResult(result, includeUncertain) ? [index] : []);
+  const returnableTokens = returnedIndexes.map((index) => tokens[index]).filter(Boolean);
+  if (!returnableTokens.length) return 0;
 
   const stock = await loadBoostTokenStock();
   const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
   const existing = new Set([...stock.oneMonth, ...stock.threeMonth]);
-  const returned = queuedTokens.filter((token) => !existing.has(token));
+  const returned = returnableTokens.filter((token) => !existing.has(token));
   if (returned.length) {
     await saveBoostTokenStock({ ...stock, [stockKey]: [...stock[stockKey], ...returned] });
   }
-  return queuedTokens.length;
+  if (includeUncertain) {
+    const returnedUsageIds = new Set(returnedIndexes.map((index) => results[index]?.usedTokenId).filter(Boolean));
+    if (returnedUsageIds.size) {
+      await mutateUsedBoostTokenHistory((history) => history.filter((item) => !returnedUsageIds.has(item.id)));
+    }
+  }
+  return returnableTokens.length;
 }
 
 async function runDcordBoostToken(token, invite) {
@@ -1196,7 +1212,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   }
 
   async function stopAfterOutage() {
-    const returnedCount = await returnQueuedDcordTokensToStock(order, tokens, results);
+    const returnedCount = await returnDcordTokensToStock(order, tokens, results);
     results.forEach((result, index) => {
       if (String(result?.status ?? "").toLowerCase() !== "queued") return;
       results[index] = {
@@ -2861,21 +2877,23 @@ app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, r
     if (String(order.status ?? "").trim().toUpperCase() !== "WAITING") {
       return res.status(409).json({ message: "Only a waiting Dcord order can be cancelled." });
     }
-    if (!order.dcordResults.some((item) => String(item?.status ?? "").toLowerCase() === "queued")) {
-      return res.status(409).json({ message: "This order has no unsubmitted tokens to return." });
-    }
-
     const tokens = await loadDcordOrderTokens(uniqid);
     const results = [...order.dcordResults];
-    const returnedTokenCount = await returnQueuedDcordTokensToStock(order, tokens, results);
+    const returnedTokenCount = await returnDcordTokensToStock(order, tokens, results, true);
     results.forEach((result, index) => {
-      if (String(result?.status ?? "").toLowerCase() !== "queued") return;
+      if (!canReturnDcordTokenResult(result, true)) return;
+      const wasSubmitted = isUncertainDcordTransportResult(result);
       results[index] = {
         ...result,
+        previousStatus: result.status,
         status: "returned",
-        joinStatus: "not submitted",
-        boostStatus: "not submitted",
-        boostMessage: "Delivery was cancelled. This token was returned to stock."
+        joinStatus: wasSubmitted ? "verification stopped" : "not submitted",
+        boostStatus: wasSubmitted ? "verification stopped" : "not submitted",
+        boostMessage: wasSubmitted
+          ? "Delivery was cancelled. This submitted token was force-returned to stock before Dcord confirmed the result."
+          : "Delivery was cancelled. This token was returned to stock.",
+        transportUncertain: false,
+        returnedAt: new Date().toISOString()
       };
     });
 
@@ -2890,11 +2908,10 @@ app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, r
       autoResumeDisabled: true,
       cancelledAt: new Date().toISOString(),
       returnedTokenCount,
-      details: `Delivery cancelled. ${returnedTokenCount} unsubmitted token${returnedTokenCount === 1 ? " was" : "s were"} returned to stock.`,
+      details: `Delivery cancelled. ${returnedTokenCount} reserved token${returnedTokenCount === 1 ? " was" : "s were"} returned to stock.`,
       dcordResults: results
     };
     await saveTrackedOrderPayload(cancelledOrder);
-    if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(uniqid);
     res.json(await revealDcordOrderTokens(cancelledOrder));
   } catch (error) {
     next(error);
