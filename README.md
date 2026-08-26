@@ -28,7 +28,7 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 
 - API anahtarlari koda gommeli degil; admin panelindeki ayarlar bolumune girilir ve PostgreSQL'de sifreli saklanir.
 - Varsayilan API tabani: `https://dev.tokenu.net/api/v1/reseller`
-- Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir ve Dcord `/api/joiner/start` job akisi ile toplu olarak islenir. Job sonuclari `/api/joiner/status` uzerinden izlenir.
+- Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir ve Dcord `/join` endpointine `boost: true` ile gonderilir.
 - Dcord endpointi ortam degiskenleriyle ayarlanir:
   - `DCORD_API_BASE_URL`
   - `DCORD_DASHBOARD_API_BASE_URL`

@@ -19,6 +19,7 @@ const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.t
 const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
 const dcordDashboardApiBase = process.env.DCORD_DASHBOARD_API_BASE_URL ?? "https://app.dcord.co/api";
 const dcordJoinPath = process.env.DCORD_JOIN_PATH ?? "join";
+const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "620000", 10) || 620_000, 15_000), 620_000);
 const discordApiBase = "https://discord.com/api/v10";
 const communityOauthStateDurationMs = 10 * 60 * 1000;
@@ -29,7 +30,6 @@ const publicRestartCooldowns = new Map();
 const communityOauthStartCooldowns = new Map();
 const dcordResultReconcileCooldowns = new Map();
 const dcordResultReconcileJobs = new Set();
-let dcordJoinerQueue = Promise.resolve();
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -525,25 +525,6 @@ async function recordUsedBoostToken({ token, duration, order, replacementFor }) 
   return entry;
 }
 
-async function recordUsedBoostTokens({ tokens, duration, order }) {
-  const usedAt = new Date().toISOString();
-  const entries = tokens.map((token) => ({
-    id: crypto.randomUUID(),
-    token,
-    redactedToken: redactToken(token),
-    duration,
-    orderId: order?.uniqid,
-    serverId: order?.serverId,
-    serverName: order?.serverName,
-    usedAt,
-    status: "pending",
-    success: false,
-    boosted: false
-  }));
-  await mutateUsedBoostTokenHistory((history) => [...entries, ...history]);
-  return entries;
-}
-
 async function updateUsedBoostTokenResult(id, result) {
   await mutateUsedBoostTokenHistory((history) => history.map((entry) => {
     if (entry.id !== id) return entry;
@@ -735,105 +716,6 @@ function normalizeDcordDashboardResult(item, currentResult) {
     boosted,
     reconciledAt: new Date().toISOString()
   };
-}
-
-function normalizeDcordJobItem(item, currentResult) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) return currentResult;
-  const status = String(item.status ?? "pending").trim().toLowerCase();
-  const message = String(item.message ?? "").trim();
-  const boostMessage = String(item.boost_message ?? "").trim();
-  const successful = normalizeDcordDashboardResult(item, currentResult);
-  if (successful) return { ...successful, transportUncertain: false };
-
-  if (["queued", "pending", "running"].includes(status)) {
-    return {
-      ...currentResult,
-      success: false,
-      status: status === "running" ? "joining" : "queued",
-      joinStatus: status === "running" ? "joining" : "waiting",
-      boostStatus: "waiting",
-      slots: null,
-      boost: false,
-      boostMessage: message || (status === "running" ? "Join + boost request is running." : "Waiting for Dcord worker."),
-      boosted: false,
-      transportUncertain: false
-    };
-  }
-
-  return {
-    ...currentResult,
-    success: false,
-    status: status || "error",
-    joinStatus: "failed",
-    boostStatus: boostMessage.toLowerCase().includes("boosted") ? "boosted" : "skipped",
-    slots: 0,
-    boost: false,
-    boostMessage: [message, boostMessage && `boost: ${boostMessage}`].filter(Boolean).join(" | ") || "Dcord join failed.",
-    boosted: false,
-    transportUncertain: false
-  };
-}
-
-function findDcordJobItem(items, token, index) {
-  const indexed = items[index];
-  if (indexed && (!indexed.token_masked && !indexed.token || matchesDcordMaskedToken(token, indexed.token_masked ?? indexed.token))) {
-    return indexed;
-  }
-  return items.find((item) => matchesDcordMaskedToken(token, item?.token_masked ?? item?.token));
-}
-
-async function applyDcordJobStatus(order, statusPayload, assignedTokens) {
-  const job = statusPayload?.job;
-  if (!job || typeof job !== "object" || Array.isArray(job)) return order;
-  if (order.dcordJobId && job.id && String(job.id) !== String(order.dcordJobId)) return order;
-
-  const items = Array.isArray(job.items) ? job.items : [];
-  const previousResults = Array.isArray(order.dcordResults) ? order.dcordResults : assignedTokens.map(createQueuedDcordResult);
-  const jobOffset = Math.max(0, Number.parseInt(order.dcordJobOffset, 10) || 0);
-  const dcordResults = previousResults.map((current, index) => {
-    if (index < jobOffset || index >= jobOffset + items.length) return current;
-    const item = findDcordJobItem(items, assignedTokens[index], index - jobOffset);
-    return normalizeDcordJobItem(item, current);
-  });
-  const jobActive = statusPayload.active === true || ["queued", "running"].includes(String(job.status ?? "").toLowerCase());
-  const pendingResults = dcordResults.some((result) => ["queued", "joining"].includes(String(result?.status ?? "").toLowerCase()));
-  const active = jobActive || pendingResults;
-  const added = dcordResults.reduce((total, result) => total + (result?.boosted === true ? 2 : 0), 0);
-  const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
-  const nextOrder = {
-    ...order,
-    dcordJobId: String(job.id ?? order.dcordJobId ?? ""),
-    dcordJobStatus: String(job.status ?? (jobActive ? "running" : "finished")),
-    added,
-    status: active ? "PROCESS" : added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
-    details: active
-      ? `${added}/${amount} boosts completed. Dcord job is ${jobActive ? "running" : "continuing"}.`
-      : added >= amount
-        ? `${added}/${amount} boosts completed.`
-        : `${added}/${amount} boosts completed. Review failed tokens in the payload.`,
-    dcordResults
-  };
-
-  for (let index = 0; index < dcordResults.length; index += 1) {
-    const result = dcordResults[index];
-    const previous = previousResults[index];
-    if (result?.usedTokenId && !["queued", "joining"].includes(String(result.status ?? "").toLowerCase()) && (
-      result.status !== previous?.status || result.boosted !== previous?.boosted || result.boostMessage !== previous?.boostMessage
-    )) {
-      await updateUsedBoostTokenResult(result.usedTokenId, result);
-    }
-  }
-
-  await saveTrackedOrderPayload(nextOrder);
-  return nextOrder;
-}
-
-async function syncDcordJobOrder(order) {
-  const jobId = String(order?.dcordJobId ?? "").trim();
-  if (!jobId) return order;
-  const assignedTokens = await loadDcordOrderTokens(order.uniqid);
-  const status = await requestDcordDashboard(`joiner/status?job_id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
-  return applyDcordJobStatus(order, status, assignedTokens);
 }
 
 async function reconcileDcordTransportResults(order) {
@@ -1192,108 +1074,90 @@ async function runDcordBoostToken(token, invite) {
 }
 
 async function processDcordBoostOrder(order, tokens, invite) {
-  const usageEntries = await recordUsedBoostTokens({ tokens, duration: order.duration, order });
-  let currentOrder = {
-    ...order,
-    dcordMode: "job",
-    dcordResults: tokens.map((token, index) => ({ ...createQueuedDcordResult(token), usedTokenId: usageEntries[index].id }))
-  };
-  await saveTrackedOrderPayload(currentOrder);
+  const results = tokens.map(createQueuedDcordResult);
+  let nextIndex = 0;
+  let progressSave = Promise.resolve();
 
-  for (let offset = 0; offset < tokens.length; offset += 50) {
-    const batchTokens = tokens.slice(offset, offset + 50);
-    let started;
-    for (let attempt = 0; attempt < 600; attempt += 1) {
-      try {
-        started = await requestDcordDashboard("joiner/start", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tokens: batchTokens, invites: [invite], proxies: ["test"], boost: true })
-        });
-        break;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "";
-        if (error?.statusCode !== 409 && !/already|active|running|wait/i.test(message)) throw error;
-        currentOrder = {
-          ...currentOrder,
-          status: "PROCESS",
-          details: `${currentOrder.added ?? 0}/${order.amount} boosts completed. Waiting for the active Dcord job.`
-        };
-        await saveTrackedOrderPayload(currentOrder);
-        await new Promise((resolve) => setTimeout(resolve, 3_000));
-      }
-    }
-
-    const job = started?.job;
-    const jobId = String(job?.id ?? "").trim();
-    if (!jobId) throw new Error("Dcord did not return a joiner job ID.");
-    currentOrder = {
-      ...currentOrder,
-      dcordJobId: jobId,
-      dcordJobOffset: offset,
-      dcordJobIds: [...(Array.isArray(currentOrder.dcordJobIds) ? currentOrder.dcordJobIds : []), jobId],
-      status: "PROCESS",
-      details: `${currentOrder.added ?? 0}/${order.amount} boosts completed. Dcord job started.`
-    };
-    currentOrder = await applyDcordJobStatus(currentOrder, { ...started, active: true }, tokens);
-
-    for (let poll = 0; poll < 450; poll += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-      try {
-        const statusPayload = await requestDcordDashboard(`joiner/status?job_id=${encodeURIComponent(jobId)}`, { cache: "no-store" });
-        currentOrder = await applyDcordJobStatus(currentOrder, statusPayload, tokens);
-        const active = statusPayload.active === true || ["queued", "running"].includes(String(statusPayload?.job?.status ?? "").toLowerCase());
-        if (!active) break;
-      } catch (error) {
-        if (poll >= 449) throw error;
-      }
-    }
-  }
-
-  const added = currentOrder.dcordResults.reduce((total, result) => total + (result?.boosted === true ? 2 : 0), 0);
-  currentOrder = {
-    ...currentOrder,
-    added,
-    status: added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
-    details: added >= order.amount
-      ? `${added}/${order.amount} boosts completed.`
-      : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
-  };
-  await saveTrackedOrderPayload(currentOrder);
-}
-
-function enqueueDcordBoostOrder(order, tokens, invite) {
-  const operation = dcordJoinerQueue.then(() => processDcordBoostOrder(order, tokens, invite));
-  dcordJoinerQueue = operation.catch(() => undefined);
-  return operation;
-}
-
-async function handleDcordBoostOrderFailure(order, error) {
-  const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-  const current = tracked.rows[0]?.payload ?? order;
-  const message = error instanceof Error ? error.message : "Dcord job could not be started.";
-  if (current.dcordJobId) {
-    await saveTrackedOrderPayload({
-      ...current,
-      status: "PROCESS",
-      details: `${current.added ?? 0}/${order.amount} boosts completed. Dcord status sync will resume from the saved job.`
+  async function saveCurrentProgress() {
+    progressSave = progressSave.then(async () => {
+      const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
+      const finished = results.every((item) => !["queued", "joining", "verifying"].includes(String(item?.status ?? "").toLowerCase()));
+      await saveTrackedOrderPayload({
+        ...order,
+        added,
+        status: finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
+        details: finished
+          ? added >= order.amount
+            ? `${added}/${order.amount} boosts completed.`
+            : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
+          : `${added}/${order.amount} boosts completed.`,
+        dcordResults: results
+      });
     });
-    return;
+    await progressSave;
   }
 
-  const dcordResults = (Array.isArray(current.dcordResults) ? current.dcordResults : []).map((result) => ({
-    ...result,
-    status: "error",
-    joinStatus: "failed",
-    boostStatus: "skipped",
-    slots: 0,
-    boostMessage: message,
-    boosted: false
-  }));
-  for (const result of dcordResults) {
-    if (result?.usedTokenId) await updateUsedBoostTokenResult(result.usedTokenId, result);
+  async function runNextToken() {
+    const index = nextIndex;
+    nextIndex += 1;
+    if (index >= tokens.length) return;
+
+    const token = tokens[index];
+    results[index] = {
+      ...results[index],
+      status: "joining",
+      joinStatus: "joining",
+      boostStatus: "waiting",
+      boostMessage: "Join + boost request is running."
+    };
+    await saveCurrentProgress();
+
+    const usageEntry = await recordUsedBoostToken({ token, duration: order.duration, order });
+    const normalized = await runDcordBoostToken(token, invite);
+    await updateUsedBoostTokenResult(usageEntry.id, normalized);
+    results[index] = { ...normalized, usedTokenId: usageEntry.id };
+    await saveCurrentProgress();
+    await runNextToken();
   }
-  await saveTrackedOrderPayload({ ...current, status: "ERROR", details: message, dcordResults });
+
+  const workerCount = Math.min(tokens.length, dcordBoostConcurrency);
+  await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
+  await saveCurrentProgress();
+  if (results.some(isUncertainDcordTransportResult)) scheduleDcordResultReconciliation(order.uniqid);
+}
+
+async function recoverBlockedDcordJobOrders() {
+  const blocked = await pool.query(
+    `SELECT uniqid, payload
+     FROM tracked_orders
+     WHERE payload->>'provider' = 'dcord'
+       AND payload->>'dcordMode' = 'job'
+       AND COALESCE(payload->>'dcordJobId', '') = ''
+       AND COALESCE((payload->>'tokensReturnedToStock')::boolean, false) = false`
+  );
+  if (!blocked.rowCount) return;
+
+  for (const row of blocked.rows) {
+    const order = row.payload;
+    const duration = Number.parseInt(order?.duration, 10);
+    const tokens = await loadDcordOrderTokens(row.uniqid);
+    if ([1, 3].includes(duration) && tokens.length) {
+      const stock = await loadBoostTokenStock();
+      const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+      const existing = new Set([...stock.oneMonth, ...stock.threeMonth]);
+      await saveBoostTokenStock({
+        ...stock,
+        [stockKey]: [...stock[stockKey], ...tokens.filter((token) => !existing.has(token))]
+      });
+      await mutateUsedBoostTokenHistory((history) => history.filter((item) => item.orderId !== row.uniqid));
+    }
+    await saveTrackedOrderPayload({
+      ...order,
+      status: "ERROR",
+      details: "Dcord job was blocked before submission. Assigned tokens were returned to stock.",
+      tokensReturnedToStock: true
+    });
+  }
 }
 
 async function requestTokenuPublicData(pathname, init = {}) {
@@ -1388,6 +1252,7 @@ async function initializeDatabase() {
   `);
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
   await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
+  await recoverBlockedDcordJobOrders();
 }
 
 async function requireSession(req, res, next) {
@@ -2105,9 +1970,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       !Array.isArray(trackedPayload) &&
       (trackedPayload.provider === "dcord" || trackedPayload.service === "DCORD-BOOSTS")
     ) {
-      trackedPayload = trackedPayload.dcordJobId
-        ? await syncDcordJobOrder(trackedPayload).catch(() => trackedPayload)
-        : await reconcileDcordTransportResults(trackedPayload);
+      trackedPayload = await reconcileDcordTransportResults(trackedPayload);
       if ((!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) && typeof trackedPayload.serverInvite === "string" && trackedPayload.serverInvite.trim()) {
         try {
           const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
@@ -2634,11 +2497,8 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
 
     await saveDcordOrderTokens(uniqid, selectedTokens);
     await saveTrackedOrderPayload(order);
-    void enqueueDcordBoostOrder(order, selectedTokens, invite).catch(async (error) => {
-      console.error("Dcord boost job failed:", error instanceof Error ? error.message : error);
-      await handleDcordBoostOrderFailure(order, error).catch((saveError) => {
-        console.error("Dcord boost failure could not be saved:", saveError instanceof Error ? saveError.message : saveError);
-      });
+    void processDcordBoostOrder(order, selectedTokens, invite).catch((error) => {
+      console.error(error);
     });
     res.json({
       uniqid,
@@ -2711,9 +2571,7 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
       return res.status(404).json({ message: "Boost order could not be found." });
     }
 
-    let payload = tracked.rows[0].payload?.dcordJobId
-      ? await syncDcordJobOrder(tracked.rows[0].payload).catch(() => tracked.rows[0].payload)
-      : await reconcileDcordTransportResults(tracked.rows[0].payload);
+    let payload = await reconcileDcordTransportResults(tracked.rows[0].payload);
     if (
       payload &&
       typeof payload === "object" &&
