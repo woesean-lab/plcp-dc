@@ -745,7 +745,7 @@ export default function OrderPage() {
                       {resumingDcordOrder ? "Starting..." : "Resume delivery"}
                     </Button>
                   ) : null}
-                  <Button type="button" variant="dangerGhost" size="sm" onClick={() => void handleCancelDcordOrder()} disabled={cancellingDcordOrder || resumingDcordOrder}>
+                  <Button type="button" variant="destructive" size="sm" onClick={() => void handleCancelDcordOrder()} disabled={cancellingDcordOrder || resumingDcordOrder}>
                     <X className="h-4 w-4" aria-hidden="true" />
                     {cancellingDcordOrder ? "Cancelling..." : "Cancel delivery"}
                   </Button>
