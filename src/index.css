@@ -3538,7 +3538,7 @@
 
   .public-token-result-flow {
     display: grid;
-    grid-template-columns: 140px 88px 88px 52px;
+    grid-template-columns: 76px 88px 88px 52px;
     gap: .7rem;
     align-items: center;
     justify-self: end;
@@ -3593,9 +3593,8 @@
 
   .public-token-result-action {
     display: flex;
-    gap: 6px;
     justify-content: flex-start;
-    min-width: 140px;
+    min-width: 78px;
   }
 
   .public-token-replace-button {

@@ -8,7 +8,7 @@ import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, Rota
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { getPublicOrderStatus, replaceCommunityMember, replaceDcordBoostToken, retryDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
+import { getPublicOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -26,7 +26,6 @@ type DcordTokenResult = {
   boostMessage: string;
   successful: boolean;
   state: "success" | "pending" | "error";
-  canRetry: boolean;
 };
 
 type CommunityMemberResult = {
@@ -184,12 +183,6 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
       const isFailed = [joinStatus, boostStatus, status].some((value) =>
         ["failed", "error", "skipped"].some((stateValue) => value.toLowerCase().includes(stateValue))
       );
-      const hasTaskId = typeof row.dcordTaskId === "string" && row.dcordTaskId.trim();
-      const canRetry = !successful && !hasTaskId && (
-        isFailed
-        || normalizedStatus === "joining"
-        || boostMessage.toLowerCase().includes("stopped before a task id")
-      );
       const state = successful
         ? "success"
         : isFailed
@@ -198,7 +191,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
             ? "pending"
             : "error";
 
-      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state, canRetry };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -212,7 +205,6 @@ export default function PublicOrderPage() {
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
-  const [retryingTokenIndex, setRetryingTokenIndex] = useState<number | null>(null);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
@@ -494,21 +486,6 @@ export default function PublicOrderPage() {
     }
   }
 
-  async function handleRetryDcordToken(resultIndex: number) {
-    if (!uniqid || retryingTokenIndex !== null) return;
-
-    try {
-      setRetryingTokenIndex(resultIndex);
-      const data = await retryDcordBoostToken(uniqid, resultIndex);
-      setStatus((current) => mergeOrderStatus(current, data));
-      toast.success("Token retry started.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Token could not be retried.");
-    } finally {
-      setRetryingTokenIndex(null);
-    }
-  }
-
   async function handleReplaceCommunityMember(resultIndex: number) {
     if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
 
@@ -755,18 +732,6 @@ export default function PublicOrderPage() {
                             </span>
                             <span className="public-token-result-flow">
                               <span className="public-token-result-action">
-                                {item.canRetry ? (
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="xs"
-                                    className="public-token-replace-button"
-                                    onClick={() => void handleRetryDcordToken(item.index)}
-                                    disabled={retryingTokenIndex !== null || replacingTokenIndex !== null}
-                                  >
-                                    {retryingTokenIndex === item.index ? "Retrying..." : "Retry"}
-                                  </Button>
-                                ) : null}
                                 {item.state === "error" ? (
                                   <Button
                                     type="button"
