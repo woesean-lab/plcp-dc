@@ -1516,6 +1516,39 @@ async function resumeDcordBoostOrder(uniqid) {
   await processDcordBoostOrder(order, tokens, invite);
 }
 
+async function recoverStaleDcordBoostOrder(order) {
+  const orderId = String(order?.uniqid ?? "").trim();
+  if (!orderId || !order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) return order;
+  if (dcordOrderProcessingJobs.has(orderId) || !order.dcordResults.some(isDcordUnconfirmedRunningResult)) return order;
+
+  const recoveredOrder = {
+    ...order,
+    status: "PROCESS",
+    details: "Recovering a Dcord request that stopped before a task ID was saved.",
+    dcordResults: order.dcordResults.map((result) => {
+      if (!isDcordUnconfirmedRunningResult(result)) return result;
+      return {
+        ...result,
+        status: "queued",
+        joinStatus: "waiting",
+        boostStatus: "waiting",
+        boostMessage: "Previous Dcord request stopped before a task ID was saved. Retrying.",
+        transportUncertain: false
+      };
+    })
+  };
+
+  await saveTrackedOrderPayload(recoveredOrder);
+  const tokens = await loadDcordOrderTokens(orderId);
+  const invite = extractDiscordInviteCode(recoveredOrder.serverInvite);
+  if (tokens.length && invite) {
+    void processDcordBoostOrder(recoveredOrder, tokens, invite).catch((error) => {
+      console.error("Stale Dcord order recovery failed:", error instanceof Error ? error.message : error);
+    });
+  }
+  return recoveredOrder;
+}
+
 async function recoverPendingDcordOrders() {
   const pending = await pool.query(
     `SELECT uniqid, payload
@@ -2542,6 +2575,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
           // Keep the public monitor available even if Discord metadata lookup fails.
         }
       }
+      trackedPayload = await recoverStaleDcordBoostOrder(trackedPayload);
       const canManageDcordTokens = await hasActiveSession(req);
       if (canManageDcordTokens) {
         const managedPayload = await revealDcordOrderTokens(trackedPayload);
@@ -3141,6 +3175,7 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
     }
 
     let payload = tracked.rows[0].payload;
+    payload = await recoverStaleDcordBoostOrder(payload);
     if (
       payload &&
       typeof payload === "object" &&
