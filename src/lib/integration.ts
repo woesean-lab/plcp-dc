@@ -157,6 +157,17 @@ export function cancelDcordBoostOrder(uniqid: string) {
   );
 }
 
+export function replaceCommunityMember(uniqid: string, resultIndex: number) {
+  return requestJson<OrderStatusResponse>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/replace-member`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resultIndex })
+    }
+  );
+}
+
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(

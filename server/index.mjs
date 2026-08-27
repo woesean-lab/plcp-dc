@@ -974,6 +974,7 @@ async function addCommunityGuildMember(config, discordUserId, accessToken) {
 
 async function processCommunityOrder(order, members, config) {
   const results = members.map((member) => ({
+    discordUserId: member.discord_user_id,
     username: member.username,
     avatarUrl: member.avatar_url ?? null,
     state: "queued",
@@ -990,7 +991,7 @@ async function processCommunityOrder(order, members, config) {
 
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
-    results[index] = { username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
+    results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
     let state = "failed";
@@ -1016,10 +1017,10 @@ async function processCommunityOrder(order, members, config) {
       details = error instanceof Error ? error.message : details;
     }
 
-    results[index] = { username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
+    results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = 'authorized', details = $3,
+       SET status = CASE WHEN $4 = 'failed' THEN 'failed' ELSE 'authorized' END, details = $3,
            joined_at = CASE WHEN $4 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
            reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
@@ -1042,6 +1043,61 @@ async function processCommunityOrder(order, members, config) {
     added,
     status,
     details: added >= order.amount ? `${added}/${order.amount} members delivered.` : `${added}/${order.amount} members delivered. Review the member results.`,
+    communityResults: results
+  });
+}
+
+async function processCommunityReplacement(orderId, resultIndex, member, config) {
+  let state = "failed";
+  let details = "Replacement member could not be added.";
+  try {
+    const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
+    await pool.query(
+      "UPDATE community_oauth_joins SET encrypted_refresh_token = $3 WHERE discord_user_id = $1 AND guild_id = $2",
+      [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
+    );
+    const joined = await addCommunityGuildMember(config, member.discord_user_id, credentials.accessToken);
+    if (joined.response.status === 201) {
+      state = "joined";
+      details = "Replacement member joined the server.";
+    } else if (joined.response.status === 204) {
+      details = "Replacement user was already in the server.";
+    } else {
+      details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
+    }
+  } catch (error) {
+    details = error instanceof Error ? error.message : details;
+  }
+
+  await pool.query(
+    `UPDATE community_oauth_joins
+     SET status = $3, details = $4,
+         joined_at = CASE WHEN $3 = 'authorized' THEN NOW() ELSE joined_at END,
+         reserved_order_id = NULL
+     WHERE discord_user_id = $1 AND guild_id = $2`,
+    [member.discord_user_id, config.guildId, state === "joined" ? "authorized" : "failed", details]
+  );
+
+  const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
+  const order = tracked.rows[0]?.payload;
+  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) return;
+  const results = [...order.communityResults];
+  const current = results[resultIndex];
+  if (!current || current.discordUserId !== member.discord_user_id || String(current.state).toLowerCase() !== "replacing") return;
+
+  results[resultIndex] = {
+    ...current,
+    state,
+    details,
+    completedAt: new Date().toISOString()
+  };
+  const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+  const amount = Number(order.amount) || results.length;
+  await saveTrackedOrderPayload({
+    ...order,
+    added,
+    status: added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
+    details: added >= amount ? `${added}/${amount} members delivered.` : `${added}/${amount} members delivered. Review the member results.`,
     communityResults: results
   });
 }
@@ -2003,7 +2059,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       status: waitingForBot ? "WAITING" : "PROCESS",
       details: waitingForBot ? "Add the Members bot to this server to start delivery." : `0/${amount} members delivered.`,
       botInvite,
-      communityResults: selected.rows.map((row) => ({ username: row.username, avatarUrl: row.avatar_url ?? null, state: "queued", details: "Waiting for delivery." }))
+      communityResults: selected.rows.map((row) => ({ discordUserId: row.discord_user_id, username: row.username, avatarUrl: row.avatar_url ?? null, state: "queued", details: "Waiting for delivery." }))
     };
     await client.query(
       `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -2139,6 +2195,19 @@ async function hydrateCommunityOrderAvatars(order) {
   return hydrated;
 }
 
+function sanitizePublicCommunityOrder(order) {
+  if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.communityResults)) return order;
+  return {
+    ...order,
+    communityResults: order.communityResults.map((item) => {
+      if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+      const sanitized = { ...item };
+      delete sanitized.discordUserId;
+      return sanitized;
+    })
+  };
+}
+
 app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -2176,6 +2245,134 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   }
 });
 
+app.post("/api/community/orders/:uniqid/replace-member", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const resultIndex = Number.parseInt(req.body?.resultIndex, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(resultIndex) || resultIndex < 0) {
+      return res.status(400).json({ message: "A valid order ID and member row are required." });
+    }
+
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before replacing a member." });
+    }
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (String(order.serverId ?? "") !== config.guildId) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "The Members bot is no longer configured for this order's server." });
+    }
+
+    const results = [...order.communityResults];
+    if (results.some((item) => String(item?.state ?? "").toLowerCase() === "replacing")) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Another replacement member is already running for this order." });
+    }
+    const failedResult = results[resultIndex];
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || String(failedResult.state ?? "").toLowerCase() !== "failed") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Only a failed member result can be replaced." });
+    }
+
+    let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;
+    if (!failedUserId && typeof failedResult.username === "string" && failedResult.username.trim()) {
+      const matched = await client.query(
+        `SELECT discord_user_id
+         FROM community_oauth_joins
+         WHERE guild_id = $1 AND username = $2
+         ORDER BY authorized_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [config.guildId, failedResult.username.trim()]
+      );
+      failedUserId = matched.rows[0]?.discord_user_id ?? null;
+    }
+    if (!failedUserId) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
+    }
+
+    await client.query(
+      `UPDATE community_oauth_joins
+       SET status = 'failed', details = 'Disconnected after failed order delivery.', reserved_order_id = NULL
+       WHERE discord_user_id = $1 AND guild_id = $2`,
+      [failedUserId, config.guildId]
+    );
+
+    const usedUserIds = Array.from(new Set([
+      failedUserId,
+      ...results.map((item) => String(item?.discordUserId ?? "").trim()).filter(isDiscordGuildId)
+    ]));
+    const usedUsernames = Array.from(new Set(results.map((item) => String(item?.username ?? "").trim()).filter(Boolean)));
+    const replacement = await client.query(
+      `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1
+         AND status <> 'failed'
+         AND encrypted_refresh_token IS NOT NULL
+         AND reserved_order_id IS NULL
+         AND NOT (discord_user_id = ANY($2::text[]))
+         AND NOT (username = ANY($3::text[]))
+       ORDER BY authorized_at ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`,
+      [config.guildId, usedUserIds, usedUsernames]
+    );
+    if (!replacement.rowCount) {
+      await client.query("COMMIT");
+      return res.status(409).json({ message: "No connected replacement member is currently available. The failed user was removed from available stock." });
+    }
+
+    const member = replacement.rows[0];
+    await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE discord_user_id = $2 AND guild_id = $3",
+      [uniqid, member.discord_user_id, config.guildId]
+    );
+    results[resultIndex] = {
+      discordUserId: member.discord_user_id,
+      username: member.username,
+      avatarUrl: member.avatar_url ?? null,
+      state: "replacing",
+      details: "Replacement member delivery is running.",
+      replacementAttempt: (Number(failedResult.replacementAttempt) || 0) + 1,
+      previousUsername: failedResult.username
+    };
+    const activeOrder = {
+      ...order,
+      status: "PROCESS",
+      details: `${order.added ?? 0}/${order.amount} members delivered. Replacing a failed member.`,
+      communityResults: results
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(activeOrder)]
+    );
+    await client.query("COMMIT");
+
+    void processCommunityReplacement(uniqid, resultIndex, member, config).catch(async (error) => {
+      console.error("Members replacement failed:", error instanceof Error ? error.message : error);
+      await pool.query(
+        "UPDATE community_oauth_joins SET status = 'failed', reserved_order_id = NULL, details = $3 WHERE discord_user_id = $1 AND guild_id = $2",
+        [member.discord_user_id, config.guildId, error instanceof Error ? error.message : "Replacement failed."]
+      ).catch(() => {});
+    });
+    res.json(activeOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -2194,7 +2391,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
       trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
-      return res.set("Cache-Control", "no-store").json({ ...trackedPayload, liveBoostStock });
+      return res.set("Cache-Control", "no-store").json({ ...sanitizePublicCommunityOrder(trackedPayload), liveBoostStock });
     }
     if (
       trackedPayload &&

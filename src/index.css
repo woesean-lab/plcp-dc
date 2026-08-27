@@ -768,6 +768,13 @@
     gap: .2rem;
   }
 
+  .community-order-result-state {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: .45rem;
+  }
+
   .community-order-avatar {
     display: grid;
     width: 34px;

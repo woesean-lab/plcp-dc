@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelDcordBoostOrder, getOrderStatus, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -309,6 +309,7 @@ export default function OrderPage() {
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
+  const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "tokenu" ? 10 : 2);
@@ -353,7 +354,8 @@ export default function OrderPage() {
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(result);
-  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
+  const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
+  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const summary = isDcordProvider
     ? [
         { label: "Duration", value: result?.duration === 1 || result?.duration === 3 ? `${result.duration} Month` : "-" },
@@ -542,6 +544,28 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Token could not be replaced.");
     } finally {
       setReplacingTokenIndex(null);
+    }
+  }
+
+  async function handleReplaceCommunityMember(resultIndex: number) {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || replacingCommunityMemberIndex !== null) return;
+
+    try {
+      setReplacingCommunityMemberIndex(resultIndex);
+      const data = await replaceCommunityMember(target, resultIndex);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success("Replacement member started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Member could not be replaced.");
+      try {
+        const data = await getOrderStatus(target, provider);
+        setResult((current) => mergeOrderStatus(current, data));
+      } catch {
+        // Keep the current order visible; live refresh will retry later.
+      }
+    } finally {
+      setReplacingCommunityMemberIndex(null);
     }
   }
 
@@ -849,7 +873,15 @@ export default function OrderPage() {
                         <strong>{item.username}</strong>
                         <small>{item.details}</small>
                       </span>
-                      <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                      <span className="community-order-result-state">
+                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                        {item.state.toLowerCase() === "failed" ? (
+                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning}>
+                            <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
+                            {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
+                          </Button>
+                        ) : null}
+                      </span>
                       <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
                     </div>
                   ))}
