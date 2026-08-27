@@ -17,8 +17,8 @@ const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net
 const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
 const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
 const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
-const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "api/task/create";
-const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "api/task/status";
+const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
+const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
@@ -616,8 +616,16 @@ async function requestTokenu(baseUrl, pathname, init = {}) {
   return requestTokenuWithKey(await loadTokenuApiKey(), baseUrl, pathname, init);
 }
 
+function resolveDcordApiUrl(pathname) {
+  const base = new URL(dcordApiBase);
+  const requested = String(pathname ?? "").trim();
+  const normalized = requested.replace(/^\/+/, "");
+  if (normalized.startsWith("api/")) return new URL(`/${normalized}`, base.origin);
+  return new URL(requested, `${dcordApiBase.replace(/\/$/, "")}/`);
+}
+
 async function requestDcord(pathname, init = {}) {
-  const response = await fetch(new URL(pathname, `${dcordApiBase.replace(/\/$/, "")}/`), {
+  const response = await fetch(resolveDcordApiUrl(pathname), {
     ...init,
     signal: init.signal ?? AbortSignal.timeout(dcordRequestTimeoutMs),
     headers: {
@@ -1168,7 +1176,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
         boostStatus: "not submitted",
         slots: null,
         boost: false,
-        boostMessage: "Dcord Cloudflare blocked the API request before it reached the task service. Delivery was paused.",
+        boostMessage: "Dcord Cloudflare blocked POST /api/task/create before it reached the task service. Delivery was paused.",
         httpStatus: Number.isFinite(statusCode) ? statusCode : 403,
         boosted: false,
         transportUncertain: false,
@@ -1189,7 +1197,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
       slots: transportUncertain ? null : 0,
       boost: false,
       boostMessage: transportUncertain
-        ? `Dcord did not confirm task creation: ${message} The result is being checked without sending the token again.`
+        ? `POST /api/task/create was not confirmed: ${message} The token will not be sent again without a task ID.`
         : message,
       httpStatus: Number.isFinite(statusCode) ? statusCode : undefined,
       boosted: false,
