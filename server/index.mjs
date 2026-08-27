@@ -1,11 +1,13 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { execFile } from "node:child_process/promises";
+import { execFile as execFileCallback } from "node:child_process";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import pg from "pg";
 
 const { Pool } = pg;
+const execFile = promisify(execFileCallback);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "../dist");
 const port = Number(process.env.PORT ?? 3000);
