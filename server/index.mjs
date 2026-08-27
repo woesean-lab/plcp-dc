@@ -646,8 +646,8 @@ async function requestDcord(pathname, init = {}) {
 
   if (!response.ok) {
     const error = new Error(
-      typeof payload === "object" && payload && "message" in payload
-        ? String(payload.message)
+      typeof payload === "object" && payload && ("message" in payload || "detail" in payload)
+        ? String(payload.message ?? payload.detail)
         : typeof payload === "string" && payload
           ? payload
           : `Dcord request failed with ${response.status}.`
@@ -1287,6 +1287,24 @@ async function runDcordBoostToken(token, invite, options = {}) {
   } catch (error) {
     const statusCode = Number(error?.statusCode);
     const message = error instanceof Error ? error.message : "Dcord join failed.";
+    if (taskId) {
+      return {
+        token: redactToken(token),
+        success: false,
+        status: "verifying",
+        joinStatus: "verifying",
+        boostStatus: "verifying",
+        slots: null,
+        boost: false,
+        boostMessage: "Dcord accepted the task. Its result will be checked again.",
+        httpStatus: Number.isFinite(statusCode) ? statusCode : undefined,
+        boosted: false,
+        transportUncertain: true,
+        taskPending: true,
+        dcordTaskId: taskId,
+        dcordTaskStatus: "pending"
+      };
+    }
     const transportUncertain = error?.uncertain === true
       || [408, 425, 429].includes(statusCode)
       || statusCode >= 500
@@ -1300,7 +1318,9 @@ async function runDcordBoostToken(token, invite, options = {}) {
       boostStatus: transportUncertain ? "verifying" : "skipped",
       slots: transportUncertain ? null : 0,
       boost: false,
-      boostMessage: transportUncertain ? "Upstream response is uncertain. Verifying the Dcord result." : message,
+      boostMessage: transportUncertain
+        ? `Dcord did not confirm task creation: ${message} The result is being checked without sending the token again.`
+        : message,
       httpStatus: Number.isFinite(statusCode) ? statusCode : undefined,
       boosted: false,
       transportUncertain,
