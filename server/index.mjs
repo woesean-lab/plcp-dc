@@ -624,6 +624,10 @@ function resolveDcordApiUrl(pathname) {
   return new URL(requested, `${dcordApiBase.replace(/\/$/, "")}/`);
 }
 
+function isDcordUpstreamVerificationMessage(message) {
+  return /upstream verification|awaiting upstream verification|did not confirm task creation/i.test(String(message ?? ""));
+}
+
 async function requestDcord(pathname, init = {}) {
   const response = await fetch(resolveDcordApiUrl(pathname), {
     ...init,
@@ -644,10 +648,8 @@ async function requestDcord(pathname, init = {}) {
   }
 
   if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
-    const providerBlocked = response.status === 403 && /sorry, you have been blocked|unable to access|attention required/i.test(payload);
-    const error = new Error(providerBlocked
-      ? "Dcord Cloudflare blocked the API request before it reached the task service."
-      : "Dcord request is awaiting upstream verification.");
+    const providerBlocked = /challenge-platform|__cf_chl|just a moment|sorry, you have been blocked|unable to access|attention required/i.test(payload);
+    const error = new Error("Dcord Cloudflare blocked the API request before it reached the task service.");
     error.statusCode = response.status;
     error.uncertain = !providerBlocked;
     error.providerBlocked = providerBlocked;
@@ -655,15 +657,15 @@ async function requestDcord(pathname, init = {}) {
   }
 
   if (!response.ok) {
-    const error = new Error(
-      typeof payload === "object" && payload && ("message" in payload || "detail" in payload)
-        ? String(payload.message ?? payload.detail)
-        : typeof payload === "string" && payload
-          ? payload
-          : `Dcord request failed with ${response.status}.`
-    );
+    const message = typeof payload === "object" && payload && ("message" in payload || "detail" in payload)
+      ? String(payload.message ?? payload.detail)
+      : typeof payload === "string" && payload
+        ? payload
+        : `Dcord request failed with ${response.status}.`;
+    const error = new Error(message);
     error.statusCode = response.status;
     error.uncertain = response.status >= 500;
+    error.providerBlocked = isDcordUpstreamVerificationMessage(message);
     throw error;
   }
 
@@ -694,7 +696,8 @@ function isDcordCloudflareBlockedResult(result) {
   if (!result || typeof result !== "object" || Array.isArray(result) || result.dcordTaskId) return false;
   const message = String(result.boostMessage ?? result.message ?? "").toLowerCase();
   return result.providerBlocked === true
-    || (Number(result.httpStatus) === 403 && /upstream verification|cloudflare|did not confirm task creation/.test(message));
+    || isDcordUpstreamVerificationMessage(message)
+    || (Number(result.httpStatus) === 403 && /cloudflare|did not confirm task creation/.test(message));
 }
 
 function getOrderIdFromPayload(payload) {
@@ -1343,8 +1346,14 @@ async function processDcordBoostOrder(order, tokens, invite) {
         await saveCurrentProgress();
       }
     });
-    await updateUsedBoostTokenResult(usedTokenId, normalized);
-    results[index] = { ...results[index], ...normalized, usedTokenId };
+    if (normalized.providerBlocked === true) {
+      await mutateUsedBoostTokenHistory((history) => history.filter((item) => item.id !== usedTokenId));
+      const { usedTokenId: _unusedId, ...currentResult } = results[index];
+      results[index] = { ...currentResult, ...normalized };
+    } else {
+      await updateUsedBoostTokenResult(usedTokenId, normalized);
+      results[index] = { ...results[index], ...normalized, usedTokenId };
+    }
     if (normalized.providerBlocked === true) {
       providerPaused = true;
       retryCount += 1;
