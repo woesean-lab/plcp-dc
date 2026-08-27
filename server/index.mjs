@@ -20,7 +20,6 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
-const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
 const dcordTaskMaxWaitMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_MAX_WAIT_MS ?? "620000", 10) || 620_000, 60_000), 900_000);
@@ -1262,7 +1261,6 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let nextIndex = 0;
   let progressSave = Promise.resolve();
   let providerPaused = false;
-  let providerRecovering = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
 
@@ -1414,11 +1412,9 @@ async function processDcordBoostOrder(order, tokens, invite) {
         scheduleDcordOrderRetry(orderId, retryAfterMs);
         return;
       }
-      providerRecovering = availability.recovering;
     }
 
-    const workerCount = Math.min(tokens.length, providerRecovering ? 1 : dcordBoostConcurrency);
-    await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
+    await runNextToken();
     await saveCurrentProgress();
     if (providerPaused && (hasRunnable || results.some(isRunnableDcordResult))) {
       await saveCurrentProgress(true);
@@ -1866,7 +1862,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       pool.query(
         `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed'
+         WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed' AND reserved_order_id IS NULL
          ORDER BY authorized_at DESC
          LIMIT 50`,
         [config.guildId]

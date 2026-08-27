@@ -1356,7 +1356,7 @@ export default function HomePage() {
       </div>
 
       <div className="community-admin-progress members-connected-summary">
-        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}</strong></div>
+        <div><span>Available users</span><strong>{communityStatus?.ready ?? 0}</strong></div>
       </div>
 
       {!communityStatus?.configured ? (
