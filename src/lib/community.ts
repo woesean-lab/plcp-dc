@@ -76,7 +76,7 @@ export function syncCommunityAuthorizations() {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin"
-  }).then(parseResponse<{ checked: number; removed: number; errors: number }>);
+  }).then(parseResponse<{ checked: number; inactive?: number; removed: number; errors: number }>);
 }
 
 export function removeCommunityAuthorization(discordUserId: string) {

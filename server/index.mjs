@@ -916,11 +916,11 @@ async function syncCommunityAuthorizations(config) {
   const result = await pool.query(
     `SELECT discord_user_id, encrypted_refresh_token
      FROM community_oauth_joins
-     WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+     WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed'
      ORDER BY authorized_at ASC`,
     [config.guildId]
   );
-  const summary = { checked: 0, removed: 0, errors: 0 };
+  const summary = { checked: 0, inactive: 0, removed: 0, errors: 0 };
 
   for (const member of result.rows) {
     summary.checked += 1;
@@ -929,17 +929,19 @@ async function syncCommunityAuthorizations(config) {
       await pool.query(
         `UPDATE community_oauth_joins
          SET encrypted_refresh_token = $3, details = NULL
-         WHERE discord_user_id = $1 AND guild_id = $2 AND reserved_order_id IS NULL`,
+         WHERE discord_user_id = $1 AND guild_id = $2`,
         [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
       );
     } catch (error) {
       if (error?.statusCode === 400 && error?.discordError === "invalid_grant") {
-        const removed = await pool.query(
-          `DELETE FROM community_oauth_joins
-           WHERE discord_user_id = $1 AND guild_id = $2 AND reserved_order_id IS NULL`,
+        const inactive = await pool.query(
+          `UPDATE community_oauth_joins
+           SET status = 'failed', details = 'Discord authorization expired.', reserved_order_id = NULL
+           WHERE discord_user_id = $1 AND guild_id = $2`,
           [member.discord_user_id, config.guildId]
         );
-        summary.removed += removed.rowCount;
+        summary.inactive += inactive.rowCount;
+        summary.removed = summary.inactive;
       } else {
         summary.errors += 1;
       }

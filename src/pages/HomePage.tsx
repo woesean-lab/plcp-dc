@@ -825,10 +825,11 @@ export default function HomePage() {
       setLoadingCommunityStatus(true);
       const result = await syncCommunityAuthorizations();
       setCommunityStatus(await getCommunityAdminStatus());
-      if (result.removed) {
-        notifySuccess(`${result.removed} disconnected user${result.removed === 1 ? "" : "s"} removed from Members Stock.`);
+      const inactive = result.inactive ?? result.removed;
+      if (inactive) {
+        notifySuccess(`${inactive} disconnected user${inactive === 1 ? "" : "s"} marked inactive.`);
       } else if (result.errors) {
-        notifyError(`${result.errors} authorization${result.errors === 1 ? "" : "s"} could not be checked. No records were removed.`);
+        notifyError(`${result.errors} authorization${result.errors === 1 ? "" : "s"} could not be checked. No records were changed.`);
       } else {
         notifySuccess(`${result.checked} connected user${result.checked === 1 ? "" : "s"} verified.`);
       }
