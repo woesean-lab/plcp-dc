@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import { execFile } from "node:child_process/promises";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import pg from "pg";
@@ -638,39 +639,107 @@ function summarizeDcordRawResponse(text, limit = 700) {
     .slice(0, limit);
 }
 
-async function requestDcord(pathname, init = {}) {
-  const response = await fetch(resolveDcordApiUrl(pathname), {
-    ...init,
-    signal: init.signal ?? AbortSignal.timeout(dcordRequestTimeoutMs),
-    headers: {
-      "X-API-Key": await loadDcordApiKey(),
-      Accept: "application/json",
-      "User-Agent": dcordUserAgent,
-      ...(init.headers ?? {})
-    }
-  });
-  const text = await response.text();
-  let payload = text;
-
+function parseDcordResponseText(text) {
   try {
-    payload = text ? JSON.parse(text) : {};
+    return text ? JSON.parse(text) : {};
   } catch {
-    // Preserve non-JSON upstream error messages.
+    return text;
+  }
+}
+
+function createDcordHtmlResponseError({ status, contentType, text }) {
+  const bodySummary = summarizeDcordRawResponse(text);
+  const error = new Error(
+    `Dcord raw response: HTTP ${status}, content-type: ${contentType || "unknown"}, body: ${bodySummary || "(empty response)"}`
+  );
+  error.statusCode = status;
+  error.contentType = contentType || "unknown";
+  error.rawResponseSummary = bodySummary;
+  error.uncertain = !/challenge-platform|__cf_chl|just a moment|sorry, you have been blocked|unable to access|attention required/i.test(String(text ?? ""));
+  error.providerBlocked = true;
+  return error;
+}
+
+async function requestDcordWithWget(url, init, headers) {
+  const method = String(init.method ?? "GET").toUpperCase();
+  if (!["GET", "POST"].includes(method)) throw new Error(`Dcord wget fallback does not support ${method}.`);
+
+  const args = ["-S", "-O", "-"];
+  for (const [name, value] of Object.entries(headers)) {
+    if (value === undefined || value === null) continue;
+    args.push(`--header=${name}: ${String(value)}`);
+  }
+  if (method === "POST") {
+    args.push(`--post-data=${typeof init.body === "string" ? init.body : String(init.body ?? "")}`);
+  }
+  args.push(String(url));
+
+  let stdout = "";
+  let stderr = "";
+  try {
+    const result = await execFile("wget", args, {
+      timeout: dcordRequestTimeoutMs,
+      maxBuffer: 1024 * 1024
+    });
+    stdout = result.stdout;
+    stderr = result.stderr;
+  } catch (error) {
+    stdout = String(error?.stdout ?? "");
+    stderr = String(error?.stderr ?? "");
+    if (!stdout && !stderr) throw error;
   }
 
+  const statusMatches = [...stderr.matchAll(/\bHTTP\/\S+\s+(\d{3})\b/gi)];
+  const status = Number(statusMatches.at(-1)?.[1] ?? 0);
+  const contentTypeMatches = [...stderr.matchAll(/\bContent-Type:\s*([^\r\n]+)/gi)];
+  const contentType = String(contentTypeMatches.at(-1)?.[1] ?? "unknown").trim();
+  const payload = parseDcordResponseText(stdout);
+
   if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
-    const providerBlocked = /challenge-platform|__cf_chl|just a moment|sorry, you have been blocked|unable to access|attention required/i.test(payload);
-    const contentType = response.headers.get("content-type") ?? "unknown";
-    const bodySummary = summarizeDcordRawResponse(payload);
-    const error = new Error(
-      `Dcord raw response: HTTP ${response.status}, content-type: ${contentType}, body: ${bodySummary || "(empty response)"}`
-    );
-    error.statusCode = response.status;
-    error.contentType = contentType;
-    error.rawResponseSummary = bodySummary;
-    error.uncertain = !providerBlocked;
-    error.providerBlocked = providerBlocked;
+    throw createDcordHtmlResponseError({ status: status || 403, contentType, text: payload });
+  }
+
+  if (status < 200 || status >= 300) {
+    const message = typeof payload === "object" && payload && ("message" in payload || "detail" in payload)
+      ? String(payload.message ?? payload.detail)
+      : typeof payload === "string" && payload
+        ? payload
+        : `Dcord request failed with ${status || "unknown status"}.`;
+    const error = new Error(message);
+    error.statusCode = status || undefined;
+    error.uncertain = status >= 500 || status === 0;
+    error.providerBlocked = isDcordUpstreamVerificationMessage(message);
     throw error;
+  }
+
+  return payload;
+}
+
+async function requestDcord(pathname, init = {}) {
+  const url = resolveDcordApiUrl(pathname);
+  const headers = {
+    "X-API-Key": await loadDcordApiKey(),
+    Accept: "application/json",
+    "User-Agent": dcordUserAgent,
+    ...(init.headers ?? {})
+  };
+  const response = await fetch(url, {
+    ...init,
+    signal: init.signal ?? AbortSignal.timeout(dcordRequestTimeoutMs),
+    headers
+  });
+  const text = await response.text();
+  let payload = parseDcordResponseText(text);
+
+  if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
+    if (process.env.DCORD_WGET_FALLBACK !== "false") {
+      return requestDcordWithWget(url, init, headers);
+    }
+    throw createDcordHtmlResponseError({
+      status: response.status,
+      contentType: response.headers.get("content-type") ?? "unknown",
+      text: payload
+    });
   }
 
   if (!response.ok) {
