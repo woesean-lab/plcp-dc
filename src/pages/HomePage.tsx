@@ -48,6 +48,7 @@ import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
+  checkDcordConnection,
   clearIntegrationApiKey,
   clearDcordApiKey,
   createOrder,
@@ -482,6 +483,7 @@ export default function HomePage() {
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
+  const [checkingDcordConnection, setCheckingDcordConnection] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
@@ -705,6 +707,18 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Boost stock could not be loaded.");
     } finally {
       setLoadingBoostStock(false);
+    }
+  }
+
+  async function handleCheckDcordConnection() {
+    try {
+      setCheckingDcordConnection(true);
+      const result = await checkDcordConnection();
+      notifySuccess(result.message || "Dcord connection is healthy.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord connection check failed.");
+    } finally {
+      setCheckingDcordConnection(false);
     }
   }
 
@@ -1943,6 +1957,10 @@ export default function HomePage() {
                 <p className="app-copy page-copy">Manage Boost Stock and Members Stock separately.</p>
               </div>
               {stockCategory === "boosts" ? <div className="stock-heading-actions">
+                <Button type="button" variant="secondary" size="sm" disabled={!dcordConfigured || checkingDcordConnection} onClick={() => void handleCheckDcordConnection()}>
+                  <ShieldCheck className={`h-4 w-4 ${checkingDcordConnection ? "animate-pulse" : ""}`} aria-hidden="true" />
+                  {checkingDcordConnection ? "Checking..." : "Dcord check"}
+                </Button>
                 <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add tokens

@@ -2769,6 +2769,33 @@ app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
+  try {
+    const payload = await requestDcord(dcordTaskCreatePath, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type: "join", token: "dummy", invite: "dummy", boost: true })
+    });
+    const taskId = getDcordTaskId(payload);
+    res.set("Cache-Control", "no-store").json({
+      connected: true,
+      status: "ok",
+      taskId,
+      message: taskId
+        ? `Dcord is reachable. Test task ${taskId} was accepted.`
+        : "Dcord is reachable and returned JSON, but no task ID was included."
+    });
+  } catch (error) {
+    const statusCode = Number(error?.statusCode);
+    res.status(502).json({
+      connected: false,
+      status: "failed",
+      httpStatus: Number.isFinite(statusCode) ? statusCode : undefined,
+      message: error instanceof Error ? error.message : "Dcord connection check failed."
+    });
+  }
+});
+
 app.get("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
   try {
     const duration = Number.parseInt(req.query.duration, 10);

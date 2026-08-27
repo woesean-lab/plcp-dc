@@ -208,6 +208,12 @@ export async function clearDcordApiKey() {
   }
 }
 
+export function checkDcordConnection() {
+  return requestJson<{ connected: boolean; status: string; message: string; httpStatus?: number; taskId?: string }>("/api/dcord/check", {
+    method: "POST"
+  });
+}
+
 export function saveBoostStock(stock: BoostTokenStockInput) {
   return requestJson<{ stock: BoostStock }>("/api/dcord/boost-stock", {
     method: "PUT",
