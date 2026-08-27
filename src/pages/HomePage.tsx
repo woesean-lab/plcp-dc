@@ -1447,6 +1447,7 @@ export default function HomePage() {
     : communityStockConfigured
       ? { label: "Ready", variant: "success" as const }
       : { label: "Setup required", variant: "destructive" as const };
+  const communityTotalUsers = (communityStatus?.authorized ?? 0) + (communityStatus?.failed ?? 0);
 
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
@@ -1461,6 +1462,7 @@ export default function HomePage() {
         <Skeleton className="h-7 w-24" />
       </div>
       <div className="community-admin-progress members-connected-summary">
+        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
         <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
         <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
         <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
@@ -1499,6 +1501,7 @@ export default function HomePage() {
       </div>
 
       <div className="community-admin-progress members-connected-summary">
+        <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
         <div><span>Available users</span><strong>{communityStatus?.ready ?? 0}</strong></div>
         <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}</strong></div>
         <div><span>Inactive users</span><strong>{communityStatus?.failed ?? 0}</strong></div>
