@@ -471,6 +471,7 @@ export default function HomePage() {
   const [balance, setBalance] = useState<number | null>(null);
   const [dcordBalance, setDcordBalance] = useState<number | null>(null);
   const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
+  const [dcordBalanceError, setDcordBalanceError] = useState("");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -751,11 +752,14 @@ export default function HomePage() {
   async function refreshDcordBalance() {
     try {
       setLoadingDcordBalance(true);
+      setDcordBalanceError("");
       const data = await getDcordBalance();
       setDcordBalance(data.balance);
       setDcordCreditsConsumed(data.creditsConsumed);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Dcord balance could not be loaded.");
+      const message = error instanceof Error ? error.message : "Dcord balance could not be loaded.";
+      setDcordBalanceError(message);
+      notifyError(message);
     } finally {
       setLoadingDcordBalance(false);
     }
@@ -919,10 +923,12 @@ export default function HomePage() {
 
     try {
       setSavingDcordApiKey(true);
-      await saveDcordApiKey(value);
+      const result = await saveDcordApiKey(value);
       setDcordConfigured(true);
       setDcordApiKey("");
-      void refreshDcordBalance();
+      setDcordBalance(result.balance);
+      setDcordCreditsConsumed(result.creditsConsumed);
+      setDcordBalanceError("");
       notifySuccess("Dcord API key saved securely.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be saved.");
@@ -939,6 +945,7 @@ export default function HomePage() {
       setDcordApiKey("");
       setDcordBalance(null);
       setDcordCreditsConsumed(null);
+      setDcordBalanceError("");
       notifySuccess("Dcord API key removed from the server.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
@@ -2357,10 +2364,13 @@ export default function HomePage() {
                       {loadingDcordBalance ? (
                         <Skeleton className="mt-2 h-4 w-24" aria-label="Loading Dcord balance" />
                       ) : (
-                        <strong>{dcordBalance === null ? "Not synced" : `${formatNumber(dcordBalance)} credits`}</strong>
+                        <strong>{dcordBalance === null ? (dcordBalanceError ? "Sync failed" : "Not synced") : `${formatNumber(dcordBalance)} credits`}</strong>
                       )}
                       {dcordCreditsConsumed !== null ? (
                         <span className="mt-1 block text-xs text-[var(--app-muted)]">{formatNumber(dcordCreditsConsumed)} credits used</span>
+                      ) : null}
+                      {dcordBalanceError ? (
+                        <span className="mt-1 block text-xs text-[var(--app-danger)]">{dcordBalanceError}</span>
                       ) : null}
                     </span>
                   </div>

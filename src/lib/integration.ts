@@ -197,7 +197,7 @@ export async function updateOrderDelay(uniqid: string, delay: number, provider: 
 }
 
 export function saveDcordApiKey(apiKey: string) {
-  return requestJson<{ configured: true }>("/api/dcord/config", {
+  return requestJson<{ configured: true; balance: number; creditsConsumed: number | null }>("/api/dcord/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ apiKey })

@@ -665,12 +665,13 @@ async function requestDcord(pathname, init = {}) {
   return payload;
 }
 
-async function requestDcordDashboard(pathname, init = {}) {
+async function requestDcordDashboardWithKey(apiKey, pathname, init = {}) {
   const response = await fetch(new URL(pathname, `${dcordDashboardApiBase.replace(/\/$/, "")}/`), {
     ...init,
     signal: init.signal ?? AbortSignal.timeout(15_000),
     headers: {
-      "X-API-Key": await loadDcordApiKey(),
+      "X-API-Key": apiKey,
+      Accept: "application/json",
       ...(init.headers ?? {})
     }
   });
@@ -696,6 +697,19 @@ async function requestDcordDashboard(pathname, init = {}) {
   }
 
   return payload;
+}
+
+async function requestDcordDashboard(pathname, init = {}) {
+  return requestDcordDashboardWithKey(await loadDcordApiKey(), pathname, init);
+}
+
+function normalizeDcordAccountBalance(payload) {
+  const balance = Number(payload?.balance ?? payload?.data?.balance ?? payload?.credits ?? payload?.available_credits);
+  const creditsConsumed = Number(payload?.stats?.credits_consumed ?? payload?.data?.stats?.credits_consumed);
+  return {
+    balance: Number.isFinite(balance) ? balance : null,
+    creditsConsumed: Number.isFinite(creditsConsumed) ? creditsConsumed : null
+  };
 }
 
 function isUncertainDcordTransportResult(result) {
@@ -2817,8 +2831,13 @@ app.put("/api/dcord/config", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Dcord API key is required." });
     }
 
+    const account = await requestDcordDashboardWithKey(apiKey, "me", { cache: "no-store" });
+    const summary = normalizeDcordAccountBalance(account);
+    if (summary.balance === null) {
+      return res.status(502).json({ message: "Dcord accepted the API key but did not return an account balance." });
+    }
     await saveEncryptedSetting("dcord_api_key", apiKey);
-    res.json({ configured: true });
+    res.json({ configured: true, ...summary });
   } catch (error) {
     next(error);
   }
@@ -2836,11 +2855,9 @@ app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
 app.get("/api/dcord/balance", requireSession, async (_req, res, next) => {
   try {
     const payload = await requestDcordDashboard("me", { cache: "no-store" });
-    const balance = Number(payload?.balance);
-    const creditsConsumed = Number(payload?.stats?.credits_consumed);
+    const summary = normalizeDcordAccountBalance(payload);
     res.set("Cache-Control", "no-store").json({
-      balance: Number.isFinite(balance) ? balance : null,
-      creditsConsumed: Number.isFinite(creditsConsumed) ? creditsConsumed : null,
+      ...summary,
       raw: payload
     });
   } catch (error) {
