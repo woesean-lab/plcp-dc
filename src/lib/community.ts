@@ -31,6 +31,7 @@ export type CommunityJoinRecord = {
   avatarUrl: string | null;
   status: "authorized" | "joined" | "already_member" | "failed";
   details: string | null;
+  reservedOrderId?: string | null;
   authorizedAt: string;
   joinedAt: string | null;
 };

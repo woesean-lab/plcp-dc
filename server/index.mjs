@@ -2021,11 +2021,17 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityGuild(config),
       loadCommunityJoinSummary(config),
       pool.query(
-        `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at
+        `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at, reserved_order_id
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL AND status <> 'failed' AND reserved_order_id IS NULL
-         ORDER BY authorized_at DESC
-         LIMIT 50`,
+         WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL
+         ORDER BY
+           CASE
+             WHEN status <> 'failed' AND reserved_order_id IS NULL THEN 0
+             WHEN reserved_order_id IS NOT NULL THEN 1
+             ELSE 2
+           END,
+           authorized_at DESC
+         LIMIT 100`,
         [config.guildId]
       )
     ]);
@@ -2040,6 +2046,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         avatarUrl: row.avatar_url,
         status: row.status,
         details: row.details,
+        reservedOrderId: row.reserved_order_id,
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at
       }))
@@ -2136,7 +2143,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
     const botInInvitedGuild = botGuilds.some((guild) => String(guild?.id ?? "") === serverInfo.guildId);
 
-    if (guildsResult.response.ok && !botInInvitedGuild && allowWaitingForBot) {
+    if (allowWaitingForBot && (!guildsResult.response.ok || !botInInvitedGuild)) {
       return {
         config,
         invite,

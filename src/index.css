@@ -5520,7 +5520,7 @@
 }
 
 .community-admin-progress.members-connected-summary {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .community-admin-progress.members-connected-summary > div {
@@ -5579,6 +5579,10 @@
   gap: 10px;
   border-top: 1px solid var(--app-divider);
   padding-top: 9px;
+}
+
+.community-recent-list > div[data-state="failed"] {
+  opacity: .72;
 }
 
 .community-recent-avatar {

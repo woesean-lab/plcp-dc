@@ -103,6 +103,14 @@ function parseProxyDraft(value: string) {
     });
 }
 
+function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number]) {
+  if (record.reservedOrderId) return { label: "In order", variant: "secondary" as const };
+  if (record.status === "failed") return { label: "Inactive", variant: "destructive" as const };
+  if (record.status === "already_member") return { label: "In server", variant: "success" as const };
+  if (record.status === "joined") return { label: "Joined", variant: "success" as const };
+  return { label: "Connected", variant: "success" as const };
+}
+
 const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
   clientSecret: "",
@@ -1448,6 +1456,8 @@ export default function HomePage() {
 
       <div className="community-admin-progress members-connected-summary">
         <div><span>Available users</span><strong>{communityStatus?.ready ?? 0}</strong></div>
+        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}</strong></div>
+        <div><span>Inactive users</span><strong>{communityStatus?.failed ?? 0}</strong></div>
       </div>
 
       {!communityStatus?.configured ? (
@@ -1456,28 +1466,34 @@ export default function HomePage() {
 
       {communityStatus?.recent?.length ? (
         <div className="community-recent-list">
-          {communityStatus.recent.map((record, index) => (
-            <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`}>
-              <span className="community-recent-avatar" aria-hidden="true">
-                {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
-              </span>
-              <span className="min-w-0"><strong>{record.username}</strong><small>{new Date(record.authorizedAt).toLocaleString()}</small></span>
-              <Badge variant="success">Connected</Badge>
-              <Button
-                type="button"
-                size="icon-sm"
-                variant="dangerGhost"
-                title={`Remove ${record.username} from Members Stock`}
-                aria-label={`Remove ${record.username} from Members Stock`}
-                disabled={removingCommunityUserId !== null}
-                onClick={() => void removeConnectedCommunityUser(record)}
-              >
-                {removingCommunityUserId === record.id
-                  ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                  : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-              </Button>
-            </div>
-          ))}
+          {communityStatus.recent.map((record, index) => {
+            const badge = getCommunityRecordBadge(record);
+            return (
+              <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
+                <span className="community-recent-avatar" aria-hidden="true">
+                  {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
+                </span>
+                <span className="min-w-0">
+                  <strong>{record.username}</strong>
+                  <small>{record.details || new Date(record.authorizedAt).toLocaleString()}</small>
+                </span>
+                <Badge variant={badge.variant}>{badge.label}</Badge>
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="dangerGhost"
+                  title={`Remove ${record.username} from Members Stock`}
+                  aria-label={`Remove ${record.username} from Members Stock`}
+                  disabled={removingCommunityUserId !== null || Boolean(record.reservedOrderId)}
+                  onClick={() => void removeConnectedCommunityUser(record)}
+                >
+                  {removingCommunityUserId === record.id
+                    ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                    : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                </Button>
+              </div>
+            );
+          })}
         </div>
       ) : communityStatus?.configured ? (
         <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members in stock yet</strong><span>Share the authorization link to build your Members Stock.</span></div>
