@@ -563,10 +563,11 @@ export default function PublicOrderPage() {
             <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
               <span className="monitor-live-stock-title">
                 <span className="monitor-live-stock-icon"><Boxes className="h-3.5 w-3.5" aria-hidden="true" /></span>
-                <span className="monitor-live-stock-copy"><small><i aria-hidden="true" /> Live</small><strong>Boost stock</strong></span>
+                <span className="monitor-live-stock-copy"><strong>Boost stock</strong><small>Live inventory</small></span>
               </span>
-              <span className="monitor-live-stock-value"><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)} <em>Boosts</em></strong></span>
-              <span className="monitor-live-stock-value"><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)} <em>Boosts</em></strong></span>
+              <span className="monitor-live-stock-status"><i aria-hidden="true" /> Live</span>
+              <span className="monitor-live-stock-value"><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)}<em>boosts</em></strong></span>
+              <span className="monitor-live-stock-value"><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)}<em>boosts</em></strong></span>
             </div>
             <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
               <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
