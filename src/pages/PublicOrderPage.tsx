@@ -8,7 +8,7 @@ import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, Rota
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { getPublicOrderStatus, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
+import { getPublicOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -205,6 +205,7 @@ export default function PublicOrderPage() {
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
+  const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -382,8 +383,10 @@ export default function PublicOrderPage() {
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
-  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining"].includes(item.state.toLowerCase())).length;
+  const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
+  const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
+  const canManageCommunityMembers = status?.canManageCommunityMembers === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
   const liveBoostStock = status?.liveBoostStock;
 
@@ -480,6 +483,21 @@ export default function PublicOrderPage() {
       toast.error(err instanceof Error ? err.message : "Token could not be replaced.");
     } finally {
       setReplacingTokenIndex(null);
+    }
+  }
+
+  async function handleReplaceCommunityMember(resultIndex: number) {
+    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
+
+    try {
+      setReplacingCommunityMemberIndex(resultIndex);
+      const data = await replaceCommunityMember(uniqid, resultIndex);
+      setStatus((current) => mergeOrderStatus(current, data));
+      toast.success("Replacement member started.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Member could not be replaced.");
+    } finally {
+      setReplacingCommunityMemberIndex(null);
     }
   }
 
@@ -667,7 +685,15 @@ export default function PublicOrderPage() {
                               {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
                             </span>
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
-                            <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                            <span className="community-order-result-state">
+                              {canManageCommunityMembers && item.state.toLowerCase() === "failed" ? (
+                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning}>
+                                  <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
+                                  {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
+                                </Button>
+                              ) : null}
+                              <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                            </span>
                             <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
                           </div>
                         ))}

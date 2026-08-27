@@ -874,13 +874,13 @@ export default function OrderPage() {
                         <small>{item.details}</small>
                       </span>
                       <span className="community-order-result-state">
-                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
                         {item.state.toLowerCase() === "failed" ? (
                           <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                           </Button>
                         ) : null}
+                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
                       </span>
                       <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
                     </div>

@@ -52,6 +52,7 @@ export interface OrderStatusResponse {
   serverMemberCount?: number;
   error?: string;
   canManageDcordTokens?: boolean;
+  canManageCommunityMembers?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   liveBoostStock?: {

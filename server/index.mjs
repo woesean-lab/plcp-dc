@@ -30,6 +30,8 @@ const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
+const publicCommunityReplaceCooldownMs = 60 * 1000;
+const publicCommunityReplaceCooldowns = new Map();
 const communityOauthStartCooldowns = new Map();
 const dcordResultReconcileCooldowns = new Map();
 const dcordResultReconcileJobs = new Set();
@@ -2245,13 +2247,20 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   }
 });
 
-app.post("/api/community/orders/:uniqid/replace-member", requireSession, async (req, res, next) => {
+app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) => {
   const client = await pool.connect();
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const resultIndex = Number.parseInt(req.body?.resultIndex, 10);
     if (!uniqid || uniqid.length > 160 || !Number.isInteger(resultIndex) || resultIndex < 0) {
       return res.status(400).json({ message: "A valid order ID and member row are required." });
+    }
+    const isAdminRequest = await hasActiveSession(req);
+    const publicCooldownKey = `${req.ip}:${uniqid}:${resultIndex}`;
+    const publicCooldownUntil = publicCommunityReplaceCooldowns.get(publicCooldownKey) ?? 0;
+    if (!isAdminRequest && publicCooldownUntil > Date.now()) {
+      const retrySeconds = Math.max(1, Math.ceil((publicCooldownUntil - Date.now()) / 1000));
+      return res.status(429).json({ message: `Wait ${retrySeconds}s before trying this replacement again.` });
     }
 
     const config = await getCommunityOAuthConfig();
@@ -2356,6 +2365,9 @@ app.post("/api/community/orders/:uniqid/replace-member", requireSession, async (
       [uniqid, JSON.stringify(activeOrder)]
     );
     await client.query("COMMIT");
+    if (!isAdminRequest) {
+      publicCommunityReplaceCooldowns.set(publicCooldownKey, Date.now() + publicCommunityReplaceCooldownMs);
+    }
 
     void processCommunityReplacement(uniqid, resultIndex, member, config).catch(async (error) => {
       console.error("Members replacement failed:", error instanceof Error ? error.message : error);
@@ -2364,7 +2376,7 @@ app.post("/api/community/orders/:uniqid/replace-member", requireSession, async (
         [member.discord_user_id, config.guildId, error instanceof Error ? error.message : "Replacement failed."]
       ).catch(() => {});
     });
-    res.json(activeOrder);
+    res.json(isAdminRequest ? activeOrder : sanitizePublicCommunityOrder(activeOrder));
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -2391,7 +2403,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
       trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
-      return res.set("Cache-Control", "no-store").json({ ...sanitizePublicCommunityOrder(trackedPayload), liveBoostStock });
+      return res.set("Cache-Control", "no-store").json({ ...sanitizePublicCommunityOrder(trackedPayload), liveBoostStock, canManageCommunityMembers: true });
     }
     if (
       trackedPayload &&
