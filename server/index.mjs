@@ -625,6 +625,7 @@ async function requestDcord(pathname, init = {}) {
     signal: init.signal ?? AbortSignal.timeout(dcordRequestTimeoutMs),
     headers: {
       "X-API-Key": await loadDcordApiKey(),
+      Accept: "application/json",
       ...(init.headers ?? {})
     }
   });
@@ -638,9 +639,13 @@ async function requestDcord(pathname, init = {}) {
   }
 
   if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
-    const error = new Error("Dcord request is awaiting upstream verification.");
+    const providerBlocked = response.status === 403 && /sorry, you have been blocked|unable to access|attention required/i.test(payload);
+    const error = new Error(providerBlocked
+      ? "Dcord Cloudflare blocked the API request before it reached the task service."
+      : "Dcord request is awaiting upstream verification.");
     error.statusCode = response.status;
-    error.uncertain = true;
+    error.uncertain = !providerBlocked;
+    error.providerBlocked = providerBlocked;
     throw error;
   }
 
@@ -711,6 +716,13 @@ function isUncertainDcordTransportResult(result) {
     "<!doctype html",
     "<html"
   ].some((value) => message.includes(value));
+}
+
+function isDcordCloudflareBlockedResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result) || result.dcordTaskId) return false;
+  const message = String(result.boostMessage ?? result.message ?? "").toLowerCase();
+  return result.providerBlocked === true
+    || (Number(result.httpStatus) === 403 && /upstream verification|cloudflare|did not confirm task creation/.test(message));
 }
 
 function matchesDcordMaskedToken(token, maskedToken) {
@@ -1127,6 +1139,12 @@ function normalizeDcordJoinResult(result, token) {
   };
 }
 
+function extractDcordApiToken(stockToken) {
+  const value = String(stockToken ?? "").trim();
+  if (!value.includes(":")) return value;
+  return value.split(":").at(-1)?.trim() ?? value;
+}
+
 function getDcordTaskId(payload) {
   const candidates = [payload?.task_id, payload?.taskId, payload?.data?.task_id, payload?.data?.taskId];
   const value = candidates.find((candidate) => typeof candidate === "string" || Number.isFinite(candidate));
@@ -1143,7 +1161,9 @@ function isDcordTaskPendingResult(result) {
 }
 
 function isRunnableDcordResult(result) {
-  return String(result?.status ?? "").toLowerCase() === "queued" || isDcordTaskPendingResult(result);
+  return String(result?.status ?? "").toLowerCase() === "queued"
+    || isDcordTaskPendingResult(result)
+    || isDcordCloudflareBlockedResult(result);
 }
 
 function normalizeDcordTaskResult(payload, token, taskId) {
@@ -1240,11 +1260,9 @@ async function returnDcordTokensToStock(order, tokens, results, includeUncertain
   if (returned.length) {
     await saveBoostTokenStock({ ...stock, [stockKey]: [...stock[stockKey], ...returned] });
   }
-  if (includeUncertain) {
-    const returnedUsageIds = new Set(returnedIndexes.map((index) => results[index]?.usedTokenId).filter(Boolean));
-    if (returnedUsageIds.size) {
-      await mutateUsedBoostTokenHistory((history) => history.filter((item) => !returnedUsageIds.has(item.id)));
-    }
+  const returnedUsageIds = new Set(returnedIndexes.map((index) => results[index]?.usedTokenId).filter(Boolean));
+  if (returnedUsageIds.size) {
+    await mutateUsedBoostTokenHistory((history) => history.filter((item) => !returnedUsageIds.has(item.id)));
   }
   return returnableTokens.length;
 }
@@ -1256,7 +1274,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
       const created = await requestDcord(dcordTaskCreatePath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "join", token, invite, boost: true })
+        body: JSON.stringify({ type: "join", token: extractDcordApiToken(token), invite, boost: true })
       });
       taskId = getDcordTaskId(created);
       if (!taskId) throw new Error("Dcord created a task without returning a task ID.");
@@ -1303,6 +1321,22 @@ async function runDcordBoostToken(token, invite, options = {}) {
         taskPending: true,
         dcordTaskId: taskId,
         dcordTaskStatus: "pending"
+      };
+    }
+    if (error?.providerBlocked === true) {
+      return {
+        token: redactToken(token),
+        success: false,
+        status: "queued",
+        joinStatus: "not submitted",
+        boostStatus: "not submitted",
+        slots: null,
+        boost: false,
+        boostMessage: "Dcord Cloudflare blocked the API request before it reached the task service. Delivery was paused.",
+        httpStatus: Number.isFinite(statusCode) ? statusCode : 403,
+        boosted: false,
+        transportUncertain: false,
+        providerBlocked: true
       };
     }
     const transportUncertain = error?.uncertain === true
@@ -1468,7 +1502,11 @@ async function processDcordBoostOrder(order, tokens, invite) {
     });
     await updateUsedBoostTokenResult(usedTokenId, normalized);
     results[index] = { ...results[index], ...normalized, usedTokenId };
-    if (normalized.taskPending === true) {
+    if (normalized.providerBlocked === true) {
+      providerPaused = true;
+      retryCount += 1;
+      retryAfterMs = markDcordProviderFailure();
+    } else if (normalized.taskPending === true) {
       providerPaused = true;
       retryAfterMs = dcordTaskPollIntervalMs;
     } else if (isUncertainDcordTransportResult(normalized)) {
