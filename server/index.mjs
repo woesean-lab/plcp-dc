@@ -1450,7 +1450,6 @@ async function processDcordBoostOrder(order, tokens, invite) {
       retryCount += 1;
       retryAfterMs = markDcordProviderFailure();
     } else if (normalized.taskPending === true) {
-      providerPaused = true;
       retryAfterMs = dcordTaskPollIntervalMs;
     } else if (isUncertainDcordTransportResult(normalized)) {
       providerPaused = true;
