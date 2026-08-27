@@ -21,6 +21,7 @@ export interface CreateOrderPayload {
   delay?: number;
   billingCycle?: number;
   duration?: BoostDuration;
+  useProxy?: boolean;
 }
 
 export interface CreateOrderResponse {
@@ -76,6 +77,7 @@ export interface TrackedOrder {
   statusDelay?: number;
   billingCycle?: number;
   duration?: BoostDuration;
+  useProxy?: boolean;
   cost?: number;
   botInvite?: string;
   createdAt: string;

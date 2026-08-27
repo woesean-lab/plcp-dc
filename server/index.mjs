@@ -23,7 +23,6 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
-const dcordStickyProxyFallback = String(process.env.DCORD_STICKY_PROXY ?? "").trim();
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
@@ -528,18 +527,15 @@ function normalizeDcordStickyProxies(value) {
   return normalized.slice(0, 1000);
 }
 
-async function loadDcordStickyProxies({ includeFallback = true } = {}) {
+async function loadDcordStickyProxies() {
   const raw = await loadEncryptedSetting("dcord_sticky_proxies");
-  const fallback = includeFallback && dcordStickyProxyFallback ? [dcordStickyProxyFallback] : [];
-  if (!raw) return fallback;
+  if (!raw) return [];
 
   try {
     const parsed = JSON.parse(raw);
-    const proxies = normalizeDcordStickyProxies(parsed);
-    return proxies.length ? proxies : fallback;
+    return normalizeDcordStickyProxies(parsed);
   } catch {
-    const proxies = normalizeDcordStickyProxies(raw);
-    return proxies.length ? proxies : fallback;
+    return normalizeDcordStickyProxies(raw);
   }
 }
 
@@ -1389,7 +1385,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let providerPaused = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
-  const stickyProxies = await loadDcordStickyProxies();
+  const stickyProxies = order.useProxy === true ? await loadDcordStickyProxies() : [];
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
@@ -2862,7 +2858,7 @@ app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
 
 app.get("/api/dcord/proxies", requireSession, async (_req, res, next) => {
   try {
-    const proxies = await loadDcordStickyProxies({ includeFallback: false });
+    const proxies = await loadDcordStickyProxies();
     res.set("Cache-Control", "no-store").json({ proxies, count: proxies.length });
   } catch (error) {
     next(error);
@@ -3142,9 +3138,17 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const invite = extractDiscordInviteCode(req.body?.id);
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
+    const useProxy = req.body?.useProxy === true;
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
+    }
+
+    if (useProxy) {
+      const stickyProxies = await loadDcordStickyProxies();
+      if (!stickyProxies.length) {
+        return res.status(409).json({ message: "Add at least one sticky proxy before creating a proxy order." });
+      }
     }
 
     const serverInfo = await resolveDiscordInvite(invite);
@@ -3172,6 +3176,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       amount,
       added: 0,
       duration,
+      useProxy,
       tokenCount: requiredTokens,
       createdAt: new Date().toISOString(),
       status: "PROCESS",

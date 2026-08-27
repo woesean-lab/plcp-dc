@@ -76,7 +76,8 @@ const EMPTY_FORM = {
   amount: 100,
   delay: 1,
   billingCycle: 1,
-  duration: 1 as const
+  duration: 1 as const,
+  useProxy: false
 };
 
 const EMPTY_BOOST_STOCK: BoostStock = {
@@ -776,6 +777,12 @@ export default function HomePage() {
   }, [activeTab, form.service, form.serverId, form.duration]);
 
   useEffect(() => {
+    if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
+    // Proxy stock count is loaded when Boosts is selected.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, selectedIsBoost]);
+
+  useEffect(() => {
     if (activeTab === "create") void refreshCommunityStatus();
     // Members Stock is loaded once when Create opens, not on every invite keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1354,7 +1361,8 @@ export default function HomePage() {
         amount: form.amount,
         delay: selectedIsBoost ? undefined : form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
-        duration: selectedIsBoost ? form.duration : undefined
+        duration: selectedIsBoost ? form.duration : undefined,
+        useProxy: selectedIsBoost ? form.useProxy : undefined
       });
       const createdStock = (created as { stock?: BoostStock }).stock;
       if (createdStock) {
@@ -1372,6 +1380,7 @@ export default function HomePage() {
         delay: selectedIsBoost ? undefined : form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
         duration: selectedIsBoost ? form.duration : undefined,
+        useProxy: selectedIsBoost ? form.useProxy : undefined,
         cost: created.cost,
         botInvite: created.bot_invite,
         serverInvite: extractDiscordInviteCode(form.serverId) ? form.serverId.trim() : undefined,
@@ -1777,6 +1786,17 @@ export default function HomePage() {
                                 required
                               />
                             </div>
+                          </label>
+
+                          <label className={`boost-proxy-toggle ${form.useProxy ? "is-enabled" : ""}`}>
+                            <input
+                              type="checkbox"
+                              checked={form.useProxy}
+                              onChange={(event) => setForm((current) => ({ ...current, useProxy: event.target.checked }))}
+                            />
+                            <span><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
+                            <strong>Use sticky proxy</strong>
+                            <small>{dcordProxyCount ? `${dcordProxyCount} saved proxies` : "No proxies saved"}</small>
                           </label>
                         </div>
                       </div>
