@@ -202,6 +202,26 @@ async function requestDiscord(pathname, init = {}) {
 let communityGuildCache = null;
 let communityBotCache = null;
 
+function fallbackCommunityBot(config) {
+  return {
+    id: String(config?.clientId ?? "members-bot"),
+    name: "Members Bot",
+    username: "Members Bot",
+    avatarUrl: null,
+    unavailable: true
+  };
+}
+
+function fallbackCommunityGuild(config) {
+  return {
+    id: String(config?.guildId ?? "community"),
+    name: "Discord Community",
+    iconUrl: null,
+    memberCount: null,
+    unavailable: true
+  };
+}
+
 async function loadCommunityBot(config) {
   if (communityBotCache?.clientId === config.clientId && communityBotCache.expiresAt > Date.now()) {
     return communityBotCache.value;
@@ -230,6 +250,14 @@ async function loadCommunityBot(config) {
   return value;
 }
 
+async function loadCommunityBotSafe(config) {
+  try {
+    return await loadCommunityBot(config);
+  } catch {
+    return fallbackCommunityBot(config);
+  }
+}
+
 async function loadCommunityGuild(config) {
   if (communityGuildCache?.guildId === config.guildId && communityGuildCache.expiresAt > Date.now()) {
     return communityGuildCache.value;
@@ -256,6 +284,14 @@ async function loadCommunityGuild(config) {
   };
   communityGuildCache = { guildId: config.guildId, expiresAt: Date.now() + 30_000, value };
   return value;
+}
+
+async function loadCommunityGuildSafe(config) {
+  try {
+    return await loadCommunityGuild(config);
+  } catch {
+    return fallbackCommunityGuild(config);
+  }
 }
 
 async function loadCommunityJoinSummary(config) {
@@ -1890,8 +1926,8 @@ app.get("/api/community/public", async (_req, res, next) => {
     }
 
     const [bot, guild, summary] = await Promise.all([
-      loadCommunityBot(config),
-      loadCommunityGuild(config),
+      loadCommunityBotSafe(config),
+      loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config)
     ]);
     res.set("Cache-Control", "no-store").json({ configured: true, bot, guild, ...summary });
@@ -2019,8 +2055,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     }
 
     const [bot, guild, summary, recentResult] = await Promise.all([
-      loadCommunityBot(config),
-      loadCommunityGuild(config),
+      loadCommunityBotSafe(config),
+      loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
       pool.query(
         `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at, reserved_order_id
