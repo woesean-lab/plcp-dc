@@ -1096,9 +1096,15 @@ function isDcordTaskPendingResult(result) {
   return ["queued", "joining", "processing", "verifying", "pending"].includes(String(result.status ?? "").toLowerCase());
 }
 
+function isDcordUnconfirmedRunningResult(result) {
+  if (!result || typeof result !== "object" || Array.isArray(result) || result.dcordTaskId) return false;
+  return String(result.status ?? "").toLowerCase() === "joining";
+}
+
 function isRunnableDcordResult(result) {
   return String(result?.status ?? "").toLowerCase() === "queued"
     || isDcordTaskPendingResult(result)
+    || isDcordUnconfirmedRunningResult(result)
     || isDcordCloudflareBlockedResult(result);
 }
 
@@ -1323,11 +1329,11 @@ async function processDcordBoostOrder(order, tokens, invite) {
     }
     return {
       ...existing,
-      status: "verifying",
-      joinStatus: "verifying",
-      boostStatus: "verifying",
-      boostMessage: "The server restarted while Dcord was responding. Verifying the result.",
-      transportUncertain: true
+      status: "queued",
+      joinStatus: "waiting",
+      boostStatus: "waiting",
+      boostMessage: "Previous Dcord request stopped before a task ID was saved. Retrying.",
+      transportUncertain: false
     };
   });
   let nextIndex = 0;
