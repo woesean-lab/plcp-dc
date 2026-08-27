@@ -33,6 +33,7 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
   - `DCORD_API_BASE_URL`
   - `DCORD_TASK_CREATE_PATH`
   - `DCORD_TASK_STATUS_PATH`
+  - `DCORD_USER_AGENT` (varsayilan `plcp-dc/0.1 (+https://capheaven.dcord.co API client)`)
   - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `30000`)
   - `DCORD_TASK_POLL_INTERVAL_MS` (varsayilan `3000`)
   - `DCORD_TASK_MAX_WAIT_MS` (varsayilan `620000`)

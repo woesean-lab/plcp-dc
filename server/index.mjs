@@ -19,6 +19,7 @@ const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.t
 const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
+const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
@@ -645,6 +646,7 @@ async function requestDcord(pathname, init = {}) {
     headers: {
       "X-API-Key": await loadDcordApiKey(),
       Accept: "application/json",
+      "User-Agent": dcordUserAgent,
       ...(init.headers ?? {})
     }
   });
