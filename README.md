@@ -31,7 +31,6 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 - Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir. Siparis once Dcord Tasks API ile olusturulur, donen `task_id` kaydedilir ve sonuc ayni gorev uzerinden takip edilir.
 - Dcord endpointi ortam degiskenleriyle ayarlanir:
   - `DCORD_API_BASE_URL`
-  - `DCORD_DASHBOARD_API_BASE_URL`
   - `DCORD_TASK_CREATE_PATH`
   - `DCORD_TASK_STATUS_PATH`
   - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `30000`)

@@ -58,10 +58,6 @@ export async function getBalance() {
   return requestJson<BalanceResponse>("/api/integration/balance");
 }
 
-export async function getDcordBalance() {
-  return requestJson<{ balance: number | null; creditsConsumed: number | null }>("/api/dcord/balance");
-}
-
 export async function createOrder(payload: CreateOrderPayload) {
   if (isCommunityService(payload.service)) {
     return requestJson<CreateOrderResponse>("/api/community/orders", {
@@ -197,7 +193,7 @@ export async function updateOrderDelay(uniqid: string, delay: number, provider: 
 }
 
 export function saveDcordApiKey(apiKey: string) {
-  return requestJson<{ configured: true; balance: number; creditsConsumed: number | null }>("/api/dcord/config", {
+  return requestJson<{ configured: true }>("/api/dcord/config", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ apiKey })

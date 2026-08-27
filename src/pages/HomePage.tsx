@@ -55,7 +55,6 @@ import {
   deleteUsedBoostTokens,
   getBalance,
   getBoostStockTokens,
-  getDcordBalance,
   getOrderStatus,
   getIntegrationConfig,
   markBoostStockTokensUsed,
@@ -469,9 +468,6 @@ export default function HomePage() {
   const [stockView, setStockView] = useState<"active" | "used">("active");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [balance, setBalance] = useState<number | null>(null);
-  const [dcordBalance, setDcordBalance] = useState<number | null>(null);
-  const [dcordCreditsConsumed, setDcordCreditsConsumed] = useState<number | null>(null);
-  const [dcordBalanceError, setDcordBalanceError] = useState("");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -486,7 +482,6 @@ export default function HomePage() {
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
   const [loadingBalance, setLoadingBalance] = useState(false);
-  const [loadingDcordBalance, setLoadingDcordBalance] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
@@ -678,9 +673,8 @@ export default function HomePage() {
   useEffect(() => {
     if (activeTab !== "settings") return;
     if (apiConfigured && balance === null) void refreshBalance();
-    if (dcordConfigured && dcordBalance === null) void refreshDcordBalance();
     void loadCommunityConfiguration();
-    // Balances are loaded lazily when Settings is opened.
+    // Tokenu balance is loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
 
@@ -746,22 +740,6 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Balance could not be loaded.");
     } finally {
       setLoadingBalance(false);
-    }
-  }
-
-  async function refreshDcordBalance() {
-    try {
-      setLoadingDcordBalance(true);
-      setDcordBalanceError("");
-      const data = await getDcordBalance();
-      setDcordBalance(data.balance);
-      setDcordCreditsConsumed(data.creditsConsumed);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Dcord balance could not be loaded.";
-      setDcordBalanceError(message);
-      notifyError(message);
-    } finally {
-      setLoadingDcordBalance(false);
     }
   }
 
@@ -923,12 +901,9 @@ export default function HomePage() {
 
     try {
       setSavingDcordApiKey(true);
-      const result = await saveDcordApiKey(value);
+      await saveDcordApiKey(value);
       setDcordConfigured(true);
       setDcordApiKey("");
-      setDcordBalance(result.balance);
-      setDcordCreditsConsumed(result.creditsConsumed);
-      setDcordBalanceError("");
       notifySuccess("Dcord API key saved securely.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be saved.");
@@ -943,9 +918,6 @@ export default function HomePage() {
       await clearDcordApiKey();
       setDcordConfigured(false);
       setDcordApiKey("");
-      setDcordBalance(null);
-      setDcordCreditsConsumed(null);
-      setDcordBalanceError("");
       notifySuccess("Dcord API key removed from the server.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
@@ -2357,25 +2329,6 @@ export default function HomePage() {
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true">
-                      <CircleDollarSign className="h-4 w-4" />
-                    </span>
-                    <span>
-                      <span className="settings-status-label">Dcord balance</span>
-                      {loadingDcordBalance ? (
-                        <Skeleton className="mt-2 h-4 w-24" aria-label="Loading Dcord balance" />
-                      ) : (
-                        <strong>{dcordBalance === null ? (dcordBalanceError ? "Sync failed" : "Not synced") : `${formatNumber(dcordBalance)} credits`}</strong>
-                      )}
-                      {dcordCreditsConsumed !== null ? (
-                        <span className="mt-1 block text-xs text-[var(--app-muted)]">{formatNumber(dcordCreditsConsumed)} credits used</span>
-                      ) : null}
-                      {dcordBalanceError ? (
-                        <span className="mt-1 block text-xs text-[var(--app-danger)]">{dcordBalanceError}</span>
-                      ) : null}
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true">
                       <ShieldCheck className="h-4 w-4" />
                     </span>
                     <span>
@@ -2389,10 +2342,6 @@ export default function HomePage() {
                 <Button className="w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!apiConfigured || loadingBalance}>
                   <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh Tokenu balance
-                </Button>
-                <Button className="w-full" variant="secondary" type="button" onClick={refreshDcordBalance} disabled={!dcordConfigured || loadingDcordBalance}>
-                  <RefreshCw className={`h-4 w-4 ${loadingDcordBalance ? "animate-spin" : ""}`} aria-hidden="true" />
-                  Refresh Dcord balance
                 </Button>
                 </div>
 
