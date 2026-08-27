@@ -3412,6 +3412,84 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
   }
 });
 
+app.post("/api/dcord/boost-orders/:uniqid/retry-token", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const resultIndex = Number.parseInt(req.body?.resultIndex, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(resultIndex) || resultIndex < 0) {
+      return res.status(400).json({ message: "A valid order ID and token row are required." });
+    }
+    if (dcordOrderProcessingJobs.has(uniqid)) {
+      return res.status(409).json({ message: "Wait for the current Dcord request to finish before retrying." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || typeof order !== "object" || Array.isArray(order) || (order.provider !== "dcord" && order.service !== "DCORD-BOOSTS")) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (String(order.status ?? "").trim().toUpperCase() === "CANCELLED") {
+      return res.status(409).json({ message: "Cancelled order tokens cannot be retried." });
+    }
+
+    const results = Array.isArray(order.dcordResults) ? [...order.dcordResults] : [];
+    const currentResult = results[resultIndex];
+    if (!currentResult || typeof currentResult !== "object" || Array.isArray(currentResult)) {
+      return res.status(404).json({ message: "Token result could not be found." });
+    }
+    if (currentResult.boosted === true) {
+      return res.status(409).json({ message: "Boosted token results cannot be retried." });
+    }
+    if (currentResult.dcordTaskId) {
+      return res.status(409).json({ message: "Dcord already accepted this token. Wait for the existing task result instead of creating a duplicate task." });
+    }
+
+    const assignedTokens = await loadDcordOrderTokens(uniqid);
+    const retryToken = assignedTokens[resultIndex];
+    const invite = extractDiscordInviteCode(order.serverInvite);
+    if (!retryToken || !invite) {
+      return res.status(409).json({ message: "The assigned token or server invite is missing." });
+    }
+
+    const cleanedResult = { ...currentResult };
+    delete cleanedResult.usedTokenId;
+    results[resultIndex] = {
+      ...cleanedResult,
+      status: "queued",
+      joinStatus: "waiting",
+      boostStatus: "waiting",
+      slots: null,
+      boost: false,
+      boostMessage: "Retry queued with the same token.",
+      boosted: false,
+      transportUncertain: false,
+      retriedAt: new Date().toISOString()
+    };
+
+    const added = results.reduce((total, item) => total + (item?.boosted === true ? 2 : 0), 0);
+    const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
+    const retryOrder = {
+      ...order,
+      added,
+      status: "PROCESS",
+      providerStatus: "checking",
+      dcordRetryCount: 0,
+      nextRetryAt: null,
+      details: `${added}/${amount} boosts completed. Token retry queued.`,
+      dcordResults: results
+    };
+
+    await saveTrackedOrderPayload(retryOrder);
+    dcordCircuitOpenUntil = 0;
+    void processDcordBoostOrder(retryOrder, assignedTokens, invite).catch((error) => {
+      console.error("Dcord token retry failed:", error instanceof Error ? error.message : error);
+    });
+    res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(retryOrder));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post([`${legacyApiPrefix}/orders/:uniqid/restart`, `${integrationApiPrefix}/orders/:uniqid/restart`], requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();

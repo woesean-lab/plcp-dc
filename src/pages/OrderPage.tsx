@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, retryDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -24,6 +24,7 @@ type DcordTokenResult = {
   boostMessage: string;
   successful: boolean;
   state: "success" | "pending" | "error";
+  canRetry: boolean;
 };
 
 type CommunityMemberResult = {
@@ -99,6 +100,12 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
       const isFailed = [joinStatus, boostStatus, status].some((value) =>
         ["failed", "error", "skipped"].some((stateValue) => value.toLowerCase().includes(stateValue))
       );
+      const hasTaskId = typeof row.dcordTaskId === "string" && row.dcordTaskId.trim();
+      const canRetry = !successful && !hasTaskId && (
+        isFailed
+        || normalizedStatus === "joining"
+        || boostMessage.toLowerCase().includes("stopped before a task id")
+      );
       const state = successful
         ? "success"
         : isFailed
@@ -107,7 +114,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
             ? "pending"
             : "error";
 
-      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state, canRetry };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -309,6 +316,7 @@ export default function OrderPage() {
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
+  const [retryingTokenIndex, setRetryingTokenIndex] = useState<number | null>(null);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -544,6 +552,25 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Token could not be replaced.");
     } finally {
       setReplacingTokenIndex(null);
+    }
+  }
+
+  async function handleRetryDcordToken(resultIndex: number) {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target) {
+      toast.error("Order ID is required.");
+      return;
+    }
+
+    try {
+      setRetryingTokenIndex(resultIndex);
+      const data = await retryDcordBoostToken(target, resultIndex);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success("Token retry started.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Token could not be retried.");
+    } finally {
+      setRetryingTokenIndex(null);
     }
   }
 
@@ -833,6 +860,11 @@ export default function OrderPage() {
                       </span>
                       <span className="public-token-result-flow">
                         <span className="public-token-result-action">
+                          {item.canRetry && normalizedStatus !== "CANCELLED" ? (
+                            <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleRetryDcordToken(item.index)} disabled={retryingTokenIndex !== null || replacingTokenIndex !== null}>
+                              {retryingTokenIndex === item.index ? "Retrying..." : "Retry"}
+                            </Button>
+                          ) : null}
                           {item.state === "error" && normalizedStatus !== "CANCELLED" ? (
                             <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}>
                               {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}

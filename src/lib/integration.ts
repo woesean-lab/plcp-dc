@@ -139,6 +139,17 @@ export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
   );
 }
 
+export function retryDcordBoostToken(uniqid: string, resultIndex: number) {
+  return requestJson<OrderStatusResponse>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/retry-token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resultIndex })
+    }
+  );
+}
+
 export function resumeDcordBoostOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(
     `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/resume`,
