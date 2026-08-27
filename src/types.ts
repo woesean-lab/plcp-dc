@@ -22,6 +22,7 @@ export interface CreateOrderPayload {
   billingCycle?: number;
   duration?: BoostDuration;
   useProxy?: boolean;
+  concurrency?: number;
 }
 
 export interface CreateOrderResponse {
@@ -78,6 +79,7 @@ export interface TrackedOrder {
   billingCycle?: number;
   duration?: BoostDuration;
   useProxy?: boolean;
+  concurrency?: number;
   cost?: number;
   botInvite?: string;
   createdAt: string;

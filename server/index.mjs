@@ -23,7 +23,7 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
-const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
+const defaultDcordBoostConcurrency = 5;
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
 const dcordTaskMaxWaitMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_MAX_WAIT_MS ?? "620000", 10) || 620_000, 60_000), 900_000);
@@ -550,6 +550,10 @@ function pickDcordStickyProxy(proxies, token) {
   const digest = crypto.createHash("sha256").update(String(token ?? "")).digest();
   const index = digest.readUInt32BE(0) % proxies.length;
   return proxies[index];
+}
+
+function normalizeDcordBoostConcurrency(value) {
+  return Math.min(Math.max(Number.parseInt(value, 10) || defaultDcordBoostConcurrency, 1), 20);
 }
 
 async function loadUsedBoostTokenHistory() {
@@ -1537,7 +1541,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
       }
     }
 
-    const workerCount = Math.min(tokens.length, dcordBoostConcurrency);
+    const workerCount = Math.min(tokens.length, normalizeDcordBoostConcurrency(order.concurrency));
     await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
     await saveCurrentProgress();
     if (providerPaused && (hasRunnable || results.some(isRunnableDcordResult))) {
@@ -3139,6 +3143,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
     const useProxy = req.body?.useProxy === true;
+    const concurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
@@ -3177,6 +3182,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       added: 0,
       duration,
       useProxy,
+      concurrency,
       tokenCount: requiredTokens,
       createdAt: new Date().toISOString(),
       status: "PROCESS",

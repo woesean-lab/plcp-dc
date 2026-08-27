@@ -1653,7 +1653,7 @@
 
   .boost-order-grid {
     display: grid;
-    grid-template-columns: minmax(190px, 240px) minmax(280px, 1fr);
+    grid-template-columns: minmax(170px, 220px) minmax(260px, 1fr) minmax(120px, 150px);
     gap: 1rem;
     align-items: start;
   }

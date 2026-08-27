@@ -30,13 +30,13 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 - Varsayilan API tabani: `https://dev.tokenu.net/api/v1/reseller`
 - Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir. Siparis once Dcord Tasks API ile olusturulur, donen `task_id` kaydedilir ve sonuc ayni gorev uzerinden takip edilir.
 - Dcord sticky proxy listesi Boost Stock panelinden yonetilir ve sifreli saklanir. Ayni token tekrar denenirse ayni proxy secilir.
+- Dcord Boosts concurrency de siparis formundan secilir; her siparis kendi paralel isleme sayisini saklar.
 - Dcord endpointi ortam degiskenleriyle ayarlanir:
   - `DCORD_API_BASE_URL`
   - `DCORD_TASK_CREATE_PATH`
   - `DCORD_TASK_STATUS_PATH`
   - `DCORD_USER_AGENT` (varsayilan `plcp-dc/0.1 (+https://capheaven.dcord.co API client)`)
   - `DCORD_WGET_FALLBACK` (`false` yapilirsa HTML challenge durumunda wget fallback devre disi kalir)
-  - `DCORD_BOOST_CONCURRENCY` (varsayilan `5`)
   - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `30000`)
   - `DCORD_TASK_POLL_INTERVAL_MS` (varsayilan `3000`)
   - `DCORD_TASK_MAX_WAIT_MS` (varsayilan `620000`)

@@ -77,7 +77,8 @@ const EMPTY_FORM = {
   delay: 1,
   billingCycle: 1,
   duration: 1 as const,
-  useProxy: false
+  useProxy: false,
+  concurrency: 5
 };
 
 const EMPTY_BOOST_STOCK: BoostStock = {
@@ -1362,7 +1363,8 @@ export default function HomePage() {
         delay: selectedIsBoost ? undefined : form.delay,
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
         duration: selectedIsBoost ? form.duration : undefined,
-        useProxy: selectedIsBoost ? form.useProxy : undefined
+        useProxy: selectedIsBoost ? form.useProxy : undefined,
+        concurrency: selectedIsBoost ? form.concurrency : undefined
       });
       const createdStock = (created as { stock?: BoostStock }).stock;
       if (createdStock) {
@@ -1381,6 +1383,7 @@ export default function HomePage() {
         billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
         duration: selectedIsBoost ? form.duration : undefined,
         useProxy: selectedIsBoost ? form.useProxy : undefined,
+        concurrency: selectedIsBoost ? form.concurrency : undefined,
         cost: created.cost,
         botInvite: created.bot_invite,
         serverInvite: extractDiscordInviteCode(form.serverId) ? form.serverId.trim() : undefined,
@@ -1786,6 +1789,21 @@ export default function HomePage() {
                                 required
                               />
                             </div>
+                          </label>
+
+                          <label className="boost-order-field">
+                            <span className="boost-order-label">Concurrency</span>
+                            <input
+                              className="boost-number-input"
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={form.concurrency}
+                              onChange={(event) => {
+                                const value = Math.min(Math.max(Number(event.target.value) || 1, 1), 20);
+                                setForm((current) => ({ ...current, concurrency: value }));
+                              }}
+                            />
                           </label>
 
                           <label className={`boost-proxy-toggle ${form.useProxy ? "is-enabled" : ""}`}>
