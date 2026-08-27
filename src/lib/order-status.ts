@@ -25,6 +25,17 @@ function getTokenProgress(result: TokenResult) {
   return 0;
 }
 
+function isProviderBlockedResult(result: TokenResult) {
+  const message = [result.boostMessage, result.message]
+    .filter((value): value is string => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+
+  return result.providerBlocked === true
+    || message.includes("html challenge/block page")
+    || message.includes("upstream verification");
+}
+
 function mergeTokenResult(current: unknown, incoming: unknown) {
   if (!isTokenResult(incoming)) return current;
   if (!isTokenResult(current)) return incoming;
@@ -32,6 +43,10 @@ function mergeTokenResult(current: unknown, incoming: unknown) {
   const currentIdentity = getTokenIdentity(current);
   const incomingIdentity = getTokenIdentity(incoming);
   if (currentIdentity && incomingIdentity && currentIdentity !== incomingIdentity) {
+    return incoming;
+  }
+
+  if (isProviderBlockedResult(incoming)) {
     return incoming;
   }
 

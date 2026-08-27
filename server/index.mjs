@@ -649,7 +649,7 @@ async function requestDcord(pathname, init = {}) {
 
   if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
     const providerBlocked = /challenge-platform|__cf_chl|just a moment|sorry, you have been blocked|unable to access|attention required/i.test(payload);
-    const error = new Error("Dcord Cloudflare blocked the API request before it reached the task service.");
+    const error = new Error("Dcord returned an HTML challenge/block page before the request reached the task service.");
     error.statusCode = response.status;
     error.uncertain = !providerBlocked;
     error.providerBlocked = providerBlocked;
@@ -1173,7 +1173,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
     if (error?.providerBlocked === true) {
       const blockedMessage = isDcordUpstreamVerificationMessage(message)
         ? `${message} Delivery will retry automatically.`
-        : "Dcord Cloudflare blocked POST /api/task/create before it reached the task service. Delivery was paused.";
+        : "Dcord returned an HTML challenge/block page for POST /api/task/create before it reached the task service. Delivery was paused.";
       return {
         token: redactToken(token),
         success: false,
