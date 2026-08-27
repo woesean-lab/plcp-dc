@@ -54,8 +54,10 @@ import {
   createOrder,
   deleteBoostStockTokens,
   deleteUsedBoostTokens,
+  clearDcordProxies,
   getBalance,
   getBoostStockTokens,
+  getDcordProxies,
   getOrderStatus,
   getIntegrationConfig,
   markBoostStockTokensUsed,
@@ -63,6 +65,7 @@ import {
   returnUsedBoostToken,
   saveBoostStock,
   saveDcordApiKey,
+  saveDcordProxies,
   saveIntegrationApiKey
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
@@ -85,6 +88,18 @@ const EMPTY_BOOST_TOKEN_DRAFTS: BoostTokenStockInput = {
   oneMonthTokens: "",
   threeMonthTokens: ""
 };
+
+function parseProxyDraft(value: string) {
+  const seen = new Set<string>();
+  return value
+    .split(/[\r\n,]+/)
+    .map((item) => item.trim())
+    .filter((item) => {
+      if (!item || seen.has(item)) return false;
+      seen.add(item);
+      return true;
+    });
+}
 
 const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
@@ -462,6 +477,8 @@ export default function HomePage() {
     oneMonthTokens: [],
     threeMonthTokens: []
   });
+  const [dcordProxyDraft, setDcordProxyDraft] = useState("");
+  const [dcordProxyCount, setDcordProxyCount] = useState(0);
   const [usedBoostTokens, setUsedBoostTokens] = useState<BoostUsedToken[]>([]);
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
@@ -476,6 +493,8 @@ export default function HomePage() {
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
+  const [savingDcordProxies, setSavingDcordProxies] = useState(false);
+  const [loadingDcordProxies, setLoadingDcordProxies] = useState(false);
   const [deletingBoostTokens, setDeletingBoostTokens] = useState(false);
   const [markingBoostTokensUsed, setMarkingBoostTokensUsed] = useState(false);
   const [deletingUsedTokens, setDeletingUsedTokens] = useState(false);
@@ -565,6 +584,7 @@ export default function HomePage() {
     [usedBoostTokens, usedTokenDurationFilter]
   );
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
+  const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
@@ -682,7 +702,10 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "stock") return;
-    if (stockCategory === "boosts") void refreshBoostStockTokens();
+    if (stockCategory === "boosts") {
+      void refreshBoostStockTokens();
+      void refreshDcordProxies();
+    }
     else void refreshCommunityStatus();
     // Each inventory loads only when its Stock tab is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -707,6 +730,19 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Boost stock could not be loaded.");
     } finally {
       setLoadingBoostStock(false);
+    }
+  }
+
+  async function refreshDcordProxies() {
+    try {
+      setLoadingDcordProxies(true);
+      const result = await getDcordProxies();
+      setDcordProxyDraft(result.proxies.join("\n"));
+      setDcordProxyCount(result.count);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord proxy list could not be loaded.");
+    } finally {
+      setLoadingDcordProxies(false);
     }
   }
 
@@ -959,6 +995,35 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Boost stock could not be saved.");
     } finally {
       setSavingBoostStock(false);
+    }
+  }
+
+  async function handleSaveDcordProxies() {
+    const proxies = parseProxyDraft(dcordProxyDraft);
+    try {
+      setSavingDcordProxies(true);
+      const result = await saveDcordProxies(proxies);
+      setDcordProxyDraft(result.proxies.join("\n"));
+      setDcordProxyCount(result.count);
+      notifySuccess(`${result.count} sticky prox${result.count === 1 ? "y" : "ies"} saved.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord proxies could not be saved.");
+    } finally {
+      setSavingDcordProxies(false);
+    }
+  }
+
+  async function handleClearDcordProxies() {
+    try {
+      setSavingDcordProxies(true);
+      await clearDcordProxies();
+      setDcordProxyDraft("");
+      setDcordProxyCount(0);
+      notifySuccess("Sticky proxy list cleared.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dcord proxies could not be cleared.");
+    } finally {
+      setSavingDcordProxies(false);
     }
   }
 
@@ -1993,6 +2058,37 @@ export default function HomePage() {
               <div className="stock-overview-metric"><small>1 month</small><strong>{boostStock.oneMonth}</strong><span>{boostStock.oneMonth * 2} boosts</span></div>
               <div className="stock-overview-metric"><small>3 month</small><strong>{boostStock.threeMonth}</strong><span>{boostStock.threeMonth * 2} boosts</span></div>
               <div className="stock-overview-metric"><small>Used history</small><strong>{usedBoostTokens.length}</strong><span>recorded tokens</span></div>
+            </section>
+
+            <section className={`${shell} dcord-proxy-panel`}>
+              <header className="dcord-proxy-header">
+                <div>
+                  <p className={labelClass}>Dcord routing</p>
+                  <h2>Sticky proxies</h2>
+                </div>
+                <div className="dcord-proxy-actions">
+                  <span>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</span>
+                  <Button type="button" variant="secondary" size="xs" disabled={loadingDcordProxies || savingDcordProxies} onClick={() => void refreshDcordProxies()}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingDcordProxies ? "animate-spin" : ""}`} aria-hidden="true" />
+                    Refresh
+                  </Button>
+                  <Button type="button" variant="dangerGhost" size="xs" disabled={savingDcordProxies || (!dcordProxyCount && !dcordProxyDraft.trim())} onClick={() => void handleClearDcordProxies()}>
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Clear
+                  </Button>
+                  <Button type="button" size="xs" disabled={savingDcordProxies} onClick={() => void handleSaveDcordProxies()}>
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    {savingDcordProxies ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </header>
+              <textarea
+                className="dcord-proxy-textarea"
+                spellCheck={false}
+                value={dcordProxyDraft}
+                onChange={(event) => setDcordProxyDraft(event.target.value)}
+                placeholder={"user:pass@host:port\nhost:port:user:pass"}
+              />
             </section>
 
             <section className={`${shell} stock-workbench`}>

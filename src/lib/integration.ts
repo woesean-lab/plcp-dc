@@ -214,6 +214,26 @@ export function checkDcordConnection() {
   });
 }
 
+export function getDcordProxies() {
+  return requestJson<{ proxies: string[]; count: number }>("/api/dcord/proxies");
+}
+
+export function saveDcordProxies(proxies: string[]) {
+  return requestJson<{ proxies: string[]; count: number }>("/api/dcord/proxies", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proxies })
+  });
+}
+
+export async function clearDcordProxies() {
+  const response = await fetch("/api/dcord/proxies", { method: "DELETE", cache: "no-store" });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message ?? `Request failed with ${response.status}`);
+  }
+}
+
 export function saveBoostStock(stock: BoostTokenStockInput) {
   return requestJson<{ stock: BoostStock }>("/api/dcord/boost-stock", {
     method: "PUT",

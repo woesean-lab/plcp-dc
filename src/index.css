@@ -5919,6 +5919,68 @@
   font-size: 10px;
 }
 
+.dcord-proxy-panel {
+  overflow: hidden;
+}
+
+.dcord-proxy-header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--app-divider);
+  padding: 13px 16px;
+}
+
+.dcord-proxy-header h2 {
+  margin: 4px 0 0;
+  color: var(--app-text);
+  font-size: 15px;
+  font-weight: 750;
+}
+
+.dcord-proxy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.dcord-proxy-actions > span {
+  color: var(--app-muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.dcord-proxy-textarea {
+  display: block;
+  width: 100%;
+  min-height: 168px;
+  max-height: 340px;
+  resize: vertical;
+  border: 0;
+  border-radius: 0;
+  padding: 16px;
+  background: rgba(5,6,13,.35);
+  color: var(--app-text-secondary);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.6;
+  outline: 0;
+  overflow: auto;
+}
+
+.dcord-proxy-textarea::placeholder {
+  color: var(--app-subtle);
+}
+
+.dcord-proxy-textarea:focus {
+  box-shadow: inset 0 0 0 1px var(--app-accent-border);
+}
+
 .stock-workbench {
   overflow: hidden;
 }
@@ -6314,6 +6376,19 @@
 
   .stock-overview strong {
     font-size: 1.45rem;
+  }
+
+  .dcord-proxy-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .dcord-proxy-actions {
+    justify-content: flex-start;
+  }
+
+  .dcord-proxy-actions > span {
+    width: 100%;
   }
 
   .stock-workbench-header {

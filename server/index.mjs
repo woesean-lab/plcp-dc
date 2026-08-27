@@ -23,6 +23,7 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
+const dcordStickyProxyFallback = String(process.env.DCORD_STICKY_PROXY ?? "").trim();
 const dcordBoostConcurrency = Math.min(Math.max(Number.parseInt(process.env.DCORD_BOOST_CONCURRENCY ?? "5", 10) || 5, 1), 20);
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
@@ -509,6 +510,50 @@ async function saveBoostTokenStock(stock) {
   const normalized = normalizeBoostTokenStock(stock);
   await saveEncryptedSetting("dcord_boost_token_stock", JSON.stringify(normalized));
   return normalized;
+}
+
+function normalizeDcordStickyProxies(value) {
+  const source = Array.isArray(value)
+    ? value
+    : String(value ?? "")
+      .split(/[\r\n,]+/);
+  const seen = new Set();
+  const normalized = [];
+  source.forEach((item) => {
+    const proxy = String(item ?? "").trim();
+    if (!proxy || proxy.length > 1000 || seen.has(proxy)) return;
+    seen.add(proxy);
+    normalized.push(proxy);
+  });
+  return normalized.slice(0, 1000);
+}
+
+async function loadDcordStickyProxies({ includeFallback = true } = {}) {
+  const raw = await loadEncryptedSetting("dcord_sticky_proxies");
+  const fallback = includeFallback && dcordStickyProxyFallback ? [dcordStickyProxyFallback] : [];
+  if (!raw) return fallback;
+
+  try {
+    const parsed = JSON.parse(raw);
+    const proxies = normalizeDcordStickyProxies(parsed);
+    return proxies.length ? proxies : fallback;
+  } catch {
+    const proxies = normalizeDcordStickyProxies(raw);
+    return proxies.length ? proxies : fallback;
+  }
+}
+
+async function saveDcordStickyProxies(value) {
+  const normalized = normalizeDcordStickyProxies(value);
+  await saveEncryptedSetting("dcord_sticky_proxies", JSON.stringify(normalized));
+  return normalized;
+}
+
+function pickDcordStickyProxy(proxies, token) {
+  if (!Array.isArray(proxies) || !proxies.length) return "";
+  const digest = crypto.createHash("sha256").update(String(token ?? "")).digest();
+  const index = digest.readUInt32BE(0) % proxies.length;
+  return proxies[index];
 }
 
 async function loadUsedBoostTokenHistory() {
@@ -1213,10 +1258,13 @@ async function runDcordBoostToken(token, invite, options = {}) {
   let taskId = options.existingTaskId ? String(options.existingTaskId) : null;
   try {
     if (!taskId) {
+      const createPayload = { type: "join", token: extractDcordApiToken(token), invite, boost: true };
+      const proxy = String(options.proxy ?? "").trim();
+      if (proxy) createPayload.proxy = proxy;
       const created = await requestDcord(dcordTaskCreatePath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "join", token: extractDcordApiToken(token), invite, boost: true })
+        body: JSON.stringify(createPayload)
       });
       taskId = getDcordTaskId(created);
       if (!taskId) throw new Error("Dcord created a task without returning a task ID.");
@@ -1341,6 +1389,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let providerPaused = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
+  const stickyProxies = await loadDcordStickyProxies();
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
@@ -1428,6 +1477,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const existingTaskId = results[index]?.dcordTaskId;
     const normalized = await runDcordBoostToken(token, invite, {
       existingTaskId,
+      proxy: existingTaskId ? "" : pickDcordStickyProxy(stickyProxies, token),
       onTaskCreated: async (taskId) => {
         results[index] = {
           ...results[index],
@@ -2810,12 +2860,43 @@ app.delete("/api/dcord/config", requireSession, async (_req, res, next) => {
   }
 });
 
+app.get("/api/dcord/proxies", requireSession, async (_req, res, next) => {
+  try {
+    const proxies = await loadDcordStickyProxies({ includeFallback: false });
+    res.set("Cache-Control", "no-store").json({ proxies, count: proxies.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/dcord/proxies", requireSession, async (req, res, next) => {
+  try {
+    const proxies = await saveDcordStickyProxies(req.body?.proxies ?? "");
+    res.json({ proxies, count: proxies.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/dcord/proxies", requireSession, async (_req, res, next) => {
+  try {
+    await pool.query("DELETE FROM app_settings WHERE setting_key = 'dcord_sticky_proxies'");
+    res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
   try {
+    const stickyProxies = await loadDcordStickyProxies();
+    const createPayload = { type: "join", token: "dummy", invite: "dummy", boost: true };
+    const proxy = pickDcordStickyProxy(stickyProxies, "dummy");
+    if (proxy) createPayload.proxy = proxy;
     const payload = await requestDcord(dcordTaskCreatePath, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: "join", token: "dummy", invite: "dummy", boost: true })
+      body: JSON.stringify(createPayload)
     });
     const taskId = getDcordTaskId(payload);
     res.set("Cache-Control", "no-store").json({
