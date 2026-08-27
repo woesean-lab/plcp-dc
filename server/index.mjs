@@ -628,6 +628,16 @@ function isDcordUpstreamVerificationMessage(message) {
   return /upstream verification|awaiting upstream verification|did not confirm task creation/i.test(String(message ?? ""));
 }
 
+function summarizeDcordRawResponse(text, limit = 700) {
+  return String(text ?? "")
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, " ")
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, limit);
+}
+
 async function requestDcord(pathname, init = {}) {
   const response = await fetch(resolveDcordApiUrl(pathname), {
     ...init,
@@ -649,8 +659,14 @@ async function requestDcord(pathname, init = {}) {
 
   if (typeof payload === "string" && /<!doctype html|<html|cloudflare|just a moment/i.test(payload)) {
     const providerBlocked = /challenge-platform|__cf_chl|just a moment|sorry, you have been blocked|unable to access|attention required/i.test(payload);
-    const error = new Error("Dcord returned an HTML challenge/block page before the request reached the task service.");
+    const contentType = response.headers.get("content-type") ?? "unknown";
+    const bodySummary = summarizeDcordRawResponse(payload);
+    const error = new Error(
+      `Dcord raw response: HTTP ${response.status}, content-type: ${contentType}, body: ${bodySummary || "(empty response)"}`
+    );
     error.statusCode = response.status;
+    error.contentType = contentType;
+    error.rawResponseSummary = bodySummary;
     error.uncertain = !providerBlocked;
     error.providerBlocked = providerBlocked;
     throw error;
@@ -1173,7 +1189,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
     if (error?.providerBlocked === true) {
       const blockedMessage = isDcordUpstreamVerificationMessage(message)
         ? `${message} Delivery will retry automatically.`
-        : "Dcord returned an HTML challenge/block page for POST /api/task/create before it reached the task service. Delivery was paused.";
+        : `${message} Delivery was paused.`;
       return {
         token: redactToken(token),
         success: false,
