@@ -5361,6 +5361,12 @@
   line-height: 1.55;
 }
 
+.community-join-skeleton {
+  display: grid;
+  gap: 11px;
+  padding: 24px 20px 20px;
+}
+
 .community-progress-block {
   padding: 24px 20px 20px;
 }

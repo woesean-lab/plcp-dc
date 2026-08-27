@@ -712,12 +712,16 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "stock") return;
-    if (stockCategory === "boosts") {
-      void refreshBoostStockTokens();
-      void refreshDcordProxies();
-    }
-    else void refreshCommunityStatus();
-    // Each inventory loads only when its Stock tab is opened.
+    void refreshBoostStockTokens();
+    void refreshCommunityStatus();
+    if (stockCategory === "boosts") void refreshDcordProxies();
+    // Stock data is preloaded so switching tabs does not flash empty values.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "stock" && stockCategory === "boosts") void refreshDcordProxies();
+    // Dcord proxy list is only needed by the Boost Stock panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, stockCategory]);
 
@@ -1436,7 +1440,48 @@ export default function HomePage() {
     notifySuccess("Order added.");
   }
 
-  const communityStockPanel = (
+  const communityStockLoading = loadingCommunityStatus && !communityStatus;
+  const communityStockConfigured = Boolean(communityStatus?.configured);
+  const communityStockBadge = communityStockLoading
+    ? { label: "Loading", variant: "secondary" as const }
+    : communityStockConfigured
+      ? { label: "Ready", variant: "success" as const }
+      : { label: "Setup required", variant: "destructive" as const };
+
+  const communityStockPanel = communityStockLoading ? (
+    <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
+      <div className="community-admin-heading">
+        <div className="flex min-w-0 items-center gap-3">
+          <Skeleton className="h-10 w-10 shrink-0" />
+          <div className="min-w-0">
+            <Skeleton className="h-3 w-24" />
+            <Skeleton className="mt-3 h-6 w-40 max-w-full" />
+          </div>
+        </div>
+        <Skeleton className="h-7 w-24" />
+      </div>
+      <div className="community-admin-progress members-connected-summary">
+        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
+        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
+        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
+      </div>
+      <div className="community-recent-list">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index}>
+            <Skeleton className="h-[34px] w-[34px]" />
+            <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-48 max-w-full" /></span>
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-8 w-8" />
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Skeleton className="h-11 w-52" />
+        <Skeleton className="h-11 w-56" />
+        <Skeleton className="h-11 w-28" />
+      </div>
+    </section>
+  ) : (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
       <div className="community-admin-heading">
         <div className="flex min-w-0 items-center gap-3">
@@ -1450,9 +1495,7 @@ export default function HomePage() {
             <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.bot?.name ?? "Members Bot"}</h2>
           </div>
         </div>
-        <Badge variant={communityStatus?.configured ? "success" : "destructive"}>
-          {communityStatus?.configured ? "Ready" : "Setup required"}
-        </Badge>
+        <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
       </div>
 
       <div className="community-admin-progress members-connected-summary">
@@ -1461,7 +1504,7 @@ export default function HomePage() {
         <div><span>Inactive users</span><strong>{communityStatus?.failed ?? 0}</strong></div>
       </div>
 
-      {!communityStatus?.configured ? (
+      {!communityStockConfigured ? (
         <p className="community-admin-note">Add the Discord application, bot, callback address and target server settings to activate Members Stock.</p>
       ) : null}
 
@@ -1501,15 +1544,15 @@ export default function HomePage() {
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" disabled={!communityStatus?.configured} onClick={() => void copyCommunityJoinLink()}>
+        <Button type="button" disabled={!communityStockConfigured} onClick={() => void copyCommunityJoinLink()}>
           <Copy className="h-4 w-4" /> Copy authorization link
         </Button>
-        <Button asChild type="button" variant="secondary" disabled={!communityStatus?.configured}>
-          {communityStatus?.configured ? (
+        <Button asChild type="button" variant="secondary" disabled={!communityStockConfigured}>
+          {communityStockConfigured ? (
             <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open authorization page</a>
           ) : <span><ExternalLink className="h-4 w-4" /> Open authorization page</span>}
         </Button>
-        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStatus?.configured} onClick={() => void syncCommunityStatus()}>
+        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void syncCommunityStatus()}>
           <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>

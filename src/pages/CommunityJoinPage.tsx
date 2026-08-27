@@ -1,7 +1,8 @@
-import { ArrowRight, Bot, CheckCircle2, LoaderCircle, LockKeyhole, ShieldCheck, Users } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getPublicCommunityStatus, type CommunityJoinSummary } from "../lib/community";
 
 const resultMessages: Record<string, { title: string; copy: string; tone: "success" | "neutral" | "danger" }> = {
@@ -25,6 +26,7 @@ export default function CommunityJoinPage() {
   const [error, setError] = useState("");
   const result = searchParams.get("result") ?? "";
   const message = resultMessages[result];
+  const loading = !status && !error;
 
   useEffect(() => {
     let active = true;
@@ -47,13 +49,13 @@ export default function CommunityJoinPage() {
       <section className="community-join-shell" aria-labelledby="community-join-title">
         <header className="community-join-header">
           <div className="community-guild-avatar" aria-hidden="true">
-            {status?.bot?.avatarUrl ? <img src={status.bot.avatarUrl} alt="" /> : <Bot className="h-7 w-7" />}
+            {loading ? <Skeleton className="h-full w-full rounded-none" /> : status?.bot?.avatarUrl ? <img src={status.bot.avatarUrl} alt="" /> : <Bot className="h-7 w-7" />}
           </div>
           <div className="min-w-0">
             <span className="community-kicker">Discord application</span>
-            <h1 id="community-join-title">{status?.bot?.name ?? "Members Bot"}</h1>
+            <h1 id="community-join-title">{loading ? <Skeleton className="h-6 w-44 max-w-full" /> : status?.bot?.name ?? "Members Bot"}</h1>
           </div>
-          <span className="community-secure-mark"><ShieldCheck className="h-4 w-4" /> Secure OAuth</span>
+          {loading ? <Skeleton className="h-9 w-28" /> : <span className="community-secure-mark"><ShieldCheck className="h-4 w-4" /> Secure OAuth</span>}
         </header>
 
         {message ? (
@@ -63,15 +65,13 @@ export default function CommunityJoinPage() {
           </div>
         ) : null}
 
-        <div className="community-progress-block">
-          <div className="community-progress-copy">
-            <span><Users className="h-4 w-4" /> Connected users</span>
-            <strong>{status ? status.authorized ?? 0 : "Loading..."}</strong>
+        {loading ? (
+          <div className="community-join-skeleton">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-4/5" />
           </div>
-          <div className="community-progress-meta">
-            {status?.guild?.memberCount != null ? <span>{status.guild.memberCount.toLocaleString()} current members</span> : null}
-          </div>
-        </div>
+        ) : null}
 
         <div className="community-consent-note">
           <LockKeyhole className="h-5 w-5" aria-hidden="true" />
@@ -79,15 +79,18 @@ export default function CommunityJoinPage() {
         </div>
 
         {error ? <p className="community-error" role="alert">{error}</p> : null}
-        {!status && !error ? <div className="community-loading"><LoaderCircle className="h-5 w-5 animate-spin" /> Loading invitation</div> : null}
 
-        <Button asChild size="lg" className="community-join-action" disabled={!ready}>
-          {ready ? (
-            <a href="/api/community/oauth/start">Authorize with Discord <ArrowRight className="h-4 w-4" /></a>
-          ) : (
-            <span>Authorization unavailable</span>
-          )}
-        </Button>
+        {loading ? (
+          <Skeleton className="community-join-action h-12" />
+        ) : (
+          <Button asChild size="lg" className="community-join-action" disabled={!ready}>
+            {ready ? (
+              <a href="/api/community/oauth/start">Authorize with Discord <ArrowRight className="h-4 w-4" /></a>
+            ) : (
+              <span>Authorization unavailable</span>
+            )}
+          </Button>
+        )}
       </section>
     </main>
   );
