@@ -1171,6 +1171,9 @@ async function runDcordBoostToken(token, invite, options = {}) {
       };
     }
     if (error?.providerBlocked === true) {
+      const blockedMessage = isDcordUpstreamVerificationMessage(message)
+        ? `${message} Delivery will retry automatically.`
+        : "Dcord Cloudflare blocked POST /api/task/create before it reached the task service. Delivery was paused.";
       return {
         token: redactToken(token),
         success: false,
@@ -1179,7 +1182,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
         boostStatus: "not submitted",
         slots: null,
         boost: false,
-        boostMessage: "Dcord Cloudflare blocked POST /api/task/create before it reached the task service. Delivery was paused.",
+        boostMessage: blockedMessage,
         httpStatus: Number.isFinite(statusCode) ? statusCode : 403,
         boosted: false,
         transportUncertain: false,
