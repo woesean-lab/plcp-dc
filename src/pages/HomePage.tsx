@@ -520,6 +520,7 @@ export default function HomePage() {
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
+  const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
@@ -657,18 +658,20 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !deletingTrackedOrder) setOrderPendingDeletion(null);
+      if (event.key !== "Escape") return;
+      if (orderPendingDeletion && !deletingTrackedOrder) setOrderPendingDeletion(null);
+      if (communityMemberPendingDeletion && removingCommunityUserId === null) setCommunityMemberPendingDeletion(null);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, deletingTrackedOrder]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, deletingTrackedOrder, removingCommunityUserId]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -845,11 +848,11 @@ export default function HomePage() {
   }
 
   async function removeConnectedCommunityUser(record: CommunityAdminStatus["recent"][number]) {
-    if (!window.confirm(`Remove ${record.username} from Members Stock?`)) return;
     try {
       setRemovingCommunityUserId(record.id);
       await removeCommunityAuthorization(record.id);
       setCommunityStatus(await getCommunityAdminStatus());
+      setCommunityMemberPendingDeletion(null);
       notifySuccess(`${record.username} disconnected and removed from Members Stock.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Connected user could not be removed.");
@@ -1532,7 +1535,7 @@ export default function HomePage() {
                   title={`Remove ${record.username} from Members Stock`}
                   aria-label={`Remove ${record.username} from Members Stock`}
                   disabled={removingCommunityUserId !== null || Boolean(record.reservedOrderId)}
-                  onClick={() => void removeConnectedCommunityUser(record)}
+                  onClick={() => setCommunityMemberPendingDeletion(record)}
                 >
                   {removingCommunityUserId === record.id
                     ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
@@ -2584,6 +2587,29 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>
                 {deletingTrackedOrder ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                 {deletingTrackedOrder ? "Removing..." : "Remove order"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {communityMemberPendingDeletion ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && removingCommunityUserId === null) setCommunityMemberPendingDeletion(null);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-member-title" aria-describedby="delete-member-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Remove member</p>
+            <h2 id="delete-member-title">Remove this user?</h2>
+            <p id="delete-member-description">This removes <strong>{communityMemberPendingDeletion.username}</strong> from Members Stock and revokes the saved Discord authorization.</p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={removingCommunityUserId !== null} onClick={() => setCommunityMemberPendingDeletion(null)}>Keep user</Button>
+              <Button type="button" variant="destructive" disabled={removingCommunityUserId !== null} onClick={() => void removeConnectedCommunityUser(communityMemberPendingDeletion)}>
+                {removingCommunityUserId === communityMemberPendingDeletion.id ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                {removingCommunityUserId === communityMemberPendingDeletion.id ? "Removing..." : "Remove user"}
               </Button>
             </div>
           </div>
