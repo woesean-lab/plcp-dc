@@ -294,6 +294,33 @@ async function loadCommunityGuildSafe(config) {
   }
 }
 
+async function checkCommunityMemberVerification(config, guildId, invite) {
+  try {
+    const params = new URLSearchParams({
+      with_guild: "false",
+      invite_code: invite
+    });
+    const { response, payload } = await requestDiscord(
+      `guilds/${encodeURIComponent(guildId)}/member-verification?${params.toString()}`,
+      { headers: { Authorization: `Bot ${config.botToken}` } }
+    );
+    if (response.status === 404) {
+      return { status: "closed", enabled: false };
+    }
+    if (!response.ok) {
+      return { status: "unknown", enabled: false };
+    }
+    const fields = Array.isArray(payload?.form_fields) ? payload.form_fields : [];
+    return {
+      status: fields.length ? "open" : "closed",
+      enabled: fields.length > 0,
+      fields: fields.length
+    };
+  } catch {
+    return { status: "unknown", enabled: false };
+  }
+}
+
 async function loadCommunityJoinSummary(config) {
   const result = await pool.query(
     `SELECT
@@ -2248,7 +2275,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    const { config } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
+    const { config, serverInfo, invite } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
@@ -2256,7 +2283,8 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       [config.guildId]
     );
     const available = Number(result.rows[0]?.available ?? 0);
-    res.set("Cache-Control", "no-store").json({ available, maximum: available });
+    const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
+    res.set("Cache-Control", "no-store").json({ available, maximum: available, memberVerification });
   } catch (error) {
     next(error);
   }
@@ -2271,7 +2299,12 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Offline member amount and delay are required." });
     }
 
-    const { config, serverInfo, waitingForBot, botInvite } = await resolveConfiguredCommunityInvite(req.body?.id, { allowWaitingForBot: true });
+    const { config, serverInfo, waitingForBot, botInvite, invite } = await resolveConfiguredCommunityInvite(req.body?.id, { allowWaitingForBot: true });
+    const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
+    if (memberVerification.status === "open") {
+      return res.status(409).json({ message: "This server has a Discord membership screening form enabled. Disable it before creating a Members 2 order." });
+    }
+
     const uniqid = createCommunityOrderId();
     await client.query("BEGIN");
     const selected = await client.query(
