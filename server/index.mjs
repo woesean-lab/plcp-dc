@@ -321,6 +321,14 @@ async function checkCommunityMemberVerification(config, guildId, invite) {
   }
 }
 
+async function checkDcordBoostMembershipScreening(invite, serverInfo) {
+  const config = await getCommunityOAuthConfig();
+  if (!config.botToken || !isDiscordGuildId(String(serverInfo?.guildId ?? ""))) {
+    return { status: "unknown", enabled: false };
+  }
+  return checkCommunityMemberVerification(config, serverInfo.guildId, invite);
+}
+
 async function loadCommunityJoinSummary(config) {
   const result = await pool.query(
     `SELECT
@@ -1035,6 +1043,16 @@ async function addCommunityGuildMember(config, discordUserId, accessToken) {
   return result;
 }
 
+function isCommunityMembershipScreeningResponse(result) {
+  const body = result?.payload;
+  const message = String(body?.message ?? "").toLowerCase();
+  const code = Number(body?.code);
+  if (body && typeof body === "object" && !Array.isArray(body) && body.pending === true) return true;
+  return code === 40007
+    || code === 40033
+    || /pending|screening|verification|member verification|membership/i.test(message);
+}
+
 async function processCommunityOrder(order, members, config) {
   const results = members.map((member) => ({
     discordUserId: member.discord_user_id,
@@ -1044,6 +1062,7 @@ async function processCommunityOrder(order, members, config) {
     details: "Waiting for delivery."
   }));
   let added = 0;
+  let blockedByMembershipScreening = false;
 
   async function saveCommunityProgress(payload) {
     const latest = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
@@ -1066,7 +1085,11 @@ async function processCommunityOrder(order, members, config) {
         [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
       );
       const joined = await addCommunityGuildMember(config, member.discord_user_id, credentials.accessToken);
-      if (joined.response.status === 201) {
+      if (isCommunityMembershipScreeningResponse(joined)) {
+        state = "blocked";
+        details = "Discord membership screening is enabled on this server.";
+        blockedByMembershipScreening = true;
+      } else if (joined.response.status === 201) {
         state = "joined";
         details = "Member joined the server.";
         added += 1;
@@ -1090,6 +1113,26 @@ async function processCommunityOrder(order, members, config) {
       [member.discord_user_id, config.guildId, details, state]
     );
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+
+    if (blockedByMembershipScreening) {
+      results.forEach((result, resultIndex) => {
+        if (resultIndex <= index) return;
+        results[resultIndex] = {
+          ...result,
+          state: "queued",
+          details: "Delivery stopped before this member was used."
+        };
+      });
+      await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [order.uniqid]);
+      await saveCommunityProgress({
+        ...order,
+        added,
+        status: "ERROR",
+        details: "Discord membership screening is enabled on this server. Disable the join form before starting Members 2 delivery.",
+        communityResults: results
+      });
+      return;
+    }
 
     if (index < members.length - 1) {
       const latestOrder = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
@@ -1120,7 +1163,10 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       [member.discord_user_id, config.guildId, encryptCredential(credentials.refreshToken)]
     );
     const joined = await addCommunityGuildMember(config, member.discord_user_id, credentials.accessToken);
-    if (joined.response.status === 201) {
+    if (isCommunityMembershipScreeningResponse(joined)) {
+      state = "blocked";
+      details = "Discord membership screening is enabled on this server.";
+    } else if (joined.response.status === 201) {
       state = "joined";
       details = "Replacement member joined the server.";
     } else if (joined.response.status === 204) {
@@ -1166,7 +1212,11 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
 }
 
 function normalizeDcordJoinResult(result, token) {
-  const boostMessage = String(result?.boost_message ?? result?.boostMessage ?? result?.message ?? "").trim();
+  const rawBoostMessage = String(result?.boost_message ?? result?.boostMessage ?? result?.message ?? "").trim();
+  const membershipScreeningBlocked = isDcordBoostMembershipScreeningMessage(rawBoostMessage);
+  const boostMessage = membershipScreeningBlocked
+    ? "Membership screening is enabled on this server. Disable the join form before boosting."
+    : rawBoostMessage;
   const boostState = String(result?.boost_status ?? result?.boostStatus ?? "").trim().toLowerCase();
   const joinState = String(result?.join_status ?? result?.joinStatus ?? result?.status ?? "").trim().toLowerCase();
   const boosted = result?.boost === true || result?.boosted === true || boostState === "boosted" || boostMessage.toLowerCase().includes("boosted");
@@ -1174,15 +1224,22 @@ function normalizeDcordJoinResult(result, token) {
   return {
     token: redactToken(token),
     success: joined || boosted,
-    status: boosted ? "joined + boosted" : joined ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
+    status: boosted ? "joined + boosted" : membershipScreeningBlocked ? "blocked" : joined ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
     joinStatus: joined || boosted ? "joined" : "failed",
-    boostStatus: boosted ? "boosted" : joined ? (boostState || "failed") : "waiting",
+    boostStatus: boosted ? "boosted" : membershipScreeningBlocked ? "blocked" : joined ? (boostState || "failed") : "waiting",
     slots: boosted ? 2 : 0,
     boost: boosted,
     boostMessage,
     httpStatus: Number.isFinite(result?.http_status) ? result.http_status : undefined,
     boosted
   };
+}
+
+function isDcordBoostMembershipScreeningMessage(message) {
+  const value = String(message ?? "").toLowerCase();
+  return value.includes("boost put")
+    && value.includes("unknown guild")
+    && (value.includes("code=10004") || value.includes("code: 10004") || value.includes("10004"));
 }
 
 function extractDcordApiToken(stockToken) {
@@ -1225,9 +1282,13 @@ function normalizeDcordTaskResult(payload, token, taskId) {
     : taskPayload;
   const taskStatus = getDcordTaskStatus(payload);
   if (taskStatus === "failed") {
-    const message = String(result?.message ?? result?.detail ?? taskPayload?.message ?? "Dcord task failed.").trim();
+    const rawMessage = String(result?.message ?? result?.detail ?? taskPayload?.message ?? "Dcord task failed.").trim();
+    const membershipScreeningBlocked = isDcordBoostMembershipScreeningMessage(rawMessage);
+    const message = membershipScreeningBlocked
+      ? "Membership screening is enabled on this server. Disable the join form before boosting."
+      : rawMessage;
     return {
-      token: redactToken(token), success: false, status: "error", joinStatus: "failed", boostStatus: "skipped",
+      token: redactToken(token), success: false, status: membershipScreeningBlocked ? "blocked" : "error", joinStatus: membershipScreeningBlocked ? "joined" : "failed", boostStatus: membershipScreeningBlocked ? "blocked" : "skipped",
       slots: 0, boost: false, boostMessage: message || "Dcord task failed.", boosted: false,
       dcordTaskId: taskId, dcordTaskStatus: taskStatus, taskPending: false, transportUncertain: false
     };
@@ -3235,6 +3296,11 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     }
 
     const serverInfo = await resolveDiscordInvite(invite);
+    const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
+    if (memberVerification.status === "open") {
+      return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
+    }
+
     const stock = await loadBoostTokenStock();
     const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
     const requiredTokens = amount / 2;

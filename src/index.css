@@ -757,7 +757,8 @@
     background: rgba(105, 221, 178, .035);
   }
 
-  .community-order-result[data-state="failed"] {
+  .community-order-result[data-state="failed"],
+  .community-order-result[data-state="blocked"] {
     border-color: var(--app-danger-button-border);
     background: var(--app-danger-soft);
   }
@@ -3636,6 +3637,13 @@
     border-color: var(--app-border);
     color: var(--app-muted);
     background: rgba(255,255,255,.035);
+  }
+
+  .public-token-result-pill[data-state="blocked"],
+  .public-token-result-pill[data-state="failed"] {
+    border-color: var(--app-danger-button-border);
+    color: var(--app-danger-text);
+    background: var(--app-danger-soft);
   }
 
   .public-token-result-slots {
