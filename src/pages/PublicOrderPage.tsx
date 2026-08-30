@@ -580,11 +580,11 @@ export default function PublicOrderPage() {
         <article className="monitor-surface">
           <div className="monitor-identity">
             <div className="monitor-server-copy">
-              <div className="public-live-label"><span aria-hidden="true" /> Live order monitor</div>
-              <h1>{isInitialLoading ? <Skeleton className="h-12 w-72 max-w-[70vw]" /> : serverName}</h1>
+              <div className="public-live-label"><span aria-hidden="true" /> Live order</div>
+              <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
               <div className="monitor-order-meta">
                 {isInitialLoading ? (
-                  <><Skeleton className="h-8 w-20 rounded-full" /><Skeleton className="h-8 w-28 rounded-full" /></>
+                  <><Skeleton className="h-7 w-20 rounded-full" /><Skeleton className="h-7 w-28 rounded-full" /></>
                 ) : (
                   <><Badge variant={getStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge><Badge variant="outline">{serviceName}</Badge></>
                 )}
@@ -592,9 +592,16 @@ export default function PublicOrderPage() {
               </div>
             </div>
 
-            <div className="monitor-trust-mark">
-              <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-              <span><strong>Verified live feed</strong><small>Securely linked to the delivery network</small></span>
+            <div className="monitor-status-summary" data-status={normalizedStatus.toLowerCase() || "pending"}>
+              <div>
+                <small>Order progress</small>
+                <strong>{progress === null ? "—" : `${progressPercent}%`}</strong>
+              </div>
+              <span>{statusLabel}</span>
+              <div className="monitor-summary-track" aria-hidden="true">
+                <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+              </div>
+              <p>{isCompleted ? "Everything has been delivered" : `${formatNumber(membersAdded)} of ${formatNumber(totalMembers)} ${unitLabel.toLowerCase()} delivered`}</p>
             </div>
           </div>
 
@@ -655,6 +662,7 @@ export default function PublicOrderPage() {
               ) : null}
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`}>
+                {!isBoostOrder ? (
                 <div className="monitor-progress-panel">
                   <div className="monitor-progress-heading">
                     <div>
@@ -669,6 +677,7 @@ export default function PublicOrderPage() {
                     {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
                   </div>
                 </div>
+                ) : null}
 
                 {delayUpdatePanel}
 

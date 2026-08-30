@@ -4372,14 +4372,14 @@
 
 .monitor-identity {
   position: relative;
-  display: flex;
-  min-height: 82px;
+  display: grid;
+  min-height: 118px;
+  grid-template-columns: minmax(0, 1fr) 260px;
   align-items: center;
-  justify-content: space-between;
-  gap: 24px;
+  gap: 22px;
   overflow: hidden;
   border-bottom: 1px solid var(--app-divider);
-  padding: 15px 24px;
+  padding: 18px 24px;
   background: rgba(255,255,255,.012);
 }
 
@@ -4400,9 +4400,9 @@
 
 .monitor-server-copy h1 {
   overflow: hidden;
-  margin: 5px 0 0;
+  margin: 6px 0 0;
   color: var(--app-text);
-  font-size: clamp(1.45rem, 2.4vw, 1.9rem);
+  font-size: clamp(1.55rem, 2.5vw, 2rem);
   font-weight: 720;
   line-height: 1;
   text-overflow: ellipsis;
@@ -4412,7 +4412,7 @@
 .monitor-order-meta {
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 9px;
+  margin-top: 11px;
 }
 
 .monitor-order-meta > span:last-child {
@@ -4428,29 +4428,89 @@
   font-weight: 650;
 }
 
-.monitor-trust-mark {
-  flex: 0 0 auto;
-  gap: 10px;
-  border: 1px solid rgba(105,221,178,.16);
-  border-radius: 10px;
-  padding: 9px 11px;
-  background: rgba(105,221,178,.055);
-  color: var(--app-success);
-}
-
-.monitor-trust-mark > span {
+.monitor-status-summary {
   display: grid;
-  gap: 3px;
+  gap: 8px;
+  align-self: stretch;
+  border: 1px solid rgba(155,140,255,.24);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(155,140,255,.075);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045);
 }
 
-.monitor-trust-mark strong {
-  color: var(--app-text-secondary);
-  font-size: 11px;
+.monitor-status-summary > div:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.monitor-trust-mark small {
-  color: var(--app-muted);
+.monitor-status-summary small {
+  color: var(--app-subtle);
   font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.monitor-status-summary strong {
+  color: var(--app-text);
+  font-size: 1.75rem;
+  font-weight: 760;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.monitor-status-summary > span {
+  justify-self: start;
+  border: 1px solid rgba(155,140,255,.28);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #c5bcff;
+  background: rgba(155,140,255,.11);
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.monitor-status-summary[data-status="completed"] {
+  border-color: rgba(105,221,178,.22);
+  background: rgba(105,221,178,.06);
+}
+
+.monitor-status-summary[data-status="completed"] > span {
+  border-color: rgba(105,221,178,.24);
+  color: var(--app-success);
+  background: var(--app-success-soft);
+}
+
+.monitor-summary-track {
+  height: 8px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.045);
+  border-radius: 999px;
+  background: rgba(4,5,11,.58);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.22);
+}
+
+.monitor-summary-track > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #7966ff, #a99eff 68%, #d7d1ff);
+  box-shadow: 0 0 16px rgba(155,140,255,.38);
+  transition: width .4s ease;
+}
+
+.monitor-status-summary[data-status="completed"] .monitor-summary-track > div {
+  background: linear-gradient(90deg, #4ce3a7, #9af0ce);
+  box-shadow: 0 0 16px rgba(105,221,178,.32);
+}
+
+.monitor-status-summary p {
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .monitor-content {
@@ -4487,12 +4547,12 @@
 
 .monitor-stat {
   min-width: 0;
-  gap: 12px;
-  padding: 11px 24px;
+  gap: 10px;
+  padding: 10px 22px;
 }
 
 .monitor-stat:nth-child(2) {
-  border-top: 1px solid rgba(155,140,255,.6);
+  border-top: 1px solid rgba(155,140,255,.45);
   background: rgba(155,140,255,.105);
 }
 
@@ -4504,8 +4564,8 @@
 .monitor-panel-icon,
 .monitor-warning-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--app-accent-border);
@@ -4530,16 +4590,16 @@
 
 .monitor-stat small {
   grid-column: 1 / -1;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   color: var(--app-subtle);
-  font-size: 9px;
+  font-size: 8px;
   font-weight: 750;
   text-transform: uppercase;
 }
 
 .monitor-stat strong {
   color: var(--app-text);
-  font-size: 1.22rem;
+  font-size: 1.1rem;
   font-weight: 700;
   line-height: 1;
 }
@@ -4547,7 +4607,7 @@
 .monitor-stat em {
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 10px;
+  font-size: 9px;
   font-style: normal;
   text-overflow: ellipsis;
   white-space: nowrap;
