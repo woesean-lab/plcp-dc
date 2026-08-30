@@ -519,7 +519,7 @@ export default function PublicOrderPage() {
       <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
         <p>
-          <strong>What is delay?</strong> It is the wait time before the next member joins. Over 500 members on a new server? <strong>700s is recommended.</strong>
+          Sunucunuz yeni ve 500'den az üyeniz mi var? <strong>700 saniye önerilir.</strong>
         </p>
       </div>
     </div>
