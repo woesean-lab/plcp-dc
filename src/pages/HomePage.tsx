@@ -2673,7 +2673,7 @@ export default function HomePage() {
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
               <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderWithScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
-                {creating ? "Creating..." : "Yine de devam et"}
+                {creating ? "Creating..." : "Continue"}
               </Button>
             </div>
           </div>
