@@ -5399,6 +5399,14 @@
 .monitor-live-progress-stats { grid-column: 2; margin-top: 0; border-radius: 14px; }
 .monitor-live-progress-stats > div { padding: 14px 16px; background: rgba(8,9,17,.54); }
 .monitor-live-progress-stats strong { margin-top: 5px; font-size: 22px; }
+.monitor-live-progress-stats .monitor-estimate {
+  display: block;
+  margin-top: 6px;
+  color: var(--app-accent-bright);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.3;
+}
 .monitor-live-progress-track { grid-column: 2; height: 11px; margin-top: 14px; }
 .monitor-live-progress-track span { overflow: hidden; }
 .monitor-live-progress-track i { position: absolute; top: 0; right: 0; width: 50px; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,.68)); filter: blur(2px); }
@@ -5410,6 +5418,7 @@
 .monitor-token-panel { border-radius: 16px; background: linear-gradient(135deg, rgba(255,255,255,.045), rgba(255,255,255,.018)); }
 .monitor-control-panel { padding: 19px; }
 .monitor-token-panel { padding: 19px; }
+.monitor-safety-note { align-items: flex-start; line-height: 1.55; }
 .monitor-progress-panel { padding: 22px; }
 .monitor-panel-heading h2,
 .monitor-token-heading h2,

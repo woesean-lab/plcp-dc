@@ -104,6 +104,18 @@ function formatDateTime(value?: number | string) {
   }).format(date);
 }
 
+function formatDuration(totalSeconds?: number) {
+  if (typeof totalSeconds !== "number" || !Number.isFinite(totalSeconds) || totalSeconds < 0) return "-";
+  if (totalSeconds < 60) return `about ${Math.ceil(totalSeconds)} sec`;
+
+  const minutes = Math.ceil(totalSeconds / 60);
+  if (minutes < 60) return `about ${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `about ${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ""}`;
+}
+
 function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
   const results = source?.dcordResults;
   if (!Array.isArray(results)) return [];
@@ -334,6 +346,9 @@ export default function PublicOrderPage() {
   const membersRemaining =
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
+  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
+    ? membersRemaining * currentDelay
+    : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
@@ -504,7 +519,7 @@ export default function PublicOrderPage() {
       <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
         <p>
-          Over 500 members on a new server? <strong>700s delay is recommended.</strong>
+          <strong>What is delay?</strong> It is the wait time before the next member joins. Over 500 members on a new server? <strong>700s is recommended.</strong>
         </p>
       </div>
     </div>
@@ -611,7 +626,11 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-stats">
                   <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
                   <div><small>Total ordered</small><strong>{formatNumber(totalMembers)}</strong></div>
-                  <div className="is-remaining"><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
+                  <div className="is-remaining">
+                    <small>Remaining</small>
+                    <strong>{formatNumber(membersRemaining)}</strong>
+                    {!isBoostOrder && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">Est. completion {formatDuration(estimatedCompletionSeconds)}</span> : null}
+                  </div>
                 </div>
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
                   <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }}><i aria-hidden="true" /></span>
