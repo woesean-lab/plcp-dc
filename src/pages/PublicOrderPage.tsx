@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -103,15 +102,6 @@ function formatDateTime(value?: number | string) {
     dateStyle: "medium",
     timeStyle: "short"
   }).format(date);
-}
-
-function getStatusBadgeVariant(status?: string): "success" | "destructive" | "secondary" {
-  const normalized = String(status ?? "").toLowerCase();
-  if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
-    return "destructive";
-  }
-  return "secondary";
 }
 
 function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
@@ -557,16 +547,23 @@ export default function PublicOrderPage() {
 
         <article className="monitor-surface">
           <div className="monitor-identity">
+            <span className="monitor-order-mark" aria-hidden="true"><Activity className="h-4 w-4" /></span>
             <div className="monitor-server-copy">
               <div className="public-live-label"><span aria-hidden="true" /> Live order</div>
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
-              <div className="monitor-order-meta">
-                {isInitialLoading ? (
-                  <><Skeleton className="h-7 w-20 rounded-full" /><Skeleton className="h-7 w-28 rounded-full" /></>
-                ) : (
-                  <><Badge variant={getStatusBadgeVariant(statusLabel)}>{statusLabel}</Badge><Badge variant="outline">{serviceName}</Badge></>
-                )}
-                <span><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</span>
+            </div>
+            <div className="monitor-order-facts">
+              <div>
+                <small>Status</small>
+                {isInitialLoading ? <Skeleton className="h-4 w-20" /> : <strong className="monitor-order-state" data-status={normalizedStatus.toLowerCase() || "pending"}>{statusLabel}</strong>}
+              </div>
+              <div>
+                <small>Service</small>
+                {isInitialLoading ? <Skeleton className="h-4 w-16" /> : <strong>{serviceName}</strong>}
+              </div>
+              <div>
+                <small>Created</small>
+                <strong><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong>
               </div>
             </div>
           </div>
