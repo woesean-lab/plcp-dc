@@ -4104,7 +4104,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  width: min(100%, 1456px);
+  width: min(100%, 1240px);
   min-height: min(650px, calc(100vh - 30px));
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 8px;
