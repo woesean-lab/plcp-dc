@@ -3297,7 +3297,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
 
     const serverInfo = await resolveDiscordInvite(invite);
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
-    if (memberVerification.status === "open") {
+    if (memberVerification.status === "open" && req.body?.forceMembershipScreening !== true) {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
     }
 

@@ -68,7 +68,7 @@ import {
   saveDcordProxies,
   saveIntegrationApiKey
 } from "../lib/integration";
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
@@ -117,6 +117,8 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   botToken: "",
   redirectUri: ""
 };
+
+const BOOST_MEMBERSHIP_SCREENING_MESSAGE = "Membership screening is enabled on this server. Disable the join form before boosting.";
 
 type FilterOption = {
   value: string;
@@ -521,6 +523,7 @@ export default function HomePage() {
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
@@ -1362,56 +1365,86 @@ export default function HomePage() {
     }
   }
 
+  async function submitCreateOrder(payload: CreateOrderPayload, { forceMembershipScreening = false } = {}) {
+    const targetId = String(payload.id ?? "").trim();
+    const payloadIsBoost = isBoostService(payload.service);
+    const payloadIsCommunity = isCommunityService(payload.service);
+    const serverInfo = await resolveDiscordGuildInfo(targetId);
+    const serverId = serverInfo.guildId;
+    const created = await createOrder({
+      ...payload,
+      id: payloadIsBoost || payloadIsCommunity ? targetId : serverId,
+      forceMembershipScreening: payloadIsBoost && forceMembershipScreening ? true : undefined
+    });
+    const createdStock = (created as { stock?: BoostStock }).stock;
+    if (createdStock) {
+      setBoostStock(createdStock);
+    }
+
+    const nextOrder: TrackedOrder = {
+      uniqid: created.uniqid,
+      provider: payloadIsBoost ? "dcord" : payloadIsCommunity ? "community" : "tokenu",
+      service: payload.service,
+      serverId,
+      serverName: serverInfo.guildName,
+      amount: payload.amount,
+      added: 0,
+      delay: payloadIsBoost ? undefined : payload.delay,
+      billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
+      duration: payloadIsBoost ? payload.duration : undefined,
+      useProxy: payloadIsBoost ? payload.useProxy : undefined,
+      concurrency: payloadIsBoost ? payload.concurrency : undefined,
+      cost: created.cost,
+      botInvite: created.bot_invite,
+      serverInvite: extractDiscordInviteCode(targetId) ? targetId : undefined,
+      serverMemberCount: serverInfo.approximateMemberCount,
+      createdAt: new Date().toISOString(),
+      status: "NEW"
+    };
+
+    persistOrders([nextOrder, ...orders]);
+    notifySuccess(`Order created: ${created.uniqid}`);
+    const providerQuery = payloadIsBoost ? "&provider=dcord" : payloadIsCommunity ? "&provider=community" : "";
+    navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
+  }
+
   async function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
 
+    const payload: CreateOrderPayload = {
+      service: form.service,
+      id: form.serverId.trim(),
+      amount: form.amount,
+      delay: selectedIsBoost ? undefined : form.delay,
+      billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
+      duration: selectedIsBoost ? form.duration : undefined,
+      useProxy: selectedIsBoost ? form.useProxy : undefined,
+      concurrency: selectedIsBoost ? form.concurrency : undefined
+    };
+
     try {
-      const serverInfo = await resolveDiscordGuildInfo(form.serverId);
-      const serverId = serverInfo.guildId;
       if (selectedIsBoost && form.amount % 2 !== 0) {
         throw new Error("Boost amount must be an even number.");
       }
-      const created = await createOrder({
-        service: form.service,
-        id: selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : serverId,
-        amount: form.amount,
-        delay: selectedIsBoost ? undefined : form.delay,
-        billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
-        duration: selectedIsBoost ? form.duration : undefined,
-        useProxy: selectedIsBoost ? form.useProxy : undefined,
-        concurrency: selectedIsBoost ? form.concurrency : undefined
-      });
-      const createdStock = (created as { stock?: BoostStock }).stock;
-      if (createdStock) {
-        setBoostStock(createdStock);
+      await submitCreateOrder(payload);
+    } catch (error) {
+      if (selectedIsBoost && error instanceof Error && error.message === BOOST_MEMBERSHIP_SCREENING_MESSAGE) {
+        setBoostScreeningPendingPayload(payload);
+        return;
       }
+      notifyError(error instanceof Error ? error.message : "Order could not be created.");
+    } finally {
+      setCreating(false);
+    }
+  }
 
-      const nextOrder: TrackedOrder = {
-        uniqid: created.uniqid,
-        provider: selectedIsBoost ? "dcord" : selectedIsCommunity ? "community" : "tokenu",
-        service: form.service,
-        serverId,
-        serverName: serverInfo.guildName,
-        amount: form.amount,
-        added: 0,
-        delay: selectedIsBoost ? undefined : form.delay,
-        billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
-        duration: selectedIsBoost ? form.duration : undefined,
-        useProxy: selectedIsBoost ? form.useProxy : undefined,
-        concurrency: selectedIsBoost ? form.concurrency : undefined,
-        cost: created.cost,
-        botInvite: created.bot_invite,
-        serverInvite: extractDiscordInviteCode(form.serverId) ? form.serverId.trim() : undefined,
-        serverMemberCount: serverInfo.approximateMemberCount,
-        createdAt: new Date().toISOString(),
-        status: "NEW"
-      };
-
-      persistOrders([nextOrder, ...orders]);
-      notifySuccess(`Order created: ${created.uniqid}`);
-      const providerQuery = selectedIsBoost ? "&provider=dcord" : selectedIsCommunity ? "&provider=community" : "";
-      navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
+  async function continueBoostOrderWithScreening() {
+    if (!boostScreeningPendingPayload || creating) return;
+    setCreating(true);
+    try {
+      await submitCreateOrder(boostScreeningPendingPayload, { forceMembershipScreening: true });
+      setBoostScreeningPendingPayload(null);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Order could not be created.");
     } finally {
@@ -2610,6 +2643,37 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={removingCommunityUserId !== null} onClick={() => void removeConnectedCommunityUser(communityMemberPendingDeletion)}>
                 {removingCommunityUserId === communityMemberPendingDeletion.id ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                 {removingCommunityUserId === communityMemberPendingDeletion.id ? "Removing..." : "Remove user"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {boostScreeningPendingPayload ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !creating) setBoostScreeningPendingPayload(null);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="boost-screening-title" aria-describedby="boost-screening-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Boost warning</p>
+            <h2 id="boost-screening-title">Registration form is enabled</h2>
+            <p id="boost-screening-description">
+              ⚠️ Disable the registration form until your order is complete.
+              <br /><br />
+              Our bots can’t complete the registration form, so they can’t join your server and add the boosts.
+              <br /><br />
+              Server Settings → Access → Invite Only
+              <br /><br />
+              After changing the setting, please create a new server invite link and send it to us.
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderWithScreening()}>
+                {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
+                {creating ? "Creating..." : "Yine de devam et"}
               </Button>
             </div>
           </div>
