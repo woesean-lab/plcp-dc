@@ -294,7 +294,7 @@ async function loadCommunityGuildSafe(config) {
   }
 }
 
-async function checkCommunityMemberVerification(config, guildId, invite) {
+async function checkCommunityMemberVerification(config, guildId, invite, { requireExplicitEnabled = false } = {}) {
   try {
     const params = new URLSearchParams({
       with_guild: "false",
@@ -311,9 +311,14 @@ async function checkCommunityMemberVerification(config, guildId, invite) {
       return { status: "unknown", enabled: false };
     }
     const fields = Array.isArray(payload?.form_fields) ? payload.form_fields : [];
+    const explicitlyEnabled = payload?.enabled === true
+      || payload?.is_enabled === true
+      || payload?.verification_form_enabled === true
+      || payload?.member_verification_enabled === true;
+    const enabled = fields.length > 0 && (!requireExplicitEnabled || explicitlyEnabled);
     return {
-      status: fields.length ? "open" : "closed",
-      enabled: fields.length > 0,
+      status: enabled ? "open" : "closed",
+      enabled,
       fields: fields.length
     };
   } catch {
@@ -326,7 +331,7 @@ async function checkDcordBoostMembershipScreening(invite, serverInfo) {
   if (!config.botToken || !isDiscordGuildId(String(serverInfo?.guildId ?? ""))) {
     return { status: "unknown", enabled: false };
   }
-  return checkCommunityMemberVerification(config, serverInfo.guildId, invite);
+  return checkCommunityMemberVerification(config, serverInfo.guildId, invite, { requireExplicitEnabled: true });
 }
 
 async function loadCommunityJoinSummary(config) {
