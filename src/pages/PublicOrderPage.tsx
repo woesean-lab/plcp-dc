@@ -519,7 +519,7 @@ export default function PublicOrderPage() {
         <header className="monitor-topbar">
           <div className="monitor-brand">
             <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-            <span><span className="brand-eyebrow">Pulcip</span><strong>{isBoostOrder ? "Boosts Monitor" : "Members Monitor"}</strong></span>
+            <span><span className="brand-eyebrow">Pulcip</span><strong>Monitor</strong></span>
           </div>
 
           <div className="monitor-topbar-actions">
