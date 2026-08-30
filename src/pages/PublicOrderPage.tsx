@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, Server, ShieldCheck, Star, Timer, TriangleAlert, Users } from "lucide-react";
+import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -112,27 +112,6 @@ function getStatusBadgeVariant(status?: string): "success" | "destructive" | "se
     return "destructive";
   }
   return "secondary";
-}
-
-function formatEstimatedDuration(remaining?: number, delay?: number) {
-  if (typeof remaining !== "number" || typeof delay !== "number" || !Number.isFinite(remaining) || !Number.isFinite(delay)) {
-    return null;
-  }
-  if (remaining <= 0) return "Completion imminent";
-
-  const totalSeconds = Math.max(Math.ceil(remaining * delay), 0);
-  if (totalSeconds < 60) return "Less than 1 minute remaining";
-
-  const days = Math.floor(totalSeconds / 86_400);
-  const hours = Math.floor((totalSeconds % 86_400) / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const parts: string[] = [];
-
-  if (days) parts.push(`${days} ${days === 1 ? "day" : "days"}`);
-  if (hours) parts.push(`${hours} ${hours === 1 ? "hour" : "hours"}`);
-  if (minutes || parts.length === 0) parts.push(`${minutes} ${minutes === 1 ? "minute" : "minutes"}`);
-
-  return `About ${parts.join(" ")} remaining`;
 }
 
 function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
@@ -379,7 +358,6 @@ export default function PublicOrderPage() {
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
-  const estimatedCompletion = isBoostOrder || isTerminalStatus || isInvitesPaused ? null : formatEstimatedDuration(membersRemaining, currentDelay);
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
@@ -591,18 +569,6 @@ export default function PublicOrderPage() {
                 <span><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</span>
               </div>
             </div>
-
-            <div className="monitor-status-summary" data-status={normalizedStatus.toLowerCase() || "pending"}>
-              <div>
-                <small>Order progress</small>
-                <strong>{progress === null ? "—" : `${progressPercent}%`}</strong>
-              </div>
-              <span>{statusLabel}</span>
-              <div className="monitor-summary-track" aria-hidden="true">
-                <div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
-              </div>
-              <p>{isCompleted ? "Everything has been delivered" : `${formatNumber(membersAdded)} of ${formatNumber(totalMembers)} ${unitLabel.toLowerCase()} delivered`}</p>
-            </div>
           </div>
 
           {loading && !status ? (
@@ -631,20 +597,30 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              <div className="monitor-stat-strip">
-                <div className="monitor-stat is-primary">
-                  <span className="monitor-stat-icon"><Users className="h-4 w-4" aria-hidden="true" /></span>
-                  <span><small>Delivered {unitLabel}</small><strong>{formatNumber(membersAdded)}</strong><em>of {formatNumber(totalMembers)}</em></span>
+              <section className="monitor-live-progress">
+                <div className="monitor-live-progress-heading">
+                  <div>
+                    <p className="app-kicker">Live delivery</p>
+                    <h2>{isCompleted ? "Order completed" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                  </div>
+                  <div className="monitor-live-progress-value">
+                    <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
+                    <span>Order progress</span>
+                  </div>
                 </div>
-                <div className="monitor-stat">
-                  <span className="monitor-stat-icon"><Server className="h-4 w-4" aria-hidden="true" /></span>
-                  <span><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong><em>still in queue</em></span>
+                <div className="monitor-live-progress-stats">
+                  <div><small>Delivered</small><strong>{formatNumber(membersAdded)}</strong></div>
+                  <div><small>Total ordered</small><strong>{formatNumber(totalMembers)}</strong></div>
+                  <div className="is-remaining"><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
-                <div className="monitor-stat">
-                  <span className="monitor-stat-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
-                  <span><small>{isBoostOrder ? "Duration" : "Current delay"}</small><strong>{isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong><em>{isBoostOrder ? "subscription length" : "between joins"}</em></span>
+                <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
+                  <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
                 </div>
-              </div>
+                <div className="monitor-live-progress-foot">
+                  <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
+                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                </div>
+              </section>
 
               {isInvitesPaused && !isCommunityOrder ? (
                 <div className="monitor-restart-warning" role="alert">
@@ -662,23 +638,6 @@ export default function PublicOrderPage() {
               ) : null}
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`}>
-                {!isBoostOrder ? (
-                <div className="monitor-progress-panel">
-                  <div className="monitor-progress-heading">
-                    <div>
-                      <p className="app-kicker">Delivery progress</p>
-                      <h2>{isCompleted ? "Order completed" : "Delivery in progress"}</h2>
-                    </div>
-                    <span className="monitor-progress-percent">{progress === null ? "—" : `${progressPercent}%`}</span>
-                  </div>
-                  <div className="monitor-progress-track"><div style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} /></div>
-                  <div className="monitor-progress-foot">
-                    <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersAdded)} delivered so far`}</span>
-                    {estimatedCompletion ? <span><Timer className="h-3.5 w-3.5" /> {estimatedCompletion}</span> : null}
-                  </div>
-                </div>
-                ) : null}
-
                 {delayUpdatePanel}
 
                 {isCommunityOrder ? (
