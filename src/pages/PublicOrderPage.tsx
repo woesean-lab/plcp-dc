@@ -599,6 +599,9 @@ export default function PublicOrderPage() {
                   <div>
                     <p className="app-kicker">Live delivery</p>
                     <h2>{isCompleted ? "Order completed" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <p className="monitor-progress-summary">
+                      {isCompleted ? "Your order has been completed successfully." : "We keep this page updated automatically while your order is processed."}
+                    </p>
                   </div>
                   <div className="monitor-live-progress-value">
                     <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -611,7 +614,7 @@ export default function PublicOrderPage() {
                   <div className="is-remaining"><small>Remaining</small><strong>{formatNumber(membersRemaining)}</strong></div>
                 </div>
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
-                  <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }} />
+                  <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }}><i aria-hidden="true" /></span>
                 </div>
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
