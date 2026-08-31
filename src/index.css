@@ -5497,6 +5497,15 @@
 .monitor-footer { padding: 0 10px 2px; font-size: 10px; }
 
 @media (max-width: 899px) {
+  .monitor-workspace,
+  .monitor-workspace.is-boost {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .monitor-workspace > .monitor-progress-panel,
+  .monitor-workspace > .monitor-control-panel {
+    width: 100%;
+    height: auto;
+  }
   .monitor-live-progress { grid-template-columns: 1fr; gap: 16px; }
   .monitor-live-progress-stats,
   .monitor-live-progress-track,
@@ -5517,6 +5526,11 @@
   .monitor-live-progress-stats { grid-template-columns: 1fr; }
   .monitor-live-progress-stats > div + div { border-top: 1px solid var(--app-divider); }
   .monitor-workspace { padding: 12px; }
+  .monitor-control-panel { min-width: 0; padding: 18px; }
+  .monitor-panel-heading { width: 100%; }
+  .monitor-delay-controls { grid-template-columns: minmax(90px, 1fr) auto; }
+  .monitor-delay-controls .ui-button { width: auto; white-space: nowrap; }
+  .monitor-safety-note { width: 100%; margin-top: 13px; font-size: 10px; line-height: 1.55; }
   .monitor-live-progress + .monitor-restart-warning { margin: 0 12px; }
 }
 
