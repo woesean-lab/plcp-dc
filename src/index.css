@@ -5349,11 +5349,81 @@
 .monitor-brand { gap: 12px; }
 .monitor-brand .brand-mark { width: 42px; height: 42px; border-radius: 14px; }
 .monitor-brand strong { font-size: 15px; letter-spacing: -.01em; }
-.monitor-topbar-actions { gap: 8px; }
+.monitor-topbar-actions { gap: 10px; }
 .monitor-refresh,
-.monitor-store-link { min-height: 42px; border-radius: 12px; }
-.monitor-refresh { padding-inline: 14px; background: rgba(255,255,255,.035); }
-.monitor-live-stock { min-height: 42px; border-radius: 12px; padding: 5px 9px; }
+.monitor-live-stock,
+.monitor-store-link {
+  min-height: 48px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 14px;
+  background: rgba(15,16,28,.72);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.045), 0 12px 30px rgba(0,0,0,.12);
+  backdrop-filter: blur(16px);
+}
+.monitor-refresh {
+  min-width: 174px;
+  padding: 6px 8px;
+}
+.monitor-refresh svg {
+  width: 30px;
+  height: 30px;
+  padding: 8px;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 10px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+.monitor-refresh span { color: var(--app-text-secondary); font-size: 10px; }
+.monitor-refresh strong {
+  min-width: 31px;
+  margin-left: auto;
+  border-radius: 8px;
+  padding: 5px 6px;
+  background: rgba(255,255,255,.045);
+  color: var(--app-text-secondary);
+  text-align: center;
+}
+.monitor-refresh.is-refreshing { border-color: var(--app-accent-border); background: rgba(15,16,28,.82); }
+.monitor-live-stock {
+  min-width: 322px;
+  grid-template-columns: minmax(104px, 1fr) auto 72px 72px;
+  gap: 7px;
+  padding: 6px 8px;
+}
+.monitor-live-stock-icon {
+  width: 30px;
+  height: 30px;
+  border-color: var(--app-accent-border);
+  border-radius: 10px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+.monitor-live-stock-copy strong,
+.monitor-store-link strong { font-size: 10px; }
+.monitor-live-stock-status { padding: 4px 7px; }
+.monitor-live-stock-value { padding-left: 9px; }
+.monitor-live-stock-value > strong { font-size: 13px; }
+.monitor-store-link {
+  min-width: 194px;
+  gap: 9px;
+  padding: 6px 9px;
+  color: var(--app-muted);
+}
+.monitor-store-link:hover {
+  border-color: var(--app-accent-border);
+  background: rgba(155,140,255,.075);
+}
+.monitor-store-link > svg:first-child {
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  padding: 8px;
+  border: 1px solid rgba(244,190,78,.2);
+  border-radius: 10px;
+  background: rgba(244,190,78,.075);
+  color: #f4be4e;
+}
+.monitor-store-link > svg:last-child { margin-left: auto; color: var(--app-subtle); }
 
 .monitor-surface {
   border-color: rgba(255,255,255,.12);
