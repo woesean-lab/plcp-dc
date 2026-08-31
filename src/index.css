@@ -5387,14 +5387,26 @@
   min-width: 174px;
   padding: 6px 8px;
 }
-.monitor-refresh svg {
+.monitor-refresh-icon {
+  display: grid;
   width: 30px;
   height: 30px;
-  padding: 8px;
+  flex: 0 0 auto;
+  place-items: center;
+  padding: 0;
   border: 1px solid var(--app-accent-border);
   border-radius: 10px;
   background: var(--app-accent-soft);
   color: var(--app-accent-bright);
+}
+.monitor-refresh .monitor-refresh-icon svg {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: currentColor;
 }
 .monitor-refresh span { color: var(--app-text-secondary); font-size: 10px; }
 .monitor-refresh strong {

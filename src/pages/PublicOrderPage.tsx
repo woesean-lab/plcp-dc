@@ -539,7 +539,7 @@ export default function PublicOrderPage() {
 
           <div className="monitor-topbar-actions">
             <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+              <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
               <span>{autoRefreshing ? "Syncing live data" : "Live data synced"}</span>
               <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
             </div>
