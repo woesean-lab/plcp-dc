@@ -78,7 +78,7 @@ const EMPTY_FORM = {
   billingCycle: 1,
   duration: 1 as const,
   useProxy: true,
-  concurrency: 3
+  concurrency: 7
 };
 
 const EMPTY_BOOST_STOCK: BoostStock = {

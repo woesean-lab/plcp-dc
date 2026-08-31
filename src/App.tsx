@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Boxes, ListChecks, Plus, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
@@ -55,50 +55,46 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
 
             <div className="app-nav-cluster">
               <nav className="app-nav" aria-label="Primary navigation">
-                <button
-                  type="button"
+                <Link
+                  to="/manage?tab=create"
                   aria-label="Create order"
                   title="Create order"
                   className={`app-nav-button ${isManage && tab === "create" ? "is-active" : ""}`}
                   aria-current={isManage && tab === "create" ? "page" : undefined}
-                  onClick={() => navigate("/manage?tab=create")}
                 >
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   <span>Create</span>
-                </button>
-                <button
-                  type="button"
+                </Link>
+                <Link
+                  to="/manage?tab=manage"
                   aria-label="Orders"
                   title="Orders"
                   className={`app-nav-button ${(isManage && tab === "manage") || isOrders ? "is-active" : ""}`}
                   aria-current={(isManage && tab === "manage") || isOrders ? "page" : undefined}
-                  onClick={() => navigate("/manage?tab=manage")}
                 >
                   <ListChecks className="h-4 w-4" aria-hidden="true" />
                   <span>Orders</span>
-                </button>
-                <button
-                  type="button"
+                </Link>
+                <Link
+                  to="/manage?tab=stock"
                   aria-label="Stock"
                   title="Stock"
                   className={`app-nav-button ${isManage && tab === "stock" ? "is-active" : ""}`}
                   aria-current={isManage && tab === "stock" ? "page" : undefined}
-                  onClick={() => navigate("/manage?tab=stock")}
                 >
                   <Boxes className="h-4 w-4" aria-hidden="true" />
                   <span>Stock</span>
-                </button>
-                <button
-                  type="button"
+                </Link>
+                <Link
+                  to="/manage?tab=settings"
                   aria-label="Settings"
                   title="Settings"
                   className={`app-nav-button ${isManage && tab === "settings" ? "is-active" : ""}`}
                   aria-current={isManage && tab === "settings" ? "page" : undefined}
-                  onClick={() => navigate("/manage?tab=settings")}
                 >
                   <Settings2 className="h-4 w-4" aria-hidden="true" />
                   <span>Settings</span>
-                </button>
+                </Link>
               </nav>
             </div>
 
