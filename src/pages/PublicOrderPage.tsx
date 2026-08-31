@@ -540,7 +540,7 @@ export default function PublicOrderPage() {
           <div className="monitor-topbar-actions">
             <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
               <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
-              <span>{autoRefreshing ? "Syncing live data" : "Live data synced"}</span>
+              <span>{autoRefreshing ? "Syncing" : "Live sync"}</span>
               <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
             </div>
             <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
