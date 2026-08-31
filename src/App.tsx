@@ -156,7 +156,17 @@ function ProtectedGate() {
     };
   }, []);
 
-  if (authState === "loading") return <div className="min-h-screen" />;
+  if (authState === "loading") {
+    return (
+      <div className="session-loading-screen app-shell min-h-screen" role="status" aria-live="polite">
+        <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+        <span>
+          <span className="brand-eyebrow">Pulcip</span>
+          <strong>Loading secure session…</strong>
+        </span>
+      </div>
+    );
+  }
   if (authState === "anonymous") {
     if (location.pathname !== "/manage") {
       return <Navigate to="/manage" replace state={{ from: location }} />;
