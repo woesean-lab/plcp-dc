@@ -5553,13 +5553,118 @@
 @media (max-width: 639px) {
   .monitor-page { padding: 14px 10px; }
   .monitor-frame { gap: 10px; }
+  .monitor-topbar { gap: 8px; }
+  .monitor-topbar-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    width: 100%;
+  }
+  .monitor-refresh {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    min-height: 42px;
+    gap: 6px;
+    padding: 5px 6px;
+  }
+  .monitor-store-link {
+    grid-column: 2;
+    grid-row: 1;
+    min-width: 0;
+    min-height: 42px;
+    gap: 7px;
+    padding: 5px 7px;
+  }
+  .monitor-live-stock {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    min-width: 0;
+    min-height: 44px;
+    grid-template-columns: minmax(90px, 1fr) auto 64px 64px;
+    gap: 6px;
+    padding: 5px 7px;
+  }
+  .monitor-refresh-icon,
+  .monitor-live-stock-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 9px;
+  }
+  .monitor-refresh .monitor-refresh-icon svg {
+    width: 13px;
+    height: 13px;
+  }
+  .monitor-refresh > span:nth-child(2) {
+    min-width: 0;
+    overflow: hidden;
+    margin-right: 0;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .monitor-refresh strong {
+    min-width: 28px;
+    padding: 4px;
+    font-size: 9px;
+  }
+  .monitor-store-link > svg:first-child {
+    width: 28px;
+    height: 28px;
+    padding: 7px;
+    border-radius: 9px;
+  }
+  .monitor-store-link > span {
+    min-width: 0;
+    margin-right: 0;
+  }
+  .monitor-store-link strong {
+    display: block;
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .monitor-store-link small,
+  .monitor-store-link > svg:last-child,
+  .monitor-live-stock-copy small {
+    display: none;
+  }
+  .monitor-live-stock-status {
+    padding: 3px 6px;
+    font-size: 7px;
+  }
+  .monitor-live-stock-value { padding-left: 7px; }
+  .monitor-live-stock-value > strong { font-size: 12px; }
+  .monitor-live-stock-value em { font-size: 6px; }
   .monitor-surface { border-radius: 20px; }
   .monitor-identity { padding: 19px 17px; }
   .monitor-order-mark { width: 43px; height: 43px; border-radius: 13px; }
-  .monitor-live-progress { padding: 20px 17px; }
+  .monitor-live-progress { padding: 16px 14px; }
   .monitor-live-progress-value { padding: 9px 11px; }
-  .monitor-live-progress-stats { grid-template-columns: 1fr; }
-  .monitor-live-progress-stats > div + div { border-top: 1px solid var(--app-divider); }
+  .monitor-live-progress-stats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    border-radius: 12px;
+  }
+  .monitor-live-progress-stats > div {
+    min-width: 0;
+    min-height: 74px;
+    padding: 11px 10px;
+  }
+  .monitor-live-progress-stats > div + div {
+    border-top: 0;
+    border-left: 1px solid var(--app-divider);
+  }
+  .monitor-live-progress-stats small {
+    font-size: 7px;
+    white-space: nowrap;
+  }
+  .monitor-live-progress-stats strong { font-size: 18px; }
+  .monitor-live-progress-stats .monitor-estimate {
+    margin-top: 4px;
+    font-size: 7.5px;
+    line-height: 1.25;
+  }
   .monitor-workspace { padding: 12px; }
   .monitor-control-panel { min-width: 0; padding: 18px; }
   .monitor-panel-heading { width: 100%; }

@@ -629,7 +629,7 @@ export default function PublicOrderPage() {
                   <div className="is-remaining">
                     <small>Remaining</small>
                     <strong>{formatNumber(membersRemaining)}</strong>
-                    {!isBoostOrder && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">Est. completion {formatDuration(estimatedCompletionSeconds)}</span> : null}
+                    {!isBoostOrder && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
                   </div>
                 </div>
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
