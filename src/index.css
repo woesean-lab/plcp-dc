@@ -5483,6 +5483,7 @@
   letter-spacing: -.035em;
 }
 .monitor-order-facts { grid-template-columns: 100px minmax(130px, 1fr) minmax(164px, 1fr); border-radius: 13px; }
+.monitor-order-facts.has-duration { grid-template-columns: 100px minmax(110px, 1fr) 92px minmax(164px, 1fr); }
 .monitor-order-facts > div { padding: 13px 15px; }
 .monitor-order-facts small { font-size: 8px; letter-spacing: .08em; }
 .monitor-order-facts strong { font-size: 11px; }
@@ -5742,6 +5743,15 @@
     margin-top: 4px;
     font-size: 7.5px;
     line-height: 1.25;
+  }
+  .monitor-order-facts.has-duration > div:nth-child(3) {
+    grid-column: auto;
+    border-top: 1px solid var(--app-divider);
+    border-left: 0;
+  }
+  .monitor-order-facts.has-duration > div:nth-child(4) {
+    border-top: 1px solid var(--app-divider);
+    border-left: 1px solid var(--app-divider);
   }
   .monitor-workspace { padding: 12px; }
   .monitor-control-panel { min-width: 0; padding: 18px; }

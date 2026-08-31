@@ -370,7 +370,9 @@ export default function PublicOrderPage() {
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true;
-  const boostDuration = status?.duration === 1 || status?.duration === 3 ? `${status.duration} Month` : "-";
+  const boostDuration = status?.duration === 1 || status?.duration === 3
+    ? `${status.duration} ${status.duration === 1 ? "Month" : "Months"}`
+    : "-";
   const liveBoostStock = status?.liveBoostStock;
 
   useEffect(() => {
@@ -567,7 +569,7 @@ export default function PublicOrderPage() {
               <div className="public-live-label"><span aria-hidden="true" /> Live order</div>
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
             </div>
-            <div className="monitor-order-facts">
+            <div className={`monitor-order-facts ${isBoostOrder ? "has-duration" : ""}`}>
               <div>
                 <small>Status</small>
                 {isInitialLoading ? <Skeleton className="h-4 w-20" /> : <strong className="monitor-order-state" data-status={normalizedStatus.toLowerCase() || "pending"}>{statusLabel}</strong>}
@@ -576,6 +578,12 @@ export default function PublicOrderPage() {
                 <small>Service</small>
                 {isInitialLoading ? <Skeleton className="h-4 w-16" /> : <strong>{serviceName}</strong>}
               </div>
+              {isBoostOrder ? (
+                <div>
+                  <small>Duration</small>
+                  <strong><Timer className="h-3.5 w-3.5" /> {boostDuration}</strong>
+                </div>
+              ) : null}
               <div>
                 <small>Created</small>
                 <strong><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong>
