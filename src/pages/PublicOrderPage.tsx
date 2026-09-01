@@ -187,6 +187,7 @@ export default function PublicOrderPage() {
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
+  const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -368,6 +369,9 @@ export default function PublicOrderPage() {
   const communityMemberResults = getCommunityMemberResults(status);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
+  const replaceableCommunityMemberIndices = communityMemberResults
+    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()))
+    .map((item) => item.index);
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3
@@ -485,6 +489,31 @@ export default function PublicOrderPage() {
       setReplacingCommunityMemberIndex(null);
     }
   }
+
+  function handleReplaceAllCommunityMembers() {
+    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
+    setCommunityReplaceQueue(replaceableCommunityMemberIndices);
+    toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
+  }
+
+  useEffect(() => {
+    const nextIndex = communityReplaceQueue[0];
+    if (nextIndex === undefined || !uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
+
+    void (async () => {
+      try {
+        setReplacingCommunityMemberIndex(nextIndex);
+        const data = await replaceCommunityMember(uniqid, nextIndex);
+        setStatus((current) => mergeOrderStatus(current, data));
+        setCommunityReplaceQueue((current) => current.slice(1));
+      } catch (err) {
+        setCommunityReplaceQueue([]);
+        toast.error(err instanceof Error ? err.message : "Bulk replacement stopped.");
+      } finally {
+        setReplacingCommunityMemberIndex(null);
+      }
+    })();
+  }, [communityReplaceQueue, communityReplacementRunning, replacingCommunityMemberIndex, uniqid]);
 
   const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
@@ -671,7 +700,15 @@ export default function PublicOrderPage() {
                   <div className="monitor-token-panel community-order-log">
                     <div className="monitor-token-heading">
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
-                      <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
+                      <span className="flex items-center gap-2">
+                        {canManageCommunityMembers && replaceableCommunityMemberIndices.length ? (
+                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                            <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
+                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : "Replace all"}
+                          </Button>
+                        ) : null}
+                        <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
+                      </span>
                     </div>
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list">
@@ -682,8 +719,8 @@ export default function PublicOrderPage() {
                             </span>
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
-                              {canManageCommunityMembers && item.state.toLowerCase() === "failed" ? (
-                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning}>
+                              {canManageCommunityMembers && ["failed", "already_member"].includes(item.state.toLowerCase()) ? (
+                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>
