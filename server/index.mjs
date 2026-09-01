@@ -1058,6 +1058,13 @@ function isCommunityMembershipScreeningResponse(result) {
     || /pending|screening|verification|member verification|membership/i.test(message);
 }
 
+function isDiscordUnknownUser(value) {
+  const payload = value?.payload && typeof value.payload === "object" ? value.payload : value;
+  const code = Number(payload?.code ?? value?.code);
+  const message = String(payload?.message ?? value?.message ?? value?.details ?? value?.discordError ?? "");
+  return code === 10013 || /unknown user/i.test(message);
+}
+
 async function processCommunityOrder(order, members, config) {
   const results = members.map((member) => ({
     discordUserId: member.discord_user_id,
@@ -1083,6 +1090,7 @@ async function processCommunityOrder(order, members, config) {
 
     let state = "failed";
     let details = "Member could not be added.";
+    let markStockInactive = false;
     try {
       const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
       await pool.query(
@@ -1103,19 +1111,21 @@ async function processCommunityOrder(order, members, config) {
         details = "User was already in the server.";
       } else {
         details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
+        markStockInactive = isDiscordUnknownUser(joined);
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
+      markStockInactive = isDiscordUnknownUser(error);
     }
 
     results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = CASE WHEN $4 = 'failed' THEN 'failed' ELSE 'authorized' END, details = $3,
-           joined_at = CASE WHEN $4 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
+       SET status = CASE WHEN $4 THEN 'failed' ELSE 'authorized' END, details = $3,
+           joined_at = CASE WHEN $5 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
            reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId, details, state]
+      [member.discord_user_id, config.guildId, details, markStockInactive, state]
     );
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
@@ -1161,6 +1171,7 @@ async function processCommunityOrder(order, members, config) {
 async function processCommunityReplacement(orderId, resultIndex, member, config) {
   let state = "failed";
   let details = "Replacement member could not be added.";
+  let markStockInactive = false;
   try {
     const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
     await pool.query(
@@ -1178,18 +1189,20 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       details = "Replacement user was already in the server.";
     } else {
       details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
+      markStockInactive = isDiscordUnknownUser(joined);
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
+    markStockInactive = isDiscordUnknownUser(error);
   }
 
   await pool.query(
     `UPDATE community_oauth_joins
-     SET status = $3, details = $4,
-         joined_at = CASE WHEN $3 = 'authorized' THEN NOW() ELSE joined_at END,
+     SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, details = $4,
+         joined_at = CASE WHEN $5 = 'joined' THEN NOW() ELSE joined_at END,
          reserved_order_id = NULL
      WHERE discord_user_id = $1 AND guild_id = $2`,
-    [member.discord_user_id, config.guildId, state === "joined" ? "authorized" : "failed", details]
+    [member.discord_user_id, config.guildId, markStockInactive, details, state]
   );
 
   const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
@@ -2654,11 +2667,15 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
     }
 
+    const markOriginalInactive = isDiscordUnknownUser(failedResult);
+    const originalDetails = typeof failedResult.details === "string" && failedResult.details.trim()
+      ? failedResult.details.trim()
+      : "Member was unavailable during order delivery.";
     await client.query(
       `UPDATE community_oauth_joins
-       SET status = 'failed', details = 'Disconnected after failed order delivery.', reserved_order_id = NULL
+       SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, details = $4, reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [failedUserId, config.guildId]
+      [failedUserId, config.guildId, markOriginalInactive, originalDetails]
     );
 
     const usedUserIds = Array.from(new Set([
@@ -2682,7 +2699,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
-      return res.status(409).json({ message: "No connected replacement member is currently available. The failed user was removed from available stock." });
+      return res.status(409).json({ message: "No connected replacement member is currently available. The original member remains active unless Discord reported Unknown User." });
     }
 
     const member = replacement.rows[0];
@@ -2717,8 +2734,8 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     void processCommunityReplacement(uniqid, resultIndex, member, config).catch(async (error) => {
       console.error("Members replacement failed:", error instanceof Error ? error.message : error);
       await pool.query(
-        "UPDATE community_oauth_joins SET status = 'failed', reserved_order_id = NULL, details = $3 WHERE discord_user_id = $1 AND guild_id = $2",
-        [member.discord_user_id, config.guildId, error instanceof Error ? error.message : "Replacement failed."]
+        "UPDATE community_oauth_joins SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, reserved_order_id = NULL, details = $4 WHERE discord_user_id = $1 AND guild_id = $2",
+        [member.discord_user_id, config.guildId, isDiscordUnknownUser(error), error instanceof Error ? error.message : "Replacement failed."]
       ).catch(() => {});
     });
     res.json(isAdminRequest ? activeOrder : sanitizePublicCommunityOrder(activeOrder));
