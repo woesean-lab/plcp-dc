@@ -633,9 +633,13 @@ function getDcordProxyLabel(value) {
   const proxy = String(value ?? "").trim();
   if (!proxy) return "";
   const authenticatedSeparator = proxy.lastIndexOf("@");
-  if (authenticatedSeparator >= 0) return proxy.slice(authenticatedSeparator + 1);
+  if (authenticatedSeparator >= 0) {
+    const username = proxy.slice(0, authenticatedSeparator).split(":")[0];
+    const endpoint = proxy.slice(authenticatedSeparator + 1);
+    return username && endpoint ? `${username}@${endpoint}` : endpoint;
+  }
   const parts = proxy.split(":");
-  return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : proxy;
+  return parts.length >= 4 ? `${parts[2]}@${parts[0]}:${parts[1]}` : parts.length >= 2 ? `${parts[0]}:${parts[1]}` : proxy;
 }
 
 function getDcordProxyUrl(value) {
