@@ -9,7 +9,7 @@ FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache curl && npm ci --omit=dev
 COPY --from=build /app/dist ./dist
 COPY server ./server
 EXPOSE 3000
