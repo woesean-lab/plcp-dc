@@ -538,6 +538,7 @@ export default function HomePage() {
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
@@ -1423,9 +1424,8 @@ export default function HomePage() {
     navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
   }
 
-  async function handleCreateOrder(event: FormEvent) {
+  function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
-    setCreating(true);
 
     const payload: CreateOrderPayload = {
       service: form.service,
@@ -1438,13 +1438,23 @@ export default function HomePage() {
       concurrency: selectedIsBoost ? form.concurrency : undefined
     };
 
+    if (selectedIsBoost && form.amount % 2 !== 0) {
+      notifyError("Boost amount must be an even number.");
+      return;
+    }
+    setOrderConfirmationPayload(payload);
+  }
+
+  async function confirmCreateOrder() {
+    if (!orderConfirmationPayload || creating) return;
+    const payload = orderConfirmationPayload;
+    const payloadIsBoost = isBoostService(payload.service);
+    setOrderConfirmationPayload(null);
+    setCreating(true);
     try {
-      if (selectedIsBoost && form.amount % 2 !== 0) {
-        throw new Error("Boost amount must be an even number.");
-      }
       await submitCreateOrder(payload);
     } catch (error) {
-      if (selectedIsBoost && error instanceof Error && error.message === BOOST_MEMBERSHIP_SCREENING_MESSAGE) {
+      if (payloadIsBoost && error instanceof Error && error.message === BOOST_MEMBERSHIP_SCREENING_MESSAGE) {
         setBoostScreeningPendingPayload(payload);
         return;
       }
@@ -2639,6 +2649,39 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>
                 {deletingTrackedOrder ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                 {deletingTrackedOrder ? "Removing..." : "Remove order"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {orderConfirmationPayload ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !creating) setOrderConfirmationPayload(null);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="create-order-title" aria-describedby="create-order-description">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Check className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Order confirmation</p>
+            <h2 id="create-order-title">Create this order?</h2>
+            <p id="create-order-description">
+              Check the order details before submitting. This action will reserve the required stock.
+            </p>
+            <div className="grid gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-panel-muted)] p-4 text-sm">
+              <span><strong>Service:</strong> {SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</span>
+              <span><strong>Target:</strong> {orderConfirmationPayload.id}</span>
+              <span><strong>Amount:</strong> {orderConfirmationPayload.amount}</span>
+              {orderConfirmationPayload.duration ? <span><strong>Duration:</strong> {orderConfirmationPayload.duration} month</span> : null}
+              {orderConfirmationPayload.concurrency ? <span><strong>Concurrency:</strong> {orderConfirmationPayload.concurrency}</span> : null}
+              {orderConfirmationPayload.delay ? <span><strong>Delay:</strong> {orderConfirmationPayload.delay} seconds</span> : null}
+            </div>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setOrderConfirmationPayload(null)}>Go back</Button>
+              <Button type="button" disabled={creating} onClick={() => void confirmCreateOrder()}>
+                {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
+                {creating ? "Creating..." : "Confirm order"}
               </Button>
             </div>
           </div>
