@@ -670,7 +670,7 @@ async function checkDcordProxy(proxy) {
       maxBuffer: 64 * 1024
     });
   } catch (error) {
-    const detail = String(error?.stderr ?? error?.message ?? "connection failed")
+    const detail = String(error?.stderr || error?.message || "connection failed")
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 220);
