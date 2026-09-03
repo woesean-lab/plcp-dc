@@ -1489,6 +1489,18 @@ function canReturnDcordTokenResult(result, includeUncertain = false) {
     || (includeUncertain && !result?.dcordTaskId && isUncertainDcordTransportResult(result));
 }
 
+async function returnDcordTokenToStock(order, token) {
+  const duration = Number.parseInt(order?.duration, 10);
+  const normalizedToken = String(token ?? "").trim();
+  if (![1, 3].includes(duration) || !normalizedToken) return false;
+
+  const stock = await loadBoostTokenStock();
+  const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
+  if (stock.oneMonth.includes(normalizedToken) || stock.threeMonth.includes(normalizedToken)) return false;
+  await saveBoostTokenStock({ ...stock, [stockKey]: [...stock[stockKey], normalizedToken] });
+  return true;
+}
+
 async function returnDcordTokensToStock(order, tokens, results, includeUncertain = false) {
   const duration = Number.parseInt(order?.duration, 10);
   if (![1, 3].includes(duration)) return 0;
@@ -1718,12 +1730,14 @@ async function processDcordBoostOrder(order, tokens, invite) {
         await checkDcordProxy(proxy);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Proxy connection check failed.";
+        const returnedToStock = await returnDcordTokenToStock(order, token);
         results[index] = {
           ...results[index],
           status: "proxy_failed",
           joinStatus: "not started",
           boostStatus: "not started",
-          boostMessage: message,
+          boostMessage: `${message}${returnedToStock ? " Token returned to active stock." : ""}`,
+          returnedToStock,
           proxyCheck: "failed"
         };
         await saveCurrentProgress();
