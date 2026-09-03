@@ -26,6 +26,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  Timer,
   TriangleAlert,
   Trash2,
   Users,
@@ -2669,24 +2670,28 @@ export default function HomePage() {
             <p id="create-order-description">
               Check the order details before submitting. This action will reserve the required stock.
             </p>
-            <dl className="order-confirm-summary">
-              <div className="order-confirm-item is-wide">
-                <dt>Service</dt>
-                <dd>{SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</dd>
+            <div className="order-confirm-summary">
+              <div className="order-confirm-primary">
+                <span className="order-confirm-service-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
+                <span className="order-confirm-primary-copy">
+                  <small>Service</small>
+                  <strong>{SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</strong>
+                </span>
+                <span className="order-confirm-amount"><small>Amount</small><strong>{orderConfirmationPayload.amount}</strong></span>
               </div>
-              <div className="order-confirm-item is-wide">
-                <dt>Discord invite</dt>
-                <dd className="is-target">{orderConfirmationPayload.id}</dd>
+              <div className="order-confirm-target">
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                <span><small>Discord invite</small><strong>{orderConfirmationPayload.id}</strong></span>
               </div>
-              <div className="order-confirm-item">
-                <dt>Amount</dt>
-                <dd>{orderConfirmationPayload.amount}</dd>
-              </div>
-              {orderConfirmationPayload.duration ? <div className="order-confirm-item"><dt>Duration</dt><dd>{orderConfirmationPayload.duration} month</dd></div> : null}
-              {orderConfirmationPayload.concurrency ? <div className="order-confirm-item"><dt>Concurrency</dt><dd>{orderConfirmationPayload.concurrency} workers</dd></div> : null}
-              {orderConfirmationPayload.duration ? <div className="order-confirm-item"><dt>Proxy usage</dt><dd>{orderConfirmationPayload.amount / 2} one-time</dd></div> : null}
-              {orderConfirmationPayload.delay ? <div className="order-confirm-item"><dt>Delay</dt><dd>{orderConfirmationPayload.delay} seconds</dd></div> : null}
-            </dl>
+              {(orderConfirmationPayload.duration || orderConfirmationPayload.concurrency || orderConfirmationPayload.delay) ? (
+                <div className="order-confirm-meta">
+                  {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
+                  {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
+                  {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
+                  {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
+                </div>
+              ) : null}
+            </div>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setOrderConfirmationPayload(null)}>Go back</Button>
               <Button type="button" disabled={creating} onClick={() => void confirmCreateOrder()}>

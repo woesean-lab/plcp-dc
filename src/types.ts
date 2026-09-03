@@ -117,6 +117,7 @@ export interface BoostUsedToken {
   status?: string;
   success?: boolean;
   boosted?: boolean;
+  boostCount?: number;
   boostMessage?: string;
   replacementFor?: string;
 }

@@ -24,6 +24,7 @@ type DcordTokenResult = {
   boostMessage: string;
   proxy: string;
   timing: string;
+  replaceable: boolean;
   successful: boolean;
   state: "success" | "pending" | "error";
 };
@@ -89,6 +90,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
             ? "waiting"
             : "failed";
       const rawSlots = row.slots;
+      const boostCount = typeof row.boostCount === "number" && Number.isFinite(row.boostCount) ? row.boostCount : 0;
       const slots = typeof rawSlots === "number" && Number.isFinite(rawSlots)
         ? rawSlots > 0 ? `+${rawSlots}` : "-"
         : typeof rawSlots === "string" && rawSlots.trim()
@@ -121,8 +123,9 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
           : isPending
             ? "pending"
             : "error";
+      const replaceable = boostCount <= 0;
 
-      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, proxy, timing, successful, state };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, proxy, timing, replaceable, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -880,7 +883,7 @@ export default function OrderPage() {
                       </span>
                       <span className="public-token-result-flow">
                         <span className="public-token-result-action">
-                          {item.state === "error" && normalizedStatus !== "CANCELLED" ? (
+                          {item.state === "error" && item.replaceable && normalizedStatus !== "CANCELLED" ? (
                             <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}>
                               {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
                             </Button>

@@ -508,6 +508,7 @@ async function revealDcordOrderTokens(order) {
         status: typeof result.status === "string" ? result.status : "unknown",
         success: result.success === true,
         boosted: result.boosted === true,
+        boostCount: getDcordResultBoostCount(result),
         boostMessage: typeof result.boostMessage === "string" ? result.boostMessage : undefined
       }];
     });
@@ -585,6 +586,7 @@ function normalizeUsedBoostTokenHistory(value) {
         status: typeof item.status === "string" ? item.status : "pending",
         success: item.success === true,
         boosted: item.boosted === true,
+        boostCount: Math.min(Math.max(Number.parseInt(item.boostCount, 10) || (item.boosted === true ? 2 : 0), 0), 2),
         boostMessage: typeof item.boostMessage === "string" ? item.boostMessage : undefined,
         replacementFor: typeof item.replacementFor === "string" ? item.replacementFor : undefined
       };
@@ -813,6 +815,7 @@ async function updateUsedBoostTokenResult(id, result) {
       status: typeof result.status === "string" ? result.status : "unknown",
       success: result.success === true,
       boosted: result.boosted === true,
+      boostCount: getDcordResultBoostCount(result),
       boostMessage: typeof result.boostMessage === "string" ? result.boostMessage : undefined
     };
   }));
@@ -1361,20 +1364,42 @@ function normalizeDcordJoinResult(result, token) {
     : rawBoostMessage;
   const boostState = String(result?.boost_status ?? result?.boostStatus ?? "").trim().toLowerCase();
   const joinState = String(result?.join_status ?? result?.joinStatus ?? result?.status ?? "").trim().toLowerCase();
-  const boosted = result?.boost === true || result?.boosted === true || boostState === "boosted" || boostMessage.toLowerCase().includes("boosted");
+  const fullyBoosted = result?.boost === true || result?.boosted === true || boostState === "boosted" || boostMessage.toLowerCase().includes("boosted");
+  const boostCount = fullyBoosted ? 2 : getDcordSuccessfulBoostCount(result, boostMessage);
+  const boosted = boostCount >= 2;
+  const partiallyBoosted = boostCount === 1;
   const joined = result?.success === true || result?.joined === true || ["ok", "joined", "completed", "success"].includes(joinState);
   return {
     token: redactToken(token),
-    success: joined || boosted,
-    status: boosted ? "joined + boosted" : membershipScreeningBlocked ? "blocked" : joined ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
-    joinStatus: joined || boosted ? "joined" : "failed",
-    boostStatus: boosted ? "boosted" : membershipScreeningBlocked ? "blocked" : joined ? (boostState || "failed") : "waiting",
-    slots: boosted ? 2 : 0,
-    boost: boosted,
+    success: joined || boostCount > 0,
+    status: boosted ? "joined + boosted" : partiallyBoosted ? "partial" : membershipScreeningBlocked ? "blocked" : joined ? "joined" : typeof result?.status === "string" ? result.status : "unknown",
+    joinStatus: joined || boostCount > 0 ? "joined" : "failed",
+    boostStatus: boosted ? "boosted" : partiallyBoosted ? "partial" : membershipScreeningBlocked ? "blocked" : joined ? (boostState || "failed") : "waiting",
+    slots: boostCount,
+    boost: boostCount > 0,
+    boostCount,
     boostMessage,
     httpStatus: Number.isFinite(result?.http_status) ? result.http_status : undefined,
     boosted
   };
+}
+
+function getDcordSuccessfulBoostCount(result, message = "") {
+  const explicitCount = Number.parseInt(result?.boost_count ?? result?.boostCount, 10);
+  if (Number.isFinite(explicitCount)) return Math.min(Math.max(explicitCount, 0), 2);
+  const slotLists = [result?.partial_ok_slots, result?.partialOkSlots, result?.successful_slots, result?.successfulSlots];
+  const structuredSlots = slotLists.find((value) => Array.isArray(value));
+  if (structuredSlots) return Math.min(new Set(structuredSlots.map(String).filter(Boolean)).size, 2);
+  const listMatch = String(message).match(/partial_ok_slots\s*[=:]\s*\[([^\]]*)\]/i);
+  if (!listMatch) return 0;
+  const slotIds = listMatch[1].match(/\d{10,}/g) ?? [];
+  return Math.min(new Set(slotIds).size, 2);
+}
+
+function getDcordResultBoostCount(result) {
+  const count = Number.parseInt(result?.boostCount, 10);
+  if (Number.isFinite(count)) return Math.min(Math.max(count, 0), 2);
+  return result?.boosted === true ? 2 : 0;
 }
 
 function isDcordBoostMembershipScreeningMessage(message) {
@@ -1425,13 +1450,20 @@ function normalizeDcordTaskResult(payload, token, taskId) {
   const taskStatus = getDcordTaskStatus(payload);
   if (taskStatus === "failed") {
     const rawMessage = String(result?.message ?? result?.detail ?? taskPayload?.message ?? "Dcord task failed.").trim();
+    const partialBoostCount = getDcordSuccessfulBoostCount(result, rawMessage);
     const membershipScreeningBlocked = isDcordBoostMembershipScreeningMessage(rawMessage);
     const message = membershipScreeningBlocked
       ? "Membership screening is enabled on this server. Disable the join form before boosting."
       : rawMessage;
+    if (partialBoostCount > 0) return {
+      token: redactToken(token), success: true, status: "partial", joinStatus: "joined", boostStatus: "partial",
+      slots: partialBoostCount, boost: true, boostCount: partialBoostCount, boostMessage: rawMessage,
+      httpStatus: Number.isFinite(taskPayload?.http_status) ? taskPayload.http_status : undefined,
+      boosted: false, dcordTaskId: taskId, dcordTaskStatus: taskStatus, taskPending: false, transportUncertain: false
+    };
     return {
       token: redactToken(token), success: false, status: membershipScreeningBlocked ? "blocked" : "error", joinStatus: membershipScreeningBlocked ? "joined" : "failed", boostStatus: membershipScreeningBlocked ? "blocked" : "skipped",
-      slots: 0, boost: false, boostMessage: message || "Dcord task failed.", boosted: false,
+      slots: 0, boost: false, boostCount: 0, boostMessage: message || "Dcord task failed.", boosted: false,
       dcordTaskId: taskId, dcordTaskStatus: taskStatus, taskPending: false, transportUncertain: false
     };
   }
@@ -1674,7 +1706,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
-      const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
+      const added = results.reduce((total, item) => total + getDcordResultBoostCount(item), 0);
       const hasQueued = results.some((item) => String(item?.status ?? "").toLowerCase() === "queued");
       const hasRunning = results.some((item) => ["joining", "processing", "verifying", "pending"].includes(String(item?.status ?? "").toLowerCase()));
       const finished = !hasQueued && !hasRunning;
@@ -1715,7 +1747,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
         boostMessage: "Dcord remained unavailable. This token was returned to stock."
       };
     });
-    const added = results.reduce((total, item) => total + (item?.boosted ? 2 : 0), 0);
+    const added = results.reduce((total, item) => total + getDcordResultBoostCount(item), 0);
     await saveTrackedOrderPayload({
       ...order,
       added,
@@ -3771,6 +3803,9 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     if (currentResult.boosted === true) {
       return res.status(409).json({ message: "Only failed token results can be replaced." });
     }
+    if (getDcordResultBoostCount(currentResult) > 0) {
+      return res.status(409).json({ message: "A partially boosted token cannot be replaced automatically because that could over-deliver the order." });
+    }
     if (String(currentResult.status ?? "").trim().toLowerCase() === "returned") {
       return res.status(409).json({ message: "This token has already been returned to stock." });
     }
@@ -3817,9 +3852,7 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
       await saveDcordOrderProxies(uniqid, assignedProxies);
     }
 
-    const added = results.reduce((total, item) => {
-      return total + (item && typeof item === "object" && !Array.isArray(item) && item.boosted === true ? 2 : 0);
-    }, 0);
+    const added = results.reduce((total, item) => total + getDcordResultBoostCount(item), 0);
     const amount = Number.isFinite(Number(order.amount)) ? Number(order.amount) : added;
     const nextOrder = {
       ...order,
