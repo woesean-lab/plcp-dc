@@ -38,7 +38,7 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
   - `DCORD_USER_AGENT` (varsayilan `plcp-dc/0.1 (+https://capheaven.dcord.co API client)`)
   - `DCORD_WGET_FALLBACK` (`false` yapilirsa HTML challenge durumunda wget fallback devre disi kalir)
   - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `30000`)
-  - `DCORD_PROXY_CHECK_URL` (varsayilan `https://www.google.com/generate_204`; Dcord'a gorev gondermeden once proxy baglantisini kontrol eder)
+  - `DCORD_PROXY_CHECK_URL` (varsayilan `https://discord.com/api/v10/gateway`; Dcord'a gorev gondermeden once proxy baglantisini kontrol eder)
   - `DCORD_PROXY_CHECK_TIMEOUT_MS` (varsayilan `10000`)
   - `DCORD_TASK_POLL_INTERVAL_MS` (varsayilan `3000`)
   - `DCORD_TASK_MAX_WAIT_MS` (varsayilan `620000`)
