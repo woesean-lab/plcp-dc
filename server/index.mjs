@@ -1541,6 +1541,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
       const createPayload = { type: "join", token: extractDcordApiToken(token), invite, boost: true };
       const proxy = String(options.proxy ?? "").trim();
       if (proxy) createPayload.proxy = proxy;
+      const requestStartedAt = Date.now();
       const created = await requestDcord(dcordTaskCreatePath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1548,7 +1549,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
       });
       taskId = getDcordTaskId(created);
       if (!taskId) throw new Error("Dcord created a task without returning a task ID.");
-      await options.onTaskCreated?.(taskId);
+      await options.onTaskCreated?.(taskId, { acceptedMs: Date.now() - requestStartedAt });
     }
 
     const deadline = Date.now() + dcordTaskMaxWaitMs;
@@ -1735,12 +1736,17 @@ async function processDcordBoostOrder(order, tokens, invite) {
     if (index >= tokens.length || providerPaused) return;
 
     const token = tokens[index];
+    const tokenStartedAt = Date.now();
     const existingTaskId = results[index]?.dcordTaskId;
     const proxy = existingTaskId ? "" : assignedProxies[index];
+    let proxyCheckMs = Number.isFinite(results[index]?.proxyCheckMs) ? results[index].proxyCheckMs : undefined;
     if (proxy) {
+      const proxyCheckStartedAt = Date.now();
       try {
         await checkDcordProxy(proxy);
+        proxyCheckMs = Date.now() - proxyCheckStartedAt;
       } catch (error) {
+        proxyCheckMs = Date.now() - proxyCheckStartedAt;
         const message = error instanceof Error ? error.message : "Proxy connection check failed.";
         const returnedToStock = await returnDcordTokenToStock(order, token);
         results[index] = {
@@ -1750,7 +1756,9 @@ async function processDcordBoostOrder(order, tokens, invite) {
           boostStatus: "not started",
           boostMessage: `${message}${returnedToStock ? " Token returned to active stock." : ""}`,
           returnedToStock,
-          proxyCheck: "failed"
+          proxyCheck: "failed",
+          proxyCheckMs,
+          totalMs: Date.now() - tokenStartedAt
         };
         await saveCurrentProgress();
         await runNextToken();
@@ -1762,7 +1770,8 @@ async function processDcordBoostOrder(order, tokens, invite) {
       status: "joining",
       joinStatus: "joining",
       boostStatus: "waiting",
-      boostMessage: "Join + boost request is running."
+      boostMessage: "Join + boost request is running.",
+      ...(proxyCheckMs !== undefined ? { proxyCheck: "passed", proxyCheckMs } : {})
     };
     await saveCurrentProgress();
 
@@ -1776,10 +1785,13 @@ async function processDcordBoostOrder(order, tokens, invite) {
       });
       usedTokenId = usageEntry.id;
     }
-    const normalized = await runDcordBoostToken(token, invite, {
+    const dcordStartedAt = Date.now();
+    let dcordAcceptedMs = Number.isFinite(results[index]?.dcordAcceptedMs) ? results[index].dcordAcceptedMs : undefined;
+    const normalizedResult = await runDcordBoostToken(token, invite, {
       existingTaskId,
       proxy,
-      onTaskCreated: async (taskId) => {
+      onTaskCreated: async (taskId, timing) => {
+        dcordAcceptedMs = Number.isFinite(timing?.acceptedMs) ? timing.acceptedMs : undefined;
         results[index] = {
           ...results[index],
           status: "joining",
@@ -1789,11 +1801,19 @@ async function processDcordBoostOrder(order, tokens, invite) {
           dcordTaskId: taskId,
           dcordTaskStatus: "pending",
           taskPending: true,
-          usedTokenId
+          usedTokenId,
+          ...(dcordAcceptedMs !== undefined ? { dcordAcceptedMs } : {})
         };
         await saveCurrentProgress();
       }
     });
+    const normalized = {
+      ...normalizedResult,
+      ...(proxyCheckMs !== undefined ? { proxyCheckMs } : {}),
+      ...(dcordAcceptedMs !== undefined ? { dcordAcceptedMs } : {}),
+      dcordElapsedMs: Date.now() - dcordStartedAt,
+      totalMs: Date.now() - tokenStartedAt
+    };
     if (normalized.providerBlocked === true) {
       await mutateUsedBoostTokenHistory((history) => history.filter((item) => item.id !== usedTokenId));
       const { usedTokenId: _unusedId, ...currentResult } = results[index];
@@ -3466,9 +3486,6 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
     if (memberVerification.status === "open") {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
-    }
-    if (memberVerification.status === "unknown") {
-      return res.status(503).json({ message: "The server registration form status could not be verified. No order was created; please try again." });
     }
 
     const stock = await loadBoostTokenStock();

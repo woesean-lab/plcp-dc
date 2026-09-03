@@ -3648,6 +3648,17 @@
     white-space: nowrap;
   }
 
+  .public-token-result-main small.public-token-result-timing {
+    margin-top: .3rem;
+    color: var(--app-accent);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .015em;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
   .public-token-result-flow {
     display: grid;
     grid-template-columns: 76px 88px 88px 52px;

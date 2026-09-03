@@ -24,6 +24,7 @@ type DcordTokenResult = {
   slots: string;
   boostMessage: string;
   proxy: string;
+  timing: string;
   successful: boolean;
   state: "success" | "pending" | "error";
 };
@@ -36,6 +37,12 @@ type CommunityMemberResult = {
   details: string;
   completedAt?: string;
 };
+
+function formatDcordTiming(value: unknown) {
+  const milliseconds = typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (milliseconds === null) return "";
+  return milliseconds < 1_000 ? `${Math.round(milliseconds)}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
+}
 
 function maskUsername(value: string) {
   const username = value.trim();
@@ -160,6 +167,12 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
           ? row.boost_message.trim()
           : "";
       const proxy = typeof row.proxy === "string" && row.proxy.trim() ? row.proxy.trim() : "";
+      const timing = [
+        ["Proxy", formatDcordTiming(row.proxyCheckMs)],
+        ["Accepted", formatDcordTiming(row.dcordAcceptedMs)],
+        ["Dcord", formatDcordTiming(row.dcordElapsedMs)],
+        ["Total", formatDcordTiming(row.totalMs)]
+      ].filter(([, value]) => value).map(([label, value]) => `${label} ${value}`).join(" · ");
       const isPending = [joinStatus, boostStatus, status].some((value) =>
         ["queued", "joining", "pending", "process", "waiting", "verifying"].some((stateValue) => value.toLowerCase().includes(stateValue))
       );
@@ -174,7 +187,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
             ? "pending"
             : "error";
 
-      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, proxy, successful, state };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, proxy, timing, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -763,6 +776,7 @@ export default function PublicOrderPage() {
                             <span className="public-token-result-main">
                               <strong>{item.token}</strong>
                               <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}</small>
+                              {item.timing ? <small className="public-token-result-timing">{item.timing}</small> : null}
                             </span>
                             <span className="public-token-result-flow">
                               <span className="public-token-result-action">
