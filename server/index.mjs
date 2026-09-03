@@ -296,7 +296,7 @@ async function loadCommunityGuildSafe(config) {
   }
 }
 
-async function checkCommunityMemberVerification(config, guildId, invite, { requireExplicitEnabled = false } = {}) {
+async function checkCommunityMemberVerification(config, guildId, invite) {
   try {
     const params = new URLSearchParams({
       with_guild: "false",
@@ -313,11 +313,7 @@ async function checkCommunityMemberVerification(config, guildId, invite, { requi
       return { status: "unknown", enabled: false };
     }
     const fields = Array.isArray(payload?.form_fields) ? payload.form_fields : [];
-    const explicitlyEnabled = payload?.enabled === true
-      || payload?.is_enabled === true
-      || payload?.verification_form_enabled === true
-      || payload?.member_verification_enabled === true;
-    const enabled = fields.length > 0 && (!requireExplicitEnabled || explicitlyEnabled);
+    const enabled = fields.length > 0;
     return {
       status: enabled ? "open" : "closed",
       enabled,
@@ -333,7 +329,7 @@ async function checkDcordBoostMembershipScreening(invite, serverInfo) {
   if (!config.botToken || !isDiscordGuildId(String(serverInfo?.guildId ?? ""))) {
     return { status: "unknown", enabled: false };
   }
-  return checkCommunityMemberVerification(config, serverInfo.guildId, invite, { requireExplicitEnabled: true });
+  return checkCommunityMemberVerification(config, serverInfo.guildId, invite);
 }
 
 async function loadCommunityJoinSummary(config) {
@@ -3468,8 +3464,11 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
 
     const serverInfo = await resolveDiscordInvite(invite);
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
-    if (memberVerification.status === "open" && req.body?.forceMembershipScreening !== true) {
+    if (memberVerification.status === "open") {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
+    }
+    if (memberVerification.status === "unknown") {
+      return res.status(503).json({ message: "The server registration form status could not be verified. No order was created; please try again." });
     }
 
     const stock = await loadBoostTokenStock();

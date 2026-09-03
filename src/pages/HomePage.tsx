@@ -1381,7 +1381,7 @@ export default function HomePage() {
     }
   }
 
-  async function submitCreateOrder(payload: CreateOrderPayload, { forceMembershipScreening = false } = {}) {
+  async function submitCreateOrder(payload: CreateOrderPayload) {
     const targetId = String(payload.id ?? "").trim();
     const payloadIsBoost = isBoostService(payload.service);
     const payloadIsCommunity = isCommunityService(payload.service);
@@ -1389,8 +1389,7 @@ export default function HomePage() {
     const serverId = serverInfo.guildId;
     const created = await createOrder({
       ...payload,
-      id: payloadIsBoost || payloadIsCommunity ? targetId : serverId,
-      forceMembershipScreening: payloadIsBoost && forceMembershipScreening ? true : undefined
+      id: payloadIsBoost || payloadIsCommunity ? targetId : serverId
     });
     const createdStock = (created as { stock?: BoostStock }).stock;
     if (createdStock) {
@@ -1455,14 +1454,18 @@ export default function HomePage() {
     }
   }
 
-  async function continueBoostOrderWithScreening() {
+  async function retryBoostOrderAfterScreening() {
     if (!boostScreeningPendingPayload || creating) return;
     setCreating(true);
     try {
-      await submitCreateOrder(boostScreeningPendingPayload, { forceMembershipScreening: true });
+      await submitCreateOrder(boostScreeningPendingPayload);
       setBoostScreeningPendingPayload(null);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Order could not be created.");
+      if (error instanceof Error && error.message === BOOST_MEMBERSHIP_SCREENING_MESSAGE) {
+        notifyError("Registration form is still enabled. No order was created.");
+      } else {
+        notifyError(error instanceof Error ? error.message : "Order could not be created.");
+      }
     } finally {
       setCreating(false);
     }
@@ -2687,9 +2690,9 @@ export default function HomePage() {
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
-              <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderWithScreening()}>
+              <Button type="button" variant="destructive" disabled={creating} onClick={() => void retryBoostOrderAfterScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
-                {creating ? "Creating..." : "Continue"}
+                {creating ? "Checking..." : "Check again"}
               </Button>
             </div>
           </div>
