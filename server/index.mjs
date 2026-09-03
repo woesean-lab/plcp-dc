@@ -25,6 +25,8 @@ const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/sta
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
 const defaultDcordBoostConcurrency = 7;
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
+const dcordProxyCheckUrl = process.env.DCORD_PROXY_CHECK_URL ?? "https://www.google.com/generate_204";
+const dcordProxyCheckTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_PROXY_CHECK_TIMEOUT_MS ?? "10000", 10) || 10_000, 3_000), 30_000);
 const dcordTaskPollIntervalMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_POLL_INTERVAL_MS ?? "3000", 10) || 3_000, 2_000), 10_000);
 const dcordTaskMaxWaitMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_TASK_MAX_WAIT_MS ?? "620000", 10) || 620_000, 60_000), 900_000);
 const dcordRetryBaseMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_BASE_MS ?? "30000", 10) || 30_000, 10_000), 300_000);
@@ -419,6 +421,10 @@ function getDcordOrderTokensSettingKey(uniqid) {
   return `dcord_order_tokens_${hashToken(String(uniqid ?? "").trim())}`;
 }
 
+function getDcordOrderProxiesSettingKey(uniqid) {
+  return `dcord_order_proxies_${hashToken(String(uniqid ?? "").trim())}`;
+}
+
 async function loadDcordOrderTokens(uniqid) {
   if (!uniqid) return [];
   const raw = await loadEncryptedSetting(getDcordOrderTokensSettingKey(uniqid));
@@ -438,10 +444,29 @@ async function saveDcordOrderTokens(uniqid, tokens) {
   return normalized;
 }
 
+async function loadDcordOrderProxies(uniqid) {
+  if (!uniqid) return [];
+  const raw = await loadEncryptedSetting(getDcordOrderProxiesSettingKey(uniqid));
+  if (!raw) return [];
+
+  try {
+    return normalizeDcordStickyProxies(JSON.parse(raw));
+  } catch {
+    return normalizeDcordStickyProxies(raw);
+  }
+}
+
+async function saveDcordOrderProxies(uniqid, proxies) {
+  const normalized = normalizeDcordStickyProxies(proxies);
+  await saveEncryptedSetting(getDcordOrderProxiesSettingKey(uniqid), JSON.stringify(normalized));
+  return normalized;
+}
+
 async function revealDcordOrderTokens(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.dcordResults)) return order;
 
   const assignedTokens = await loadDcordOrderTokens(order.uniqid);
+  const assignedProxies = order.useProxy === true ? await loadDcordOrderProxies(order.uniqid) : [];
   const returnedIndexes = order.dcordResults.flatMap((result, index) =>
     String(result?.status ?? "").trim().toLowerCase() === "returned" ? [index] : []
   );
@@ -506,7 +531,8 @@ async function revealDcordOrderTokens(order) {
     dcordResults: order.dcordResults.map((result, index) => {
       if (!result || typeof result !== "object" || Array.isArray(result)) return result;
       const fullToken = assignedTokens[index] || usedTokenById.get(result.usedTokenId);
-      return fullToken ? { ...result, token: fullToken } : result;
+      const proxy = getDcordProxyLabel(assignedProxies[index]);
+      return { ...result, ...(fullToken ? { token: fullToken } : {}), ...(proxy ? { proxy } : {}) };
     })
   };
 }
@@ -603,6 +629,51 @@ function normalizeDcordStickyProxies(value) {
   return normalized.slice(0, 1000);
 }
 
+function getDcordProxyLabel(value) {
+  const proxy = String(value ?? "").trim();
+  if (!proxy) return "";
+  const authenticatedSeparator = proxy.lastIndexOf("@");
+  if (authenticatedSeparator >= 0) return proxy.slice(authenticatedSeparator + 1);
+  const parts = proxy.split(":");
+  return parts.length >= 2 ? `${parts[0]}:${parts[1]}` : proxy;
+}
+
+function getDcordProxyUrl(value) {
+  const proxy = String(value ?? "").trim();
+  if (!proxy) return "";
+  if (proxy.includes("@")) return `http://${proxy}`;
+  const [host, port, username, password, ...extra] = proxy.split(":");
+  if (!host || !port || !username || !password || extra.length) return "";
+  return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+}
+
+async function checkDcordProxy(proxy) {
+  const proxyUrl = getDcordProxyUrl(proxy);
+  if (!proxyUrl) throw new Error("Proxy format is invalid.");
+
+  try {
+    await execFile("curl", [
+      "--proxy", proxyUrl,
+      "--connect-timeout", String(Math.ceil(dcordProxyCheckTimeoutMs / 1000)),
+      "--max-time", String(Math.ceil(dcordProxyCheckTimeoutMs / 1000)),
+      "--silent",
+      "--show-error",
+      "--fail",
+      "--output", process.platform === "win32" ? "NUL" : "/dev/null",
+      dcordProxyCheckUrl
+    ], {
+      timeout: dcordProxyCheckTimeoutMs + 2_000,
+      maxBuffer: 64 * 1024
+    });
+  } catch (error) {
+    const detail = String(error?.stderr ?? error?.message ?? "connection failed")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 220);
+    throw new Error(`Proxy connection check failed${detail ? `: ${detail}` : "."}`);
+  }
+}
+
 async function loadDcordStickyProxies() {
   const raw = await loadEncryptedSetting("dcord_sticky_proxies");
   if (!raw) return [];
@@ -621,11 +692,48 @@ async function saveDcordStickyProxies(value) {
   return normalized;
 }
 
-function pickDcordStickyProxy(proxies, token) {
-  if (!Array.isArray(proxies) || !proxies.length) return "";
-  const digest = crypto.createHash("sha256").update(String(token ?? "")).digest();
-  const index = digest.readUInt32BE(0) % proxies.length;
-  return proxies[index];
+async function reserveDcordProxies(count) {
+  const requested = Number.parseInt(count, 10);
+  if (!Number.isFinite(requested) || requested < 1) return [];
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      "SELECT encrypted_value FROM app_settings WHERE setting_key = 'dcord_sticky_proxies' FOR UPDATE"
+    );
+    const proxies = result.rowCount
+      ? (() => {
+        const raw = decryptCredential(result.rows[0].encrypted_value);
+        try {
+          return normalizeDcordStickyProxies(JSON.parse(raw));
+        } catch {
+          return normalizeDcordStickyProxies(raw);
+        }
+      })()
+      : [];
+    if (proxies.length < requested) {
+      const error = new Error(`Add at least ${requested} proxies before creating this proxy order.`);
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const reserved = proxies.slice(0, requested);
+    const remaining = proxies.slice(requested);
+    await client.query(
+      `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
+       VALUES ('dcord_sticky_proxies', $1, NOW())
+       ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+      [encryptCredential(JSON.stringify(remaining))]
+    );
+    await client.query("COMMIT");
+    return reserved;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 function normalizeDcordBoostConcurrency(value) {
@@ -1533,7 +1641,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let providerPaused = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
-  const stickyProxies = order.useProxy === true ? await loadDcordStickyProxies() : [];
+  const assignedProxies = order.useProxy === true ? await loadDcordOrderProxies(orderId) : [];
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
@@ -1599,6 +1707,26 @@ async function processDcordBoostOrder(order, tokens, invite) {
     if (index >= tokens.length || providerPaused) return;
 
     const token = tokens[index];
+    const existingTaskId = results[index]?.dcordTaskId;
+    const proxy = existingTaskId ? "" : assignedProxies[index];
+    if (proxy) {
+      try {
+        await checkDcordProxy(proxy);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Proxy connection check failed.";
+        results[index] = {
+          ...results[index],
+          status: "proxy_failed",
+          joinStatus: "not started",
+          boostStatus: "not started",
+          boostMessage: message,
+          proxyCheck: "failed"
+        };
+        await saveCurrentProgress();
+        await runNextToken();
+        return;
+      }
+    }
     results[index] = {
       ...results[index],
       status: "joining",
@@ -1618,10 +1746,9 @@ async function processDcordBoostOrder(order, tokens, invite) {
       });
       usedTokenId = usageEntry.id;
     }
-    const existingTaskId = results[index]?.dcordTaskId;
     const normalized = await runDcordBoostToken(token, invite, {
       existingTaskId,
-      proxy: existingTaskId ? "" : pickDcordStickyProxy(stickyProxies, token),
+      proxy,
       onTaskCreated: async (taskId) => {
         results[index] = {
           ...results[index],
@@ -3053,7 +3180,7 @@ app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
   try {
     const stickyProxies = await loadDcordStickyProxies();
     const createPayload = { type: "join", token: "dummy", invite: "dummy", boost: true };
-    const proxy = pickDcordStickyProxy(stickyProxies, "dummy");
+    const proxy = stickyProxies[0];
     if (proxy) createPayload.proxy = proxy;
     const payload = await requestDcord(dcordTaskCreatePath, {
       method: "POST",
@@ -3311,13 +3438,6 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
     }
 
-    if (useProxy) {
-      const stickyProxies = await loadDcordStickyProxies();
-      if (!stickyProxies.length) {
-        return res.status(409).json({ message: "Add at least one sticky proxy before creating a proxy order." });
-      }
-    }
-
     const serverInfo = await resolveDiscordInvite(invite);
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
     if (memberVerification.status === "open" && req.body?.forceMembershipScreening !== true) {
@@ -3330,6 +3450,8 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     if (stock[stockKey].length < requiredTokens) {
       return res.status(409).json({ message: `Only ${stock[stockKey].length * 2} ${duration} month boosts are in stock.` });
     }
+
+    const assignedProxies = useProxy ? await reserveDcordProxies(requiredTokens) : [];
 
     const selectedTokens = stock[stockKey].slice(0, requiredTokens);
     const nextStock = await saveBoostTokenStock({
@@ -3358,6 +3480,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     };
 
     await saveDcordOrderTokens(uniqid, selectedTokens);
+    if (useProxy) await saveDcordOrderProxies(uniqid, assignedProxies);
     await saveTrackedOrderPayload(order);
     void processDcordBoostOrder(order, selectedTokens, invite).catch((error) => {
       console.error(error);
@@ -3625,6 +3748,8 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
       return res.status(409).json({ message: `No ${duration} month replacement tokens are in stock.` });
     }
 
+    const replacementProxy = order.useProxy === true ? (await reserveDcordProxies(1))[0] : "";
+
     await saveBoostTokenStock({
       ...stock,
       [stockKey]: stock[stockKey].slice(1)
@@ -3642,6 +3767,11 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     const assignedTokens = await loadDcordOrderTokens(uniqid);
     assignedTokens[resultIndex] = replacementToken;
     await saveDcordOrderTokens(uniqid, assignedTokens);
+    if (order.useProxy === true) {
+      const assignedProxies = await loadDcordOrderProxies(uniqid);
+      assignedProxies[resultIndex] = replacementProxy;
+      await saveDcordOrderProxies(uniqid, assignedProxies);
+    }
 
     const added = results.reduce((total, item) => {
       return total + (item && typeof item === "object" && !Array.isArray(item) && item.boosted === true ? 2 : 0);

@@ -23,6 +23,7 @@ type DcordTokenResult = {
   boostStatus: string;
   slots: string;
   boostMessage: string;
+  proxy: string;
   successful: boolean;
   state: "success" | "pending" | "error";
 };
@@ -158,6 +159,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
         : typeof row.boost_message === "string" && row.boost_message.trim()
           ? row.boost_message.trim()
           : "";
+      const proxy = typeof row.proxy === "string" && row.proxy.trim() ? row.proxy.trim() : "";
       const isPending = [joinStatus, boostStatus, status].some((value) =>
         ["queued", "joining", "pending", "process", "waiting", "verifying"].some((stateValue) => value.toLowerCase().includes(stateValue))
       );
@@ -172,7 +174,7 @@ function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenRes
             ? "pending"
             : "error";
 
-      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, successful, state };
+      return { index, token, status, joinStatus, boostStatus, slots, boostMessage, proxy, successful, state };
     })
     .filter((item): item is DcordTokenResult => Boolean(item));
 }
@@ -760,7 +762,7 @@ export default function PublicOrderPage() {
                             <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
                             <span className="public-token-result-main">
                               <strong>{item.token}</strong>
-                              <small>{item.boostMessage || item.status}</small>
+                              <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}</small>
                             </span>
                             <span className="public-token-result-flow">
                               <span className="public-token-result-action">

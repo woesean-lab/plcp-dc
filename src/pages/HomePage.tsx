@@ -1912,8 +1912,8 @@ export default function HomePage() {
                               onChange={(event) => setForm((current) => ({ ...current, useProxy: event.target.checked }))}
                             />
                             <span><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
-                            <strong>Use sticky proxy</strong>
-                            <small>{dcordProxyCount ? `${dcordProxyCount} saved proxies` : "No proxies saved"}</small>
+                            <strong>Use one-time proxies</strong>
+                            <small>{dcordProxyCount ? `${dcordProxyCount} available; one is consumed per token` : "No proxies saved"}</small>
                           </label>
                         </div>
                       </div>
@@ -2201,7 +2201,7 @@ export default function HomePage() {
               <header className="dcord-proxy-header">
                 <div>
                   <p className={labelClass}>Dcord routing</p>
-                  <h2>Sticky proxies</h2>
+                  <h2>One-time proxies</h2>
                 </div>
                 <div className="dcord-proxy-actions">
                   <span>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</span>
