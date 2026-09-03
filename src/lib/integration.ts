@@ -209,7 +209,7 @@ export async function clearDcordApiKey() {
 }
 
 export function checkDcordConnection() {
-  return requestJson<{ connected: boolean; status: string; message: string; httpStatus?: number; taskId?: string }>("/api/dcord/check", {
+  return requestJson<{ connected: boolean; status: string; message: string; balance?: number; httpStatus?: number }>("/api/dcord/check", {
     method: "POST"
   });
 }

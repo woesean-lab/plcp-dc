@@ -621,7 +621,7 @@ function normalizeDcordStickyProxies(value) {
   const seen = new Set();
   const normalized = [];
   source.forEach((item) => {
-    const proxy = String(item ?? "").trim();
+    const proxy = normalizeDcordProxyForDcord(item);
     if (!proxy || proxy.length > 1000 || seen.has(proxy)) return;
     seen.add(proxy);
     normalized.push(proxy);
@@ -629,9 +629,26 @@ function normalizeDcordStickyProxies(value) {
   return normalized.slice(0, 1000);
 }
 
+function normalizeDcordProxyForDcord(value) {
+  const proxy = String(value ?? "").trim();
+  if (!proxy) return "";
+  if (/^https?:\/\//i.test(proxy) || proxy.includes("@")) return proxy;
+  const [host, port, username, password, ...extra] = proxy.split(":");
+  if (!host || !port || !username || !password || extra.length) return "";
+  return `${username}:${password}@${host}:${port}`;
+}
+
 function getDcordProxyLabel(value) {
   const proxy = String(value ?? "").trim();
   if (!proxy) return "";
+  if (/^https?:\/\//i.test(proxy)) {
+    try {
+      const parsed = new URL(proxy);
+      return parsed.username ? `${decodeURIComponent(parsed.username)}@${parsed.host}` : parsed.host;
+    } catch {
+      return proxy;
+    }
+  }
   const authenticatedSeparator = proxy.lastIndexOf("@");
   if (authenticatedSeparator >= 0) {
     const username = proxy.slice(0, authenticatedSeparator).split(":")[0];
@@ -643,12 +660,11 @@ function getDcordProxyLabel(value) {
 }
 
 function getDcordProxyUrl(value) {
-  const proxy = String(value ?? "").trim();
+  const proxy = normalizeDcordProxyForDcord(value);
   if (!proxy) return "";
+  if (/^https?:\/\//i.test(proxy)) return proxy;
   if (proxy.includes("@")) return `http://${proxy}`;
-  const [host, port, username, password, ...extra] = proxy.split(":");
-  if (!host || !port || !username || !password || extra.length) return "";
-  return `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+  return "";
 }
 
 async function checkDcordProxy(proxy) {
@@ -3196,23 +3212,17 @@ app.delete("/api/dcord/proxies", requireSession, async (_req, res, next) => {
 
 app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
   try {
-    const stickyProxies = await loadDcordStickyProxies();
-    const createPayload = { type: "join", token: "dummy", invite: "dummy", boost: true };
-    const proxy = stickyProxies[0];
-    if (proxy) createPayload.proxy = proxy;
-    const payload = await requestDcord(dcordTaskCreatePath, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(createPayload)
-    });
-    const taskId = getDcordTaskId(payload);
+    const payload = await requestDcord("/api/me", { method: "GET", cache: "no-store" });
+    const account = payload?.data && typeof payload.data === "object" && !Array.isArray(payload.data) ? payload.data : payload;
+    const enabled = account?.enabled !== false;
+    const balance = Number(account?.balance);
     res.set("Cache-Control", "no-store").json({
-      connected: true,
-      status: "ok",
-      taskId,
-      message: taskId
-        ? `Dcord is reachable. Test task ${taskId} was accepted.`
-        : "Dcord is reachable and returned JSON, but no task ID was included."
+      connected: enabled,
+      status: enabled ? "ok" : "disabled",
+      balance: Number.isFinite(balance) ? balance : undefined,
+      message: enabled
+        ? `Dcord API is reachable${Number.isFinite(balance) ? `. Available credits: ${balance}` : "."}`
+        : "Dcord API key is valid, but the account is disabled."
     });
   } catch (error) {
     const statusCode = Number(error?.statusCode);
@@ -3449,7 +3459,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const invite = extractDiscordInviteCode(req.body?.id);
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
-    const useProxy = req.body?.useProxy === true;
+    const useProxy = true;
     const concurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {

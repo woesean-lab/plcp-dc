@@ -103,6 +103,21 @@ function parseProxyDraft(value: string) {
     });
 }
 
+function normalizeProxyDraft(value: string) {
+  return value
+    .split(/(\r\n|\n|\r|,)/)
+    .map((part) => {
+      if (/^(\r\n|\n|\r|,)$/.test(part)) return part;
+      const entry = part.trim();
+      if (!entry || entry.includes("@") || /^https?:\/\//i.test(entry)) return part;
+      const [host, port, username, password, ...extra] = entry.split(":");
+      return host && port && username && password && !extra.length
+        ? `${username}:${password}@${host}:${port}`
+        : part;
+    })
+    .join("");
+}
+
 function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number]) {
   if (record.reservedOrderId) return { label: "In order", variant: "secondary" as const };
   if (record.status === "failed") return { label: "Inactive", variant: "destructive" as const };
@@ -770,6 +785,7 @@ export default function HomePage() {
     try {
       setCheckingDcordConnection(true);
       const result = await checkDcordConnection();
+      if (!result.connected) throw new Error(result.message || "Dcord account is disabled.");
       notifySuccess(result.message || "Dcord connection is healthy.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Dcord connection check failed.");
@@ -1392,7 +1408,7 @@ export default function HomePage() {
       delay: payloadIsBoost ? undefined : payload.delay,
       billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
       duration: payloadIsBoost ? payload.duration : undefined,
-      useProxy: payloadIsBoost ? payload.useProxy : undefined,
+      useProxy: payloadIsBoost ? true : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
       botInvite: created.bot_invite,
@@ -1419,7 +1435,7 @@ export default function HomePage() {
       delay: selectedIsBoost ? undefined : form.delay,
       billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
       duration: selectedIsBoost ? form.duration : undefined,
-      useProxy: selectedIsBoost ? form.useProxy : undefined,
+      useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined
     };
 
@@ -1905,14 +1921,14 @@ export default function HomePage() {
                             />
                           </label>
 
-                          <label className={`boost-proxy-toggle ${form.useProxy ? "is-enabled" : ""}`}>
+                          <label className="boost-proxy-toggle is-enabled">
                             <input
                               type="checkbox"
-                              checked={form.useProxy}
-                              onChange={(event) => setForm((current) => ({ ...current, useProxy: event.target.checked }))}
+                              checked
+                              disabled
                             />
                             <span><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
-                            <strong>Use one-time proxies</strong>
+                            <strong>One-time proxy required</strong>
                             <small>{dcordProxyCount ? `${dcordProxyCount} available; one is consumed per token` : "No proxies saved"}</small>
                           </label>
                         </div>
@@ -2223,7 +2239,7 @@ export default function HomePage() {
                 className="dcord-proxy-textarea"
                 spellCheck={false}
                 value={dcordProxyDraft}
-                onChange={(event) => setDcordProxyDraft(event.target.value)}
+                onChange={(event) => setDcordProxyDraft(normalizeProxyDraft(event.target.value))}
                 placeholder={"user:pass@host:port\nhost:port:user:pass"}
               />
             </section>

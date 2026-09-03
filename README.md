@@ -29,7 +29,7 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 - API anahtarlari koda gommeli degil; admin panelindeki ayarlar bolumune girilir ve PostgreSQL'de sifreli saklanir.
 - Varsayilan API tabani: `https://dev.tokenu.net/api/v1/reseller`
 - Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir. Siparis once Dcord Tasks API ile olusturulur, donen `task_id` kaydedilir ve sonuc ayni gorev uzerinden takip edilir.
-- Dcord proxy listesi Boost Stock panelinden yonetilir ve sifreli saklanir. Proxy'li bir sipariste her token icin bir proxy rezerve edilir, siparis eslesmesi sifreli saklanir ve rezerve edilen proxy listeden kaldirilir.
+- Dcord proxy listesi Boost Stock panelinden yonetilir ve sifreli saklanir. Dcord'un `join` endpointi proxy gerektirdigi icin her token icin bir proxy rezerve edilir, siparis eslesmesi sifreli saklanir ve rezerve edilen proxy listeden kaldirilir. `host:port:user:pass` girdileri otomatik olarak Dcord'un bekledigi `user:pass@host:port` formatina donusturulur.
 - Dcord Boosts concurrency de siparis formundan secilir; her siparis kendi paralel isleme sayisini saklar.
 - Dcord endpointi ortam degiskenleriyle ayarlanir:
   - `DCORD_API_BASE_URL`
