@@ -23,6 +23,7 @@ export interface CreateOrderPayload {
   duration?: BoostDuration;
   useProxy?: boolean;
   concurrency?: number;
+  allowMembershipScreening?: boolean;
 }
 
 export interface CreateOrderResponse {

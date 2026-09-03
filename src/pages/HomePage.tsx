@@ -1482,6 +1482,20 @@ export default function HomePage() {
     }
   }
 
+  async function continueBoostOrderDespiteScreening() {
+    if (!boostScreeningPendingPayload || creating) return;
+    const payload = boostScreeningPendingPayload;
+    setCreating(true);
+    try {
+      await submitCreateOrder({ ...payload, allowMembershipScreening: true });
+      setBoostScreeningPendingPayload(null);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Order could not be created.");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   function trackOrderManually() {
     const uniqid = orderIdToTrack.trim();
     if (!uniqid) {
@@ -2733,7 +2747,7 @@ export default function HomePage() {
             if (event.target === event.currentTarget && !creating) setBoostScreeningPendingPayload(null);
           }}
         >
-          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="boost-screening-title" aria-describedby="boost-screening-description">
+          <div className="confirm-modal boost-screening-modal" role="alertdialog" aria-modal="true" aria-labelledby="boost-screening-title" aria-describedby="boost-screening-description">
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Boost warning</p>
             <h2 id="boost-screening-title">Registration form is enabled</h2>
@@ -2748,9 +2762,13 @@ export default function HomePage() {
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
-              <Button type="button" variant="destructive" disabled={creating} onClick={() => void retryBoostOrderAfterScreening()}>
+              <Button type="button" variant="secondary" disabled={creating} onClick={() => void retryBoostOrderAfterScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
                 {creating ? "Checking..." : "Check again"}
+              </Button>
+              <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderDespiteScreening()}>
+                {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
+                {creating ? "Creating..." : "Continue anyway"}
               </Button>
             </div>
           </div>

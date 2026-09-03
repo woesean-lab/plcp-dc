@@ -3509,6 +3509,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const duration = Number.parseInt(req.body?.duration, 10);
     const useProxy = true;
     const concurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
+    const allowMembershipScreening = req.body?.allowMembershipScreening === true;
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
@@ -3516,7 +3517,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
 
     const serverInfo = await resolveDiscordInvite(invite);
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
-    if (memberVerification.status === "open") {
+    if (memberVerification.status === "open" && !allowMembershipScreening) {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
     }
 

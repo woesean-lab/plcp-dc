@@ -2912,6 +2912,12 @@
   .confirm-modal > p:not(.app-kicker) { margin-top: .8rem; color: var(--app-text-secondary); font-size: .88rem; line-height: 1.7; }
   .confirm-modal > p strong { color: var(--app-text); overflow-wrap: anywhere; }
   .confirm-modal-actions { display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1.35rem; }
+  .boost-screening-modal .confirm-modal-actions { flex-wrap: wrap; }
+
+  @media (max-width: 620px) {
+    .boost-screening-modal .confirm-modal-actions { flex-direction: column-reverse; }
+    .boost-screening-modal .confirm-modal-actions .ui-button { width: 100%; }
+  }
 
   .order-confirm-modal {
     width: min(100%, 470px);
