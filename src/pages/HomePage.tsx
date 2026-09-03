@@ -2662,21 +2662,31 @@ export default function HomePage() {
             if (event.target === event.currentTarget && !creating) setOrderConfirmationPayload(null);
           }}
         >
-          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="create-order-title" aria-describedby="create-order-description">
+          <div className="confirm-modal order-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="create-order-title" aria-describedby="create-order-description">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Check className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Order confirmation</p>
             <h2 id="create-order-title">Create this order?</h2>
             <p id="create-order-description">
               Check the order details before submitting. This action will reserve the required stock.
             </p>
-            <div className="grid gap-2 rounded-xl border border-[var(--app-line)] bg-[var(--app-panel-muted)] p-4 text-sm">
-              <span><strong>Service:</strong> {SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</span>
-              <span><strong>Target:</strong> {orderConfirmationPayload.id}</span>
-              <span><strong>Amount:</strong> {orderConfirmationPayload.amount}</span>
-              {orderConfirmationPayload.duration ? <span><strong>Duration:</strong> {orderConfirmationPayload.duration} month</span> : null}
-              {orderConfirmationPayload.concurrency ? <span><strong>Concurrency:</strong> {orderConfirmationPayload.concurrency}</span> : null}
-              {orderConfirmationPayload.delay ? <span><strong>Delay:</strong> {orderConfirmationPayload.delay} seconds</span> : null}
-            </div>
+            <dl className="order-confirm-summary">
+              <div className="order-confirm-item is-wide">
+                <dt>Service</dt>
+                <dd>{SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</dd>
+              </div>
+              <div className="order-confirm-item is-wide">
+                <dt>Discord invite</dt>
+                <dd className="is-target">{orderConfirmationPayload.id}</dd>
+              </div>
+              <div className="order-confirm-item">
+                <dt>Amount</dt>
+                <dd>{orderConfirmationPayload.amount}</dd>
+              </div>
+              {orderConfirmationPayload.duration ? <div className="order-confirm-item"><dt>Duration</dt><dd>{orderConfirmationPayload.duration} month</dd></div> : null}
+              {orderConfirmationPayload.concurrency ? <div className="order-confirm-item"><dt>Concurrency</dt><dd>{orderConfirmationPayload.concurrency} workers</dd></div> : null}
+              {orderConfirmationPayload.duration ? <div className="order-confirm-item"><dt>Proxy usage</dt><dd>{orderConfirmationPayload.amount / 2} one-time</dd></div> : null}
+              {orderConfirmationPayload.delay ? <div className="order-confirm-item"><dt>Delay</dt><dd>{orderConfirmationPayload.delay} seconds</dd></div> : null}
+            </dl>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setOrderConfirmationPayload(null)}>Go back</Button>
               <Button type="button" disabled={creating} onClick={() => void confirmCreateOrder()}>

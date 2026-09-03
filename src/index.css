@@ -2913,6 +2913,61 @@
   .confirm-modal > p strong { color: var(--app-text); overflow-wrap: anywhere; }
   .confirm-modal-actions { display: flex; justify-content: flex-end; gap: .7rem; margin-top: 1.35rem; }
 
+  .order-confirm-modal {
+    width: min(100%, 520px);
+    padding: 1.55rem;
+    box-shadow: inset 0 1px 0 var(--app-inset-line), 0 32px 90px rgba(0, 0, 0, .52), 0 0 52px rgba(105, 221, 178, .07);
+  }
+
+  .order-confirm-summary {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .7rem;
+    margin-top: 1.15rem;
+  }
+
+  .order-confirm-item {
+    min-width: 0;
+    border: 1px solid var(--app-border);
+    border-radius: 14px;
+    padding: .8rem .9rem;
+    background: linear-gradient(145deg, rgba(255, 255, 255, .035), rgba(255, 255, 255, .012));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+  }
+
+  .order-confirm-item.is-wide { grid-column: 1 / -1; }
+  .order-confirm-item dt {
+    color: var(--app-muted);
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .order-confirm-item dd {
+    margin-top: .48rem;
+    color: var(--app-text);
+    font-size: .92rem;
+    font-weight: 650;
+    line-height: 1.35;
+  }
+  .order-confirm-item dd.is-target {
+    overflow: hidden;
+    color: var(--app-text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: .78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 520px) {
+    .order-confirm-modal { padding: 1.15rem; }
+    .order-confirm-summary { grid-template-columns: 1fr; }
+    .order-confirm-item.is-wide { grid-column: auto; }
+    .order-confirm-modal .confirm-modal-actions { flex-direction: column-reverse; }
+    .order-confirm-modal .confirm-modal-actions .ui-button { width: 100%; }
+  }
+
   .add-tokens-modal {
     max-height: calc(100dvh - 2.5rem);
     overflow-x: hidden;
