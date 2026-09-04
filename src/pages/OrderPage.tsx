@@ -327,6 +327,7 @@ export default function OrderPage() {
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
+  const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
   const [delayDraft, setDelayDraft] = useState("");
@@ -372,6 +373,9 @@ export default function OrderPage() {
   const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const replaceableDcordTokenIndices = dcordTokenResults
+    .filter((item) => item.state === "error" && item.replaceable)
+    .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
@@ -568,6 +572,33 @@ export default function OrderPage() {
       setReplacingTokenIndex(null);
     }
   }
+
+  function handleReplaceAllDcordTokens() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || replacingTokenIndex !== null || normalizedStatus === "PROCESS" || !replaceableDcordTokenIndices.length) return;
+    setDcordReplaceQueue(replaceableDcordTokenIndices);
+    toast.success(`${replaceableDcordTokenIndices.length} token replacement${replaceableDcordTokenIndices.length === 1 ? "" : "s"} queued.`);
+  }
+
+  useEffect(() => {
+    const nextIndex = dcordReplaceQueue[0];
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (nextIndex === undefined || !target || replacingTokenIndex !== null || normalizedStatus === "PROCESS") return;
+
+    void (async () => {
+      try {
+        setReplacingTokenIndex(nextIndex);
+        const payload = await replaceDcordBoostToken(target, nextIndex);
+        setResult((current) => mergeOrderStatus(current, payload.order));
+        setDcordReplaceQueue((current) => current.slice(1));
+      } catch (error) {
+        setDcordReplaceQueue([]);
+        toast.error(error instanceof Error ? error.message : "Bulk token replacement stopped.");
+      } finally {
+        setReplacingTokenIndex(null);
+      }
+    })();
+  }, [dcordReplaceQueue, normalizedStatus, replacingTokenIndex, result?.uniqid, uniqid]);
 
   async function handleReplaceCommunityMember(resultIndex: number) {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -863,7 +894,15 @@ export default function OrderPage() {
                   <p className="app-kicker">Token results</p>
                   <h3>Per-token boost log</h3>
                 </div>
-                <span className="public-secure-mark"><ShieldCheck className="h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
+                <span className="public-secure-mark gap-2">
+                  {replaceableDcordTokenIndices.length || dcordReplaceQueue.length ? (
+                    <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllDcordTokens} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS" || dcordReplaceQueue.length > 0}>
+                      <RefreshCw className={`h-3.5 w-3.5 ${dcordReplaceQueue.length > 0 || replacingTokenIndex !== null ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {dcordReplaceQueue.length > 0 ? `Replacing all (${dcordReplaceQueue.length})` : "Replace all"}
+                    </Button>
+                  ) : null}
+                  <span><ShieldCheck className="inline h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
+                </span>
               </div>
 
               {dcordTokenResults.length ? (
@@ -884,7 +923,7 @@ export default function OrderPage() {
                       <span className="public-token-result-flow">
                         <span className="public-token-result-action">
                           {item.state === "error" && item.replaceable && normalizedStatus !== "CANCELLED" ? (
-                            <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS"}>
+                            <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS" || dcordReplaceQueue.length > 0}>
                               {replacingTokenIndex === item.index ? "Replacing..." : normalizedStatus === "PROCESS" ? "Wait" : "Replace"}
                             </Button>
                           ) : null}
