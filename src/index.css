@@ -7250,3 +7250,100 @@
     }
   }
 }
+
+/* Live Sync card */
+.monitor-refresh {
+  display: grid;
+  width: 194px;
+  min-width: 194px;
+  height: 44px;
+  min-height: 44px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 12px;
+  padding: 5px;
+  background: rgba(155,140,255,.055);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+
+.monitor-refresh-icon {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 8px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-refresh .monitor-refresh-icon svg {
+  width: 12px;
+  height: 12px;
+  color: currentColor;
+}
+
+.monitor-sync-copy {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin: 0 !important;
+}
+
+.monitor-sync-copy > strong {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--app-text);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.monitor-sync-copy > small {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 7px;
+  font-weight: 650;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-sync-count {
+  min-width: 30px;
+  margin: 0 !important;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 7px;
+  padding: 5px 4px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright) !important;
+  font-size: 8px !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+}
+
+.monitor-refresh.is-refreshing {
+  border-color: rgba(155,140,255,.42);
+  background: rgba(155,140,255,.085);
+}
+
+@media (max-width: 639px) {
+  .monitor-refresh {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    gap: 6px;
+  }
+
+  .monitor-sync-copy > strong { font-size: 8.5px; }
+  .monitor-sync-copy > small { font-size: 6.5px; }
+  .monitor-sync-count { min-width: 27px; font-size: 7px !important; }
+}

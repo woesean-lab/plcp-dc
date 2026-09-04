@@ -587,8 +587,11 @@ export default function PublicOrderPage() {
           <div className="monitor-topbar-actions">
             <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
               <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
-              <span>{autoRefreshing ? "Syncing" : "Live sync"}</span>
-              <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
+              <span className="monitor-sync-copy">
+                <strong>{autoRefreshing ? "Syncing" : "Live Sync"}</strong>
+                <small>{autoRefreshing ? "Updating order" : "Auto refresh"}</small>
+              </span>
+              <span className="monitor-sync-count">{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</span>
             </div>
             <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
               <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
