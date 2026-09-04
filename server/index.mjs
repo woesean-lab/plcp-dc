@@ -755,7 +755,7 @@ async function reserveDcordProxies(count) {
 }
 
 function normalizeDcordBoostConcurrency(value) {
-  return Math.min(Math.max(Number.parseInt(value, 10) || defaultDcordBoostConcurrency, 1), 20);
+  return Math.min(Math.max(Number.parseInt(value, 10) || defaultDcordBoostConcurrency, 1), 1_000);
 }
 
 async function loadUsedBoostTokenHistory() {

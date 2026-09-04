@@ -7297,7 +7297,7 @@
   margin: 0;
   padding: 0;
   background: transparent;
-  color: rgba(232,231,244,.78);
+  color: var(--app-text-secondary);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
@@ -7336,7 +7336,7 @@
 }
 
 .monitor-store-link strong {
-  color: rgba(232,231,244,.78);
+  color: var(--app-text-secondary);
 }
 
 @media (max-width: 639px) {

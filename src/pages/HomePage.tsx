@@ -82,6 +82,10 @@ const EMPTY_FORM = {
   concurrency: 7
 };
 
+function getBoostConcurrency(amount: number) {
+  return Math.max(1, Math.floor(amount / 2));
+}
+
 const EMPTY_BOOST_STOCK: BoostStock = {
   oneMonth: 0,
   threeMonth: 0
@@ -1712,7 +1716,8 @@ export default function HomePage() {
                                     : option.value === "community"
                                       ? "COMMUNITY-OFFLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
-                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.ready ?? 1)) : 100
+                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.ready ?? 1)) : 100,
+                                  concurrency: option.value === "boosts" ? 1 : current.concurrency
                                 }))
                               }
                             />
@@ -1846,10 +1851,12 @@ export default function HomePage() {
                                 onChange={() =>
                                   setForm((current) => {
                                     const nextCapacity = duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+                                    const nextAmount = nextCapacity > 0 ? Math.min(current.amount, nextCapacity) : current.amount;
                                     return {
                                       ...current,
                                       duration: duration as 1 | 3,
-                                      amount: nextCapacity > 0 ? Math.min(current.amount, nextCapacity) : current.amount
+                                      amount: nextAmount,
+                                      concurrency: getBoostConcurrency(nextAmount)
                                     };
                                   })
                                 }
@@ -1897,7 +1904,10 @@ export default function HomePage() {
                               <button
                                 type="button"
                                 aria-label="Decrease boosts"
-                                onClick={() => setForm((current) => ({ ...current, amount: Math.max(2, current.amount - 2) }))}
+                                onClick={() => setForm((current) => {
+                                  const amount = Math.max(2, current.amount - 2);
+                                  return { ...current, amount, concurrency: getBoostConcurrency(amount) };
+                                })}
                               >
                                 <Minus className="h-4 w-4" aria-hidden="true" />
                               </button>
@@ -1907,10 +1917,10 @@ export default function HomePage() {
                                 aria-label="Increase boosts"
                                 disabled={selectedBoostCapacity <= 0 || form.amount >= selectedBoostCapacity}
                                 onClick={() =>
-                                  setForm((current) => ({
-                                    ...current,
-                                    amount: Math.min(Math.max(2, selectedBoostCapacity), current.amount + 2)
-                                  }))
+                                  setForm((current) => {
+                                    const amount = Math.min(Math.max(2, selectedBoostCapacity), current.amount + 2);
+                                    return { ...current, amount, concurrency: getBoostConcurrency(amount) };
+                                  })
                                 }
                               >
                                 <Plus className="h-4 w-4" aria-hidden="true" />
@@ -1940,10 +1950,10 @@ export default function HomePage() {
                               className="boost-number-input"
                               type="number"
                               min={1}
-                              max={20}
+                              max={getBoostConcurrency(form.amount)}
                               value={form.concurrency}
                               onChange={(event) => {
-                                const value = Math.min(Math.max(Number(event.target.value) || 1, 1), 20);
+                                const value = Math.min(Math.max(Number(event.target.value) || 1, 1), getBoostConcurrency(form.amount));
                                 setForm((current) => ({ ...current, concurrency: value }));
                               }}
                             />
