@@ -5502,40 +5502,52 @@
   backdrop-filter: blur(16px);
 }
 .monitor-refresh {
-  min-width: 174px;
-  padding: 6px 8px;
+  min-width: 0;
+  min-height: 34px;
+  gap: 5px;
   border-color: rgba(105,221,178,.18);
+  border-radius: 999px;
+  padding: 4px 5px;
   background: rgba(105,221,178,.055);
+  box-shadow: none;
+  backdrop-filter: none;
 }
 .monitor-refresh-icon {
   display: grid;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   place-items: center;
   padding: 0;
-  border: 1px solid var(--app-accent-border);
-  border-radius: 10px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent-bright);
+  border: 1px solid rgba(105,221,178,.18);
+  border-radius: 50%;
+  background: rgba(105,221,178,.08);
+  color: var(--app-success);
 }
 .monitor-refresh .monitor-refresh-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
   color: currentColor;
 }
-.monitor-refresh span { color: var(--app-success); font-size: 10px; }
+.monitor-refresh span {
+  margin-right: 0;
+  color: var(--app-success);
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
 .monitor-refresh strong {
-  min-width: 31px;
-  margin-left: auto;
+  min-width: 25px;
+  margin-left: 0;
   border-radius: 8px;
-  padding: 5px 6px;
+  padding: 4px 3px;
   background: rgba(105,221,178,.08);
   color: var(--app-success);
+  font-size: 8px;
   text-align: center;
 }
 .monitor-refresh.is-refreshing { border-color: var(--app-accent-border); background: rgba(15,16,28,.82); }
@@ -5559,29 +5571,34 @@
 .monitor-live-stock-value { padding-left: 9px; }
 .monitor-live-stock-value > strong { font-size: 13px; }
 .monitor-store-link {
-  min-width: 194px;
-  gap: 9px;
-  padding: 6px 9px;
+  min-width: 0;
+  min-height: 44px;
+  gap: 5px;
+  padding: 5px;
   border-color: rgba(244,190,78,.16);
+  border-radius: 12px;
   background: rgba(244,190,78,.04);
   color: #f4be4e;
+  box-shadow: none;
+  backdrop-filter: none;
 }
 .monitor-store-link:hover {
   border-color: var(--app-accent-border);
   background: rgba(155,140,255,.075);
 }
 .monitor-store-link > svg:first-child {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   flex: 0 0 auto;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid rgba(244,190,78,.2);
-  border-radius: 10px;
+  border-radius: 8px;
   background: rgba(244,190,78,.075);
   color: #f4be4e;
 }
 .monitor-store-link > svg:last-child { margin-left: auto; color: var(--app-subtle); }
-.monitor-store-link strong { color: var(--app-text); }
+.monitor-store-link > span { gap: 2px; margin-right: 0; }
+.monitor-store-link strong { color: var(--app-text); line-height: 1.1; }
 
 .monitor-surface {
   border-color: rgba(255,255,255,.12);
