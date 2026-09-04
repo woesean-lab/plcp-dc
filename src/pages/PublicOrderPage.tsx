@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Boxes, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -395,8 +395,6 @@ export default function PublicOrderPage() {
   const boostDuration = status?.duration === 1 || status?.duration === 3
     ? `${status.duration} ${status.duration === 1 ? "Month" : "Months"}`
     : "-";
-  const liveBoostStock = status?.liveBoostStock;
-
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
       setDelayDraft(String(currentDelay));
@@ -591,15 +589,6 @@ export default function PublicOrderPage() {
               <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
               <span>{autoRefreshing ? "Syncing" : "Live sync"}</span>
               <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
-            </div>
-            <div className="monitor-live-stock" aria-label={`Live boost stock: ${formatNumber(liveBoostStock?.oneMonth)} one month boosts and ${formatNumber(liveBoostStock?.threeMonth)} three month boosts`}>
-              <span className="monitor-live-stock-title">
-                <span className="monitor-live-stock-icon"><Boxes className="h-3.5 w-3.5" aria-hidden="true" /></span>
-                <span className="monitor-live-stock-copy"><strong>Boost stock</strong><small>Live inventory</small></span>
-              </span>
-              <span className="monitor-live-stock-status"><i aria-hidden="true" /> Live</span>
-              <span className="monitor-live-stock-value"><small>1 Month</small><strong>{formatNumber(liveBoostStock?.oneMonth)}<em>boosts</em></strong></span>
-              <span className="monitor-live-stock-value"><small>3 Month</small><strong>{formatNumber(liveBoostStock?.threeMonth)}<em>boosts</em></strong></span>
             </div>
             <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
               <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
