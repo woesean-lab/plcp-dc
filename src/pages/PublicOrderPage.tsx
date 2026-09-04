@@ -592,7 +592,7 @@ export default function PublicOrderPage() {
             </div>
             <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
               <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
-              <span><strong>Eldorado Top Seller</strong><small>25,000+ sales · 99.7% positive</small></span>
+              <span><strong>Eldorado Top Seller</strong><small>30,000+ sales · 99.7% positive</small></span>
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </div>

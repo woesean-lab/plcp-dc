@@ -5504,6 +5504,8 @@
 .monitor-refresh {
   min-width: 174px;
   padding: 6px 8px;
+  border-color: rgba(105,221,178,.18);
+  background: rgba(105,221,178,.055);
 }
 .monitor-refresh-icon {
   display: grid;
@@ -5526,14 +5528,14 @@
   background: transparent;
   color: currentColor;
 }
-.monitor-refresh span { color: var(--app-text-secondary); font-size: 10px; }
+.monitor-refresh span { color: var(--app-success); font-size: 10px; }
 .monitor-refresh strong {
   min-width: 31px;
   margin-left: auto;
   border-radius: 8px;
   padding: 5px 6px;
-  background: rgba(255,255,255,.045);
-  color: var(--app-text-secondary);
+  background: rgba(105,221,178,.08);
+  color: var(--app-success);
   text-align: center;
 }
 .monitor-refresh.is-refreshing { border-color: var(--app-accent-border); background: rgba(15,16,28,.82); }
@@ -5560,7 +5562,9 @@
   min-width: 194px;
   gap: 9px;
   padding: 6px 9px;
-  color: var(--app-muted);
+  border-color: rgba(244,190,78,.16);
+  background: rgba(244,190,78,.04);
+  color: #f4be4e;
 }
 .monitor-store-link:hover {
   border-color: var(--app-accent-border);
@@ -5577,6 +5581,7 @@
   color: #f4be4e;
 }
 .monitor-store-link > svg:last-child { margin-left: auto; color: var(--app-subtle); }
+.monitor-store-link strong { color: var(--app-text); }
 
 .monitor-surface {
   border-color: rgba(255,255,255,.12);
