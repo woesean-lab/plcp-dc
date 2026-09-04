@@ -7297,7 +7297,7 @@
   margin: 0;
   padding: 0;
   background: transparent;
-  color: var(--app-text);
+  color: rgba(232,231,244,.78);
   font-size: 9px;
   font-weight: 800;
   line-height: 1;
@@ -7333,6 +7333,10 @@
 .monitor-refresh.is-refreshing {
   border-color: rgba(105,221,178,.4);
   background: rgba(105,221,178,.085);
+}
+
+.monitor-store-link strong {
+  color: rgba(232,231,244,.78);
 }
 
 @media (max-width: 639px) {
