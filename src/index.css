@@ -7261,18 +7261,18 @@
 .monitor-action-card {
   position: relative;
   display: grid;
-  height: 40px;
-  min-height: 40px;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  height: 46px;
+  min-height: 46px;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   overflow: hidden;
-  border: 1px solid rgba(155,140,255,.14);
-  border-radius: 11px;
-  padding: 6px 8px;
-  background: rgba(17,18,31,.84);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
-  backdrop-filter: blur(10px);
+  border: 1px solid rgba(155,140,255,.18);
+  border-radius: 13px;
+  padding: 7px 9px;
+  background: linear-gradient(145deg, rgba(25,24,42,.94), rgba(14,15,27,.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 8px 24px rgba(0,0,0,.12);
+  backdrop-filter: blur(12px);
   transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 
@@ -7282,16 +7282,16 @@
 
 .monitor-action-icon {
   display: grid;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   place-items: center;
   border: 1px solid;
-  border-radius: 8px;
+  border-radius: 9px;
 }
 
 .monitor-action-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   padding: 0;
 }
 
@@ -7305,7 +7305,7 @@
 .monitor-action-copy strong {
   overflow: hidden;
   color: var(--app-text) !important;
-  font-size: 9px !important;
+  font-size: 9.5px !important;
   font-weight: 800;
   line-height: 1;
   text-overflow: ellipsis;
@@ -7316,7 +7316,7 @@
   display: block !important;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 7px;
+  font-size: 7.5px;
   font-weight: 600;
   line-height: 1;
   text-overflow: ellipsis;
@@ -7324,38 +7324,38 @@
 }
 
 .monitor-refresh {
-  width: 154px;
-  min-width: 154px;
-  border-color: rgba(155,140,255,.14);
-  border-radius: 11px;
-  padding: 6px 8px;
-  background: rgba(17,18,31,.84);
+  width: 166px;
+  min-width: 166px;
+  border-color: rgba(105,221,178,.16);
+  border-radius: 13px;
+  padding: 7px 9px;
+  background: linear-gradient(145deg, rgba(23,29,39,.94), rgba(14,15,27,.92));
 }
 
 .monitor-refresh-icon {
-  width: 26px;
-  height: 26px;
-  border-color: rgba(105,221,178,.16);
-  border-radius: 8px;
-  background: rgba(105,221,178,.055);
+  width: 30px;
+  height: 30px;
+  border-color: rgba(105,221,178,.2);
+  border-radius: 9px;
+  background: rgba(105,221,178,.08);
   color: var(--app-success);
 }
 
 .monitor-refresh .monitor-refresh-icon svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   animation: app-spin 7s linear infinite;
 }
 
 .monitor-action-badge {
-  min-width: 30px !important;
+  min-width: 32px !important;
   margin: 0 !important;
   border: 1px solid rgba(105,221,178,.14);
   border-radius: 7px;
-  padding: 5px !important;
-  background: rgba(105,221,178,.055) !important;
+  padding: 5px 6px !important;
+  background: rgba(105,221,178,.07) !important;
   color: var(--app-success) !important;
-  font-size: 8px !important;
+  font-size: 8.5px !important;
   font-weight: 800 !important;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -7370,24 +7370,24 @@
 .monitor-refresh.is-refreshing .monitor-refresh-icon svg { animation-duration: .8s; }
 
 .monitor-store-link {
-  width: 204px;
-  min-width: 204px;
-  min-height: 40px;
-  gap: 7px;
-  border-color: rgba(155,140,255,.14);
-  border-radius: 11px;
-  padding: 6px 8px;
-  background: rgba(17,18,31,.84);
+  width: 220px;
+  min-width: 220px;
+  min-height: 46px;
+  gap: 8px;
+  border-color: rgba(244,190,78,.16);
+  border-radius: 13px;
+  padding: 7px 9px;
+  background: linear-gradient(145deg, rgba(34,29,30,.94), rgba(14,15,27,.92));
   color: #f4be4e;
 }
 
 .monitor-store-icon {
-  width: 26px !important;
-  height: 26px !important;
+  width: 30px !important;
+  height: 30px !important;
   padding: 0 !important;
-  border-color: rgba(244,190,78,.16) !important;
-  border-radius: 8px !important;
-  background: rgba(244,190,78,.055) !important;
+  border-color: rgba(244,190,78,.2) !important;
+  border-radius: 9px !important;
+  background: rgba(244,190,78,.08) !important;
   color: #f4be4e !important;
 }
 
@@ -7431,26 +7431,26 @@
   .monitor-store-link {
     width: 100%;
     min-width: 0;
-    height: 40px;
-    min-height: 40px;
+    height: 46px;
+    min-height: 46px;
     grid-column: auto;
     grid-row: auto;
-    grid-template-columns: 26px minmax(0, 1fr) auto;
-    gap: 6px;
-    border-radius: 11px;
-    padding: 6px 7px;
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    gap: 7px;
+    border-radius: 13px;
+    padding: 7px 8px;
   }
 
   .monitor-action-icon,
   .monitor-refresh-icon,
   .monitor-store-icon {
-    width: 26px !important;
-    height: 26px !important;
-    border-radius: 8px !important;
+    width: 30px !important;
+    height: 30px !important;
+    border-radius: 9px !important;
   }
 
-  .monitor-action-copy strong { font-size: 8px !important; }
-  .monitor-action-copy small { font-size: 6.5px; }
-  .monitor-action-badge { min-width: 28px !important; padding: 4px !important; font-size: 7px !important; }
+  .monitor-action-copy strong { font-size: 8.5px !important; }
+  .monitor-action-copy small { font-size: 7px; }
+  .monitor-action-badge { min-width: 30px !important; padding: 5px !important; font-size: 8px !important; }
   .monitor-store-link > svg:last-child { display: none; }
 }
