@@ -7249,3 +7249,214 @@
     }
   }
 }
+
+/* Monitor header actions — shared desktop and mobile card system. */
+.monitor-topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.monitor-action-card {
+  position: relative;
+  display: grid;
+  height: 54px;
+  min-height: 54px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 15px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(26,27,44,.94), rgba(14,15,27,.94));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 12px 30px rgba(0,0,0,.16);
+  backdrop-filter: blur(14px);
+  transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.monitor-action-card::before {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  left: 14px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
+  content: "";
+}
+
+.monitor-action-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid;
+  border-radius: 11px;
+}
+
+.monitor-action-icon svg {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+}
+
+.monitor-action-copy {
+  display: grid !important;
+  min-width: 0;
+  gap: 4px !important;
+  margin: 0 !important;
+}
+
+.monitor-action-copy strong {
+  overflow: hidden;
+  color: var(--app-text) !important;
+  font-size: 10px !important;
+  font-weight: 800;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap !important;
+}
+
+.monitor-action-copy small {
+  display: block !important;
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-refresh {
+  width: 188px;
+  min-width: 188px;
+  border-color: rgba(105,221,178,.16);
+  border-radius: 15px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(105,221,178,.075), rgba(20,22,35,.94) 58%, rgba(105,221,178,.025));
+}
+
+.monitor-refresh-icon {
+  width: 34px;
+  height: 34px;
+  border-color: rgba(105,221,178,.22);
+  border-radius: 11px;
+  background: rgba(105,221,178,.09);
+  color: var(--app-success);
+}
+
+.monitor-refresh .monitor-refresh-icon svg {
+  width: 14px;
+  height: 14px;
+  animation: app-spin 7s linear infinite;
+}
+
+.monitor-action-badge {
+  min-width: 36px !important;
+  margin: 0 !important;
+  border: 1px solid rgba(105,221,178,.14);
+  border-radius: 9px;
+  padding: 6px 7px !important;
+  background: rgba(105,221,178,.08) !important;
+  color: var(--app-success) !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+}
+
+.monitor-refresh.is-refreshing {
+  border-color: rgba(105,221,178,.34);
+  background: linear-gradient(135deg, rgba(105,221,178,.12), rgba(20,22,35,.96));
+}
+
+.monitor-refresh.is-refreshing .monitor-refresh-icon svg { animation-duration: .8s; }
+
+.monitor-store-link {
+  width: 232px;
+  min-width: 232px;
+  min-height: 54px;
+  gap: 10px;
+  border-color: rgba(244,190,78,.16);
+  border-radius: 15px;
+  padding: 8px 10px;
+  background: linear-gradient(135deg, rgba(244,190,78,.075), rgba(20,22,35,.94) 58%, rgba(244,190,78,.025));
+  color: #f4be4e;
+}
+
+.monitor-store-icon {
+  width: 34px !important;
+  height: 34px !important;
+  padding: 0 !important;
+  border-color: rgba(244,190,78,.22) !important;
+  border-radius: 11px !important;
+  background: rgba(244,190,78,.09) !important;
+  color: #f4be4e !important;
+}
+
+.monitor-store-link > svg:last-child {
+  display: block;
+  margin-left: 0;
+  color: rgba(244,190,78,.58);
+}
+
+.monitor-store-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(244,190,78,.34);
+  background: linear-gradient(135deg, rgba(244,190,78,.11), rgba(20,22,35,.96));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 15px 34px rgba(0,0,0,.2);
+}
+
+@media (max-width: 639px) {
+  .monitor-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    gap: 10px;
+  }
+
+  .monitor-brand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .monitor-topbar-actions {
+    display: grid;
+    width: 100%;
+    grid-column: 1;
+    grid-row: 2;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .monitor-action-card,
+  .monitor-refresh,
+  .monitor-store-link {
+    width: 100%;
+    min-width: 0;
+    height: 52px;
+    min-height: 52px;
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    gap: 7px;
+    border-radius: 14px;
+    padding: 7px 8px;
+  }
+
+  .monitor-action-icon,
+  .monitor-refresh-icon,
+  .monitor-store-icon {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 10px !important;
+  }
+
+  .monitor-action-copy strong { font-size: 9px !important; }
+  .monitor-action-copy small { font-size: 7px; }
+  .monitor-action-badge { min-width: 31px !important; padding: 5px !important; font-size: 8px !important; }
+  .monitor-store-link > svg:last-child { display: none; }
+}
