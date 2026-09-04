@@ -3569,7 +3569,7 @@
     display: inline-flex;
     align-items: center;
     gap: .4rem;
-    border: 1px solid rgba(105,221,178,.2);
+    border: 1px solid var(--app-accent-border);
     border-radius: 999px;
     padding: .4rem .65rem;
     font-size: 9px;
@@ -4768,7 +4768,7 @@
   height: 28px;
   flex: 0 0 auto;
   place-items: center;
-  border: 1px solid var(--app-accent-border);
+  border: 1px solid rgba(105,221,178,.2);
   border-radius: 9px;
   background: var(--app-accent-soft);
   color: var(--app-accent-bright);
@@ -7261,10 +7261,10 @@
   grid-template-columns: 26px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--app-accent-border);
+  border: 1px solid rgba(105,221,178,.2);
   border-radius: 12px;
   padding: 5px;
-  background: rgba(155,140,255,.055);
+  background: rgba(105,221,178,.055);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
 }
 
@@ -7273,10 +7273,10 @@
   width: 26px;
   height: 26px;
   place-items: center;
-  border: 1px solid var(--app-accent-border);
+  border: 1px solid rgba(105,221,178,.22);
   border-radius: 8px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent-bright);
+  background: rgba(105,221,178,.09);
+  color: var(--app-success);
 }
 
 .monitor-refresh .monitor-refresh-icon svg {
@@ -7318,11 +7318,11 @@
 .monitor-sync-count {
   min-width: 30px;
   margin: 0 !important;
-  border: 1px solid var(--app-accent-border);
+  border: 1px solid rgba(105,221,178,.2);
   border-radius: 7px;
   padding: 5px 4px;
-  background: var(--app-accent-soft);
-  color: var(--app-accent-bright) !important;
+  background: rgba(105,221,178,.08);
+  color: var(--app-success) !important;
   font-size: 8px !important;
   font-weight: 800 !important;
   font-variant-numeric: tabular-nums;
@@ -7331,8 +7331,8 @@
 }
 
 .monitor-refresh.is-refreshing {
-  border-color: rgba(155,140,255,.42);
-  background: rgba(155,140,255,.085);
+  border-color: rgba(105,221,178,.4);
+  background: rgba(105,221,178,.085);
 }
 
 @media (max-width: 639px) {
