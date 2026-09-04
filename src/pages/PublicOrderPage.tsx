@@ -585,17 +585,14 @@ export default function PublicOrderPage() {
           </div>
 
           <div className="monitor-topbar-actions">
-            <div className={`monitor-action-card monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
-              <span className="monitor-action-icon monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
-              <span className="monitor-action-copy">
-                <strong>{autoRefreshing ? "Syncing" : "Live sync"}</strong>
-                <small>{autoRefreshing ? "Updating order" : "Automatic refresh"}</small>
-              </span>
-              <span className="monitor-action-badge">{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</span>
+            <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
+              <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
+              <span>{autoRefreshing ? "Syncing" : "Live sync"}</span>
+              <strong>{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</strong>
             </div>
-            <a className="monitor-action-card monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-              <span className="monitor-action-icon monitor-store-icon" aria-hidden="true"><Star className="h-3.5 w-3.5" fill="currentColor" /></span>
-              <span className="monitor-action-copy"><strong>Eldorado Top Seller</strong><small>30,000+ sales · 99.7% positive</small></span>
+            <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+              <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+              <span><strong>Eldorado Top Seller</strong><small>30,000+ sales · 99.7% positive</small></span>
               <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
             </a>
           </div>

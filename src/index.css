@@ -7250,6 +7250,128 @@
   }
 }
 
+/* Restored compact monitor header cards. */
+.monitor-refresh {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  gap: 5px;
+  border-color: rgba(105,221,178,.18);
+  border-radius: 999px;
+  padding: 4px 5px;
+  background: rgba(105,221,178,.055);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.monitor-refresh-icon {
+  width: 26px;
+  height: 26px;
+  border-color: var(--app-accent-border);
+  border-radius: 50%;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-refresh .monitor-refresh-icon svg {
+  width: 12px;
+  height: 12px;
+  color: currentColor;
+}
+
+.monitor-refresh > span:nth-child(2) {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 8px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.monitor-refresh > strong {
+  min-width: 25px;
+  margin-left: 0;
+  border-radius: 8px;
+  padding: 4px 3px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+  font-size: 8px;
+}
+
+.monitor-refresh.is-refreshing {
+  border-color: var(--app-accent-border);
+  background: rgba(155,140,255,.06);
+}
+
+.monitor-store-link {
+  display: flex;
+  width: auto;
+  min-width: 194px;
+  height: 44px;
+  min-height: 44px;
+  justify-content: flex-start;
+  gap: 5px;
+  border-color: rgba(244,190,78,.16);
+  border-radius: 12px;
+  padding: 5px;
+  background: rgba(244,190,78,.04);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.monitor-store-link > svg:first-child {
+  width: 26px;
+  height: 26px;
+  padding: 6px;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 8px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-store-link > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  margin-right: 0;
+}
+
+.monitor-store-link strong {
+  color: var(--app-text);
+  font-size: 9px;
+  line-height: 1.1;
+}
+
+.monitor-store-link small {
+  display: block;
+  font-size: 7px;
+}
+
+.monitor-store-link > svg:last-child {
+  display: block;
+  margin-left: auto;
+  color: var(--app-accent-bright);
+}
+
+.monitor-store-link:hover {
+  border-color: var(--app-accent-border);
+  background: rgba(155,140,255,.06);
+  box-shadow: none;
+}
+
+@media (max-width: 639px) {
+  .monitor-refresh,
+  .monitor-store-link {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .monitor-store-link > svg:last-child { display: none; }
+}
+
 /* Monitor header actions — shared desktop and mobile card system. */
 .monitor-topbar-actions {
   display: flex;
@@ -7452,5 +7574,98 @@
   .monitor-action-copy strong { font-size: 8.5px !important; }
   .monitor-action-copy small { font-size: 7px; }
   .monitor-action-badge { min-width: 30px !important; padding: 5px !important; font-size: 8px !important; }
+  .monitor-store-link > svg:last-child { display: none; }
+}
+
+/* Final restored header appearance; supersedes the discarded redesign. */
+.monitor-refresh {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  gap: 5px;
+  border-color: rgba(105,221,178,.18);
+  border-radius: 999px;
+  padding: 4px 5px;
+  background: rgba(105,221,178,.055);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.monitor-refresh-icon {
+  width: 26px !important;
+  height: 26px !important;
+  border-color: var(--app-accent-border);
+  border-radius: 50% !important;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-refresh > span:nth-child(2) {
+  margin: 0;
+  color: var(--app-text-secondary);
+  font-size: 8px;
+  font-weight: 750;
+}
+
+.monitor-refresh > strong {
+  min-width: 25px;
+  margin-left: 0;
+  padding: 4px 3px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+  font-size: 8px;
+}
+
+.monitor-store-link {
+  display: flex;
+  width: auto;
+  min-width: 194px;
+  height: 44px;
+  min-height: 44px;
+  gap: 5px;
+  border-color: rgba(244,190,78,.16);
+  border-radius: 12px;
+  padding: 5px;
+  background: rgba(244,190,78,.04);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.monitor-store-link > svg:first-child {
+  width: 26px;
+  height: 26px;
+  padding: 6px;
+  border-color: var(--app-accent-border);
+  border-radius: 8px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-store-link > span { gap: 2px; }
+.monitor-store-link strong { color: var(--app-text); font-size: 9px; }
+.monitor-store-link small { display: block; font-size: 7px; }
+.monitor-store-link > svg:last-child { display: block; color: var(--app-accent-bright); }
+
+.monitor-store-link:hover {
+  border-color: var(--app-accent-border);
+  background: rgba(155,140,255,.06);
+  box-shadow: none;
+}
+
+@media (max-width: 639px) {
+  .monitor-refresh,
+  .monitor-store-link {
+    width: 100%;
+    min-width: 0;
+    height: 44px;
+    min-height: 44px;
+    gap: 5px;
+    border-radius: 12px;
+    padding: 5px;
+  }
+
+  .monitor-refresh { border-radius: 999px; }
   .monitor-store-link > svg:last-child { display: none; }
 }
