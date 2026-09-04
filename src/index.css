@@ -7261,57 +7261,51 @@
 .monitor-action-card {
   position: relative;
   display: grid;
-  height: 54px;
-  min-height: 54px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  height: 40px;
+  min-height: 40px;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  gap: 7px;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 15px;
-  padding: 8px 10px;
-  background: linear-gradient(135deg, rgba(26,27,44,.94), rgba(14,15,27,.94));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.055), 0 12px 30px rgba(0,0,0,.16);
-  backdrop-filter: blur(14px);
+  border: 1px solid rgba(155,140,255,.14);
+  border-radius: 11px;
+  padding: 6px 8px;
+  background: rgba(17,18,31,.84);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+  backdrop-filter: blur(10px);
   transition: border-color .18s ease, background .18s ease, transform .18s ease, box-shadow .18s ease;
 }
 
 .monitor-action-card::before {
-  position: absolute;
-  top: 0;
-  right: 14px;
-  left: 14px;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
-  content: "";
+  display: none;
 }
 
 .monitor-action-icon {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 26px;
+  height: 26px;
   place-items: center;
   border: 1px solid;
-  border-radius: 11px;
+  border-radius: 8px;
 }
 
 .monitor-action-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   padding: 0;
 }
 
 .monitor-action-copy {
   display: grid !important;
   min-width: 0;
-  gap: 4px !important;
+  gap: 3px !important;
   margin: 0 !important;
 }
 
 .monitor-action-copy strong {
   overflow: hidden;
   color: var(--app-text) !important;
-  font-size: 10px !important;
+  font-size: 9px !important;
   font-weight: 800;
   line-height: 1;
   text-overflow: ellipsis;
@@ -7322,7 +7316,7 @@
   display: block !important;
   overflow: hidden;
   color: var(--app-muted);
-  font-size: 8px;
+  font-size: 7px;
   font-weight: 600;
   line-height: 1;
   text-overflow: ellipsis;
@@ -7330,38 +7324,38 @@
 }
 
 .monitor-refresh {
-  width: 188px;
-  min-width: 188px;
-  border-color: rgba(105,221,178,.16);
-  border-radius: 15px;
-  padding: 8px 10px;
-  background: linear-gradient(135deg, rgba(105,221,178,.075), rgba(20,22,35,.94) 58%, rgba(105,221,178,.025));
+  width: 154px;
+  min-width: 154px;
+  border-color: rgba(155,140,255,.14);
+  border-radius: 11px;
+  padding: 6px 8px;
+  background: rgba(17,18,31,.84);
 }
 
 .monitor-refresh-icon {
-  width: 34px;
-  height: 34px;
-  border-color: rgba(105,221,178,.22);
-  border-radius: 11px;
-  background: rgba(105,221,178,.09);
+  width: 26px;
+  height: 26px;
+  border-color: rgba(105,221,178,.16);
+  border-radius: 8px;
+  background: rgba(105,221,178,.055);
   color: var(--app-success);
 }
 
 .monitor-refresh .monitor-refresh-icon svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   animation: app-spin 7s linear infinite;
 }
 
 .monitor-action-badge {
-  min-width: 36px !important;
+  min-width: 30px !important;
   margin: 0 !important;
   border: 1px solid rgba(105,221,178,.14);
-  border-radius: 9px;
-  padding: 6px 7px !important;
-  background: rgba(105,221,178,.08) !important;
+  border-radius: 7px;
+  padding: 5px !important;
+  background: rgba(105,221,178,.055) !important;
   color: var(--app-success) !important;
-  font-size: 9px !important;
+  font-size: 8px !important;
   font-weight: 800 !important;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -7369,31 +7363,31 @@
 }
 
 .monitor-refresh.is-refreshing {
-  border-color: rgba(105,221,178,.34);
-  background: linear-gradient(135deg, rgba(105,221,178,.12), rgba(20,22,35,.96));
+  border-color: rgba(105,221,178,.24);
+  background: rgba(18,24,32,.9);
 }
 
 .monitor-refresh.is-refreshing .monitor-refresh-icon svg { animation-duration: .8s; }
 
 .monitor-store-link {
-  width: 232px;
-  min-width: 232px;
-  min-height: 54px;
-  gap: 10px;
-  border-color: rgba(244,190,78,.16);
-  border-radius: 15px;
-  padding: 8px 10px;
-  background: linear-gradient(135deg, rgba(244,190,78,.075), rgba(20,22,35,.94) 58%, rgba(244,190,78,.025));
+  width: 204px;
+  min-width: 204px;
+  min-height: 40px;
+  gap: 7px;
+  border-color: rgba(155,140,255,.14);
+  border-radius: 11px;
+  padding: 6px 8px;
+  background: rgba(17,18,31,.84);
   color: #f4be4e;
 }
 
 .monitor-store-icon {
-  width: 34px !important;
-  height: 34px !important;
+  width: 26px !important;
+  height: 26px !important;
   padding: 0 !important;
-  border-color: rgba(244,190,78,.22) !important;
-  border-radius: 11px !important;
-  background: rgba(244,190,78,.09) !important;
+  border-color: rgba(244,190,78,.16) !important;
+  border-radius: 8px !important;
+  background: rgba(244,190,78,.055) !important;
   color: #f4be4e !important;
 }
 
@@ -7405,9 +7399,9 @@
 
 .monitor-store-link:hover {
   transform: translateY(-1px);
-  border-color: rgba(244,190,78,.34);
-  background: linear-gradient(135deg, rgba(244,190,78,.11), rgba(20,22,35,.96));
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), 0 15px 34px rgba(0,0,0,.2);
+  border-color: rgba(155,140,255,.28);
+  background: rgba(22,22,39,.92);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
 }
 
 @media (max-width: 639px) {
@@ -7437,26 +7431,26 @@
   .monitor-store-link {
     width: 100%;
     min-width: 0;
-    height: 52px;
-    min-height: 52px;
+    height: 40px;
+    min-height: 40px;
     grid-column: auto;
     grid-row: auto;
-    grid-template-columns: 32px minmax(0, 1fr) auto;
-    gap: 7px;
-    border-radius: 14px;
-    padding: 7px 8px;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    gap: 6px;
+    border-radius: 11px;
+    padding: 6px 7px;
   }
 
   .monitor-action-icon,
   .monitor-refresh-icon,
   .monitor-store-icon {
-    width: 32px !important;
-    height: 32px !important;
-    border-radius: 10px !important;
+    width: 26px !important;
+    height: 26px !important;
+    border-radius: 8px !important;
   }
 
-  .monitor-action-copy strong { font-size: 9px !important; }
-  .monitor-action-copy small { font-size: 7px; }
-  .monitor-action-badge { min-width: 31px !important; padding: 5px !important; font-size: 8px !important; }
+  .monitor-action-copy strong { font-size: 8px !important; }
+  .monitor-action-copy small { font-size: 6.5px; }
+  .monitor-action-badge { min-width: 28px !important; padding: 4px !important; font-size: 7px !important; }
   .monitor-store-link > svg:last-child { display: none; }
 }
