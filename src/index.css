@@ -7378,10 +7378,33 @@
 }
 
 .monitor-store-action {
-  height: 36px;
+  height: 42px;
   border-radius: 9px;
-  padding-inline: 13px;
+  padding-inline: 11px;
   color: var(--app-text-secondary);
+}
+
+.monitor-store-action > span {
+  display: grid;
+  gap: 2px;
+  text-align: left;
+}
+
+.monitor-store-action strong {
+  color: var(--app-text);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.monitor-store-action small {
+  color: var(--app-muted);
+  font-size: 8px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.monitor-store-action .monitor-store-star {
+  color: #f4be4e;
 }
 
 .monitor-identity {
@@ -7389,7 +7412,7 @@
 }
 
 .monitor-server-copy h1 {
-  margin-top: 6px;
+  margin-top: 0;
   font-size: clamp(1.15rem, 2vw, 1.35rem);
   font-weight: 750;
   letter-spacing: -.025em;
@@ -7487,6 +7510,10 @@
 
   .monitor-store-action {
     width: auto;
+  }
+
+  .monitor-store-action small {
+    display: none;
   }
 
   .monitor-order-context {

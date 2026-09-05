@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, RotateCcw, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -591,7 +591,12 @@ export default function PublicOrderPage() {
             </span>
             <Button asChild variant="secondary" size="sm" className="monitor-store-action">
               <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-                Visit PulcipStore <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                <Star className="monitor-store-star h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
+                <span>
+                  <strong>Eldorado Top Seller</strong>
+                  <small>30,000+ sales · 99.7% positive</small>
+                </span>
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
             </Button>
           </div>
@@ -601,7 +606,6 @@ export default function PublicOrderPage() {
           <div className="monitor-identity">
             <span className="monitor-order-mark" aria-hidden="true"><Activity className="h-4 w-4" /></span>
             <div className="monitor-server-copy">
-              <div className="public-live-label"><span aria-hidden="true" /> Live order</div>
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
               <div className="monitor-order-labels">
                 <span className="lookup-status" data-status={normalizedStatus.toLowerCase() || "pending"}>
