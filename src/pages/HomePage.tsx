@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  FileJson,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -29,8 +30,9 @@ import {
   Timer,
   TriangleAlert,
   Trash2,
-  Upload,
+  UploadCloud,
   Users,
+  X,
 } from "lucide-react";
 import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
@@ -542,6 +544,7 @@ export default function HomePage() {
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
+  const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
@@ -958,6 +961,7 @@ export default function HomePage() {
       const result = await importCommunityOAuthStock(sanitizedRecords);
       await refreshCommunityStatus();
       setCommunityImportFile(null);
+      if (communityImportInputRef.current) communityImportInputRef.current.value = "";
       const summary = `${result.imported} imported, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) notifyError(summary);
       else notifySuccess(summary);
@@ -1620,8 +1624,71 @@ export default function HomePage() {
       </div>
 
       {!communityStockConfigured ? (
-        <p className="community-admin-note">Add the Discord application, bot, callback address and target server settings to activate Members Stock.</p>
+        <p className="community-admin-note">Add the Discord application, bot and target server settings to activate Members Stock.</p>
       ) : null}
+
+      <form onSubmit={handleImportCommunityStock} className="community-stock-import">
+        <div className="community-stock-import-heading">
+          <span className="community-stock-import-icon" aria-hidden="true"><FileJson className="h-4 w-4" /></span>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3>Import OAuth stock</h3>
+              <span className="community-stock-import-format">JSON · max 2 MB</span>
+            </div>
+            <p>Import users authorized for this Discord application. Only user ID and refresh token fields are processed.</p>
+          </div>
+        </div>
+
+        <input
+          ref={communityImportInputRef}
+          id="community-oauth-stock-file"
+          className="sr-only"
+          type="file"
+          accept=".json,application/json"
+          disabled={!communityStockConfigured || importingCommunityStock}
+          onChange={(event) => setCommunityImportFile(event.target.files?.[0] ?? null)}
+        />
+
+        {communityImportFile ? (
+          <div className="community-stock-import-selected">
+            <span className="community-stock-import-file-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>
+            <span className="min-w-0 flex-1">
+              <strong>{communityImportFile.name}</strong>
+              <small>{Math.max(0.1, communityImportFile.size / 1024).toFixed(1)} KB · Ready to import</small>
+            </span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              title="Remove selected file"
+              aria-label="Remove selected file"
+              disabled={importingCommunityStock}
+              onClick={() => {
+                setCommunityImportFile(null);
+                if (communityImportInputRef.current) communityImportInputRef.current.value = "";
+              }}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <label
+            htmlFor="community-oauth-stock-file"
+            className={`community-stock-import-dropzone ${!communityStockConfigured || importingCommunityStock ? "is-disabled" : ""}`}
+          >
+            <UploadCloud className="h-5 w-5" aria-hidden="true" />
+            <span><strong>Choose OAuth JSON</strong><small>Select the export file from your computer</small></span>
+          </label>
+        )}
+
+        <div className="community-stock-import-actions">
+          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account and access tokens in the file are ignored.</p>
+          <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
+            {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {importingCommunityStock ? "Validating & importing..." : "Import stock"}
+          </Button>
+        </div>
+      </form>
 
       {communityStatus?.recent?.length ? (
         <div className="community-recent-list">
@@ -2524,27 +2591,6 @@ export default function HomePage() {
                   </div>
                 </form>
 
-                <form onSubmit={handleImportCommunityStock} className="mt-6 grid gap-4 border-t border-[var(--app-border)] pt-6">
-                  <div>
-                    <p className={fieldLabelClass}>Import OAuth stock</p>
-                    <p className="app-copy mt-2 max-w-2xl text-sm leading-6">
-                      Migrate OAuth records issued to this same Discord application. Only user_id and refresh_token are used; account tokens are ignored.
-                    </p>
-                  </div>
-                  <Input
-                    type="file"
-                    accept=".json,application/json"
-                    disabled={!communityConfig?.configured || importingCommunityStock}
-                    onChange={(event) => setCommunityImportFile(event.target.files?.[0] ?? null)}
-                  />
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Button type="submit" variant="secondary" disabled={!communityConfig?.configured || !communityImportFile || importingCommunityStock}>
-                      {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                      {importingCommunityStock ? "Validating & importing..." : "Import OAuth JSON"}
-                    </Button>
-                    {communityImportFile ? <span className="text-sm text-[var(--app-muted)]">{communityImportFile.name}</span> : null}
-                  </div>
-                </form>
               </section>
 
               <section className={`${shell} p-5 sm:p-6`}>
