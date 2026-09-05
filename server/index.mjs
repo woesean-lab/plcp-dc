@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import path from "node:path";
+import { readFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -37,8 +38,13 @@ const discordApiBase = "https://discord.com/api/v10";
 const s2toolsApiBase = String(process.env.S2TOOLS_API_BASE_URL ?? "https://api3.s2tools.uk").replace(/\/$/, "");
 const s2toolsBotId = String(process.env.S2TOOLS_BOT_ID ?? "").trim();
 const s2toolsDiscordBotToken = String(process.env.S2TOOLS_DISCORD_BOT_TOKEN ?? "").trim();
+const defaultS2ToolsKeysFile = process.env.USERPROFILE
+  ? path.join(process.env.USERPROFILE, "Desktop", "OAuth-AIO V1.2.3", "Data", "keys.json")
+  : "";
+const s2toolsKeysFile = String(process.env.S2TOOLS_KEYS_FILE ?? defaultS2ToolsKeysFile).trim();
 const s2toolsOrders = new Map();
 const s2toolsPendingOrders = new Map();
+const s2toolsInvoiceWatchers = new Map();
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -3064,6 +3070,47 @@ function connectS2ToolsOrderStatus(order, requestId) {
   statusSocket.addEventListener("close", () => { order.statusSocketConnected = false; });
 }
 
+function watchS2ToolsInvoiceId(order, redeemKey) {
+  if (!s2toolsKeysFile || s2toolsInvoiceWatchers.has(order.uniqid)) {
+    if (!s2toolsKeysFile) order.liveProgressAvailable = false;
+    return;
+  }
+  const startedAt = Date.now();
+  let reading = false;
+  const timer = setInterval(async () => {
+    if (reading) return;
+    if (Date.now() - startedAt > 10 * 60 * 1000 || ["COMPLETED", "ERROR", "INVALID", "TERMINATED"].includes(String(order.status).toUpperCase())) {
+      clearInterval(timer);
+      s2toolsInvoiceWatchers.delete(order.uniqid);
+      return;
+    }
+    reading = true;
+    try {
+      const keys = JSON.parse(await readFile(s2toolsKeysFile, "utf8"));
+      const keyRecord = Array.isArray(keys) ? keys.find((item) => item && item.id === redeemKey) : null;
+      const requestId = typeof keyRecord?.linked_invoice_id === "string" ? keyRecord.linked_invoice_id.trim() : "";
+      if (requestId) {
+        order.externalRequestId = requestId;
+        order.liveProgressAvailable = true;
+        order.vendorStage = "live_tracking";
+        order.details = "Live S2Tools delivery tracking connected.";
+        order.updatedAt = new Date().toISOString();
+        connectS2ToolsOrderStatus(order, requestId);
+        clearInterval(timer);
+        s2toolsInvoiceWatchers.delete(order.uniqid);
+      }
+    } catch (error) {
+      order.liveProgressAvailable = false;
+      order.liveProgressError = error instanceof Error ? error.message : "S2Tools key file could not be read.";
+      order.details = `Delivery is running, but live tracking cannot read keys.json: ${order.liveProgressError}`;
+      order.updatedAt = new Date().toISOString();
+    } finally {
+      reading = false;
+    }
+  }, 500);
+  s2toolsInvoiceWatchers.set(order.uniqid, timer);
+}
+
 async function runS2ToolsOrder(order, redeemKey, serverTarget) {
   if (order.delay > 0) await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
   order.status = "PROCESS";
@@ -3092,6 +3139,7 @@ async function runS2ToolsOrder(order, redeemKey, serverTarget) {
         order.vendorStage = "submitted";
         order.details = "Order submitted to S2Tools; waiting for the first response.";
         order.updatedAt = new Date().toISOString();
+        watchS2ToolsInvoiceId(order, redeemKey);
         socket.send(JSON.stringify({ event: "send_order", key: redeemKey, server_id: serverTarget, boost_method: "OAuth", bot_id: s2toolsBotId, system: "oaio", session_id: message.session_id, display_name: "", pronoun: "", bio: "", avatar: "", banner: "" }));
       } else if (message.event === "order_response") {
         clearTimeout(responseTimeout);
