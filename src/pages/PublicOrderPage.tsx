@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, RotateCcw, ShieldCheck, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -585,19 +585,15 @@ export default function PublicOrderPage() {
           </div>
 
           <div className="monitor-topbar-actions">
-            <div className={`monitor-refresh ${autoRefreshing ? "is-refreshing" : ""}`} aria-live="polite">
-              <span className="monitor-refresh-icon" aria-hidden="true"><RefreshCw className="h-3.5 w-3.5" /></span>
-              <span className="monitor-sync-copy">
-                <strong>{autoRefreshing ? "Syncing" : "Live Sync"}</strong>
-                <small>{autoRefreshing ? "Updating order" : "Auto refresh"}</small>
-              </span>
-              <span className="monitor-sync-count">{autoRefreshing ? "…" : `${secondsUntilRefresh}s`}</span>
-            </div>
-            <a className="monitor-store-link" href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-              <Star className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
-              <span><strong>Eldorado Top Seller</strong><small>30,000+ sales · 99.7% positive</small></span>
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-            </a>
+            <span className="lookup-live-refresh monitor-live-refresh" data-active={!isTerminalStatus} aria-live="polite">
+              <span aria-hidden="true" />
+              {isTerminalStatus ? "Refresh complete" : autoRefreshing ? "Updating order" : `Live refresh · ${secondsUntilRefresh}s`}
+            </span>
+            <Button asChild variant="secondary" size="sm" className="monitor-store-action">
+              <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                Visit PulcipStore <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            </Button>
           </div>
         </header>
 
@@ -607,25 +603,27 @@ export default function PublicOrderPage() {
             <div className="monitor-server-copy">
               <div className="public-live-label"><span aria-hidden="true" /> Live order</div>
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
+              <div className="monitor-order-labels">
+                <span className="lookup-status" data-status={normalizedStatus.toLowerCase() || "pending"}>
+                  <small>Order status</small>
+                  {isInitialLoading ? <Skeleton className="h-3 w-16" /> : <strong>{statusLabel}</strong>}
+                </span>
+                <span className="lookup-service-name">
+                  <small>Service</small>
+                  {isInitialLoading ? <Skeleton className="h-3 w-14" /> : <strong>{serviceName}</strong>}
+                </span>
+              </div>
             </div>
-            <div className={`monitor-order-facts ${isBoostOrder ? "has-duration" : ""}`}>
-              <div>
-                <small>Status</small>
-                {isInitialLoading ? <Skeleton className="h-4 w-20" /> : <strong className="monitor-order-state" data-status={normalizedStatus.toLowerCase() || "pending"}>{statusLabel}</strong>}
-              </div>
-              <div>
-                <small>Service</small>
-                {isInitialLoading ? <Skeleton className="h-4 w-16" /> : <strong>{serviceName}</strong>}
-              </div>
+            <div className="monitor-order-context">
               {isBoostOrder ? (
                 <div>
-                  <small>Duration</small>
-                  <strong><Timer className="h-3.5 w-3.5" /> {boostDuration}</strong>
+                  <Timer className="h-4 w-4" aria-hidden="true" />
+                  <span><small>Duration</small><strong>{boostDuration}</strong></span>
                 </div>
               ) : null}
               <div>
-                <small>Created</small>
-                <strong><CalendarDays className="h-3.5 w-3.5" /> {isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong>
+                <CalendarDays className="h-4 w-4" aria-hidden="true" />
+                <span><small>Created</small><strong>{isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong></span>
               </div>
             </div>
           </div>

@@ -7371,3 +7371,133 @@
   .monitor-sync-copy > small { font-size: 6.5px; }
   .monitor-sync-count { min-width: 27px; font-size: 7px !important; }
 }
+
+/* Monitor header — share the same compact workspace language as Orders. */
+.monitor-live-refresh {
+  flex: 0 0 auto;
+}
+
+.monitor-store-action {
+  height: 36px;
+  border-radius: 9px;
+  padding-inline: 13px;
+  color: var(--app-text-secondary);
+}
+
+.monitor-identity {
+  grid-template-columns: auto minmax(220px, 1fr) auto;
+}
+
+.monitor-server-copy h1 {
+  margin-top: 6px;
+  font-size: clamp(1.15rem, 2vw, 1.35rem);
+  font-weight: 750;
+  letter-spacing: -.025em;
+}
+
+.monitor-order-labels {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.monitor-order-labels .lookup-status,
+.monitor-order-labels .lookup-service-name {
+  min-height: 36px;
+}
+
+.monitor-order-labels .lookup-service-name {
+  grid-template-columns: 1fr;
+}
+
+.monitor-order-context {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  border-left: 1px solid var(--app-divider);
+  padding-left: 22px;
+}
+
+.monitor-order-context > div {
+  display: flex;
+  min-width: 112px;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 17px;
+}
+
+.monitor-order-context > div + div {
+  border-left: 1px solid var(--app-divider);
+}
+
+.monitor-order-context > div > svg {
+  flex: 0 0 auto;
+  color: var(--app-muted);
+}
+
+.monitor-order-context > div > span {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.monitor-order-context small {
+  color: var(--app-subtle);
+  font-size: 7px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.monitor-order-context strong {
+  overflow: hidden;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 899px) {
+  .monitor-order-context {
+    grid-column: 1 / -1;
+    width: 100%;
+    border-top: 1px solid var(--app-divider);
+    border-left: 0;
+    padding-top: 12px;
+    padding-left: 0;
+  }
+
+  .monitor-order-context > div:first-child {
+    padding-left: 0;
+  }
+}
+
+@media (max-width: 639px) {
+  .monitor-topbar-actions {
+    align-items: center;
+  }
+
+  .monitor-live-refresh {
+    width: auto;
+  }
+
+  .monitor-store-action {
+    width: auto;
+  }
+
+  .monitor-order-context {
+    align-items: stretch;
+  }
+
+  .monitor-order-context > div {
+    min-width: 0;
+    flex: 1 1 50%;
+    padding-inline: 12px;
+  }
+}
