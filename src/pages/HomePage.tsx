@@ -137,7 +137,6 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
   clientSecret: "",
   botToken: "",
-  redirectUri: "",
   guildId: ""
 };
 
@@ -899,7 +898,6 @@ export default function HomePage() {
         clientId: config.clientId,
         clientSecret: "",
         botToken: "",
-        redirectUri: config.redirectUri,
         guildId: config.guildId
       });
     } catch (error) {
@@ -967,15 +965,6 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "OAuth stock could not be imported.");
     } finally {
       setImportingCommunityStock(false);
-    }
-  }
-
-  async function copyCommunityJoinLink() {
-    try {
-      await navigator.clipboard.writeText(`${window.location.origin}/join`);
-      notifySuccess("Community join link copied.");
-    } catch {
-      notifyError("Community join link could not be copied.");
     }
   }
 
@@ -1666,18 +1655,10 @@ export default function HomePage() {
           })}
         </div>
       ) : communityStatus?.configured ? (
-        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members in stock yet</strong><span>Share the authorization link to build your Members Stock.</span></div>
+        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members in stock yet</strong><span>Import an OAuth JSON file to build your Members Stock.</span></div>
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" disabled={!communityStockConfigured} onClick={() => void copyCommunityJoinLink()}>
-          <Copy className="h-4 w-4" /> Copy authorization link
-        </Button>
-        <Button asChild type="button" variant="secondary" disabled={!communityStockConfigured}>
-          {communityStockConfigured ? (
-            <a href="/join" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open authorization page</a>
-          ) : <span><ExternalLink className="h-4 w-4" /> Open authorization page</span>}
-        </Button>
         <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void syncCommunityStatus()}>
           <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
         </Button>
@@ -2517,11 +2498,6 @@ export default function HomePage() {
                   </label>
 
                   <label className="grid gap-2">
-                    <span className={fieldLabelClass}>OAuth callback address</span>
-                    <Input value={communityConfigDraft.redirectUri} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, redirectUri: event.target.value }))} placeholder={`${window.location.origin}/api/community/oauth/callback`} />
-                  </label>
-
-                  <label className="grid gap-2">
                     <span className={fieldLabelClass}>Members Stock server ID</span>
                     <Input value={communityConfigDraft.guildId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, guildId: event.target.value }))} placeholder="Required when the bot is in multiple servers" inputMode="numeric" />
                   </label>
@@ -2538,7 +2514,7 @@ export default function HomePage() {
                   </div>
 
                   <div className="flex flex-wrap gap-3 pt-1">
-                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || !communityConfigDraft.redirectUri.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
+                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
                       {savingCommunityConfig ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       {savingCommunityConfig ? "Verifying..." : communityConfig?.configured ? "Update Members bot" : "Verify & save"}
                     </Button>

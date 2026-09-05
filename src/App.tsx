@@ -8,7 +8,6 @@ import BrandPage from "./pages/BrandPage";
 import LandingPage from "./pages/LandingPage";
 import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
-import CommunityJoinPage from "./pages/CommunityJoinPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
 
@@ -194,7 +193,6 @@ export default function App() {
         <Route path="/monitor" element={<PublicOrderPage />} />
         <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
         <Route path="/monitor/*" element={<PublicOrderPage />} />
-        <Route path="/join" element={<CommunityJoinPage />} />
         <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
         <Route path="*" element={<ProtectedGate />} />
       </Routes>

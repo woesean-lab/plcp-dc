@@ -44,7 +44,6 @@ export type CommunityConfig = {
   configured: boolean;
   stored: boolean;
   clientId: string;
-  redirectUri: string;
   guildId: string;
   hasClientSecret: boolean;
   hasBotToken: boolean;
@@ -55,7 +54,6 @@ export type CommunityConfigInput = {
   clientId: string;
   clientSecret: string;
   botToken: string;
-  redirectUri: string;
   guildId: string;
 };
 
@@ -71,10 +69,6 @@ async function parseResponse<T>(response: Response) {
   const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(payload.message ?? `Request failed with ${response.status}`);
   return payload;
-}
-
-export function getPublicCommunityStatus() {
-  return fetch("/api/community/public", { cache: "no-store" }).then(parseResponse<CommunityJoinSummary>);
 }
 
 export function getCommunityAdminStatus() {

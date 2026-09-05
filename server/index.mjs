@@ -33,14 +33,12 @@ const dcordRetryBaseMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RET
 const dcordRetryMaxMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_MAX_MS ?? "600000", 10) || 600_000, dcordRetryBaseMs), 3_600_000);
 const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCORD_MAX_RETRY_ATTEMPTS ?? "12", 10) || 12, 1), 100);
 const discordApiBase = "https://discord.com/api/v10";
-const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
 const publicCommunityReplaceCooldownMs = 60 * 1000;
 const publicCommunityReplaceCooldowns = new Map();
-const communityOauthStartCooldowns = new Map();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 let dcordCircuitOpenUntil = 0;
@@ -148,28 +146,15 @@ function normalizeCommunityOAuthConfig(value = {}) {
   const clientId = String(value.clientId ?? "").trim();
   const clientSecret = String(value.clientSecret ?? "").trim();
   const botToken = String(value.botToken ?? "").trim();
-  const redirectUri = String(value.redirectUri ?? "").trim();
   const guildId = String(value.guildId ?? "").trim();
   const missing = [];
 
   if (!clientId) missing.push("DISCORD_OAUTH_CLIENT_ID");
   if (!clientSecret) missing.push("DISCORD_OAUTH_CLIENT_SECRET");
   if (!botToken) missing.push("DISCORD_BOT_TOKEN");
-  if (!redirectUri) missing.push("DISCORD_OAUTH_REDIRECT_URI");
   if (!isDiscordGuildId(guildId)) missing.push("DISCORD_TARGET_GUILD_ID");
 
-  if (redirectUri) {
-    try {
-      const url = new URL(redirectUri);
-      if (url.protocol !== "https:" && !["localhost", "127.0.0.1"].includes(url.hostname)) {
-        missing.push("DISCORD_OAUTH_REDIRECT_URI_HTTPS");
-      }
-    } catch {
-      missing.push("DISCORD_OAUTH_REDIRECT_URI_VALID");
-    }
-  }
-
-  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, redirectUri, guildId };
+  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, guildId };
 }
 
 async function getCommunityOAuthConfig() {
@@ -187,7 +172,6 @@ async function getCommunityOAuthConfig() {
     clientId: process.env.DISCORD_OAUTH_CLIENT_ID,
     clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET,
     botToken: process.env.DISCORD_BOT_TOKEN,
-    redirectUri: process.env.DISCORD_OAUTH_REDIRECT_URI,
     guildId: process.env.DISCORD_TARGET_GUILD_ID
   });
 }
@@ -2073,14 +2057,7 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS community_oauth_states (
-      state_hash TEXT PRIMARY KEY,
-      expires_at TIMESTAMPTZ NOT NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    )
-  `);
-  await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_states_expires_at_idx ON community_oauth_states (expires_at)");
+  await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_oauth_joins (
       discord_user_id TEXT NOT NULL,
@@ -2110,7 +2087,6 @@ async function initializeDatabase() {
     WHERE payload->>'provider' = 'community' AND payload->>'status' = 'PROCESS'
   `);
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
-  await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
   await recoverBlockedDcordJobOrders();
   await recoverPendingDcordOrders();
 }
@@ -2154,7 +2130,6 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       configured: config.configured,
       stored: Boolean(storedResult.rowCount),
       clientId: config.clientId,
-      redirectUri: config.redirectUri,
       guildId: config.guildId,
       hasClientSecret: Boolean(config.clientSecret),
       hasBotToken: Boolean(config.botToken)
@@ -2172,7 +2147,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       clientId: req.body?.clientId || current.clientId,
       clientSecret: req.body?.clientSecret || current.clientSecret,
       botToken: req.body?.botToken || current.botToken,
-      redirectUri: req.body?.redirectUri || current.redirectUri,
       guildId: requestedGuildId
     });
     if (candidateWithoutDetectedGuild.missing.some((item) => item !== "DISCORD_TARGET_GUILD_ID")) {
@@ -2221,7 +2195,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       clientId: candidate.clientId,
       clientSecret: candidate.clientSecret,
       botToken: candidate.botToken,
-      redirectUri: candidate.redirectUri,
       guildId: candidate.guildId
     }));
     communityGuildCache = null;
@@ -2230,7 +2203,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       configured: true,
       stored: true,
       clientId: candidate.clientId,
-      redirectUri: candidate.redirectUri,
       guildId: candidate.guildId,
       hasClientSecret: true,
       hasBotToken: true,
@@ -2333,129 +2305,6 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     res.json(result);
   } catch (error) {
     next(error);
-  }
-});
-
-app.get("/api/community/public", async (_req, res, next) => {
-  try {
-    const config = await getCommunityOAuthConfig();
-    if (!config.configured) {
-      return res.set("Cache-Control", "no-store").json({
-        configured: false,
-        joined: 0,
-        authorized: 0
-      });
-    }
-
-    const [bot, guild, summary] = await Promise.all([
-      loadCommunityBotSafe(config),
-      loadCommunityGuildSafe(config),
-      loadCommunityJoinSummary(config)
-    ]);
-    res.set("Cache-Control", "no-store").json({ configured: true, bot, guild, ...summary });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/community/oauth/start", async (req, res, next) => {
-  try {
-    const config = await getCommunityOAuthConfig();
-    if (!config.configured) return res.redirect(303, "/join?result=unavailable");
-
-    const cooldownKey = req.ip;
-    const cooldownUntil = communityOauthStartCooldowns.get(cooldownKey) ?? 0;
-    if (cooldownUntil > Date.now()) return res.redirect(303, "/join?result=wait");
-
-    const state = crypto.randomBytes(32).toString("base64url");
-    await pool.query("DELETE FROM community_oauth_states WHERE expires_at <= NOW()");
-    await pool.query(
-      "INSERT INTO community_oauth_states (state_hash, expires_at) VALUES ($1, $2)",
-      [hashToken(state), new Date(Date.now() + communityOauthStateDurationMs)]
-    );
-    communityOauthStartCooldowns.set(cooldownKey, Date.now() + 2_000);
-
-    const authorizeUrl = new URL("https://discord.com/oauth2/authorize");
-    authorizeUrl.searchParams.set("client_id", config.clientId);
-    authorizeUrl.searchParams.set("response_type", "code");
-    authorizeUrl.searchParams.set("redirect_uri", config.redirectUri);
-    authorizeUrl.searchParams.set("scope", "identify guilds.join");
-    authorizeUrl.searchParams.set("state", state);
-    authorizeUrl.searchParams.set("prompt", "consent");
-    res.redirect(303, authorizeUrl.toString());
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get("/api/community/oauth/callback", async (req, res) => {
-  const redirectWithResult = (result) => res.redirect(303, `/join?result=${encodeURIComponent(result)}`);
-  try {
-    const config = await getCommunityOAuthConfig();
-    if (!config.configured) return redirectWithResult("unavailable");
-    if (req.query.error) return redirectWithResult("cancelled");
-
-    const code = String(req.query.code ?? "").trim();
-    const state = String(req.query.state ?? "").trim();
-    if (!code || !state || code.length > 2048 || state.length > 256) return redirectWithResult("invalid");
-
-    const consumedState = await pool.query(
-      "DELETE FROM community_oauth_states WHERE state_hash = $1 AND expires_at > NOW() RETURNING state_hash",
-      [hashToken(state)]
-    );
-    if (!consumedState.rowCount) return redirectWithResult("expired");
-
-    const tokenBody = new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: config.redirectUri
-    });
-    const tokenResult = await requestDiscord("oauth2/token", {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString("base64")}`,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: tokenBody
-    });
-    const accessToken = String(tokenResult.payload?.access_token ?? "").trim();
-    const refreshToken = String(tokenResult.payload?.refresh_token ?? "").trim();
-    const grantedScopes = String(tokenResult.payload?.scope ?? "").split(/\s+/).filter(Boolean);
-    if (!tokenResult.response.ok || !accessToken || !refreshToken || !grantedScopes.includes("guilds.join")) {
-      return redirectWithResult("authorization_failed");
-    }
-
-    const userResult = await requestDiscord("users/@me", {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    const userId = String(userResult.payload?.id ?? "").trim();
-    if (!userResult.response.ok || !isDiscordGuildId(userId)) return redirectWithResult("profile_failed");
-
-    const username = String(userResult.payload?.global_name ?? userResult.payload?.username ?? "Discord member").slice(0, 100);
-    const avatarHash = String(userResult.payload?.avatar ?? "").trim();
-    const avatarUrl = avatarHash
-      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(userId)}/${encodeURIComponent(avatarHash)}.png?size=128`
-      : null;
-    await pool.query(
-      `INSERT INTO community_oauth_joins
-        (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, details, authorized_at, joined_at)
-       VALUES ($1, $2, $3, $4, $5, 'authorized', NULL, NOW(), NULL)
-       ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
-         username = EXCLUDED.username,
-         avatar_url = EXCLUDED.avatar_url,
-         encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
-         status = CASE
-           WHEN community_oauth_joins.status IN ('joined', 'already_member') THEN community_oauth_joins.status
-           ELSE 'authorized'
-         END,
-         details = NULL,
-         authorized_at = NOW()`,
-      [userId, config.guildId, username, avatarUrl, encryptCredential(refreshToken)]
-    );
-    return redirectWithResult("authorized");
-  } catch (error) {
-    console.error("Community OAuth callback failed:", error instanceof Error ? error.message : error);
-    return redirectWithResult("error");
   }
 });
 
@@ -2661,7 +2510,6 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
           clientId: nextConfig.clientId,
           clientSecret: nextConfig.clientSecret,
           botToken: nextConfig.botToken,
-          redirectUri: nextConfig.redirectUri,
           guildId: nextConfig.guildId
         }))]
       );
