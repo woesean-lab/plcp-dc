@@ -1,5 +1,5 @@
 import type { BalanceResponse, BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
-import { isBoostService, isCommunityService } from "./services";
+import { isBoostService, isCommunityService, isS2ToolsService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
   let response: Response;
@@ -59,6 +59,11 @@ export async function getBalance() {
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
+  if (isS2ToolsService(payload.service)) {
+    return requestJson<CreateOrderResponse>("/api/s2tools/orders", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+    });
+  }
   if (isCommunityService(payload.service)) {
     return requestJson<CreateOrderResponse>("/api/community/orders", {
       method: "POST",
@@ -90,6 +95,8 @@ export async function getOrderStatus(uniqid: string, provider: OrderProvider = "
     ? "/api/dcord/boost-orders"
     : provider === "community"
       ? "/api/community/orders"
+      : provider === "s2tools"
+        ? "/api/s2tools/orders"
       : "/api/integration/orders";
   return requestJson<OrderStatusResponse>(`${prefix}/${encodeURIComponent(uniqid)}/status`);
 }
@@ -165,6 +172,9 @@ export function replaceCommunityMember(uniqid: string, resultIndex: number) {
 }
 
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
+  if (isS2ToolsService(service)) {
+    return requestJson<{ available: number; maximum: number }>(`/api/s2tools/availability?service=${encodeURIComponent(service)}`);
+  }
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(
       `/api/community/availability?invite=${encodeURIComponent(id)}`

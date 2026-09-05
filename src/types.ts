@@ -1,8 +1,9 @@
 export type MemberServiceType = "OAUTH-OFFLINE" | "OAUTH-ONLINE" | "OAUTH-PREMIUM" | "OAUTH-NFT";
 export type CommunityServiceType = "COMMUNITY-OFFLINE";
+export type S2ToolsServiceType = "S2TOOLS-ONLINE" | "S2TOOLS-OFFLINE" | "S2TOOLS-1MONTH" | "S2TOOLS-3MONTH";
 export type BoostServiceType = "DCORD-BOOSTS";
-export type ServiceType = MemberServiceType | CommunityServiceType | BoostServiceType;
-export type OrderProvider = "tokenu" | "community" | "dcord";
+export type ServiceType = MemberServiceType | CommunityServiceType | S2ToolsServiceType | BoostServiceType;
+export type OrderProvider = "tokenu" | "community" | "s2tools" | "dcord";
 export type BoostDuration = 1 | 3;
 
 export type OrderStatus =
@@ -24,6 +25,7 @@ export interface CreateOrderPayload {
   useProxy?: boolean;
   concurrency?: number;
   allowMembershipScreening?: boolean;
+  redeemKey?: string;
 }
 
 export interface CreateOrderResponse {

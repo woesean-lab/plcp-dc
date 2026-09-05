@@ -318,7 +318,7 @@ export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const providerParam = params.get("provider");
-  const provider = (providerParam === "dcord" || providerParam === "community" ? providerParam : "tokenu") as OrderProvider;
+  const provider = (["dcord", "community", "s2tools"].includes(providerParam ?? "") ? providerParam : "tokenu") as OrderProvider;
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
@@ -866,7 +866,7 @@ export default function OrderPage() {
               ) : null}
             </section>
 
-            {!terminal && !isInvitesPaused && !isDcordProvider ? (
+            {!terminal && !isInvitesPaused && !isDcordProvider && provider !== "s2tools" ? (
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>

@@ -46,7 +46,7 @@ import {
   type CommunityConfig
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
-import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
+import { isBoostService, isCommunityService, isS2ToolsService, SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
   checkDcordConnection,
@@ -79,7 +79,8 @@ const EMPTY_FORM = {
   billingCycle: 1,
   duration: 1 as const,
   useProxy: true,
-  concurrency: 7
+  concurrency: 7,
+  redeemKey: ""
 };
 
 function getBoostConcurrency(amount: number) {
@@ -602,7 +603,8 @@ export default function HomePage() {
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
-  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
+  const selectedIsS2Tools = isS2ToolsService(form.service);
+  const selectedApiConfigured = selectedIsS2Tools || (selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured);
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || (communityStatus?.ready ?? 0) > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
@@ -621,6 +623,7 @@ export default function HomePage() {
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
+  const s2toolsServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "s2tools");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
@@ -1251,7 +1254,7 @@ export default function HomePage() {
 
   function persistOrders(nextOrders: TrackedOrder[]) {
     setOrders(nextOrders);
-    void saveTrackedOrders(nextOrders).catch((error) => {
+    void saveTrackedOrders(nextOrders.filter((order) => order.provider !== "s2tools")).catch((error) => {
       notifyError(error instanceof Error ? error.message : "Orders could not be saved.");
     });
   }
@@ -1391,11 +1394,12 @@ export default function HomePage() {
     const targetId = String(payload.id ?? "").trim();
     const payloadIsBoost = isBoostService(payload.service);
     const payloadIsCommunity = isCommunityService(payload.service);
+    const payloadIsS2Tools = isS2ToolsService(payload.service);
     const serverInfo = await resolveDiscordGuildInfo(targetId);
     const serverId = serverInfo.guildId;
     const created = await createOrder({
       ...payload,
-      id: payloadIsBoost || payloadIsCommunity ? targetId : serverId
+      id: payloadIsBoost || payloadIsCommunity || payloadIsS2Tools ? targetId : serverId
     });
     const createdStock = (created as { stock?: BoostStock }).stock;
     if (createdStock) {
@@ -1404,7 +1408,7 @@ export default function HomePage() {
 
     const nextOrder: TrackedOrder = {
       uniqid: created.uniqid,
-      provider: payloadIsBoost ? "dcord" : payloadIsCommunity ? "community" : "tokenu",
+      provider: payloadIsBoost ? "dcord" : payloadIsCommunity ? "community" : payloadIsS2Tools ? "s2tools" : "tokenu",
       service: payload.service,
       serverId,
       serverName: serverInfo.guildName,
@@ -1425,7 +1429,7 @@ export default function HomePage() {
 
     persistOrders([nextOrder, ...orders]);
     notifySuccess(`Order created: ${created.uniqid}`);
-    const providerQuery = payloadIsBoost ? "&provider=dcord" : payloadIsCommunity ? "&provider=community" : "";
+    const providerQuery = payloadIsBoost ? "&provider=dcord" : payloadIsCommunity ? "&provider=community" : payloadIsS2Tools ? "&provider=s2tools" : "";
     navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
   }
 
@@ -1440,7 +1444,8 @@ export default function HomePage() {
       billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
       duration: selectedIsBoost ? form.duration : undefined,
       useProxy: selectedIsBoost ? true : undefined,
-      concurrency: selectedIsBoost ? form.concurrency : undefined
+      concurrency: selectedIsBoost ? form.concurrency : undefined,
+      redeemKey: selectedIsS2Tools ? form.redeemKey : undefined
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -1685,12 +1690,13 @@ export default function HomePage() {
                         <span className={fieldLabelClass}>Choose service</span>
                         <p className="service-selector-copy">Select members or boosts, then configure the order details.</p>
                       </div>
-                      <span className="service-selector-count">3 services</span>
+                      <span className="service-selector-count">4 services</span>
                     </div>
                     <div className="service-grid service-grid-compact choose-service-grid">
                       {[
                         { value: "members", title: "Members", description: "Tokenu member delivery", icon: KeyRound },
                         { value: "community", title: "Members 2", description: "Connected OAuth stock", icon: Users },
+                        { value: "s2tools", title: "Members 3", description: "S2Tools OAuth AIO", icon: Bot },
                         { value: "boosts", title: "Boosts", description: "Dcord join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
                       ].map((option, index) => {
                         const Icon = option.icon;
@@ -1698,7 +1704,7 @@ export default function HomePage() {
                           ? selectedIsBoost
                           : option.value === "community"
                             ? selectedIsCommunity
-                            : !selectedIsBoost && !selectedIsCommunity;
+                            : option.value === "s2tools" ? selectedIsS2Tools : !selectedIsBoost && !selectedIsCommunity && !selectedIsS2Tools;
 
                         return (
                           <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
@@ -1715,6 +1721,8 @@ export default function HomePage() {
                                     ? "DCORD-BOOSTS"
                                     : option.value === "community"
                                       ? "COMMUNITY-OFFLINE"
+                                      : option.value === "s2tools"
+                                        ? "S2TOOLS-ONLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
                                   amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.ready ?? 1)) : 100,
                                   concurrency: option.value === "boosts" ? 1 : current.concurrency
@@ -1745,7 +1753,7 @@ export default function HomePage() {
                     </div>
                   </fieldset>
 
-                  {!selectedIsBoost && !selectedIsCommunity ? (
+                  {!selectedIsBoost && !selectedIsCommunity && !selectedIsS2Tools ? (
                     <fieldset className="service-selector md:col-span-2">
                       <legend className="sr-only">Member service</legend>
                       <div className="service-selector-heading">
@@ -1792,6 +1800,13 @@ export default function HomePage() {
                           );
                         })}
                       </div>
+                    </fieldset>
+                  ) : null}
+
+                  {selectedIsS2Tools ? (
+                    <fieldset className="service-selector md:col-span-2">
+                      <div className="service-selector-heading"><div><span className={fieldLabelClass}>Members 3 mode</span><p className="service-selector-copy">Choose the S2Tools stock bucket.</p></div><span className="service-selector-count">{s2toolsServiceOptions.length} modes</span></div>
+                      <div className="service-grid">{s2toolsServiceOptions.map((option) => { const Icon=option.icon; return <label key={option.value} className={`service-option ${form.service===option.value?"is-selected":""}`}><input className="sr-only" type="radio" name="s2toolsService" checked={form.service===option.value} onChange={()=>setForm((current)=>({...current,service:option.value}))}/><span className="service-option-head"><span className="service-option-icon"><Icon className="h-5 w-5"/></span></span><span className="service-option-title">{option.title}</span><span className="service-option-description">{option.description}</span><span className="service-option-code">{option.value}</span></label>})}</div>
                     </fieldset>
                   ) : null}
 
@@ -2026,6 +2041,8 @@ export default function HomePage() {
                             />
                           </label>
 
+                          {selectedIsS2Tools ? <label className="boost-order-field"><span className="boost-order-label">Redeem key</span><input className="boost-number-input" type="password" value={form.redeemKey} onChange={(event)=>setForm((current)=>({...current,redeemKey:event.target.value}))} required autoComplete="off"/></label> : null}
+
                           {form.service === "OAUTH-ONLINE" ? (
                             <label className="boost-order-field">
                               <span className="boost-order-label">Billing cycle</span>
@@ -2139,7 +2156,7 @@ export default function HomePage() {
                         const ServiceIcon = serviceOption?.icon ?? KeyRound;
                         const progress = getOrderProgress(order);
                         const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-                        const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
+                        const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : order.provider === "s2tools" ? "&provider=s2tools" : "";
                         const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;

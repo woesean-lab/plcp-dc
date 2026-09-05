@@ -33,6 +33,9 @@ const dcordRetryBaseMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RET
 const dcordRetryMaxMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_MAX_MS ?? "600000", 10) || 600_000, dcordRetryBaseMs), 3_600_000);
 const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCORD_MAX_RETRY_ATTEMPTS ?? "12", 10) || 12, 1), 100);
 const discordApiBase = "https://discord.com/api/v10";
+const s2toolsApiBase = String(process.env.S2TOOLS_API_BASE_URL ?? "https://api3.s2tools.uk").replace(/\/$/, "");
+const s2toolsBotId = String(process.env.S2TOOLS_BOT_ID ?? "").trim();
+const s2toolsOrders = new Map();
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -2956,6 +2959,83 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
   }
 });
 
+function getS2ToolsStockValue(stock, service) {
+  return ({
+    "S2TOOLS-ONLINE": stock.online_tokens,
+    "S2TOOLS-OFFLINE": stock.offline_tokens,
+    "S2TOOLS-1MONTH": stock.one_month_tokens,
+    "S2TOOLS-3MONTH": stock.three_month_tokens
+  })[service] ?? 0;
+}
+
+async function fetchS2Tools(pathname) {
+  const response = await fetch(`${s2toolsApiBase}${pathname}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw Object.assign(new Error(payload?.message ?? `S2Tools returned ${response.status}.`), { statusCode: response.status });
+  return payload;
+}
+
+async function runS2ToolsOrder(order, redeemKey, serverTarget) {
+  if (order.delay > 0) await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
+  order.status = "PROCESS";
+  order.details = "Connecting to S2Tools delivery.";
+  const wsUrl = `${s2toolsApiBase.replace(/^http/, "ws")}/ws/guest`;
+  const socket = new WebSocket(wsUrl);
+  const timeout = setTimeout(() => socket.close(4000, "timeout"), 30 * 60 * 1000);
+  socket.addEventListener("message", (event) => {
+    try {
+      const message = JSON.parse(String(event.data));
+      if (message.event === "session_id") {
+        socket.send(JSON.stringify({ event: "send_order", key: redeemKey, server_id: serverTarget, boost_method: "OAuth", bot_id: s2toolsBotId, system: "oaio", session_id: message.session_id, display_name: "", pronoun: "", bio: "", avatar: "", banner: "" }));
+      } else if (message.event === "order_response") {
+        if (typeof message.message === "string") order.details = message.message;
+        if (Number.isFinite(Number(message.success))) order.added = Number(message.success);
+        order.externalRequestId = message.request_id ?? message.requestId ?? order.externalRequestId;
+        if (message.finished) {
+          order.status = Number(order.added) >= Number(order.amount) ? "COMPLETED" : "ERROR";
+          clearTimeout(timeout);
+          socket.close();
+        }
+      }
+    } catch { /* Ignore malformed vendor events. */ }
+  });
+  socket.addEventListener("error", () => { order.status = "ERROR"; order.details = "S2Tools connection failed."; clearTimeout(timeout); });
+  socket.addEventListener("close", () => { clearTimeout(timeout); if (order.status === "PROCESS") { order.status = "ERROR"; order.details = "S2Tools connection closed before completion."; } });
+}
+
+app.get("/api/s2tools/availability", requireSession, async (req, res, next) => {
+  try {
+    if (!s2toolsBotId) return res.status(503).json({ message: "S2TOOLS_BOT_ID is not configured." });
+    const stock = await fetchS2Tools(`/api/oauth-aio/stock/${encodeURIComponent(s2toolsBotId)}`);
+    const available = Number(getS2ToolsStockValue(stock, String(req.query.service ?? ""))) || 0;
+    res.set("Cache-Control", "no-store").json({ available, maximum: available, stock });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/s2tools/orders", requireSession, async (req, res, next) => {
+  try {
+    const service = String(req.body?.service ?? "");
+    const redeemKey = String(req.body?.redeemKey ?? "").trim();
+    const target = String(req.body?.id ?? "").trim();
+    const amount = Number.parseInt(req.body?.amount, 10);
+    const delay = Math.min(Math.max(Number.parseInt(req.body?.delay, 10) || 0, 0), 1200);
+    if (!s2toolsBotId) return res.status(503).json({ message: "S2TOOLS_BOT_ID is not configured." });
+    if (!/^S2TOOLS-(ONLINE|OFFLINE|1MONTH|3MONTH)$/.test(service) || !redeemKey || !target || !Number.isInteger(amount) || amount < 1) return res.status(400).json({ message: "Service, redeem key, target and amount are required." });
+    const info = await resolveDiscordInvite(target);
+    const uniqid = `s2_${crypto.randomUUID()}`;
+    const order = { uniqid, provider: "s2tools", service, serverId: info.guildId, serverName: info.guildName, serverInvite: target, serverMemberCount: info.approximateMemberCount, amount, added: 0, delay, status: delay ? "WAITING" : "NEW", details: delay ? `Delivery starts in ${delay} seconds.` : "Delivery queued.", createdAt: new Date().toISOString() };
+    s2toolsOrders.set(uniqid, order);
+    void runS2ToolsOrder(order, redeemKey, target).catch((error) => { order.status = "ERROR"; order.details = error instanceof Error ? error.message : "S2Tools order failed."; });
+    res.json({ uniqid });
+  } catch (error) { next(error); }
+});
+
+app.get("/api/s2tools/orders/:uniqid/status", async (req, res) => {
+  const order = s2toolsOrders.get(String(req.params.uniqid));
+  if (!order) return res.status(404).json({ message: "This local Members 3 order is no longer available." });
+  res.set("Cache-Control", "no-store").json(order);
+});
+
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -2963,6 +3043,8 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
 
+    const localS2ToolsOrder = s2toolsOrders.get(uniqid);
+    if (localS2ToolsOrder) return res.set("Cache-Control", "no-store").json(localS2ToolsOrder);
     const boostTokenStock = summarizeBoostTokenStock(await loadBoostTokenStock());
     const liveBoostStock = {
       oneMonth: boostTokenStock.oneMonth * 2,
@@ -3964,7 +4046,7 @@ app.post([`${legacyApiPrefix}/orders/:uniqid/delay`, `${integrationApiPrefix}/or
 app.get("/api/orders", requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query("SELECT payload FROM tracked_orders ORDER BY created_at DESC");
-    res.json(result.rows.map((row) => row.payload));
+    res.json([...s2toolsOrders.values(), ...result.rows.map((row) => row.payload)]);
   } catch (error) {
     next(error);
   }

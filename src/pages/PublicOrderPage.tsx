@@ -354,6 +354,7 @@ export default function PublicOrderPage() {
   const statusService = typeof status?.service === "string" ? status.service : undefined;
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
+  const isS2ToolsOrder = status?.provider === "s2tools";
   const isCommunityOrder = status?.provider === "community";
   const unitLabel = isBoostOrder ? "Boosts" : "Members";
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
@@ -531,7 +532,7 @@ export default function PublicOrderPage() {
     })();
   }, [communityReplaceQueue, communityReplacementRunning, replacingCommunityMemberIndex, uniqid]);
 
-  const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
+  const delayUpdatePanel = !isBoostOrder && !isS2ToolsOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
       <div className="monitor-panel-heading">
         <span className="monitor-panel-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
