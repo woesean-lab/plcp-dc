@@ -7417,8 +7417,6 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  border-left: 1px solid var(--app-divider);
-  padding-left: 22px;
 }
 
 .monitor-order-context > div {
