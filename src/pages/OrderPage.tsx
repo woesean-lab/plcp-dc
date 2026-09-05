@@ -318,7 +318,7 @@ export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const providerParam = params.get("provider");
-  const provider = (["dcord", "community", "s2tools"].includes(providerParam ?? "") ? providerParam : "tokenu") as OrderProvider;
+  const provider = (["dcord", "community"].includes(providerParam ?? "") ? providerParam : "tokenu") as OrderProvider;
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
@@ -336,7 +336,6 @@ export default function OrderPage() {
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
   const isCommunityProvider = provider === "community";
-  const isS2ToolsProvider = provider === "s2tools";
 
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
@@ -835,7 +834,7 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <p className={labelClass}>{isWaitingForBot ? "Action required" : "Order details"}</p>
                 {isWaitingForBot ? (
-                  <p>{isS2ToolsProvider ? "Add the Members 3 bot to this server to start delivery." : <>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</>}</p>
+                  <p>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</p>
                 ) : (
                   <p>{result.error ?? getPlainDetails(result.details)}</p>
                 )}
@@ -867,7 +866,7 @@ export default function OrderPage() {
               ) : null}
             </section>
 
-            {!terminal && !isInvitesPaused && !isDcordProvider && provider !== "s2tools" ? (
+            {!terminal && !isInvitesPaused && !isDcordProvider ? (
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>

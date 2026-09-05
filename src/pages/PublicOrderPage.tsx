@@ -354,7 +354,6 @@ export default function PublicOrderPage() {
   const statusService = typeof status?.service === "string" ? status.service : undefined;
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
-  const isS2ToolsOrder = status?.provider === "s2tools";
   const isCommunityOrder = status?.provider === "community";
   const unitLabel = isBoostOrder ? "Boosts" : "Members";
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
@@ -366,7 +365,7 @@ export default function PublicOrderPage() {
   const membersRemaining =
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
-  const estimatedCompletionSeconds = !isBoostOrder && !isS2ToolsOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
+  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
     ? membersRemaining * currentDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
@@ -532,7 +531,7 @@ export default function PublicOrderPage() {
     })();
   }, [communityReplaceQueue, communityReplacementRunning, replacingCommunityMemberIndex, uniqid]);
 
-  const delayUpdatePanel = !isBoostOrder && !isS2ToolsOrder && !isTerminalStatus ? (
+  const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
       <div className="monitor-panel-heading">
         <span className="monitor-panel-icon"><Timer className="h-4 w-4" aria-hidden="true" /></span>
@@ -687,7 +686,7 @@ export default function PublicOrderPage() {
                 </div>
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
-                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : isS2ToolsOrder ? "Live updates" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                 </div>
               </section>
 

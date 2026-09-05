@@ -1,12 +1,10 @@
 import crypto from "node:crypto";
 import path from "node:path";
-import { readFile } from "node:fs/promises";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import pg from "pg";
-import WebSocket from "ws";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -35,20 +33,6 @@ const dcordRetryBaseMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RET
 const dcordRetryMaxMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_RETRY_MAX_MS ?? "600000", 10) || 600_000, dcordRetryBaseMs), 3_600_000);
 const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCORD_MAX_RETRY_ATTEMPTS ?? "12", 10) || 12, 1), 100);
 const discordApiBase = "https://discord.com/api/v10";
-const s2toolsApiBase = String(process.env.S2TOOLS_API_BASE_URL ?? "https://api3.s2tools.uk").replace(/\/$/, "");
-const s2toolsBotId = String(process.env.S2TOOLS_BOT_ID ?? "").trim();
-const configuredS2ToolsDiscordBotToken = String(process.env.S2TOOLS_DISCORD_BOT_TOKEN ?? "").trim();
-const defaultS2ToolsKeysFile = process.env.USERPROFILE
-  ? path.join(process.env.USERPROFILE, "Desktop", "OAuth-AIO V1.2.3", "Data", "keys.json")
-  : "";
-const s2toolsKeysFile = String(process.env.S2TOOLS_KEYS_FILE ?? defaultS2ToolsKeysFile).trim();
-const defaultS2ToolsConfigFile = process.env.USERPROFILE
-  ? path.join(process.env.USERPROFILE, "Desktop", "OAuth-AIO V1.2.3", "config.yaml")
-  : "";
-const s2toolsConfigFile = String(process.env.S2TOOLS_CONFIG_FILE ?? defaultS2ToolsConfigFile).trim();
-const s2toolsOrders = new Map();
-const s2toolsPendingOrders = new Map();
-const s2toolsInvoiceWatchers = new Map();
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -355,7 +339,7 @@ async function loadCommunityJoinSummary(config) {
        COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
        COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed')::int AS authorized,
-       COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed' AND reserved_order_id IS NULL)::int AS ready
+       COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status = 'authorized' AND reserved_order_id IS NULL)::int AS ready
      FROM community_oauth_joins
      WHERE guild_id = $1`,
     [config.guildId]
@@ -1087,11 +1071,15 @@ async function saveTrackedOrderPayload(payload) {
 }
 
 async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
+  return exchangeCommunityRefreshToken(config, decryptCredential(encryptedRefreshToken));
+}
+
+async function exchangeCommunityRefreshToken(config, refreshToken) {
   const body = new URLSearchParams({
     client_id: config.clientId,
     client_secret: config.clientSecret,
     grant_type: "refresh_token",
-    refresh_token: decryptCredential(encryptedRefreshToken)
+    refresh_token
   });
   const { response, payload } = await requestDiscord("oauth2/token", {
     method: "POST",
@@ -1106,7 +1094,7 @@ async function refreshCommunityAccessToken(config, encryptedRefreshToken) {
   }
   return {
     accessToken: payload.access_token,
-    refreshToken: typeof payload.refresh_token === "string" ? payload.refresh_token : decryptCredential(encryptedRefreshToken)
+    refreshToken: typeof payload.refresh_token === "string" ? payload.refresh_token : refreshToken
   };
 }
 
@@ -1264,7 +1252,13 @@ async function processCommunityOrder(order, members, config) {
     results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = CASE WHEN $4 THEN 'failed' ELSE 'authorized' END, details = $3,
+       SET status = CASE
+             WHEN $4 THEN 'failed'
+             WHEN $5 = 'joined' THEN 'joined'
+             WHEN $5 = 'already_member' THEN 'already_member'
+             ELSE 'authorized'
+           END,
+           details = $3,
            joined_at = CASE WHEN $5 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
            reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
@@ -1329,6 +1323,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       state = "joined";
       details = "Replacement member joined the server.";
     } else if (joined.response.status === 204) {
+      state = "already_member";
       details = "Replacement user was already in the server.";
     } else {
       details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
@@ -1341,7 +1336,13 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
 
   await pool.query(
     `UPDATE community_oauth_joins
-     SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, details = $4,
+     SET status = CASE
+           WHEN $3 THEN 'failed'
+           WHEN $5 = 'joined' THEN 'joined'
+           WHEN $5 = 'already_member' THEN 'already_member'
+           ELSE 'authorized'
+         END,
+         details = $4,
          joined_at = CASE WHEN $5 = 'joined' THEN NOW() ELSE joined_at END,
          reserved_order_id = NULL
      WHERE discord_user_id = $1 AND guild_id = $2`,
@@ -2154,6 +2155,7 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       stored: Boolean(storedResult.rowCount),
       clientId: config.clientId,
       redirectUri: config.redirectUri,
+      guildId: config.guildId,
       hasClientSecret: Boolean(config.clientSecret),
       hasBotToken: Boolean(config.botToken)
     });
@@ -2165,12 +2167,13 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
 app.put("/api/community/config", requireSession, async (req, res, next) => {
   try {
     const current = await getCommunityOAuthConfig();
+    const requestedGuildId = String(req.body?.guildId ?? current.guildId ?? "").trim();
     const candidateWithoutDetectedGuild = normalizeCommunityOAuthConfig({
       clientId: req.body?.clientId || current.clientId,
       clientSecret: req.body?.clientSecret || current.clientSecret,
       botToken: req.body?.botToken || current.botToken,
       redirectUri: req.body?.redirectUri || current.redirectUri,
-      guildId: current.guildId
+      guildId: requestedGuildId
     });
     if (candidateWithoutDetectedGuild.missing.some((item) => item !== "DISCORD_TARGET_GUILD_ID")) {
       return res.status(400).json({ message: "Complete all Discord bot and OAuth fields with valid values." });
@@ -2186,18 +2189,21 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Bot token and Client ID belong to different Discord applications." });
     }
 
-    const guildsResult = await requestDiscord("users/@me/guilds?limit=200", {
-      headers: { Authorization: `Bot ${candidateWithoutDetectedGuild.botToken}` }
-    });
-    const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
-    if (!guildsResult.response.ok || !botGuilds.length) {
-      return res.status(400).json({ message: "Add the bot to your Discord server before saving these settings." });
+    let selectedGuild = null;
+    if (requestedGuildId) {
+      const requestedGuild = await requestDiscord(`guilds/${encodeURIComponent(requestedGuildId)}?with_counts=true`, {
+        headers: { Authorization: `Bot ${candidateWithoutDetectedGuild.botToken}` }
+      });
+      if (requestedGuild.response.ok) selectedGuild = requestedGuild.payload;
+    } else {
+      const guildsResult = await requestDiscord("users/@me/guilds?limit=200", {
+        headers: { Authorization: `Bot ${candidateWithoutDetectedGuild.botToken}` }
+      });
+      const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
+      if (guildsResult.response.ok && botGuilds.length === 1) selectedGuild = botGuilds[0];
     }
-    const selectedGuild = botGuilds.length === 1
-      ? botGuilds[0]
-      : botGuilds.find((guild) => String(guild?.id ?? "") === current.guildId);
     if (!selectedGuild) {
-      return res.status(400).json({ message: "This bot is in multiple servers. Keep it in the Members Stock server only, then save again." });
+      return res.status(400).json({ message: "Enter a server ID that the Members bot has already joined." });
     }
 
     const candidate = normalizeCommunityOAuthConfig({
@@ -2225,6 +2231,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       stored: true,
       clientId: candidate.clientId,
       redirectUri: candidate.redirectUri,
+      guildId: candidate.guildId,
       hasClientSecret: true,
       hasBotToken: true,
       guildName: String(guildResult.payload?.name ?? "Discord server")
@@ -2240,6 +2247,90 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
     communityGuildCache = null;
     communityBotCache = null;
     res.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/import-oauth-stock", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before importing OAuth stock." });
+    }
+
+    const records = Array.isArray(req.body) ? req.body : req.body?.records;
+    if (!Array.isArray(records) || !records.length || records.length > 500) {
+      return res.status(400).json({ message: "Upload a JSON array containing between 1 and 500 OAuth records." });
+    }
+
+    const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [] };
+    const seenSourceUserIds = new Set();
+    const seenDiscordUserIds = new Set();
+
+    for (let index = 0; index < records.length; index += 1) {
+      const record = records[index];
+      const sourceUserId = String(record?.user_id ?? record?.userId ?? "").trim();
+      const refreshToken = String(record?.refresh_token ?? record?.refreshToken ?? "").trim();
+      const recordLabel = isDiscordGuildId(sourceUserId) ? sourceUserId : `row ${index + 1}`;
+
+      if (!isDiscordGuildId(sourceUserId) || refreshToken.length < 20 || refreshToken.length > 4096) {
+        result.failed += 1;
+        if (result.errors.length < 25) result.errors.push({ record: recordLabel, message: "A valid user_id and refresh_token are required." });
+        continue;
+      }
+      if (seenSourceUserIds.has(sourceUserId)) {
+        result.skipped += 1;
+        continue;
+      }
+      seenSourceUserIds.add(sourceUserId);
+
+      try {
+        const credentials = await exchangeCommunityRefreshToken(config, refreshToken);
+        const oauthIdentity = await requestDiscord("oauth2/@me", {
+          headers: { Authorization: `Bearer ${credentials.accessToken}` }
+        });
+        const oauthUser = oauthIdentity.payload?.user;
+        const discordUserId = String(oauthUser?.id ?? "").trim();
+        const applicationId = String(oauthIdentity.payload?.application?.id ?? "").trim();
+        const scopes = Array.isArray(oauthIdentity.payload?.scopes) ? oauthIdentity.payload.scopes.map(String) : [];
+        if (!oauthIdentity.response.ok || !isDiscordGuildId(discordUserId)) throw new Error("The Discord OAuth identity could not be verified.");
+        if (applicationId && applicationId !== config.clientId) throw new Error("The OAuth record belongs to a different Discord application.");
+        if (!scopes.includes("guilds.join")) throw new Error("The OAuth record does not include the guilds.join permission.");
+        const duplicateDiscordUser = seenDiscordUserIds.has(discordUserId);
+        seenDiscordUserIds.add(discordUserId);
+
+        const username = String(oauthUser?.global_name ?? oauthUser?.username ?? `Discord user ${discordUserId}`).slice(0, 100);
+        const avatarHash = String(oauthUser?.avatar ?? "").trim();
+        const avatarUrl = avatarHash
+          ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(discordUserId)}/${encodeURIComponent(avatarHash)}.png?size=128`
+          : null;
+        await pool.query(
+          `INSERT INTO community_oauth_joins
+             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, details, authorized_at, joined_at, reserved_order_id)
+           VALUES ($1, $2, $3, $4, $5, 'authorized', 'Imported from OAuth stock.', NOW(), NULL, NULL)
+           ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
+             username = EXCLUDED.username,
+             avatar_url = EXCLUDED.avatar_url,
+             encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
+             status = 'authorized',
+             details = EXCLUDED.details,
+             authorized_at = NOW(),
+             joined_at = NULL,
+             reserved_order_id = NULL`,
+          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(credentials.refreshToken)]
+        );
+        if (duplicateDiscordUser) result.skipped += 1;
+        else result.imported += 1;
+      } catch (error) {
+        result.failed += 1;
+        if (result.errors.length < 25) {
+          result.errors.push({ record: recordLabel, message: error instanceof Error ? error.message : "OAuth record could not be imported." });
+        }
+      }
+    }
+
+    res.json(result);
   } catch (error) {
     next(error);
   }
@@ -2506,13 +2597,12 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
   }
   const serverInfo = await resolveDiscordInvite(invite);
   if (serverInfo.guildId !== config.guildId) {
-    const guildsResult = await requestDiscord("users/@me/guilds?limit=200", {
+    const invitedGuildResult = await requestDiscord(`guilds/${encodeURIComponent(serverInfo.guildId)}`, {
       headers: { Authorization: `Bot ${config.botToken}` }
     });
-    const botGuilds = Array.isArray(guildsResult.payload) ? guildsResult.payload : [];
-    const botInInvitedGuild = botGuilds.some((guild) => String(guild?.id ?? "") === serverInfo.guildId);
+    const botInInvitedGuild = invitedGuildResult.response.ok;
 
-    if (allowWaitingForBot && (!guildsResult.response.ok || !botInInvitedGuild)) {
+    if (allowWaitingForBot && !botInInvitedGuild) {
       return {
         config,
         invite,
@@ -2522,8 +2612,21 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       };
     }
 
-    if (!guildsResult.response.ok || !botInInvitedGuild) {
+    if (!botInInvitedGuild) {
       const error = new Error("Add the Members bot from the order monitor to start delivery.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const activeOrders = await pool.query(
+      `SELECT 1
+       FROM tracked_orders
+       WHERE payload->>'provider' = 'community'
+         AND payload->>'status' IN ('WAITING', 'PROCESS')
+       LIMIT 1`
+    );
+    if (activeOrders.rowCount) {
+      const error = new Error("Finish the active Members 2 order before switching the target server.");
       error.statusCode = 409;
       throw error;
     }
@@ -2583,7 +2686,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
+       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
       [config.guildId]
     );
     const available = Number(result.rows[0]?.available ?? 0);
@@ -2614,7 +2717,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const selected = await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
        ORDER BY authorized_at ASC
        LIMIT $2
        FOR UPDATE SKIP LOCKED`,
@@ -2696,7 +2799,7 @@ async function activateWaitingCommunityOrder(order) {
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND reserved_order_id = $2 AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL
+        WHERE guild_id = $1 AND reserved_order_id = $2 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
        ORDER BY authorized_at ASC
        FOR UPDATE`,
       [resolved.config.guildId, current.uniqid]
@@ -2707,7 +2810,7 @@ async function activateWaitingCommunityOrder(order) {
       const extra = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND reserved_order_id IS NULL AND status <> 'failed' AND encrypted_refresh_token IS NOT NULL
+         WHERE guild_id = $1 AND reserved_order_id IS NULL AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
          ORDER BY authorized_at ASC
          LIMIT $2
          FOR UPDATE SKIP LOCKED`,
@@ -2912,7 +3015,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
        WHERE guild_id = $1
-         AND status <> 'failed'
+          AND status = 'authorized'
          AND encrypted_refresh_token IS NOT NULL
          AND reserved_order_id IS NULL
          AND NOT (discord_user_id = ANY($2::text[]))
@@ -2972,282 +3075,6 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
   }
 });
 
-function getS2ToolsStockValue(stock, service) {
-  return ({
-    "S2TOOLS-ONLINE": stock.online_tokens,
-    "S2TOOLS-OFFLINE": stock.offline_tokens,
-    "S2TOOLS-1MONTH": stock.one_month_tokens,
-    "S2TOOLS-3MONTH": stock.three_month_tokens
-  })[service] ?? 0;
-}
-
-function getS2ToolsBotInvite(guildId) {
-  const params = new URLSearchParams({ client_id: s2toolsBotId, scope: "bot applications.commands", permissions: "35" });
-  if (guildId) params.set("guild_id", guildId);
-  return `https://discord.com/oauth2/authorize?${params.toString()}`;
-}
-
-async function loadS2ToolsDiscordBotToken() {
-  if (configuredS2ToolsDiscordBotToken) return configuredS2ToolsDiscordBotToken;
-  if (!s2toolsConfigFile) return "";
-  const source = await readFile(s2toolsConfigFile, "utf8");
-  const lines = source.split(/\r?\n/);
-  const discordLine = lines.findIndex((line) => /^Discord:\s*(?:#.*)?$/.test(line.trimEnd()));
-  if (discordLine < 0) return "";
-  for (let index = discordLine + 1; index < lines.length; index += 1) {
-    const line = lines[index];
-    if (/^\S/.test(line)) break;
-    const match = line.match(/^\s+Token:\s*["']?([^"'#\s]+)["']?/);
-    if (match?.[1]) return match[1].trim();
-  }
-  return "";
-}
-
-async function isS2ToolsBotInGuild(guildId) {
-  let botToken = "";
-  try {
-    botToken = await loadS2ToolsDiscordBotToken();
-  } catch {
-    throw Object.assign(new Error("Members 3 bot token could not be loaded. In EasyPanel, set S2TOOLS_DISCORD_BOT_TOKEN instead of a Windows config path."), { statusCode: 503, exposeMessage: true });
-  }
-  if (!botToken) {
-    throw Object.assign(new Error("Members 3 bot token is not configured. Add S2TOOLS_DISCORD_BOT_TOKEN to the EasyPanel service environment and redeploy it."), { statusCode: 503, exposeMessage: true });
-  }
-  let response;
-  try {
-    response = await fetch(`${discordApiBase}/guilds/${encodeURIComponent(guildId)}`, {
-      headers: { Authorization: `Bot ${botToken}` },
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000)
-    });
-  } catch {
-    throw Object.assign(new Error("EasyPanel could not reach the Discord API for the Members 3 bot check."), { statusCode: 502, exposeMessage: true });
-  }
-  if (response.ok) return true;
-  if (response.status === 403 || response.status === 404) return false;
-  if (response.status === 401) throw Object.assign(new Error("S2TOOLS_DISCORD_BOT_TOKEN is invalid. Copy the bot token, not the client secret, then redeploy EasyPanel."), { statusCode: 503, exposeMessage: true });
-  throw Object.assign(new Error(`Discord bot membership check returned HTTP ${response.status}.`), { statusCode: 502, exposeMessage: true });
-}
-
-function waitForS2ToolsBot(order, redeemKey, target) {
-  if (s2toolsPendingOrders.has(order.uniqid)) return;
-  const startedAt = Date.now();
-  const timer = setInterval(async () => {
-    try {
-      if (Date.now() - startedAt > 30 * 60 * 1000) {
-        clearInterval(timer);
-        s2toolsPendingOrders.delete(order.uniqid);
-        order.status = "ERROR";
-        order.details = "Members 3 bot was not added within 30 minutes. The redeem key was not submitted.";
-        return;
-      }
-      if (await isS2ToolsBotInGuild(order.serverId)) {
-        clearInterval(timer);
-        s2toolsPendingOrders.delete(order.uniqid);
-        order.status = "NEW";
-        order.details = "Members 3 bot detected. Delivery queued.";
-        void runS2ToolsOrder(order, redeemKey, target).catch((error) => {
-          order.status = "ERROR";
-          order.details = error instanceof Error ? error.message : "S2Tools order failed.";
-        });
-      }
-    } catch (error) {
-      order.details = error instanceof Error ? error.message : "Bot membership check failed.";
-    }
-  }, 5_000);
-  s2toolsPendingOrders.set(order.uniqid, timer);
-}
-
-async function fetchS2Tools(pathname) {
-  let response;
-  try {
-    response = await fetch(`${s2toolsApiBase}${pathname}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
-  } catch {
-    throw Object.assign(new Error("EasyPanel could not reach the S2Tools API."), { statusCode: 502, exposeMessage: true });
-  }
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(`S2Tools API returned HTTP ${response.status}.`), { statusCode: response.status, exposeMessage: true });
-  return payload;
-}
-
-function getS2ToolsRequestId(message) {
-  const direct = message?.request_id ?? message?.requestId ?? message?.order_id ?? message?.orderId;
-  if (typeof direct === "string" && direct.trim()) return direct.trim();
-  const serialized = JSON.stringify(message ?? {});
-  return serialized.match(/\/orders\/([A-Za-z0-9_-]{8,})/i)?.[1] ?? null;
-}
-
-function connectS2ToolsOrderStatus(order, requestId) {
-  if (!requestId || order.statusSocketConnected) return;
-  order.statusSocketConnected = true;
-  order.liveProgressAvailable = true;
-  order.externalRequestId = requestId;
-  const statusUrl = `${s2toolsApiBase.replace(/^http/, "ws")}/ws/order-status/${encodeURIComponent(requestId)}`;
-  const statusSocket = new WebSocket(statusUrl, { origin: s2toolsApiBase });
-  statusSocket.addEventListener("message", (event) => {
-    try {
-      const update = JSON.parse(String(event.data));
-      if (update.event !== "site_order_forward") return;
-      const success = Array.isArray(update.success) ? update.success.length : update.success == null ? Number.NaN : Number(update.success);
-      const failed = Array.isArray(update.failed) ? update.failed.length : update.failed == null ? Number.NaN : Number(update.failed);
-      if (Number.isFinite(success)) order.added = success;
-      if (Number.isFinite(failed)) order.failed = failed;
-      if (Number.isFinite(Number(update.amount))) order.amount = Number(update.amount);
-      if (typeof update.message === "string" && update.message.trim()) order.details = update.message;
-      order.vendorStage = "delivering";
-      order.updatedAt = new Date().toISOString();
-      if (Number(order.added) >= Number(order.amount)) {
-        order.status = "COMPLETED";
-        order.vendorStage = "finished";
-        statusSocket.close();
-      }
-    } catch { /* Ignore malformed vendor events. */ }
-  });
-  statusSocket.addEventListener("error", () => { order.statusSocketConnected = false; });
-  statusSocket.addEventListener("close", () => { order.statusSocketConnected = false; });
-}
-
-function watchS2ToolsInvoiceId(order, redeemKey) {
-  if (!s2toolsKeysFile || s2toolsInvoiceWatchers.has(order.uniqid)) {
-    if (!s2toolsKeysFile) order.liveProgressAvailable = false;
-    return;
-  }
-  const startedAt = Date.now();
-  let reading = false;
-  const timer = setInterval(async () => {
-    if (reading) return;
-    if (Date.now() - startedAt > 10 * 60 * 1000 || ["COMPLETED", "ERROR", "INVALID", "TERMINATED"].includes(String(order.status).toUpperCase())) {
-      clearInterval(timer);
-      s2toolsInvoiceWatchers.delete(order.uniqid);
-      return;
-    }
-    reading = true;
-    try {
-      const keys = JSON.parse(await readFile(s2toolsKeysFile, "utf8"));
-      const keyRecord = Array.isArray(keys) ? keys.find((item) => item && item.id === redeemKey) : null;
-      const requestId = typeof keyRecord?.linked_invoice_id === "string" ? keyRecord.linked_invoice_id.trim() : "";
-      if (requestId) {
-        order.externalRequestId = requestId;
-        order.liveProgressAvailable = true;
-        order.vendorStage = "live_tracking";
-        order.details = "Live S2Tools delivery tracking connected.";
-        order.updatedAt = new Date().toISOString();
-        connectS2ToolsOrderStatus(order, requestId);
-        clearInterval(timer);
-        s2toolsInvoiceWatchers.delete(order.uniqid);
-      }
-    } catch (error) {
-      order.liveProgressAvailable = false;
-      order.liveProgressError = error instanceof Error ? error.message : "S2Tools key file could not be read.";
-      order.details = `Delivery is running, but live tracking cannot read keys.json: ${order.liveProgressError}`;
-      order.updatedAt = new Date().toISOString();
-    } finally {
-      reading = false;
-    }
-  }, 500);
-  s2toolsInvoiceWatchers.set(order.uniqid, timer);
-}
-
-async function runS2ToolsOrder(order, redeemKey, serverTarget) {
-  if (order.delay > 0) await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
-  order.status = "PROCESS";
-  order.details = "Connecting to S2Tools delivery.";
-  order.vendorStage = "connecting";
-  order.updatedAt = new Date().toISOString();
-  const wsUrl = `${s2toolsApiBase.replace(/^http/, "ws")}/ws/guest`;
-  const socket = new WebSocket(wsUrl, { origin: s2toolsApiBase });
-  const timeout = setTimeout(() => socket.close(4000, "timeout"), 30 * 60 * 1000);
-  const responseTimeout = setTimeout(() => {
-    order.status = "ERROR";
-    order.vendorStage = "response_timeout";
-    order.details = "S2Tools accepted the WebSocket connection but did not answer the order request within 45 seconds.";
-    order.updatedAt = new Date().toISOString();
-    socket.close(4000, "response timeout");
-  }, 45_000);
-  socket.addEventListener("open", () => {
-    order.vendorStage = "connected";
-    order.details = "Connected to S2Tools; waiting for a guest session.";
-    order.updatedAt = new Date().toISOString();
-  });
-  socket.addEventListener("message", (event) => {
-    try {
-      const message = JSON.parse(String(event.data));
-      if (message.event === "session_id") {
-        order.vendorStage = "submitted";
-        order.details = "Order submitted to S2Tools; waiting for the first response.";
-        order.updatedAt = new Date().toISOString();
-        watchS2ToolsInvoiceId(order, redeemKey);
-        socket.send(JSON.stringify({ event: "send_order", key: redeemKey, server_id: serverTarget, boost_method: "OAuth", bot_id: s2toolsBotId, system: "oaio", session_id: message.session_id, display_name: "", pronoun: "", bio: "", avatar: "", banner: "" }));
-      } else if (message.event === "order_response") {
-        clearTimeout(responseTimeout);
-        order.vendorStage = message.finished ? "finished" : "delivering";
-        order.updatedAt = new Date().toISOString();
-        if (typeof message.message === "string") order.details = message.message;
-        const successFromField = Array.isArray(message.success) ? message.success.length : message.success == null ? Number.NaN : Number(message.success);
-        const successFromText = typeof message.message === "string"
-          ? Number(String(message.message).match(/Success:\s*([\d,]+)/i)?.[1]?.replace(/,/g, ""))
-          : Number.NaN;
-        const failedFromField = Array.isArray(message.failed) ? message.failed.length : message.failed == null ? Number.NaN : Number(message.failed);
-        const failedFromText = typeof message.message === "string"
-          ? Number(String(message.message).match(/Failed:\s*([\d,]+)/i)?.[1]?.replace(/,/g, ""))
-          : Number.NaN;
-        const success = Number.isFinite(successFromField) ? successFromField : successFromText;
-        const failed = Number.isFinite(failedFromField) ? failedFromField : failedFromText;
-        if (Number.isFinite(success)) order.added = success;
-        if (Number.isFinite(failed)) order.failed = failed;
-        const requestId = getS2ToolsRequestId(message);
-        if (requestId) connectS2ToolsOrderStatus(order, requestId);
-        else if (!order.externalRequestId) order.liveProgressAvailable = false;
-        if (message.finished) {
-          const successfulMessage = typeof message.message === "string" && /successfully/i.test(message.message);
-          order.status = Number(order.added) >= Number(order.amount) || (successfulMessage && Number(order.failed) === 0) ? "COMPLETED" : "ERROR";
-          clearTimeout(timeout);
-          socket.close();
-        }
-      }
-    } catch { /* Ignore malformed vendor events. */ }
-  });
-  socket.addEventListener("error", () => { order.status = "ERROR"; order.vendorStage = "connection_error"; order.details = "S2Tools connection failed."; clearTimeout(timeout); clearTimeout(responseTimeout); });
-  socket.addEventListener("close", () => { clearTimeout(timeout); clearTimeout(responseTimeout); if (order.status === "PROCESS") { order.status = "ERROR"; order.vendorStage = "closed"; order.details = "S2Tools connection closed before completion."; } });
-}
-
-app.get("/api/s2tools/availability", requireSession, async (req, res, next) => {
-  try {
-    if (!s2toolsBotId) return res.status(503).json({ message: "S2TOOLS_BOT_ID is not configured." });
-    const stock = await fetchS2Tools(`/api/oauth-aio/stock/${encodeURIComponent(s2toolsBotId)}`);
-    const available = Number(getS2ToolsStockValue(stock, String(req.query.service ?? ""))) || 0;
-    res.set("Cache-Control", "no-store").json({ available, maximum: available, stock });
-  } catch (error) { next(error); }
-});
-
-app.post("/api/s2tools/orders", requireSession, async (req, res, next) => {
-  try {
-    const service = String(req.body?.service ?? "");
-    const redeemKey = String(req.body?.redeemKey ?? "").trim();
-    const target = String(req.body?.id ?? "").trim();
-    const amount = Number.parseInt(req.body?.amount, 10);
-    const delay = Math.min(Math.max(Number.parseInt(req.body?.delay, 10) || 0, 0), 1200);
-    if (!s2toolsBotId) return res.status(503).json({ message: "S2TOOLS_BOT_ID is not configured." });
-    if (!/^S2TOOLS-(ONLINE|OFFLINE|1MONTH|3MONTH)$/.test(service) || !redeemKey || !target || !Number.isInteger(amount) || amount < 1) return res.status(400).json({ message: "Service, redeem key, target and amount are required." });
-    const info = await resolveDiscordInvite(target);
-    const uniqid = `s2_${crypto.randomUUID()}`;
-    const botInGuild = await isS2ToolsBotInGuild(info.guildId);
-    const botInvite = getS2ToolsBotInvite(info.guildId);
-    const waitingForBot = botInGuild === false;
-    const order = { uniqid, provider: "s2tools", service, serverId: info.guildId, serverName: info.guildName, serverInvite: target, serverMemberCount: info.approximateMemberCount, amount, added: 0, delay, status: waitingForBot ? "WAITING" : delay ? "WAITING" : "NEW", details: waitingForBot ? "Add the Members 3 bot to this server to start delivery." : delay ? `Delivery starts in ${delay} seconds.` : "Delivery queued.", botInvite, bot_invite: botInvite, createdAt: new Date().toISOString() };
-    s2toolsOrders.set(uniqid, order);
-    if (waitingForBot) waitForS2ToolsBot(order, redeemKey, target);
-    else void runS2ToolsOrder(order, redeemKey, target).catch((error) => { order.status = "ERROR"; order.details = error instanceof Error ? error.message : "S2Tools order failed."; });
-    res.json({ uniqid, bot_invite: botInvite });
-  } catch (error) { next(error); }
-});
-
-app.get("/api/s2tools/orders/:uniqid/status", async (req, res) => {
-  const order = s2toolsOrders.get(String(req.params.uniqid));
-  if (!order) return res.status(404).json({ message: "This local Members 3 order is no longer available." });
-  res.set("Cache-Control", "no-store").json(order);
-});
-
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -3255,8 +3082,6 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
 
-    const localS2ToolsOrder = s2toolsOrders.get(uniqid);
-    if (localS2ToolsOrder) return res.set("Cache-Control", "no-store").json(localS2ToolsOrder);
     const boostTokenStock = summarizeBoostTokenStock(await loadBoostTokenStock());
     const liveBoostStock = {
       oneMonth: boostTokenStock.oneMonth * 2,
@@ -4258,7 +4083,7 @@ app.post([`${legacyApiPrefix}/orders/:uniqid/delay`, `${integrationApiPrefix}/or
 app.get("/api/orders", requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query("SELECT payload FROM tracked_orders ORDER BY created_at DESC");
-    res.json([...s2toolsOrders.values(), ...result.rows.map((row) => row.payload)]);
+    res.json(result.rows.map((row) => row.payload));
   } catch (error) {
     next(error);
   }
@@ -4323,10 +4148,7 @@ app.use((error, _req, res, _next) => {
 
   console.error(error);
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
-  const publicMessage = statusCode >= 500 && error?.exposeMessage !== true
-    ? "Service is temporarily unavailable."
-    : error.message;
-  res.status(statusCode).json({ message: publicMessage });
+  res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });
 });
 
 await initializeDatabase();

@@ -45,6 +45,7 @@ export type CommunityConfig = {
   stored: boolean;
   clientId: string;
   redirectUri: string;
+  guildId: string;
   hasClientSecret: boolean;
   hasBotToken: boolean;
   guildName?: string;
@@ -55,6 +56,15 @@ export type CommunityConfigInput = {
   clientSecret: string;
   botToken: string;
   redirectUri: string;
+  guildId: string;
+};
+
+export type CommunityOAuthImportResult = {
+  total: number;
+  imported: number;
+  failed: number;
+  skipped: number;
+  errors: Array<{ record: string; message: string }>;
 };
 
 async function parseResponse<T>(response: Response) {
@@ -111,4 +121,14 @@ export async function clearCommunityConfig() {
     const payload = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(payload.message ?? `Request failed with ${response.status}`);
   }
+}
+
+export function importCommunityOAuthStock(records: unknown[]) {
+  return fetch("/api/community/import-oauth-stock", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ records })
+  }).then(parseResponse<CommunityOAuthImportResult>);
 }
