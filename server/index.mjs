@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import pg from "pg";
+import WebSocket from "ws";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
