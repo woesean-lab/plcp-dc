@@ -366,7 +366,7 @@ export default function PublicOrderPage() {
   const membersRemaining =
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
-  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
+  const estimatedCompletionSeconds = !isBoostOrder && !isS2ToolsOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
     ? membersRemaining * currentDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
@@ -687,7 +687,7 @@ export default function PublicOrderPage() {
                 </div>
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
-                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : isS2ToolsOrder ? "Live updates" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                 </div>
               </section>
 

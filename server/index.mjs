@@ -2976,32 +2976,103 @@ async function fetchS2Tools(pathname) {
   return payload;
 }
 
+function getS2ToolsRequestId(message) {
+  const direct = message?.request_id ?? message?.requestId ?? message?.order_id ?? message?.orderId;
+  if (typeof direct === "string" && direct.trim()) return direct.trim();
+  const serialized = JSON.stringify(message ?? {});
+  return serialized.match(/\/orders\/([A-Za-z0-9_-]{8,})/i)?.[1] ?? null;
+}
+
+function connectS2ToolsOrderStatus(order, requestId) {
+  if (!requestId || order.statusSocketConnected) return;
+  order.statusSocketConnected = true;
+  order.liveProgressAvailable = true;
+  order.externalRequestId = requestId;
+  const statusUrl = `${s2toolsApiBase.replace(/^http/, "ws")}/ws/order-status/${encodeURIComponent(requestId)}`;
+  const statusSocket = new WebSocket(statusUrl, { origin: s2toolsApiBase });
+  statusSocket.addEventListener("message", (event) => {
+    try {
+      const update = JSON.parse(String(event.data));
+      if (update.event !== "site_order_forward") return;
+      const success = Array.isArray(update.success) ? update.success.length : update.success == null ? Number.NaN : Number(update.success);
+      const failed = Array.isArray(update.failed) ? update.failed.length : update.failed == null ? Number.NaN : Number(update.failed);
+      if (Number.isFinite(success)) order.added = success;
+      if (Number.isFinite(failed)) order.failed = failed;
+      if (Number.isFinite(Number(update.amount))) order.amount = Number(update.amount);
+      if (typeof update.message === "string" && update.message.trim()) order.details = update.message;
+      order.vendorStage = "delivering";
+      order.updatedAt = new Date().toISOString();
+      if (Number(order.added) >= Number(order.amount)) {
+        order.status = "COMPLETED";
+        order.vendorStage = "finished";
+        statusSocket.close();
+      }
+    } catch { /* Ignore malformed vendor events. */ }
+  });
+  statusSocket.addEventListener("error", () => { order.statusSocketConnected = false; });
+  statusSocket.addEventListener("close", () => { order.statusSocketConnected = false; });
+}
+
 async function runS2ToolsOrder(order, redeemKey, serverTarget) {
   if (order.delay > 0) await new Promise((resolve) => setTimeout(resolve, order.delay * 1000));
   order.status = "PROCESS";
   order.details = "Connecting to S2Tools delivery.";
+  order.vendorStage = "connecting";
+  order.updatedAt = new Date().toISOString();
   const wsUrl = `${s2toolsApiBase.replace(/^http/, "ws")}/ws/guest`;
-  const socket = new WebSocket(wsUrl);
+  const socket = new WebSocket(wsUrl, { origin: s2toolsApiBase });
   const timeout = setTimeout(() => socket.close(4000, "timeout"), 30 * 60 * 1000);
+  const responseTimeout = setTimeout(() => {
+    order.status = "ERROR";
+    order.vendorStage = "response_timeout";
+    order.details = "S2Tools accepted the WebSocket connection but did not answer the order request within 45 seconds.";
+    order.updatedAt = new Date().toISOString();
+    socket.close(4000, "response timeout");
+  }, 45_000);
+  socket.addEventListener("open", () => {
+    order.vendorStage = "connected";
+    order.details = "Connected to S2Tools; waiting for a guest session.";
+    order.updatedAt = new Date().toISOString();
+  });
   socket.addEventListener("message", (event) => {
     try {
       const message = JSON.parse(String(event.data));
       if (message.event === "session_id") {
+        order.vendorStage = "submitted";
+        order.details = "Order submitted to S2Tools; waiting for the first response.";
+        order.updatedAt = new Date().toISOString();
         socket.send(JSON.stringify({ event: "send_order", key: redeemKey, server_id: serverTarget, boost_method: "OAuth", bot_id: s2toolsBotId, system: "oaio", session_id: message.session_id, display_name: "", pronoun: "", bio: "", avatar: "", banner: "" }));
       } else if (message.event === "order_response") {
+        clearTimeout(responseTimeout);
+        order.vendorStage = message.finished ? "finished" : "delivering";
+        order.updatedAt = new Date().toISOString();
         if (typeof message.message === "string") order.details = message.message;
-        if (Number.isFinite(Number(message.success))) order.added = Number(message.success);
-        order.externalRequestId = message.request_id ?? message.requestId ?? order.externalRequestId;
+        const successFromField = Array.isArray(message.success) ? message.success.length : message.success == null ? Number.NaN : Number(message.success);
+        const successFromText = typeof message.message === "string"
+          ? Number(String(message.message).match(/Success:\s*([\d,]+)/i)?.[1]?.replace(/,/g, ""))
+          : Number.NaN;
+        const failedFromField = Array.isArray(message.failed) ? message.failed.length : message.failed == null ? Number.NaN : Number(message.failed);
+        const failedFromText = typeof message.message === "string"
+          ? Number(String(message.message).match(/Failed:\s*([\d,]+)/i)?.[1]?.replace(/,/g, ""))
+          : Number.NaN;
+        const success = Number.isFinite(successFromField) ? successFromField : successFromText;
+        const failed = Number.isFinite(failedFromField) ? failedFromField : failedFromText;
+        if (Number.isFinite(success)) order.added = success;
+        if (Number.isFinite(failed)) order.failed = failed;
+        const requestId = getS2ToolsRequestId(message);
+        if (requestId) connectS2ToolsOrderStatus(order, requestId);
+        else if (!order.externalRequestId) order.liveProgressAvailable = false;
         if (message.finished) {
-          order.status = Number(order.added) >= Number(order.amount) ? "COMPLETED" : "ERROR";
+          const successfulMessage = typeof message.message === "string" && /successfully/i.test(message.message);
+          order.status = Number(order.added) >= Number(order.amount) || (successfulMessage && Number(order.failed) === 0) ? "COMPLETED" : "ERROR";
           clearTimeout(timeout);
           socket.close();
         }
       }
     } catch { /* Ignore malformed vendor events. */ }
   });
-  socket.addEventListener("error", () => { order.status = "ERROR"; order.details = "S2Tools connection failed."; clearTimeout(timeout); });
-  socket.addEventListener("close", () => { clearTimeout(timeout); if (order.status === "PROCESS") { order.status = "ERROR"; order.details = "S2Tools connection closed before completion."; } });
+  socket.addEventListener("error", () => { order.status = "ERROR"; order.vendorStage = "connection_error"; order.details = "S2Tools connection failed."; clearTimeout(timeout); clearTimeout(responseTimeout); });
+  socket.addEventListener("close", () => { clearTimeout(timeout); clearTimeout(responseTimeout); if (order.status === "PROCESS") { order.status = "ERROR"; order.vendorStage = "closed"; order.details = "S2Tools connection closed before completion."; } });
 }
 
 app.get("/api/s2tools/availability", requireSession, async (req, res, next) => {
