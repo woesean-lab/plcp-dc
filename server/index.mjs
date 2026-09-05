@@ -36,7 +36,9 @@ const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCOR
 const discordApiBase = "https://discord.com/api/v10";
 const s2toolsApiBase = String(process.env.S2TOOLS_API_BASE_URL ?? "https://api3.s2tools.uk").replace(/\/$/, "");
 const s2toolsBotId = String(process.env.S2TOOLS_BOT_ID ?? "").trim();
+const s2toolsDiscordBotToken = String(process.env.S2TOOLS_DISCORD_BOT_TOKEN ?? "").trim();
 const s2toolsOrders = new Map();
+const s2toolsPendingOrders = new Map();
 const communityOauthStateDurationMs = 10 * 60 * 1000;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -2969,6 +2971,55 @@ function getS2ToolsStockValue(stock, service) {
   })[service] ?? 0;
 }
 
+function getS2ToolsBotInvite(guildId) {
+  const params = new URLSearchParams({ client_id: s2toolsBotId, scope: "bot applications.commands", permissions: "35" });
+  if (guildId) params.set("guild_id", guildId);
+  return `https://discord.com/oauth2/authorize?${params.toString()}`;
+}
+
+async function isS2ToolsBotInGuild(guildId) {
+  if (!s2toolsDiscordBotToken) {
+    throw Object.assign(new Error("Configure S2TOOLS_DISCORD_BOT_TOKEN before creating a Members 3 order."), { statusCode: 503 });
+  }
+  const response = await fetch(`${discordApiBase}/guilds/${encodeURIComponent(guildId)}`, {
+    headers: { Authorization: `Bot ${s2toolsDiscordBotToken}` },
+    cache: "no-store"
+  });
+  if (response.ok) return true;
+  if (response.status === 403 || response.status === 404) return false;
+  if (response.status === 401) throw Object.assign(new Error("S2TOOLS_DISCORD_BOT_TOKEN is invalid."), { statusCode: 503 });
+  throw Object.assign(new Error(`Discord bot membership check returned ${response.status}.`), { statusCode: 502 });
+}
+
+function waitForS2ToolsBot(order, redeemKey, target) {
+  if (s2toolsPendingOrders.has(order.uniqid)) return;
+  const startedAt = Date.now();
+  const timer = setInterval(async () => {
+    try {
+      if (Date.now() - startedAt > 30 * 60 * 1000) {
+        clearInterval(timer);
+        s2toolsPendingOrders.delete(order.uniqid);
+        order.status = "ERROR";
+        order.details = "Members 3 bot was not added within 30 minutes. The redeem key was not submitted.";
+        return;
+      }
+      if (await isS2ToolsBotInGuild(order.serverId)) {
+        clearInterval(timer);
+        s2toolsPendingOrders.delete(order.uniqid);
+        order.status = "NEW";
+        order.details = "Members 3 bot detected. Delivery queued.";
+        void runS2ToolsOrder(order, redeemKey, target).catch((error) => {
+          order.status = "ERROR";
+          order.details = error instanceof Error ? error.message : "S2Tools order failed.";
+        });
+      }
+    } catch (error) {
+      order.details = error instanceof Error ? error.message : "Bot membership check failed.";
+    }
+  }, 5_000);
+  s2toolsPendingOrders.set(order.uniqid, timer);
+}
+
 async function fetchS2Tools(pathname) {
   const response = await fetch(`${s2toolsApiBase}${pathname}`, { cache: "no-store" });
   const payload = await response.json().catch(() => ({}));
@@ -3095,10 +3146,14 @@ app.post("/api/s2tools/orders", requireSession, async (req, res, next) => {
     if (!/^S2TOOLS-(ONLINE|OFFLINE|1MONTH|3MONTH)$/.test(service) || !redeemKey || !target || !Number.isInteger(amount) || amount < 1) return res.status(400).json({ message: "Service, redeem key, target and amount are required." });
     const info = await resolveDiscordInvite(target);
     const uniqid = `s2_${crypto.randomUUID()}`;
-    const order = { uniqid, provider: "s2tools", service, serverId: info.guildId, serverName: info.guildName, serverInvite: target, serverMemberCount: info.approximateMemberCount, amount, added: 0, delay, status: delay ? "WAITING" : "NEW", details: delay ? `Delivery starts in ${delay} seconds.` : "Delivery queued.", createdAt: new Date().toISOString() };
+    const botInGuild = await isS2ToolsBotInGuild(info.guildId);
+    const botInvite = getS2ToolsBotInvite(info.guildId);
+    const waitingForBot = botInGuild === false;
+    const order = { uniqid, provider: "s2tools", service, serverId: info.guildId, serverName: info.guildName, serverInvite: target, serverMemberCount: info.approximateMemberCount, amount, added: 0, delay, status: waitingForBot ? "WAITING" : delay ? "WAITING" : "NEW", details: waitingForBot ? "Add the Members 3 bot to this server to start delivery." : delay ? `Delivery starts in ${delay} seconds.` : "Delivery queued.", botInvite, bot_invite: botInvite, createdAt: new Date().toISOString() };
     s2toolsOrders.set(uniqid, order);
-    void runS2ToolsOrder(order, redeemKey, target).catch((error) => { order.status = "ERROR"; order.details = error instanceof Error ? error.message : "S2Tools order failed."; });
-    res.json({ uniqid });
+    if (waitingForBot) waitForS2ToolsBot(order, redeemKey, target);
+    else void runS2ToolsOrder(order, redeemKey, target).catch((error) => { order.status = "ERROR"; order.details = error instanceof Error ? error.message : "S2Tools order failed."; });
+    res.json({ uniqid, bot_invite: botInvite });
   } catch (error) { next(error); }
 });
 

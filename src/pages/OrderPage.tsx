@@ -336,6 +336,7 @@ export default function OrderPage() {
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
   const isCommunityProvider = provider === "community";
+  const isS2ToolsProvider = provider === "s2tools";
 
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
@@ -834,7 +835,7 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <p className={labelClass}>{isWaitingForBot ? "Action required" : "Order details"}</p>
                 {isWaitingForBot ? (
-                  <p>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</p>
+                  <p>{isS2ToolsProvider ? "Add the Members 3 bot to this server to start delivery." : <>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</>}</p>
                 ) : (
                   <p>{result.error ?? getPlainDetails(result.details)}</p>
                 )}
