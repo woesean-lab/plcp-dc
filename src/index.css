@@ -7500,20 +7500,75 @@
 }
 
 @media (max-width: 639px) {
+  .monitor-topbar {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .monitor-brand {
+    width: 100%;
+  }
+
   .monitor-topbar-actions {
-    align-items: center;
+    display: grid;
+    width: 100%;
+    grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+    align-items: stretch;
+    gap: 8px;
   }
 
   .monitor-live-refresh {
-    width: auto;
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    justify-content: center;
+    padding-inline: 8px;
+    font-size: 8px;
   }
 
   .monitor-store-action {
-    width: auto;
+    width: 100%;
+    min-width: 0;
+    height: 38px;
+    justify-content: center;
+    padding-inline: 9px;
   }
 
   .monitor-store-action small {
     display: none;
+  }
+
+  .monitor-store-action strong {
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .monitor-identity {
+    gap: 14px 12px;
+  }
+
+  .monitor-server-copy h1 {
+    font-size: 1.15rem;
+    line-height: 1.2;
+  }
+
+  .monitor-order-labels .lookup-status,
+  .monitor-order-labels .lookup-service-name {
+    min-height: 38px;
+  }
+
+  .monitor-order-labels .lookup-status small,
+  .monitor-order-labels .lookup-service-name small {
+    font-size: 7.5px;
+  }
+
+  .monitor-order-labels .lookup-status strong,
+  .monitor-order-labels .lookup-service-name strong {
+    font-size: 10.5px;
   }
 
   .monitor-order-context {
@@ -7522,7 +7577,14 @@
 
   .monitor-order-context > div {
     min-width: 0;
-    flex: 1 1 50%;
     padding-inline: 12px;
+  }
+
+  .monitor-order-context > div:first-child {
+    flex: .72 1 0;
+  }
+
+  .monitor-order-context > div:last-child {
+    flex: 1.28 1 0;
   }
 }
