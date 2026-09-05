@@ -3008,19 +3008,25 @@ async function isS2ToolsBotInGuild(guildId) {
   try {
     botToken = await loadS2ToolsDiscordBotToken();
   } catch {
-    throw Object.assign(new Error("S2Tools config.yaml could not be read for the Members 3 bot check."), { statusCode: 503 });
+    throw Object.assign(new Error("Members 3 bot token could not be loaded. In EasyPanel, set S2TOOLS_DISCORD_BOT_TOKEN instead of a Windows config path."), { statusCode: 503, exposeMessage: true });
   }
   if (!botToken) {
-    throw Object.assign(new Error("Members 3 bot token was not found in config.yaml."), { statusCode: 503 });
+    throw Object.assign(new Error("Members 3 bot token is not configured. Add S2TOOLS_DISCORD_BOT_TOKEN to the EasyPanel service environment and redeploy it."), { statusCode: 503, exposeMessage: true });
   }
-  const response = await fetch(`${discordApiBase}/guilds/${encodeURIComponent(guildId)}`, {
-    headers: { Authorization: `Bot ${botToken}` },
-    cache: "no-store"
-  });
+  let response;
+  try {
+    response = await fetch(`${discordApiBase}/guilds/${encodeURIComponent(guildId)}`, {
+      headers: { Authorization: `Bot ${botToken}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(10_000)
+    });
+  } catch {
+    throw Object.assign(new Error("EasyPanel could not reach the Discord API for the Members 3 bot check."), { statusCode: 502, exposeMessage: true });
+  }
   if (response.ok) return true;
   if (response.status === 403 || response.status === 404) return false;
-  if (response.status === 401) throw Object.assign(new Error("S2TOOLS_DISCORD_BOT_TOKEN is invalid."), { statusCode: 503 });
-  throw Object.assign(new Error(`Discord bot membership check returned ${response.status}.`), { statusCode: 502 });
+  if (response.status === 401) throw Object.assign(new Error("S2TOOLS_DISCORD_BOT_TOKEN is invalid. Copy the bot token, not the client secret, then redeploy EasyPanel."), { statusCode: 503, exposeMessage: true });
+  throw Object.assign(new Error(`Discord bot membership check returned HTTP ${response.status}.`), { statusCode: 502, exposeMessage: true });
 }
 
 function waitForS2ToolsBot(order, redeemKey, target) {
@@ -3053,9 +3059,14 @@ function waitForS2ToolsBot(order, redeemKey, target) {
 }
 
 async function fetchS2Tools(pathname) {
-  const response = await fetch(`${s2toolsApiBase}${pathname}`, { cache: "no-store" });
+  let response;
+  try {
+    response = await fetch(`${s2toolsApiBase}${pathname}`, { cache: "no-store", signal: AbortSignal.timeout(15_000) });
+  } catch {
+    throw Object.assign(new Error("EasyPanel could not reach the S2Tools API."), { statusCode: 502, exposeMessage: true });
+  }
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw Object.assign(new Error(payload?.message ?? `S2Tools returned ${response.status}.`), { statusCode: response.status });
+  if (!response.ok) throw Object.assign(new Error(`S2Tools API returned HTTP ${response.status}.`), { statusCode: response.status, exposeMessage: true });
   return payload;
 }
 
@@ -4312,7 +4323,10 @@ app.use((error, _req, res, _next) => {
 
   console.error(error);
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
-  res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });
+  const publicMessage = statusCode >= 500 && error?.exposeMessage !== true
+    ? "Service is temporarily unavailable."
+    : error.message;
+  res.status(statusCode).json({ message: publicMessage });
 });
 
 await initializeDatabase();
