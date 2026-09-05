@@ -37,11 +37,15 @@ const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCOR
 const discordApiBase = "https://discord.com/api/v10";
 const s2toolsApiBase = String(process.env.S2TOOLS_API_BASE_URL ?? "https://api3.s2tools.uk").replace(/\/$/, "");
 const s2toolsBotId = String(process.env.S2TOOLS_BOT_ID ?? "").trim();
-const s2toolsDiscordBotToken = String(process.env.S2TOOLS_DISCORD_BOT_TOKEN ?? "").trim();
+const configuredS2ToolsDiscordBotToken = String(process.env.S2TOOLS_DISCORD_BOT_TOKEN ?? "").trim();
 const defaultS2ToolsKeysFile = process.env.USERPROFILE
   ? path.join(process.env.USERPROFILE, "Desktop", "OAuth-AIO V1.2.3", "Data", "keys.json")
   : "";
 const s2toolsKeysFile = String(process.env.S2TOOLS_KEYS_FILE ?? defaultS2ToolsKeysFile).trim();
+const defaultS2ToolsConfigFile = process.env.USERPROFILE
+  ? path.join(process.env.USERPROFILE, "Desktop", "OAuth-AIO V1.2.3", "config.yaml")
+  : "";
+const s2toolsConfigFile = String(process.env.S2TOOLS_CONFIG_FILE ?? defaultS2ToolsConfigFile).trim();
 const s2toolsOrders = new Map();
 const s2toolsPendingOrders = new Map();
 const s2toolsInvoiceWatchers = new Map();
@@ -2983,12 +2987,34 @@ function getS2ToolsBotInvite(guildId) {
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
 
+async function loadS2ToolsDiscordBotToken() {
+  if (configuredS2ToolsDiscordBotToken) return configuredS2ToolsDiscordBotToken;
+  if (!s2toolsConfigFile) return "";
+  const source = await readFile(s2toolsConfigFile, "utf8");
+  const lines = source.split(/\r?\n/);
+  const discordLine = lines.findIndex((line) => /^Discord:\s*(?:#.*)?$/.test(line.trimEnd()));
+  if (discordLine < 0) return "";
+  for (let index = discordLine + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (/^\S/.test(line)) break;
+    const match = line.match(/^\s+Token:\s*["']?([^"'#\s]+)["']?/);
+    if (match?.[1]) return match[1].trim();
+  }
+  return "";
+}
+
 async function isS2ToolsBotInGuild(guildId) {
-  if (!s2toolsDiscordBotToken) {
-    throw Object.assign(new Error("Configure S2TOOLS_DISCORD_BOT_TOKEN before creating a Members 3 order."), { statusCode: 503 });
+  let botToken = "";
+  try {
+    botToken = await loadS2ToolsDiscordBotToken();
+  } catch {
+    throw Object.assign(new Error("S2Tools config.yaml could not be read for the Members 3 bot check."), { statusCode: 503 });
+  }
+  if (!botToken) {
+    throw Object.assign(new Error("Members 3 bot token was not found in config.yaml."), { statusCode: 503 });
   }
   const response = await fetch(`${discordApiBase}/guilds/${encodeURIComponent(guildId)}`, {
-    headers: { Authorization: `Bot ${s2toolsDiscordBotToken}` },
+    headers: { Authorization: `Bot ${botToken}` },
     cache: "no-store"
   });
   if (response.ok) return true;
