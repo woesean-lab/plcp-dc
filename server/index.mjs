@@ -3297,6 +3297,7 @@ function sanitizePublicCommunityOrder(order) {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };
       delete sanitized.discordUserId;
+      delete sanitized.replacementHistoryUserIds;
       return sanitized;
     })
   };
@@ -3466,11 +3467,30 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       [failedUserId, config.guildId]
     );
 
+    const replacementHistoryUserIds = Array.from(new Set([
+      ...(Array.isArray(failedResult.replacementHistoryUserIds) ? failedResult.replacementHistoryUserIds : []),
+      failedUserId
+    ].map((value) => String(value ?? "").trim()).filter(isDiscordGuildId)));
+    const replacementHistoryUsernames = Array.from(new Set([
+      ...(Array.isArray(failedResult.replacementHistoryUsernames) ? failedResult.replacementHistoryUsernames : []),
+      failedResult.previousUsername,
+      failedResult.username
+    ].map((value) => String(value ?? "").trim()).filter(Boolean)));
     const usedUserIds = Array.from(new Set([
-      failedUserId,
-      ...results.map((item) => String(item?.discordUserId ?? "").trim()).filter(isDiscordGuildId)
+      ...replacementHistoryUserIds,
+      ...results.flatMap((item) => [
+        String(item?.discordUserId ?? "").trim(),
+        ...(Array.isArray(item?.replacementHistoryUserIds) ? item.replacementHistoryUserIds.map((value) => String(value ?? "").trim()) : [])
+      ]).filter(isDiscordGuildId)
     ]));
-    const usedUsernames = Array.from(new Set(results.map((item) => String(item?.username ?? "").trim()).filter(Boolean)));
+    const usedUsernames = Array.from(new Set([
+      ...replacementHistoryUsernames,
+      ...results.flatMap((item) => [
+        String(item?.username ?? "").trim(),
+        String(item?.previousUsername ?? "").trim(),
+        ...(Array.isArray(item?.replacementHistoryUsernames) ? item.replacementHistoryUsernames.map((value) => String(value ?? "").trim()) : [])
+      ]).filter(Boolean)
+    ]));
     const replacement = await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
@@ -3504,7 +3524,9 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       state: "replacing",
       details: "Replacement member delivery is running.",
       replacementAttempt: (Number(failedResult.replacementAttempt) || 0) + 1,
-      previousUsername: failedResult.username
+      previousUsername: failedResult.username,
+      replacementHistoryUserIds,
+      replacementHistoryUsernames
     };
     const activeOrder = {
       ...order,
