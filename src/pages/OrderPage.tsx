@@ -494,7 +494,10 @@ export default function OrderPage() {
     try {
       setUpdatingDelay(true);
       setResult((current) => (current ? { ...current, delay } : current));
-      await updateOrderDelay(target, delay, provider);
+      const updated = await updateOrderDelay(target, delay, provider);
+      if (updated && typeof updated === "object" && !Array.isArray(updated)) {
+        setResult((current) => mergeOrderStatus(current, updated as OrderStatusResponse));
+      }
       toast.success("Delay updated.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Delay could not be updated.");

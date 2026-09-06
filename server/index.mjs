@@ -1491,16 +1491,21 @@ async function processCommunityOrder(order, members, config) {
   let blockedByMembershipScreening = false;
 
   async function saveCommunityProgress(payload) {
-    const latest = await pool.query("SELECT payload->>'delay' AS delay, payload->>'status' AS status FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-    if (!latest.rowCount || String(latest.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return false;
-    const latestDelay = Number.parseInt(latest.rows[0]?.delay, 10);
-    if (Number.isFinite(latestDelay) && latestDelay > 0) order.delay = latestDelay;
     const updated = await pool.query(
       `UPDATE tracked_orders
-       SET payload = $2::jsonb, updated_at = NOW()
-       WHERE uniqid = $1 AND payload->>'status' <> 'CANCELLED'`,
+       SET payload = jsonb_set(
+             $2::jsonb,
+             '{delay}',
+             COALESCE(payload->'delay', $2::jsonb->'delay'),
+             true
+           ),
+           updated_at = NOW()
+       WHERE uniqid = $1 AND payload->>'status' <> 'CANCELLED'
+       RETURNING payload->>'delay' AS delay`,
       [order.uniqid, JSON.stringify({ ...payload, delay: order.delay })]
     );
+    const latestDelay = Number.parseInt(updated.rows[0]?.delay, 10);
+    if (Number.isFinite(latestDelay) && latestDelay > 0) order.delay = latestDelay;
     return updated.rowCount > 0;
   }
 
@@ -1633,14 +1638,18 @@ async function processCommunityOrder(order, members, config) {
     }
 
     if (index < members.length - 1) {
-      const latestOrder = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-      const currentDelay = Number.parseInt(latestOrder.rows[0]?.delay, 10);
-      if (Number.isFinite(currentDelay) && currentDelay > 0) {
-        const delayEndsAt = Date.now() + currentDelay * 1000;
-        while (Date.now() < delayEndsAt) {
-          await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, delayEndsAt - Date.now())));
-          const control = await pool.query("SELECT payload->>'status' AS status FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-          if (!control.rowCount || String(control.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return;
+      const delayStartedAt = Date.now();
+      let lastBotCheckAt = 0;
+      while (true) {
+        const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+        if (!control.rowCount || String(control.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return;
+        const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
+        const delayEndsAt = delayStartedAt + (Number.isFinite(currentDelay) && currentDelay > 0 ? currentDelay : Number(order.delay) || 1) * 1_000;
+        const remainingDelay = delayEndsAt - Date.now();
+        if (remainingDelay <= 0) break;
+
+        if (Date.now() - lastBotCheckAt >= 5_000) {
+          lastBotCheckAt = Date.now();
           const missingBotStatus = await detectMissingCommunityBot();
           if (missingBotStatus) {
             await pauseForCommunityBotIssue(index + 1, {
@@ -1651,6 +1660,7 @@ async function processCommunityOrder(order, members, config) {
             return;
           }
         }
+        await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, remainingDelay)));
       }
     }
   }
