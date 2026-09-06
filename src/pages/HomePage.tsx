@@ -941,8 +941,9 @@ export default function HomePage() {
         const value = record && typeof record === "object" ? record as Record<string, unknown> : {};
         return {
           user_id: value.user_id ?? value.userId,
-          refresh_token: value.refresh_token ?? value.refreshToken,
-          access_token: value.access_token ?? value.accessToken
+          access_token: value.access_token ?? value.accessToken,
+          authed_timestamp: value.authed_timestamp ?? value.authedTimestamp,
+          expires_in: value.expires_in ?? value.expiresIn
         };
       });
       const result = await importCommunityOAuthStock(sanitizedRecords, communityStockType);
@@ -1658,7 +1659,7 @@ export default function HomePage() {
               <h3>Import OAuth stock</h3>
               <span className="community-stock-import-format">JSON · max 2 MB</span>
             </div>
-            <p>Import users into the <strong>{communityStockType}</strong> pool without renewing their refresh tokens.</p>
+            <p>Import users into the <strong>{communityStockType}</strong> pool using their current OAuth access tokens without refreshing them.</p>
           </div>
         </div>
 
@@ -1705,7 +1706,7 @@ export default function HomePage() {
         )}
 
         <div className="community-stock-import-actions">
-          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account tokens are ignored. OAuth access tokens are checked when valid and never stored.</p>
+          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account and refresh tokens are ignored. Access tokens are encrypted, expire automatically and are never refreshed.</p>
           <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {importingCommunityStock ? "Validating & importing..." : "Import stock"}
@@ -2875,7 +2876,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Remove member</p>
             <h2 id="delete-member-title">Remove this user?</h2>
-            <p id="delete-member-description">This removes <strong>{communityMemberPendingDeletion.username}</strong> from Members Stock and revokes the saved Discord authorization.</p>
+            <p id="delete-member-description">This removes <strong>{communityMemberPendingDeletion.username}</strong> only from this panel. It does not revoke or modify the S2Tools authorization.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={removingCommunityUserId !== null} onClick={() => setCommunityMemberPendingDeletion(null)}>Keep user</Button>
               <Button type="button" variant="destructive" disabled={removingCommunityUserId !== null} onClick={() => void removeConnectedCommunityUser(communityMemberPendingDeletion)}>
