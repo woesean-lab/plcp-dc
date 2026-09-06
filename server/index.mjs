@@ -2480,7 +2480,7 @@ function createCommunityBotInvite(config, guildId) {
   return `https://discord.com/oauth2/authorize?${query.toString()}`;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false } = {}) {
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, activeOrderId = null } = {}) {
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
     const error = new Error("Configure the Members bot before creating an order.");
@@ -2521,7 +2521,9 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
        FROM tracked_orders
        WHERE payload->>'provider' = 'community'
          AND payload->>'status' IN ('WAITING', 'PROCESS')
-       LIMIT 1`
+         AND ($1::text IS NULL OR uniqid <> $1)
+       LIMIT 1`,
+      [activeOrderId]
     );
     if (activeOrders.rowCount) {
       const error = new Error("Finish the active Members 2 order before switching the target server.");
@@ -2684,7 +2686,7 @@ async function activateWaitingCommunityOrder(order) {
 
   let resolved;
   try {
-    resolved = await resolveConfiguredCommunityInvite(order.serverInvite);
+    resolved = await resolveConfiguredCommunityInvite(order.serverInvite, { activeOrderId: order.uniqid });
   } catch (error) {
     if (error?.statusCode === 409) return order;
     throw error;
