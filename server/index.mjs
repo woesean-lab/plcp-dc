@@ -1307,6 +1307,44 @@ async function approveCommunityJoinRequest(config, discordUserId) {
   return approval;
 }
 
+async function resolveCommunityPendingJoin(config, discordUserId) {
+  let member = await requestDiscord(
+    `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
+    { headers: { Authorization: `Bot ${config.botToken}` } }
+  );
+  if (member.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(member.payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    member = await requestDiscord(
+      `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
+      { headers: { Authorization: `Bot ${config.botToken}` } }
+    );
+  }
+
+  if (member.response.ok) {
+    return {
+      joined: true,
+      autoApproved: false,
+      pendingScreening: member.payload?.pending === true
+    };
+  }
+
+  if (member.response.status !== 404) {
+    const status = Number(member.response.status);
+    const message = String(member.payload?.message ?? "").trim();
+    const error = new Error(
+      status === 403
+        ? "The Members bot cannot verify the joined member. Check its server access and permissions."
+        : message || `Discord could not verify the joined member (${status}).`
+    );
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  await approveCommunityJoinRequest(config, discordUserId);
+  return { joined: true, autoApproved: true, pendingScreening: false };
+}
+
 function isCommunityMembershipScreeningResponse(result) {
   const body = result?.payload;
   const message = String(body?.message ?? "").toLowerCase();
@@ -1423,9 +1461,13 @@ async function processCommunityOrder(order, members, config) {
       const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
       if (isCommunityMembershipScreeningResponse(joined)) {
         if (experimentalCommunityJoinEnabled) {
-          await approveCommunityJoinRequest(config, member.discord_user_id);
+          const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
           state = "joined";
-          details = "Member applied and the Members bot approved the join request automatically.";
+          details = pendingJoin.autoApproved
+            ? "Member applied and the Members bot approved the join request automatically."
+            : pendingJoin.pendingScreening
+              ? "Member joined the server and is pending Discord's server-rules screening."
+              : "Member joined the server.";
           added += 1;
         } else {
           state = "blocked";
@@ -1528,9 +1570,13 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
     const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
     if (isCommunityMembershipScreeningResponse(joined)) {
       if (experimentalCommunityJoinEnabled) {
-        await approveCommunityJoinRequest(config, member.discord_user_id);
+        const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
         state = "joined";
-        details = "Replacement member applied and the Members bot approved the join request automatically.";
+        details = pendingJoin.autoApproved
+          ? "Replacement member applied and the Members bot approved the join request automatically."
+          : pendingJoin.pendingScreening
+            ? "Replacement member joined and is pending Discord's server-rules screening."
+            : "Replacement member joined the server.";
       } else {
         state = "blocked";
         details = "Discord membership screening is enabled on this server.";
@@ -3057,6 +3103,81 @@ async function hydrateCommunityOrderAvatars(order) {
   return hydrated;
 }
 
+async function reconcileCommunityPendingJoinResults(order) {
+  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults) || !order.serverId) return order;
+  const candidates = order.communityResults.filter((item) =>
+    item
+    && typeof item === "object"
+    && !Array.isArray(item)
+    && isDiscordGuildId(String(item.discordUserId ?? ""))
+    && ["failed", "blocked"].includes(String(item.state ?? "").toLowerCase())
+    && /pending Apply-to-Join request|Apply-to-Join request yet/i.test(String(item.details ?? ""))
+  );
+  if (!candidates.length) return order;
+
+  const config = await getCommunityOAuthConfig();
+  if (!config.configured || config.guildId !== String(order.serverId)) return order;
+
+  const joinedUserIds = new Set();
+  const pendingUserIds = new Set();
+  for (const item of candidates) {
+    try {
+      const member = await requestDiscord(
+        `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(item.discordUserId)}`,
+        { headers: { Authorization: `Bot ${config.botToken}` } }
+      );
+      if (member.response.ok) {
+        joinedUserIds.add(String(item.discordUserId));
+        if (member.payload?.pending === true) pendingUserIds.add(String(item.discordUserId));
+      }
+    } catch {
+      // Keep the original result and retry reconciliation on a later status poll.
+    }
+  }
+  if (!joinedUserIds.size) return order;
+
+  const completedAt = new Date().toISOString();
+  const communityResults = order.communityResults.map((item) => {
+    const discordUserId = String(item?.discordUserId ?? "");
+    if (!joinedUserIds.has(discordUserId)) return item;
+    return {
+      ...item,
+      state: "joined",
+      details: pendingUserIds.has(discordUserId)
+        ? "Member joined the server and is pending Discord's server-rules screening."
+        : "Member joined the server.",
+      completedAt
+    };
+  });
+  await pool.query(
+    `UPDATE community_oauth_joins
+     SET status = 'joined', details = 'Member presence reconciled after Discord returned a pending response.', joined_at = NOW(), reserved_order_id = NULL
+     WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+    [config.guildId, [...joinedUserIds]]
+  );
+
+  const joinedCount = communityResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+  const added = Math.max(Number(order.added ?? 0), joinedCount);
+  const amount = Number(order.amount ?? 0);
+  const currentStatus = String(order.status ?? "").toUpperCase();
+  const status = amount > 0 && added >= amount
+    ? "COMPLETED"
+    : ["ERROR", "PARTIAL"].includes(currentStatus) && added > 0
+      ? "PARTIAL"
+      : order.status;
+  const reconciled = {
+    ...order,
+    added,
+    status,
+    details: amount > 0 && added >= amount
+      ? `${added}/${amount} members delivered.`
+      : `${added}/${amount} members delivered. Review the member results.`,
+    communityResults
+  };
+  await saveTrackedOrderPayload(reconciled);
+  return reconciled;
+}
+
 function sanitizePublicCommunityOrder(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.communityResults)) return order;
   return {
@@ -3079,6 +3200,7 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
       return res.status(404).json({ message: "Members order could not be found." });
     }
     payload = await activateWaitingCommunityOrder(payload);
+    payload = await reconcileCommunityPendingJoinResults(payload);
     payload = await hydrateCommunityOrderAvatars(payload);
     res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
@@ -3269,6 +3391,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     let trackedPayload = tracked.rows[0]?.payload;
     if (trackedPayload && typeof trackedPayload === "object" && !Array.isArray(trackedPayload) && trackedPayload.provider === "community") {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
+      trackedPayload = await reconcileCommunityPendingJoinResults(trackedPayload);
       trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
       return res.set("Cache-Control", "no-store").json({ ...sanitizePublicCommunityOrder(trackedPayload), liveBoostStock, canManageCommunityMembers: true });
     }
