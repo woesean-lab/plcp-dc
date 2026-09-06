@@ -3047,6 +3047,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       waitingCode: waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
       experimentalJoin: experimentalCommunityJoinEnabled,
+      botApplicationId: config.clientId,
       botInvite,
       communityResults: selected.rows.map((row) => ({ discordUserId: row.discord_user_id, username: row.username, avatarUrl: row.avatar_url ?? null, state: "queued", details: "Waiting for delivery." }))
     };
@@ -3074,6 +3075,33 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
 
 async function activateWaitingCommunityOrder(order) {
   if (!order || order.provider !== "community" || String(order.status).toUpperCase() !== "WAITING") return order;
+
+  const latestConfig = await getCommunityOAuthConfig();
+  const targetGuildId = String(order.serverId ?? "").trim();
+  if (latestConfig.configured && isDiscordGuildId(targetGuildId)) {
+    const currentBotInvite = createCommunityBotInvite(latestConfig, targetGuildId);
+    if (order.botInvite !== currentBotInvite || order.botApplicationId !== latestConfig.clientId) {
+      order = {
+        ...order,
+        botInvite: currentBotInvite,
+        botApplicationId: latestConfig.clientId,
+        details: order.waitingCode === "discord_permissions"
+          ? order.details
+          : "Checking the currently configured Members bot in the target server."
+      };
+      const refreshed = await pool.query(
+        `UPDATE tracked_orders
+         SET payload = $2::jsonb, updated_at = NOW()
+         WHERE uniqid = $1 AND payload->>'status' = 'WAITING'
+         RETURNING payload`,
+        [order.uniqid, JSON.stringify(order)]
+      );
+      if (!refreshed.rowCount) {
+        const latest = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+        return latest.rows[0]?.payload ?? order;
+      }
+    }
+  }
 
   const lastCheckAt = activateWaitingCommunityOrder.lastChecks?.get(order.uniqid) ?? 0;
   if (Date.now() - lastCheckAt < 5_000) return order;
