@@ -25,11 +25,14 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
     const isHtmlResponse = contentType.includes("text/html") || /^\s*<!doctype html/i.test(text) || /^\s*<html/i.test(text);
     const isGatewayError = [502, 503, 504].includes(response.status);
+    const payloadMessage = typeof payload === "object" && payload && "message" in payload
+      ? String((payload as { message?: unknown }).message)
+      : null;
     const message =
-      isGatewayError || isHtmlResponse
+      payloadMessage
+        ? payloadMessage
+        : isGatewayError || isHtmlResponse
         ? "The server is temporarily unavailable. Please wait a moment and try again."
-        : typeof payload === "object" && payload && "message" in payload
-        ? String((payload as { message?: unknown }).message)
         : typeof payload === "string"
           ? payload.slice(0, 500)
           : `Request failed with ${response.status}`;

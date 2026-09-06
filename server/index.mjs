@@ -2613,7 +2613,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
 });
 
 app.post("/api/community/orders", requireSession, async (req, res, next) => {
-  const client = await pool.connect();
+  let client = null;
   try {
     const amount = Number.parseInt(req.body?.amount, 10);
     const delay = Number.parseInt(req.body?.delay, 10);
@@ -2630,6 +2630,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
 
     const uniqid = createCommunityOrderId();
+    client = await pool.connect();
     await client.query("BEGIN");
     const selected = await client.query(
        `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
@@ -2681,10 +2682,10 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     res.json({ uniqid, bot_invite: botInvite });
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
+    if (client) await client.query("ROLLBACK").catch(() => {});
     next(error);
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
