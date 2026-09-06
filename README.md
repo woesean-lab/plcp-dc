@@ -8,6 +8,7 @@ React + Vite uygulamasi. Admin panelinden Tokenu reseller API ile:
 - API key'i kodda tutmadan PostgreSQL'de sifreli saklama
 - Dcord uzerinden Boosts siparisi olusturma ve Boosts stok takibi
 - Acik kullanici onayi ile tek bir Discord sunucusuna Community OAuth katilimi
+- Apply-to-Join acik sunucularda Members botu ile deneysel otomatik basvuru onayi
 
 ## Gelistirme
 
@@ -27,6 +28,7 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 ## Notlar
 
 - API anahtarlari koda gommeli degil; admin panelindeki ayarlar bolumune girilir ve PostgreSQL'de sifreli saklanir.
+- `EXPERIMENTAL_JOIN_ENABLED` varsayilan olarak `true` degerindedir. Members 2 OAuth katilimi pending bir Apply-to-Join basvurusu olusturursa bot basvuruyu listeler ve otomatik onaylar. Botun hedef sunucuda `Kick Members` izni olmalidir. Gerektiginde `false` ile eski engelleme davranisina donulebilir.
 - Varsayilan API tabani: `https://dev.tokenu.net/api/v1/reseller`
 - Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir. Siparis once Dcord Tasks API ile olusturulur, donen `task_id` kaydedilir ve sonuc ayni gorev uzerinden takip edilir.
 - Dcord proxy listesi Boost Stock panelinden yonetilir ve sifreli saklanir. Dcord'un `join` endpointi proxy gerektirdigi icin her token icin bir proxy rezerve edilir, siparis eslesmesi sifreli saklanir ve rezerve edilen proxy listeden kaldirilir. `host:port:user:pass` girdileri otomatik olarak Dcord'un bekledigi `user:pass@host:port` formatina donusturulur.
