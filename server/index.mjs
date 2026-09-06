@@ -2511,8 +2511,17 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     }
 
     if (!botInInvitedGuild) {
-      const error = new Error("Add the Members bot from the order monitor to start delivery.");
+      const discordStatus = Number(invitedGuildResult.response.status);
+      const message = discordStatus === 401
+        ? "Discord rejected the saved Members bot token. Update it in Settings."
+        : discordStatus === 403
+          ? "The Members bot cannot access the target server. Check its role and permissions."
+          : discordStatus === 404
+            ? "The Members bot is not detected in the target server yet."
+            : `Discord could not verify the Members bot in the target server (${discordStatus || "unknown"}).`;
+      const error = new Error(message);
       error.statusCode = 409;
+      error.waitingCode = `discord_${discordStatus || "unknown"}`;
       throw error;
     }
 
@@ -2520,7 +2529,10 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       `SELECT 1
        FROM tracked_orders
        WHERE payload->>'provider' = 'community'
-         AND payload->>'status' IN ('WAITING', 'PROCESS')
+         AND (
+           ($1::text IS NULL AND payload->>'status' IN ('WAITING', 'PROCESS'))
+           OR ($1::text IS NOT NULL AND payload->>'status' = 'PROCESS')
+         )
          AND ($1::text IS NULL OR uniqid <> $1)
        LIMIT 1`,
       [activeOrderId]
@@ -2688,7 +2700,17 @@ async function activateWaitingCommunityOrder(order) {
   try {
     resolved = await resolveConfiguredCommunityInvite(order.serverInvite, { activeOrderId: order.uniqid });
   } catch (error) {
-    if (error?.statusCode === 409) return order;
+    if (error?.statusCode === 409) {
+      const waitingOrder = {
+        ...order,
+        details: error instanceof Error ? error.message : "The Members bot is not ready in the target server.",
+        waitingCode: error?.waitingCode ?? "order_blocked"
+      };
+      if (waitingOrder.details !== order.details || waitingOrder.waitingCode !== order.waitingCode) {
+        await saveTrackedOrderPayload(waitingOrder);
+      }
+      return waitingOrder;
+    }
     throw error;
   }
 
@@ -2742,6 +2764,7 @@ async function activateWaitingCommunityOrder(order) {
     const activeOrder = {
       ...current,
       status: "PROCESS",
+      waitingCode: null,
       details: `0/${current.amount} members delivered.`,
       serverId: resolved.serverInfo.guildId,
       serverName: resolved.serverInfo.guildName,
