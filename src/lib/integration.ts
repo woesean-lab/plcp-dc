@@ -167,7 +167,7 @@ export function replaceCommunityMember(uniqid: string, resultIndex: number) {
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(
-      `/api/community/availability?invite=${encodeURIComponent(id)}`
+      `/api/community/availability?invite=${encodeURIComponent(id)}&service=${encodeURIComponent(service)}`
     );
   }
   if (isBoostService(service)) {

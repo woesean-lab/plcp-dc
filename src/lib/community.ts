@@ -12,6 +12,16 @@ export type CommunityBot = {
   avatarUrl: string | null;
 };
 
+export type CommunityStockType = "offline" | "online";
+
+export type CommunityStockSummary = {
+  joined: number;
+  authorized: number;
+  ready: number;
+  alreadyMember: number;
+  failed: number;
+};
+
 export type CommunityJoinSummary = {
   configured: boolean;
   missing?: string[];
@@ -23,6 +33,7 @@ export type CommunityJoinSummary = {
   alreadyMember?: number;
   failed?: number;
   syncing?: boolean;
+  categories?: Record<CommunityStockType, CommunityStockSummary>;
 };
 
 export type CommunityJoinRecord = {
@@ -34,6 +45,7 @@ export type CommunityJoinRecord = {
   reservedOrderId?: string | null;
   authorizedAt: string;
   joinedAt: string | null;
+  stockType: CommunityStockType;
 };
 
 export type CommunityAdminStatus = CommunityJoinSummary & {
@@ -117,12 +129,12 @@ export async function clearCommunityConfig() {
   }
 }
 
-export function importCommunityOAuthStock(records: unknown[]) {
+export function importCommunityOAuthStock(records: unknown[], stockType: CommunityStockType) {
   return fetch("/api/community/import-oauth-stock", {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records })
+    body: JSON.stringify({ records, stockType })
   }).then(parseResponse<CommunityOAuthImportResult>);
 }

@@ -1469,7 +1469,8 @@
     transition: opacity 180ms ease;
   }
 
-  .service-option[data-service="OAUTH-OFFLINE"] {
+  .service-option[data-service="OAUTH-OFFLINE"],
+  .service-option[data-service="COMMUNITY-OFFLINE"] {
     --service-tone: #e6e8ef;
     --service-tone-soft: rgba(255, 255, 255, 0.075);
     --service-tone-border: rgba(255, 255, 255, 0.2);
@@ -1477,7 +1478,8 @@
     --service-tone-ink: #f4f5fb;
   }
 
-  .service-option[data-service="OAUTH-ONLINE"] {
+  .service-option[data-service="OAUTH-ONLINE"],
+  .service-option[data-service="COMMUNITY-ONLINE"] {
     --service-tone: #69ddb2;
     --service-tone-soft: rgba(105, 221, 178, 0.13);
     --service-tone-border: rgba(105, 221, 178, 0.38);
@@ -6006,6 +6008,67 @@
   color: var(--app-muted);
   font-size: 11px;
   line-height: 1.6;
+}
+
+.community-stock-type-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 18px;
+  padding: 4px;
+  border: 1px solid var(--app-border);
+  border-radius: 9px;
+  background: rgba(4, 5, 11, .24);
+}
+
+.community-stock-type-tabs button {
+  display: flex;
+  min-width: 0;
+  min-height: 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--app-muted);
+  text-align: left;
+  transition: border-color .18s ease, background-color .18s ease, color .18s ease;
+}
+
+.community-stock-type-tabs button:hover {
+  color: var(--app-text-secondary);
+  background: var(--app-hover);
+}
+
+.community-stock-type-tabs button.is-active {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.community-stock-type-tabs button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--app-accent-bright) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.community-stock-type-tabs button > span {
+  min-width: 0;
+}
+
+.community-stock-type-tabs strong,
+.community-stock-type-tabs small {
+  display: block;
+}
+
+.community-stock-type-tabs strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.community-stock-type-tabs small {
+  margin-top: 3px;
+  color: var(--app-subtle);
+  font-size: 9px;
 }
 
 .community-stock-import {

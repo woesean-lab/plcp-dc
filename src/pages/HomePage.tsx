@@ -22,6 +22,7 @@ import {
   LoaderCircle,
   Minus,
   Plus,
+  Radio,
   RefreshCw,
   RotateCcw,
   Search,
@@ -47,7 +48,8 @@ import {
   saveCommunityConfig,
   syncCommunityAuthorizations,
   type CommunityAdminStatus,
-  type CommunityConfig
+  type CommunityConfig,
+  type CommunityStockType
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
@@ -543,6 +545,7 @@ export default function HomePage() {
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
+  const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -609,8 +612,11 @@ export default function HomePage() {
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
+  const selectedCommunityStockType: CommunityStockType = form.service === "COMMUNITY-ONLINE" ? "online" : "offline";
+  const selectedCommunitySummary = communityStatus?.categories?.[selectedCommunityStockType];
+  const selectedCommunityReady = selectedCommunitySummary?.ready ?? (selectedCommunityStockType === "offline" ? communityStatus?.ready ?? 0 : 0);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
-  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || (communityStatus?.ready ?? 0) > 0);
+  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
     () => {
@@ -628,6 +634,7 @@ export default function HomePage() {
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
+  const communityServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "community");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
@@ -958,11 +965,11 @@ export default function HomePage() {
           refresh_token: value.refresh_token ?? value.refreshToken
         };
       });
-      const result = await importCommunityOAuthStock(sanitizedRecords);
+      const result = await importCommunityOAuthStock(sanitizedRecords, communityStockType);
       await refreshCommunityStatus();
       setCommunityImportFile(null);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-      const summary = `${result.imported} imported, ${result.skipped} skipped, ${result.failed} failed.`;
+      const summary = `${result.imported} imported to ${communityStockType}, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) notifyError(summary);
       else notifySuccess(summary);
     } catch (error) {
@@ -1563,7 +1570,15 @@ export default function HomePage() {
     : communityStockConfigured
       ? { label: "Ready", variant: "success" as const }
       : { label: "Setup required", variant: "destructive" as const };
-  const communityTotalUsers = (communityStatus?.authorized ?? 0) + (communityStatus?.failed ?? 0);
+  const communityVisibleSummary = communityStatus?.categories?.[communityStockType] ?? {
+    joined: 0,
+    authorized: communityStockType === "offline" ? communityStatus?.authorized ?? 0 : 0,
+    ready: communityStockType === "offline" ? communityStatus?.ready ?? 0 : 0,
+    alreadyMember: communityStockType === "offline" ? communityStatus?.alreadyMember ?? 0 : 0,
+    failed: communityStockType === "offline" ? communityStatus?.failed ?? 0 : 0
+  };
+  const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
+  const communityVisibleRecords = (communityStatus?.recent ?? []).filter((record) => record.stockType === communityStockType);
 
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
@@ -1616,11 +1631,39 @@ export default function HomePage() {
         <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
       </div>
 
+      <div className="community-stock-type-tabs" role="tablist" aria-label="Members Stock category">
+        {([
+          { value: "offline", label: "Offline", icon: Users },
+          { value: "online", label: "Online", icon: Radio }
+        ] as const).map((option) => {
+          const Icon = option.icon;
+          const count = communityStatus?.categories?.[option.value]?.ready ?? 0;
+          const selected = communityStockType === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              className={selected ? "is-active" : ""}
+              onClick={() => {
+                setCommunityStockType(option.value);
+                setCommunityImportFile(null);
+                if (communityImportInputRef.current) communityImportInputRef.current.value = "";
+              }}
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              <span><strong>{option.label}</strong><small>{count} available</small></span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="community-admin-progress members-connected-summary">
         <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
-        <div><span>Available users</span><strong>{communityStatus?.ready ?? 0}</strong></div>
-        <div><span>Connected users</span><strong>{communityStatus?.authorized ?? 0}</strong></div>
-        <div><span>Inactive users</span><strong>{communityStatus?.failed ?? 0}</strong></div>
+        <div><span>Available users</span><strong>{communityVisibleSummary.ready}</strong></div>
+        <div><span>Connected users</span><strong>{communityVisibleSummary.authorized}</strong></div>
+        <div><span>Inactive users</span><strong>{communityVisibleSummary.failed}</strong></div>
       </div>
 
       {!communityStockConfigured ? (
@@ -1635,7 +1678,7 @@ export default function HomePage() {
               <h3>Import OAuth stock</h3>
               <span className="community-stock-import-format">JSON · max 2 MB</span>
             </div>
-            <p>Import users authorized for this Discord application. Only user ID and refresh token fields are processed.</p>
+            <p>Import users into the <strong>{communityStockType}</strong> pool. Only user ID and refresh token fields are processed.</p>
           </div>
         </div>
 
@@ -1690,9 +1733,9 @@ export default function HomePage() {
         </div>
       </form>
 
-      {communityStatus?.recent?.length ? (
+      {communityVisibleRecords.length ? (
         <div className="community-recent-list">
-          {communityStatus.recent.map((record, index) => {
+          {communityVisibleRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
             return (
               <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
@@ -1722,7 +1765,7 @@ export default function HomePage() {
           })}
         </div>
       ) : communityStatus?.configured ? (
-        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members in stock yet</strong><span>Import an OAuth JSON file to build your Members Stock.</span></div>
+        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityStockType} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
@@ -1803,7 +1846,7 @@ export default function HomePage() {
                                     : option.value === "community"
                                       ? "COMMUNITY-OFFLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
-                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.ready ?? 1)) : 100,
+                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.categories?.offline.ready ?? communityStatus?.ready ?? 1)) : 100,
                                   concurrency: option.value === "boosts" ? 1 : current.concurrency
                                 }))
                               }
@@ -1890,18 +1933,38 @@ export default function HomePage() {
                           <span className={fieldLabelClass}>Member mode</span>
                           <p className="service-selector-copy">Members are delivered from your connected OAuth stock.</p>
                         </div>
-                        <span className="service-selector-count">1 mode</span>
+                        <span className="service-selector-count">2 modes</span>
                       </div>
-                      <div className="service-grid service-grid-compact">
-                        <div className="service-option is-selected" data-service="COMMUNITY-OFFLINE">
-                          <span className="service-option-head" aria-hidden="true">
-                            <span className="service-option-icon"><Users className="h-5 w-5" /></span>
-                            <span className="service-option-state"><Check className="h-3 w-3" /> Selected</span>
-                          </span>
-                          <span className="service-option-title">Offline</span>
-                          <span className="service-option-description">{communityStatus?.ready ?? 0} connected members available</span>
-                          <span className="service-option-code">COMMUNITY-OFFLINE</span>
-                        </div>
+                      <div className="service-grid service-grid-compact community-mode-grid">
+                        {communityServiceOptions.map((option) => {
+                          const Icon = option.icon;
+                          const selected = form.service === option.value;
+                          const stockType = option.value === "COMMUNITY-ONLINE" ? "online" : "offline";
+                          const ready = communityStatus?.categories?.[stockType]?.ready ?? 0;
+                          return (
+                            <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
+                              <input
+                                className="sr-only"
+                                type="radio"
+                                name="communityService"
+                                value={option.value}
+                                checked={selected}
+                                onChange={() => setForm((current) => ({
+                                  ...current,
+                                  service: option.value,
+                                  amount: Math.max(1, Math.min(current.amount, ready || 1))
+                                }))}
+                              />
+                              <span className="service-option-head" aria-hidden="true">
+                                <span className="service-option-icon"><Icon className="h-5 w-5" /></span>
+                                <span className="service-option-state">{selected ? <><Check className="h-3 w-3" /> Selected</> : "Select"}</span>
+                              </span>
+                              <span className="service-option-title">{option.title}</span>
+                              <span className="service-option-description">{ready} connected members available</span>
+                              <span className="service-option-code">{option.value}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </fieldset>
                   ) : null}
@@ -2075,11 +2138,11 @@ export default function HomePage() {
                               className="boost-number-input"
                               type="number"
                               min={1}
-                              max={selectedIsCommunity ? Math.max(1, communityStatus?.ready ?? 0) : undefined}
+                              max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
                               value={form.amount}
                               onChange={(event) => {
                                 const requested = Number(event.target.value) || 1;
-                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, communityStatus?.ready ?? 0)) : requested;
+                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
                                 setForm((current) => ({ ...current, amount }));
                               }}
                             />
@@ -2145,8 +2208,8 @@ export default function HomePage() {
                       </Link>
                     </Button>
                   ) : null}
-                  {selectedIsCommunity && selectedApiConfigured && (communityStatus?.ready ?? 0) === 0 ? (
-                    <span className="self-center text-sm text-[var(--app-muted)]">No connected members are available.</span>
+                  {selectedIsCommunity && selectedApiConfigured && selectedCommunityReady === 0 ? (
+                    <span className="self-center text-sm text-[var(--app-muted)]">No {selectedCommunityStockType} members are available.</span>
                   ) : null}
                 </div>
 

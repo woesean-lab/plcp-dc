@@ -319,25 +319,52 @@ async function checkDcordBoostMembershipScreening(invite, serverInfo) {
 async function loadCommunityJoinSummary(config) {
   const result = await pool.query(
     `SELECT
+       stock_type,
        COUNT(*) FILTER (WHERE status = 'joined')::int AS joined,
        COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
        COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status <> 'failed')::int AS authorized,
        COUNT(*) FILTER (WHERE encrypted_refresh_token IS NOT NULL AND status = 'authorized' AND reserved_order_id IS NULL)::int AS ready
      FROM community_oauth_joins
-     WHERE guild_id = $1`,
+     WHERE guild_id = $1
+     GROUP BY stock_type`,
     [config.guildId]
   );
-  const row = result.rows[0] ?? {};
-  const joined = Number(row.joined ?? 0);
-  const authorized = Number(row.authorized ?? 0);
+  const empty = () => ({ joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 });
+  const categories = { offline: empty(), online: empty() };
+  for (const row of result.rows) {
+    const type = normalizeCommunityStockType(row.stock_type);
+    categories[type] = {
+      joined: Number(row.joined ?? 0),
+      authorized: Number(row.authorized ?? 0),
+      ready: Number(row.ready ?? 0),
+      alreadyMember: Number(row.already_member ?? 0),
+      failed: Number(row.failed ?? 0)
+    };
+  }
+  const combined = Object.values(categories).reduce((total, item) => ({
+    joined: total.joined + item.joined,
+    authorized: total.authorized + item.authorized,
+    ready: total.ready + item.ready,
+    alreadyMember: total.alreadyMember + item.alreadyMember,
+    failed: total.failed + item.failed
+  }), empty());
   return {
-    joined,
-    authorized,
-    ready: Number(row.ready ?? 0),
-    alreadyMember: Number(row.already_member ?? 0),
-    failed: Number(row.failed ?? 0)
+    ...combined,
+    categories
   };
+}
+
+function normalizeCommunityStockType(value) {
+  return String(value ?? "").trim().toLowerCase() === "online" ? "online" : "offline";
+}
+
+function getCommunityStockTypeFromService(service) {
+  return service === "COMMUNITY-ONLINE" ? "online" : "offline";
+}
+
+function isCommunityServiceType(service) {
+  return service === "COMMUNITY-OFFLINE" || service === "COMMUNITY-ONLINE";
 }
 
 function getCredentialEncryptionKey() {
@@ -2066,6 +2093,7 @@ async function initializeDatabase() {
       avatar_url TEXT,
       encrypted_refresh_token TEXT,
       status TEXT NOT NULL,
+      stock_type TEXT NOT NULL DEFAULT 'offline',
       details TEXT,
       authorized_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       joined_at TIMESTAMPTZ,
@@ -2074,7 +2102,10 @@ async function initializeDatabase() {
   `);
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
+  await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type NOT IN ('offline', 'online') OR stock_type IS NULL");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
+  await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_type_status_idx ON community_oauth_joins (guild_id, stock_type, status)");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_reservation_idx ON community_oauth_joins (guild_id, reserved_order_id)");
   await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
   await pool.query(`
@@ -2232,6 +2263,10 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     }
 
     const records = Array.isArray(req.body) ? req.body : req.body?.records;
+    const stockType = normalizeCommunityStockType(Array.isArray(req.body) ? "offline" : req.body?.stockType);
+    if (!Array.isArray(req.body) && !["offline", "online"].includes(String(req.body?.stockType ?? "").toLowerCase())) {
+      return res.status(400).json({ message: "Choose Online or Offline before importing OAuth stock." });
+    }
     if (!Array.isArray(records) || !records.length || records.length > 500) {
       return res.status(400).json({ message: "Upload a JSON array containing between 1 and 500 OAuth records." });
     }
@@ -2279,18 +2314,19 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
           : null;
         await pool.query(
           `INSERT INTO community_oauth_joins
-             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, details, authorized_at, joined_at, reserved_order_id)
-           VALUES ($1, $2, $3, $4, $5, 'authorized', 'Imported from OAuth stock.', NOW(), NULL, NULL)
+             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
+           VALUES ($1, $2, $3, $4, $5, 'authorized', $6, 'Imported from OAuth stock.', NOW(), NULL, NULL)
            ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
              username = EXCLUDED.username,
              avatar_url = EXCLUDED.avatar_url,
              encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
              status = 'authorized',
+             stock_type = EXCLUDED.stock_type,
              details = EXCLUDED.details,
              authorized_at = NOW(),
              joined_at = NULL,
              reserved_order_id = NULL`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(credentials.refreshToken)]
+          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(credentials.refreshToken), stockType]
         );
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
@@ -2302,7 +2338,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       }
     }
 
-    res.json(result);
+    res.json({ ...result, stockType });
   } catch (error) {
     next(error);
   }
@@ -2321,6 +2357,10 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         alreadyMember: 0,
         failed: 0,
         syncing: false,
+        categories: {
+          offline: { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 },
+          online: { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 }
+        },
         recent: []
       });
     }
@@ -2330,7 +2370,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
       pool.query(
-        `SELECT discord_user_id, username, avatar_url, status, details, authorized_at, joined_at, reserved_order_id
+        `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id
          FROM community_oauth_joins
          WHERE guild_id = $1 AND encrypted_refresh_token IS NOT NULL
          ORDER BY
@@ -2354,6 +2394,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         username: row.username,
         avatarUrl: row.avatar_url,
         status: row.status,
+        stockType: normalizeCommunityStockType(row.stock_type),
         details: row.details,
         reservedOrderId: row.reserved_order_id,
         authorizedAt: row.authorized_at,
@@ -2486,10 +2527,10 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       await client.query("BEGIN");
       await client.query(
         `INSERT INTO community_oauth_joins
-           (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, details, authorized_at, joined_at, reserved_order_id)
+           (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
          SELECT discord_user_id, $2, username, avatar_url, encrypted_refresh_token,
                 CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
-                'Moved to the new Members Stock server.', authorized_at, NULL, reserved_order_id
+                stock_type, 'Moved to the new Members Stock server.', authorized_at, NULL, reserved_order_id
          FROM community_oauth_joins
          WHERE guild_id = $1
          ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
@@ -2497,6 +2538,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
            avatar_url = EXCLUDED.avatar_url,
            encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, community_oauth_joins.encrypted_refresh_token),
            status = CASE WHEN EXCLUDED.status = 'failed' THEN community_oauth_joins.status ELSE 'authorized' END,
+           stock_type = EXCLUDED.stock_type,
            details = EXCLUDED.details,
            reserved_order_id = EXCLUDED.reserved_order_id`,
         [config.guildId, nextConfig.guildId]
@@ -2531,11 +2573,14 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
     const { config, serverInfo, invite } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
+    const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
+    if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
+    const stockType = getCommunityStockTypeFromService(service);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
-      [config.guildId]
+       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL`,
+      [config.guildId, stockType]
     );
     const available = Number(result.rows[0]?.available ?? 0);
     const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
@@ -2550,9 +2595,11 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
   try {
     const amount = Number.parseInt(req.body?.amount, 10);
     const delay = Number.parseInt(req.body?.delay, 10);
-    if (req.body?.service !== "COMMUNITY-OFFLINE" || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
-      return res.status(400).json({ message: "A valid Offline member amount and delay are required." });
+    const service = String(req.body?.service ?? "");
+    if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
+      return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
+    const stockType = getCommunityStockTypeFromService(service);
 
     const { config, serverInfo, waitingForBot, botInvite, invite } = await resolveConfiguredCommunityInvite(req.body?.id, { allowWaitingForBot: true });
     const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
@@ -2563,17 +2610,17 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     await client.query("BEGIN");
     const selected = await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
+       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
+       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL AND reserved_order_id IS NULL
        ORDER BY authorized_at ASC
-       LIMIT $2
+       LIMIT $3
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, amount]
+      [config.guildId, stockType, amount]
     );
     if (selected.rowCount < amount) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: `Only ${selected.rowCount} connected members are currently available.` });
+      return res.status(409).json({ message: `Only ${selected.rowCount} ${stockType} members are currently available.` });
     }
     await client.query(
       "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
@@ -2582,7 +2629,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const order = {
       uniqid,
       provider: "community",
-      service: "COMMUNITY-OFFLINE",
+      service,
+      stockType,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
       serverInvite: String(req.body?.id ?? "").trim(),
@@ -2647,10 +2695,10 @@ async function activateWaitingCommunityOrder(order) {
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
-        WHERE guild_id = $1 AND reserved_order_id = $2 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
+        WHERE guild_id = $1 AND reserved_order_id = $2 AND stock_type = $3 AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
        ORDER BY authorized_at ASC
        FOR UPDATE`,
-      [resolved.config.guildId, current.uniqid]
+      [resolved.config.guildId, current.uniqid, getCommunityStockTypeFromService(current.service)]
     )).rows;
 
     const missing = Math.max(0, Number(current.amount) - members.length);
@@ -2658,11 +2706,11 @@ async function activateWaitingCommunityOrder(order) {
       const extra = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND reserved_order_id IS NULL AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
+         WHERE guild_id = $1 AND stock_type = $2 AND reserved_order_id IS NULL AND status = 'authorized' AND encrypted_refresh_token IS NOT NULL
          ORDER BY authorized_at ASC
-         LIMIT $2
+         LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [resolved.config.guildId, missing]
+        [resolved.config.guildId, getCommunityStockTypeFromService(current.service), missing]
       );
       if (extra.rowCount) {
         await client.query(
@@ -2674,7 +2722,7 @@ async function activateWaitingCommunityOrder(order) {
     }
 
     if (members.length < Number(current.amount)) {
-      const failedOrder = { ...current, status: "ERROR", details: `Only ${members.length} connected members are available.` };
+      const failedOrder = { ...current, status: "ERROR", details: `Only ${members.length} ${getCommunityStockTypeFromService(current.service)} members are available.` };
       await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [current.uniqid]);
       await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [current.uniqid, JSON.stringify(failedOrder)]);
       await client.query("COMMIT");
@@ -2863,6 +2911,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       `SELECT discord_user_id, username, avatar_url, encrypted_refresh_token
        FROM community_oauth_joins
        WHERE guild_id = $1
+         AND stock_type = $4
           AND status = 'authorized'
          AND encrypted_refresh_token IS NOT NULL
          AND reserved_order_id IS NULL
@@ -2871,7 +2920,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        ORDER BY authorized_at ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames]
+      [config.guildId, usedUserIds, usedUsernames, getCommunityStockTypeFromService(order.service)]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
