@@ -35,7 +35,7 @@ import {
   Users,
   X,
 } from "lucide-react";
-import { loadTrackedOrders, saveTrackedOrders } from "../data/orders";
+import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
@@ -1395,7 +1395,7 @@ export default function HomePage() {
 
     try {
       setDeletingTrackedOrder(true);
-      await saveTrackedOrders(nextOrders);
+      await deleteTrackedOrder(target.uniqid);
       setOrders(nextOrders);
       setOrderPendingDeletion(null);
       notifySuccess(`Order ${target.uniqid} removed from tracking.`);
@@ -2799,7 +2799,13 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Remove order</p>
             <h2 id="delete-order-title">Stop tracking this order?</h2>
-            <p id="delete-order-description">This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Orders list and tracked orders database. It does not cancel the upstream order.</p>
+            <p id="delete-order-description">
+              This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Orders list and tracked orders database. {orderPendingDeletion.provider === "community"
+                ? "A waiting delivery is cancelled and its reserved members return to stock."
+                : orderPendingDeletion.provider === "dcord"
+                  ? "Active local delivery must finish before removal."
+                  : "It does not cancel the upstream order."}
+            </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={deletingTrackedOrder} onClick={() => setOrderPendingDeletion(null)}>Keep order</Button>
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>

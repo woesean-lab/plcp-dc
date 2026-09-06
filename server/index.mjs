@@ -4019,6 +4019,46 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
   }
 });
 
+app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    if (!tracked.rowCount) {
+      await client.query("COMMIT");
+      return res.json({ removed: true });
+    }
+
+    const payload = tracked.rows[0].payload;
+    const locallyManaged = payload?.provider === "community" || payload?.provider === "dcord" || payload?.service === "DCORD-BOOSTS";
+    if (locallyManaged && String(payload?.status ?? "").toUpperCase() === "PROCESS") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "An actively processing local order cannot be removed until it finishes." });
+    }
+
+    if (payload?.provider === "community") {
+      await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]);
+    }
+    await client.query("DELETE FROM tracked_orders WHERE uniqid = $1", [uniqid]);
+    await client.query(
+      "DELETE FROM app_settings WHERE setting_key = ANY($1::text[])",
+      [[getDcordOrderTokensSettingKey(uniqid), getDcordOrderProxiesSettingKey(uniqid)]]
+    );
+    await client.query("COMMIT");
+    res.json({ removed: true });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.put("/api/orders", requireSession, async (req, res, next) => {
   const orders = Array.isArray(req.body?.orders) ? req.body.orders : null;
   if (!orders || orders.some((order) => !order || typeof order.uniqid !== "string" || !order.uniqid.trim())) {
@@ -4070,6 +4110,9 @@ app.use(express.static(distDir, { index: false }));
 app.get("/{*splat}", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
 
 app.use((error, _req, res, _next) => {
+  if (error?.type === "entity.too.large") {
+    return res.status(413).json({ message: "The request is too large. Send fewer records at once." });
+  }
   if (error?.type === "entity.parse.failed") {
     return res.status(400).json({
       message: "Invalid JSON body. Property names must use double quotes."

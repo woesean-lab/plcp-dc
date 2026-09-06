@@ -28,12 +28,44 @@ export async function loadTrackedOrders(): Promise<TrackedOrder[]> {
 }
 
 export async function saveTrackedOrders(orders: TrackedOrder[]) {
+  const compactOrders = orders.map((order) => ({
+    uniqid: order.uniqid,
+    provider: order.provider,
+    service: order.service,
+    serverId: order.serverId,
+    serverName: order.serverName,
+    serverInvite: order.serverInvite,
+    serverMemberCount: order.serverMemberCount,
+    amount: order.amount,
+    added: order.added,
+    delay: order.delay,
+    statusDelay: order.statusDelay,
+    billingCycle: order.billingCycle,
+    duration: order.duration,
+    useProxy: order.useProxy,
+    concurrency: order.concurrency,
+    cost: order.cost,
+    botInvite: order.botInvite,
+    createdAt: order.createdAt,
+    status: order.status,
+    details: order.details
+  }));
   await parseResponse<{ saved: number }>(
     await fetch("/api/orders", {
       method: "PUT",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ orders })
+      body: JSON.stringify({ orders: compactOrders })
+    })
+  );
+}
+
+export async function deleteTrackedOrder(uniqid: string) {
+  await parseResponse<{ removed: boolean }>(
+    await fetch(`/api/orders/${encodeURIComponent(uniqid)}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+      cache: "no-store"
     })
   );
 }
