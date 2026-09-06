@@ -190,6 +190,7 @@ async function requestDiscord(pathname, init = {}) {
 
 let communityGuildCache = null;
 let communityBotCache = null;
+const communityMemberPresenceCache = new Map();
 
 function fallbackCommunityBot(config) {
   return {
@@ -482,6 +483,48 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
     [guildId]
   );
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
+}
+
+async function isCommunityMemberStillInGuild(config, guildId, discordUserId) {
+  const cacheKey = `${guildId}:${discordUserId}`;
+  const cached = communityMemberPresenceCache.get(cacheKey);
+  if (cached?.expiresAt > Date.now()) return cached.present;
+
+  let result = await requestDiscord(
+    `guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(discordUserId)}`,
+    { headers: { Authorization: `Bot ${config.botToken}` } }
+  );
+  if (result.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1_000));
+    result = await requestDiscord(
+      `guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(discordUserId)}`,
+      { headers: { Authorization: `Bot ${config.botToken}` } }
+    );
+  }
+
+  const discordCode = Number(result.payload?.code ?? 0);
+  const definitelyAbsent = result.response.status === 404 && [10007, 10013].includes(discordCode);
+  const present = result.response.ok || !definitelyAbsent;
+  communityMemberPresenceCache.set(cacheKey, {
+    present,
+    expiresAt: Date.now() + (present ? 60_000 : 30_000)
+  });
+  return present;
+}
+
+async function loadCommunityDeliveredUsersStillPresent(queryable, config, guildId) {
+  const historicalIds = await loadCommunityPreviouslyDeliveredUserIds(queryable, guildId);
+  const presentIds = [];
+  for (let offset = 0; offset < historicalIds.length; offset += 8) {
+    const batch = historicalIds.slice(offset, offset + 8);
+    const checks = await Promise.all(batch.map(async (discordUserId) => ({
+      discordUserId,
+      present: await isCommunityMemberStillInGuild(config, guildId, discordUserId)
+    })));
+    presentIds.push(...checks.filter((item) => item.present).map((item) => item.discordUserId));
+  }
+  return presentIds;
 }
 
 function getCredentialEncryptionKey() {
@@ -1552,6 +1595,12 @@ async function processCommunityOrder(order, members, config) {
       return;
     }
 
+    if (["joined", "already_member"].includes(state)) {
+      communityMemberPresenceCache.set(`${config.guildId}:${member.discord_user_id}`, {
+        present: true,
+        expiresAt: Date.now() + 60_000
+      });
+    }
     results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
@@ -1661,6 +1710,12 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
   const current = results[resultIndex];
   if (!current || current.discordUserId !== member.discord_user_id || String(current.state).toLowerCase() !== "replacing") return;
 
+  if (["joined", "already_member"].includes(state)) {
+    communityMemberPresenceCache.set(`${config.guildId}:${member.discord_user_id}`, {
+      present: true,
+      expiresAt: Date.now() + 60_000
+    });
+  }
   results[resultIndex] = {
     ...current,
     state,
@@ -2931,11 +2986,13 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
     const stockType = getCommunityStockTypeFromService(service);
+    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(pool, config, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()`,
-      [config.guildId, stockType]
+       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+         AND NOT (discord_user_id = ANY($3::text[]))`,
+      [config.guildId, stockType, previouslyDeliveredUserIds]
     );
     const available = Number(result.rows[0]?.available ?? 0);
     const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
@@ -2965,7 +3022,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, serverInfo.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, config, serverInfo.guildId);
     const selected = await client.query(
        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
@@ -3145,7 +3202,7 @@ async function activateWaitingCommunityOrder(order) {
           .map((item) => String(item?.discordUserId ?? ""))
           .filter(isDiscordGuildId)
       : [];
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, resolved.config.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, resolved.config, resolved.config.guildId);
     const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...previouslyDeliveredUserIds]));
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
@@ -3499,7 +3556,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       failedResult.previousUsername,
       failedResult.username
     ].map((value) => String(value ?? "").trim()).filter(Boolean)));
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, config.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, config, config.guildId);
     const usedUserIds = Array.from(new Set([
       ...replacementHistoryUserIds,
       ...previouslyDeliveredUserIds,
