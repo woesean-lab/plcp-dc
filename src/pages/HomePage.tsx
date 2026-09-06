@@ -46,7 +46,6 @@ import {
   importCommunityOAuthStock,
   removeCommunityAuthorization,
   saveCommunityConfig,
-  syncCommunityAuthorizations,
   type CommunityAdminStatus,
   type CommunityConfig,
   type CommunityStockType
@@ -866,26 +865,6 @@ export default function HomePage() {
     }
   }
 
-  async function syncCommunityStatus() {
-    try {
-      setLoadingCommunityStatus(true);
-      const result = await syncCommunityAuthorizations();
-      setCommunityStatus(await getCommunityAdminStatus());
-      const inactive = result.inactive ?? result.removed;
-      if (inactive) {
-        notifySuccess(`${inactive} disconnected user${inactive === 1 ? "" : "s"} marked inactive.`);
-      } else if (result.errors) {
-        notifyError(`${result.errors} authorization${result.errors === 1 ? "" : "s"} could not be checked. No records were changed.`);
-      } else {
-        notifySuccess(`${result.checked} connected user${result.checked === 1 ? "" : "s"} verified.`);
-      }
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Members Stock could not be synced.");
-    } finally {
-      setLoadingCommunityStatus(false);
-    }
-  }
-
   async function removeConnectedCommunityUser(record: CommunityAdminStatus["recent"][number]) {
     try {
       setRemovingCommunityUserId(record.id);
@@ -962,7 +941,8 @@ export default function HomePage() {
         const value = record && typeof record === "object" ? record as Record<string, unknown> : {};
         return {
           user_id: value.user_id ?? value.userId,
-          refresh_token: value.refresh_token ?? value.refreshToken
+          refresh_token: value.refresh_token ?? value.refreshToken,
+          access_token: value.access_token ?? value.accessToken
         };
       });
       const result = await importCommunityOAuthStock(sanitizedRecords, communityStockType);
@@ -1678,7 +1658,7 @@ export default function HomePage() {
               <h3>Import OAuth stock</h3>
               <span className="community-stock-import-format">JSON · max 2 MB</span>
             </div>
-            <p>Import users into the <strong>{communityStockType}</strong> pool. Only user ID and refresh token fields are processed.</p>
+            <p>Import users into the <strong>{communityStockType}</strong> pool without renewing their refresh tokens.</p>
           </div>
         </div>
 
@@ -1725,7 +1705,7 @@ export default function HomePage() {
         )}
 
         <div className="community-stock-import-actions">
-          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account and access tokens in the file are ignored.</p>
+          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account tokens are ignored. OAuth access tokens are checked when valid and never stored.</p>
           <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {importingCommunityStock ? "Validating & importing..." : "Import stock"}
@@ -1769,7 +1749,7 @@ export default function HomePage() {
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void syncCommunityStatus()}>
+        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void refreshCommunityStatus()}>
           <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>

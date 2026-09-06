@@ -2279,6 +2279,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       const record = records[index];
       const sourceUserId = String(record?.user_id ?? record?.userId ?? "").trim();
       const refreshToken = String(record?.refresh_token ?? record?.refreshToken ?? "").trim();
+      const accessToken = String(record?.access_token ?? record?.accessToken ?? "").trim();
       const recordLabel = isDiscordGuildId(sourceUserId) ? sourceUserId : `row ${index + 1}`;
 
       if (!isDiscordGuildId(sourceUserId) || refreshToken.length < 20 || refreshToken.length > 4096) {
@@ -2293,17 +2294,24 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       seenSourceUserIds.add(sourceUserId);
 
       try {
-        const credentials = await exchangeCommunityRefreshToken(config, refreshToken);
-        const oauthIdentity = await requestDiscord("oauth2/@me", {
-          headers: { Authorization: `Bearer ${credentials.accessToken}` }
-        });
-        const oauthUser = oauthIdentity.payload?.user;
-        const discordUserId = String(oauthUser?.id ?? "").trim();
-        const applicationId = String(oauthIdentity.payload?.application?.id ?? "").trim();
-        const scopes = Array.isArray(oauthIdentity.payload?.scopes) ? oauthIdentity.payload.scopes.map(String) : [];
-        if (!oauthIdentity.response.ok || !isDiscordGuildId(discordUserId)) throw new Error("The Discord OAuth identity could not be verified.");
-        if (applicationId && applicationId !== config.clientId) throw new Error("The OAuth record belongs to a different Discord application.");
-        if (!scopes.includes("guilds.join")) throw new Error("The OAuth record does not include the guilds.join permission.");
+        let oauthUser = null;
+        let details = "Imported without rotating the refresh token. Authorization will be verified when used.";
+        if (accessToken.length >= 20 && accessToken.length <= 4096) {
+          const oauthIdentity = await requestDiscord("oauth2/@me", {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          if (oauthIdentity.response.ok) {
+            const verifiedUserId = String(oauthIdentity.payload?.user?.id ?? "").trim();
+            const applicationId = String(oauthIdentity.payload?.application?.id ?? "").trim();
+            const scopes = Array.isArray(oauthIdentity.payload?.scopes) ? oauthIdentity.payload.scopes.map(String) : [];
+            if (verifiedUserId !== sourceUserId) throw new Error("The OAuth access token belongs to a different Discord user.");
+            if (applicationId && applicationId !== config.clientId) throw new Error("The OAuth record belongs to a different Discord application.");
+            if (!scopes.includes("guilds.join")) throw new Error("The OAuth record does not include the guilds.join permission.");
+            oauthUser = oauthIdentity.payload.user;
+            details = "Imported and verified without rotating the refresh token.";
+          }
+        }
+        const discordUserId = sourceUserId;
         const duplicateDiscordUser = seenDiscordUserIds.has(discordUserId);
         seenDiscordUserIds.add(discordUserId);
 
@@ -2315,7 +2323,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         await pool.query(
           `INSERT INTO community_oauth_joins
              (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
-           VALUES ($1, $2, $3, $4, $5, 'authorized', $6, 'Imported from OAuth stock.', NOW(), NULL, NULL)
+           VALUES ($1, $2, $3, $4, $5, 'authorized', $6, $7, NOW(), NULL, NULL)
            ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
              username = EXCLUDED.username,
              avatar_url = EXCLUDED.avatar_url,
@@ -2326,7 +2334,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
              authorized_at = NOW(),
              joined_at = NULL,
              reserved_order_id = NULL`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(credentials.refreshToken), stockType]
+          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(refreshToken), stockType, details]
         );
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
