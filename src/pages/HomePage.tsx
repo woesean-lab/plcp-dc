@@ -129,10 +129,7 @@ function normalizeProxyDraft(value: string) {
 }
 
 function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number]) {
-  if (record.reservedOrderId) return { label: "In order", variant: "secondary" as const };
   if (record.status === "failed") return { label: "Inactive", variant: "destructive" as const };
-  if (record.status === "already_member") return { label: "In server", variant: "success" as const };
-  if (record.status === "joined") return { label: "Joined", variant: "success" as const };
   return { label: "Connected", variant: "success" as const };
 }
 

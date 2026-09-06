@@ -342,6 +342,8 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
+  const waitingForBotDetails = getPlainDetails(result?.details)
+    || "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const serverId = getStringField(result, ["serverId", "server_id", "guildId", "guild_id", "id"]);
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
@@ -692,7 +694,7 @@ export default function OrderPage() {
     const message = [
       "Please add our bot to your server to start the delivery.",
       "",
-      "🔑 Required Permission: Create Invite only.",
+      "🔑 Required Permissions: Create Invite, Kick Members and Manage Server.",
       "",
       "You can remove the bot from your server after all members have been added.",
       "",
@@ -834,7 +836,7 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <p className={labelClass}>{isWaitingForBot ? "Action required" : "Order details"}</p>
                 {isWaitingForBot ? (
-                  <p>Add the delivery bot with <strong>Create Invite</strong> permission to start this order.</p>
+                  <p>{waitingForBotDetails}</p>
                 ) : (
                   <p>{result.error ?? getPlainDetails(result.details)}</p>
                 )}

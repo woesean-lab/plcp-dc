@@ -372,6 +372,9 @@ export default function PublicOrderPage() {
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
+  const waitingForBotDetails = typeof status?.details === "string" && status.details.trim()
+    ? status.details.trim()
+    : "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
@@ -645,7 +648,7 @@ export default function PublicOrderPage() {
             <div className={`monitor-content ${isBoostOrder ? "is-boost-monitor" : ""}`}>
               {isWaiting && botInvite ? (
                 <div className="monitor-bot-alert">
-                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot required to start delivery</strong></span>
+                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>{waitingForBotDetails}</strong></span>
                   <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
                     <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
                   </Button>

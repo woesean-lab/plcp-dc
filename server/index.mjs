@@ -315,6 +315,7 @@ async function checkCommunityBotGuildAccess(config, guildId) {
   // Discord can briefly return 403/404 from the guild route immediately after
   // installation. The bot's own guild list is an independent membership check.
   let after = "0";
+  let listedGuildCount = 0;
   for (let page = 0; page < 5; page += 1) {
     const guilds = await requestDiscord(`users/@me/guilds?limit=200&after=${encodeURIComponent(after)}`, {
       headers: { Authorization: `Bot ${config.botToken}` }
@@ -324,9 +325,11 @@ async function checkCommunityBotGuildAccess(config, guildId) {
         accessible: false,
         status: guilds.response.status || direct.response.status,
         source: "guild-list",
-        payload: guilds.payload
+        payload: guilds.payload,
+        tokenVerified: false
       };
     }
+    listedGuildCount += guilds.payload.length;
     const matchedGuild = guilds.payload.find((guild) => String(guild?.id ?? "") === normalizedGuildId);
     if (matchedGuild) {
       cacheCommunityGuild(normalizedGuildId, matchedGuild);
@@ -338,7 +341,14 @@ async function checkCommunityBotGuildAccess(config, guildId) {
     after = lastGuildId;
   }
 
-  return { accessible: false, status: direct.response.status, source: "guild-list", payload: direct.payload };
+  return {
+    accessible: false,
+    status: direct.response.status,
+    source: "guild-list",
+    payload: direct.payload,
+    tokenVerified: true,
+    listedGuildCount
+  };
 }
 
 async function checkCommunityMemberVerification(config, guildId, invite) {
@@ -425,6 +435,22 @@ async function loadCommunityJoinSummary(config) {
     ...combined,
     categories
   };
+}
+
+async function normalizeCommunityStockRecords(config) {
+  await pool.query(
+    `UPDATE community_oauth_joins
+     SET status = 'authorized', details = NULL, joined_at = NULL
+     WHERE guild_id = $1
+       AND encrypted_access_token IS NOT NULL
+       AND access_token_expires_at > NOW()
+       AND (
+         status IN ('joined', 'already_member')
+         OR (status = 'failed' AND COALESCE(details, '') NOT ILIKE 'OAuth access token expired or became invalid%')
+         OR (status = 'authorized' AND details IS NOT NULL)
+       )`,
+    [config.guildId]
+  );
 }
 
 function normalizeCommunityStockType(value) {
@@ -1360,14 +1386,6 @@ function isDiscordUnknownUser(value) {
   return code === 10013 || /unknown user/i.test(message);
 }
 
-function isCommunityAccessTokenInvalid(value) {
-  const payload = value?.payload && typeof value.payload === "object" ? value.payload : value;
-  const status = Number(value?.response?.status ?? value?.statusCode ?? 0);
-  const message = String(payload?.message ?? value?.message ?? "");
-  return value?.oauthAccessInvalid === true
-    || ((status === 400 || status === 401) && /access token|oauth|unauthorized|invalid/i.test(message));
-}
-
 function loadCommunityAccessToken(member) {
   const expiresAt = new Date(member?.access_token_expires_at).getTime();
   if (!member?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
@@ -1455,7 +1473,6 @@ async function processCommunityOrder(order, members, config) {
 
     let state = "failed";
     let details = "Member could not be added.";
-    let markStockInactive = false;
     let botUnavailableStatus = null;
     try {
       const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
@@ -1484,11 +1501,9 @@ async function processCommunityOrder(order, members, config) {
       } else {
         botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
         details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
-        markStockInactive = isDiscordUnknownUser(joined) || isCommunityAccessTokenInvalid(joined);
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
-      markStockInactive = isDiscordUnknownUser(error) || isCommunityAccessTokenInvalid(error);
     }
 
     if (botUnavailableStatus) {
@@ -1499,17 +1514,9 @@ async function processCommunityOrder(order, members, config) {
     results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = CASE
-             WHEN $4 THEN 'failed'
-             WHEN $5 = 'joined' THEN 'joined'
-             WHEN $5 = 'already_member' THEN 'already_member'
-             ELSE 'authorized'
-           END,
-           details = $3,
-           joined_at = CASE WHEN $5 IN ('joined', 'already_member') THEN NOW() ELSE joined_at END,
-           reserved_order_id = NULL
+       SET reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId, details, markStockInactive, state]
+      [member.discord_user_id, config.guildId]
     );
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
@@ -1565,7 +1572,6 @@ async function processCommunityOrder(order, members, config) {
 async function processCommunityReplacement(orderId, resultIndex, member, config) {
   let state = "failed";
   let details = "Replacement member could not be added.";
-  let markStockInactive = false;
   try {
     const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
     if (isCommunityMembershipScreeningResponse(joined)) {
@@ -1589,26 +1595,16 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       details = "Replacement user was already in the server.";
     } else {
       details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
-      markStockInactive = isDiscordUnknownUser(joined) || isCommunityAccessTokenInvalid(joined);
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
-    markStockInactive = isDiscordUnknownUser(error) || isCommunityAccessTokenInvalid(error);
   }
 
   await pool.query(
     `UPDATE community_oauth_joins
-     SET status = CASE
-           WHEN $3 THEN 'failed'
-           WHEN $5 = 'joined' THEN 'joined'
-           WHEN $5 = 'already_member' THEN 'already_member'
-           ELSE 'authorized'
-         END,
-         details = $4,
-         joined_at = CASE WHEN $5 = 'joined' THEN NOW() ELSE joined_at END,
-         reserved_order_id = NULL
+     SET reserved_order_id = NULL
      WHERE discord_user_id = $1 AND guild_id = $2`,
-    [member.discord_user_id, config.guildId, markStockInactive, details, state]
+    [member.discord_user_id, config.guildId]
   );
 
   const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
@@ -2636,6 +2632,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       });
     }
 
+    await normalizeCommunityStockRecords(config);
     const [bot, guild, summary, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
@@ -2742,9 +2739,12 @@ function createCommunityBotInvite(config, guildId) {
   return `https://discord.com/oauth2/authorize?${query.toString()}`;
 }
 
-function createCommunityBotGuildAccessError(status) {
+function createCommunityBotGuildAccessError(status, context = {}) {
   const discordStatus = Number(status);
-  const message = discordStatus === 401
+  const targetGuildId = String(context.guildId ?? "").trim();
+  const message = context.tokenVerified === true
+    ? `The saved bot token is valid, but that bot is not a member of the target Discord server${targetGuildId ? ` (${targetGuildId})` : ""}. Re-add it using this order's generated bot link.`
+    : discordStatus === 401
     ? "Discord rejected the saved Members bot token. Update it in Settings."
     : discordStatus === 403
       ? "The Members bot cannot access the target server. Check its role and permissions."
@@ -2786,7 +2786,10 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     }
 
     if (!botInInvitedGuild) {
-      throw createCommunityBotGuildAccessError(invitedGuildAccess.status);
+      throw createCommunityBotGuildAccessError(invitedGuildAccess.status, {
+        guildId: serverInfo.guildId,
+        tokenVerified: invitedGuildAccess.tokenVerified
+      });
     }
 
     const activeOrders = await pool.query(
@@ -2816,7 +2819,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
            (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
          SELECT discord_user_id, $2, username, avatar_url, NULL, encrypted_access_token, access_token_expires_at,
                 CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
-                stock_type, 'Moved to the new Members Stock server.', authorized_at, NULL, reserved_order_id
+                stock_type, NULL, authorized_at, NULL, reserved_order_id
          FROM community_oauth_joins
          WHERE guild_id = $1
          ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
@@ -2865,7 +2868,10 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
           botInvite: createCommunityBotInvite(config, serverInfo.guildId)
         };
       }
-      throw createCommunityBotGuildAccessError(configuredGuildAccess.status);
+      throw createCommunityBotGuildAccessError(configuredGuildAccess.status, {
+        guildId: serverInfo.guildId,
+        tokenVerified: configuredGuildAccess.tokenVerified
+      });
     }
   }
   await loadCommunityGuild(config);
@@ -3151,7 +3157,7 @@ async function reconcileCommunityPendingJoinResults(order) {
   });
   await pool.query(
     `UPDATE community_oauth_joins
-     SET status = 'joined', details = 'Member presence reconciled after Discord returned a pending response.', joined_at = NOW(), reserved_order_id = NULL
+     SET reserved_order_id = NULL
      WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
     [config.guildId, [...joinedUserIds]]
   );
@@ -3292,15 +3298,11 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
     }
 
-    const markOriginalInactive = isDiscordUnknownUser(failedResult);
-    const originalDetails = typeof failedResult.details === "string" && failedResult.details.trim()
-      ? failedResult.details.trim()
-      : "Member was unavailable during order delivery.";
     await client.query(
       `UPDATE community_oauth_joins
-       SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, details = $4, reserved_order_id = NULL
+       SET reserved_order_id = NULL
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [failedUserId, config.guildId, markOriginalInactive, originalDetails]
+      [failedUserId, config.guildId]
     );
 
     const usedUserIds = Array.from(new Set([
@@ -3361,8 +3363,8 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     void processCommunityReplacement(uniqid, resultIndex, member, config).catch(async (error) => {
       console.error("Members replacement failed:", error instanceof Error ? error.message : error);
       await pool.query(
-        "UPDATE community_oauth_joins SET status = CASE WHEN $3 THEN 'failed' ELSE 'authorized' END, reserved_order_id = NULL, details = $4 WHERE discord_user_id = $1 AND guild_id = $2",
-        [member.discord_user_id, config.guildId, isDiscordUnknownUser(error), error instanceof Error ? error.message : "Replacement failed."]
+        "UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE discord_user_id = $1 AND guild_id = $2",
+        [member.discord_user_id, config.guildId]
       ).catch(() => {});
     });
     res.json(isAdminRequest ? activeOrder : sanitizePublicCommunityOrder(activeOrder));
