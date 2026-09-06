@@ -1259,24 +1259,34 @@ async function syncCommunityAuthorizations(config) {
 }
 
 async function addCommunityGuildMember(config, discordUserId, accessToken) {
-  let result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bot ${config.botToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ access_token: accessToken })
-  });
-  if (result.response.status === 429) {
-    const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 30);
-    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+  let result = null;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
     result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`, {
       method: "PUT",
       headers: { Authorization: `Bot ${config.botToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ access_token: accessToken })
     });
+    if (result.response.status === 429) {
+      const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 30);
+      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+      continue;
+    }
+
+    const code = Number(result.payload?.code ?? 0);
+    const accessMayStillBePropagating = [403, 404].includes(result.response.status)
+      || [10004, 50001, 50013].includes(code);
+    if (!accessMayStillBePropagating || attempt === 4) break;
+
+    await new Promise((resolve) => setTimeout(resolve, (attempt + 1) * 1_000));
   }
   return result;
+}
+
+function getDiscordRequestFailureDetails(label, result) {
+  const status = Number(result?.response?.status ?? 0);
+  const code = Number(result?.payload?.code ?? 0);
+  const message = String(result?.payload?.message ?? "Discord rejected the request.").trim();
+  return `${label} failed (HTTP ${status || "unknown"}${code ? `, Discord code ${code}` : ""}): ${message}`;
 }
 
 function getCommunityJoinRequests(payload) {
@@ -1513,6 +1523,7 @@ async function processCommunityOrder(order, members, config) {
     let state = "failed";
     let details = "Member could not be added.";
     let botPauseIssue = null;
+    let fatalJoinAccessIssue = null;
     try {
       const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
       if (isCommunityMembershipScreeningResponse(joined)) {
@@ -1541,19 +1552,29 @@ async function processCommunityOrder(order, members, config) {
         const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
         const discordCode = Number(joined.payload?.code ?? 0);
         if (botUnavailableStatus) {
-          botPauseIssue = {
-            waitingCode: `discord_${botUnavailableStatus}`,
-            details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
-            memberDetails: "Waiting for the Members bot to return to the server."
-          };
+          const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
+          if (confirmedAccess.accessible) {
+            fatalJoinAccessIssue = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+          } else {
+            botPauseIssue = {
+              waitingCode: `discord_${botUnavailableStatus}`,
+              details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
+              memberDetails: "Waiting for the Members bot to return to the server."
+            };
+          }
         } else if (discordCode === 50013) {
-          botPauseIssue = {
-            waitingCode: "discord_permissions",
-            details: "The Members bot is in the server but is missing Create Invite or Kick Members permission. Grant both permissions to its bot role.",
-            memberDetails: "Waiting for the Members bot role permissions to be fixed."
-          };
+          const permissionCheck = await checkCommunityBotPermissions(config, config.guildId).catch(() => ({ ok: false }));
+          if (permissionCheck.ok) {
+            fatalJoinAccessIssue = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+          } else {
+            botPauseIssue = {
+              waitingCode: "discord_permissions",
+              details: "The Members bot is in the server but is missing Create Invite or Kick Members permission. Grant both permissions to its bot role.",
+              memberDetails: "Waiting for the Members bot role permissions to be fixed."
+            };
+          }
         }
-        details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
+        details = fatalJoinAccessIssue ?? getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
@@ -1561,6 +1582,25 @@ async function processCommunityOrder(order, members, config) {
 
     if (botPauseIssue) {
       await pauseForCommunityBotIssue(index, botPauseIssue);
+      return;
+    }
+
+    if (fatalJoinAccessIssue) {
+      results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "failed", details: fatalJoinAccessIssue, completedAt: new Date().toISOString() };
+      for (let remainingIndex = index + 1; remainingIndex < members.length; remainingIndex += 1) {
+        const remainingMember = members[remainingIndex];
+        const queuedIndex = results.findIndex((result) => result?.discordUserId === remainingMember.discord_user_id);
+        if (queuedIndex < 0) continue;
+        results[queuedIndex] = { ...results[queuedIndex], state: "queued", details: "Delivery stopped after Discord rejected the bot's member-add access." };
+      }
+      await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [order.uniqid]);
+      await saveCommunityProgress({
+        ...order,
+        added,
+        status: "ERROR",
+        details: fatalJoinAccessIssue,
+        communityResults: results
+      });
       return;
     }
 
