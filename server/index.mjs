@@ -1207,15 +1207,29 @@ function isDiscordUnknownUser(value) {
   return code === 10013 || /unknown user/i.test(message);
 }
 
+function getCommunityBotUnavailableStatus(result) {
+  const status = Number(result?.response?.status ?? 0);
+  const code = Number(result?.payload?.code ?? 0);
+  return status === 403 || status === 404 || code === 10004 || code === 50001 || code === 50013
+    ? status || 403
+    : null;
+}
+
 async function processCommunityOrder(order, members, config) {
-  const results = members.map((member) => ({
-    discordUserId: member.discord_user_id,
-    username: member.username,
-    avatarUrl: member.avatar_url ?? null,
-    state: "queued",
-    details: "Waiting for delivery."
-  }));
-  let added = 0;
+  const savedResults = Array.isArray(order.communityResults) ? order.communityResults : [];
+  const results = savedResults.length
+    ? savedResults.map((result) => ({ ...result }))
+    : members.map((member) => ({
+        discordUserId: member.discord_user_id,
+        username: member.username,
+        avatarUrl: member.avatar_url ?? null,
+        state: "queued",
+        details: "Waiting for delivery."
+      }));
+  let added = Math.max(
+    Number.isFinite(Number(order.added)) ? Number(order.added) : 0,
+    results.filter((result) => String(result?.state ?? "").toLowerCase() === "joined").length
+  );
   let blockedByMembershipScreening = false;
 
   async function saveCommunityProgress(payload) {
@@ -1225,14 +1239,53 @@ async function processCommunityOrder(order, members, config) {
     await saveTrackedOrderPayload({ ...payload, delay: order.delay });
   }
 
+  async function detectMissingCommunityBot() {
+    try {
+      const result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}`, {
+        headers: { Authorization: `Bot ${config.botToken}` }
+      });
+      return getCommunityBotUnavailableStatus(result);
+    } catch {
+      return null;
+    }
+  }
+
+  async function pauseForMissingCommunityBot(startIndex, discordStatus) {
+    for (let remainingIndex = startIndex; remainingIndex < members.length; remainingIndex += 1) {
+      const remainingMember = members[remainingIndex];
+      const queuedIndex = results.findIndex((result) => result?.discordUserId === remainingMember.discord_user_id);
+      if (queuedIndex < 0) continue;
+      results[queuedIndex] = {
+        ...results[queuedIndex],
+        state: "queued",
+        details: "Waiting for the Members bot to return to the server."
+      };
+    }
+    await saveCommunityProgress({
+      ...order,
+      added,
+      status: "WAITING",
+      waitingCode: `discord_${discordStatus}`,
+      botInvite: createCommunityBotInvite(config, config.guildId),
+      details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
+      communityResults: results
+    });
+  }
+
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
-    results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
+    let resultIndex = results.findIndex((result) => result?.discordUserId === member.discord_user_id);
+    if (resultIndex < 0) {
+      resultIndex = results.length;
+      results.push({ discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "queued", details: "Waiting for delivery." });
+    }
+    results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
     let state = "failed";
     let details = "Member could not be added.";
     let markStockInactive = false;
+    let botUnavailableStatus = null;
     try {
       const credentials = await refreshCommunityAccessToken(config, member.encrypted_refresh_token);
       await pool.query(
@@ -1252,6 +1305,7 @@ async function processCommunityOrder(order, members, config) {
         state = "already_member";
         details = "User was already in the server.";
       } else {
+        botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
         details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
         markStockInactive = isDiscordUnknownUser(joined);
       }
@@ -1260,7 +1314,12 @@ async function processCommunityOrder(order, members, config) {
       markStockInactive = isDiscordUnknownUser(error);
     }
 
-    results[index] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
+    if (botUnavailableStatus) {
+      await pauseForMissingCommunityBot(index, botUnavailableStatus);
+      return;
+    }
+
+    results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
     await pool.query(
       `UPDATE community_oauth_joins
        SET status = CASE
@@ -1278,14 +1337,16 @@ async function processCommunityOrder(order, members, config) {
     await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
 
     if (blockedByMembershipScreening) {
-      results.forEach((result, resultIndex) => {
-        if (resultIndex <= index) return;
-        results[resultIndex] = {
-          ...result,
+      for (let remainingIndex = index + 1; remainingIndex < members.length; remainingIndex += 1) {
+        const remainingMember = members[remainingIndex];
+        const queuedIndex = results.findIndex((result) => result?.discordUserId === remainingMember.discord_user_id);
+        if (queuedIndex < 0) continue;
+        results[queuedIndex] = {
+          ...results[queuedIndex],
           state: "queued",
           details: "Delivery stopped before this member was used."
         };
-      });
+      }
       await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [order.uniqid]);
       await saveCommunityProgress({
         ...order,
@@ -1301,7 +1362,15 @@ async function processCommunityOrder(order, members, config) {
       const latestOrder = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
       const currentDelay = Number.parseInt(latestOrder.rows[0]?.delay, 10);
       if (Number.isFinite(currentDelay) && currentDelay > 0) {
-        await new Promise((resolve) => setTimeout(resolve, currentDelay * 1000));
+        const delayEndsAt = Date.now() + currentDelay * 1000;
+        while (Date.now() < delayEndsAt) {
+          await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, delayEndsAt - Date.now())));
+          const missingBotStatus = await detectMissingCommunityBot();
+          if (missingBotStatus) {
+            await pauseForMissingCommunityBot(index + 1, missingBotStatus);
+            return;
+          }
+        }
       }
     }
   }
@@ -2796,7 +2865,7 @@ async function activateWaitingCommunityOrder(order) {
       ...current,
       status: "PROCESS",
       waitingCode: null,
-      details: `0/${current.amount} members delivered.`,
+      details: `${Number(current.added ?? 0)}/${current.amount} members delivered.`,
       serverId: resolved.serverInfo.guildId,
       serverName: resolved.serverInfo.guildName,
       serverMemberCount: resolved.serverInfo.approximateMemberCount
