@@ -2473,7 +2473,7 @@ function createCommunityBotInvite(config, guildId) {
   const query = new URLSearchParams({
     client_id: config.clientId,
     scope: "bot",
-    permissions: "1",
+    permissions: "35",
     guild_id: guildId,
     disable_guild_select: "true"
   });
