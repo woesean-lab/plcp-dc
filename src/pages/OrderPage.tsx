@@ -344,7 +344,7 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
-  const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS"].includes(normalizedStatus);
+  const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "ERROR", "PARTIAL"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
