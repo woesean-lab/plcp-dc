@@ -1090,7 +1090,7 @@ async function exchangeCommunityRefreshToken(config, refreshToken) {
     client_id: config.clientId,
     client_secret: config.clientSecret,
     grant_type: "refresh_token",
-    refresh_token
+    refresh_token: refreshToken
   });
   const { response, payload } = await requestDiscord("oauth2/token", {
     method: "POST",
@@ -2480,6 +2480,21 @@ function createCommunityBotInvite(config, guildId) {
   return `https://discord.com/oauth2/authorize?${query.toString()}`;
 }
 
+function createCommunityBotGuildAccessError(status) {
+  const discordStatus = Number(status);
+  const message = discordStatus === 401
+    ? "Discord rejected the saved Members bot token. Update it in Settings."
+    : discordStatus === 403
+      ? "The Members bot cannot access the target server. Check its role and permissions."
+      : discordStatus === 404
+        ? "The Members bot is not detected in the target server yet."
+        : `Discord could not verify the Members bot in the target server (${discordStatus || "unknown"}).`;
+  const error = new Error(message);
+  error.statusCode = discordStatus >= 500 || !discordStatus ? 502 : 409;
+  error.waitingCode = `discord_${discordStatus || "unknown"}`;
+  return error;
+}
+
 async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, activeOrderId = null } = {}) {
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
@@ -2511,18 +2526,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     }
 
     if (!botInInvitedGuild) {
-      const discordStatus = Number(invitedGuildResult.response.status);
-      const message = discordStatus === 401
-        ? "Discord rejected the saved Members bot token. Update it in Settings."
-        : discordStatus === 403
-          ? "The Members bot cannot access the target server. Check its role and permissions."
-          : discordStatus === 404
-            ? "The Members bot is not detected in the target server yet."
-            : `Discord could not verify the Members bot in the target server (${discordStatus || "unknown"}).`;
-      const error = new Error(message);
-      error.statusCode = 409;
-      error.waitingCode = `discord_${discordStatus || "unknown"}`;
-      throw error;
+      throw createCommunityBotGuildAccessError(invitedGuildResult.response.status);
     }
 
     const activeOrders = await pool.query(
@@ -2587,6 +2591,22 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     } finally {
       client.release();
     }
+  } else {
+    const configuredGuildResult = await requestDiscord(`guilds/${encodeURIComponent(serverInfo.guildId)}`, {
+      headers: { Authorization: `Bot ${config.botToken}` }
+    });
+    if (!configuredGuildResult.response.ok) {
+      if (allowWaitingForBot) {
+        return {
+          config,
+          invite,
+          serverInfo,
+          waitingForBot: true,
+          botInvite: createCommunityBotInvite(config, serverInfo.guildId)
+        };
+      }
+      throw createCommunityBotGuildAccessError(configuredGuildResult.response.status);
+    }
   }
   await loadCommunityGuild(config);
   return { config, invite, serverInfo };
@@ -2642,8 +2662,18 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       [config.guildId, stockType, amount]
     );
     if (selected.rowCount < amount) {
+      const used = await client.query(
+        `SELECT COUNT(*)::int AS count
+         FROM community_oauth_joins
+         WHERE guild_id = $1 AND stock_type = $2 AND status IN ('joined', 'already_member')`,
+        [config.guildId, stockType]
+      );
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: `Only ${selected.rowCount} ${stockType} members are currently available.` });
+      const usedCount = Number(used.rows[0]?.count ?? 0);
+      const usedNotice = usedCount > 0
+        ? ` ${usedCount} stock member(s) were already used for this server; deleting an order does not remove them from Discord or restore them for the same server.`
+        : "";
+      return res.status(409).json({ message: `Only ${selected.rowCount} ${stockType} members are currently available.${usedNotice}` });
     }
     await client.query(
       "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
