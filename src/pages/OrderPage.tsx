@@ -715,7 +715,7 @@ export default function OrderPage() {
     const message = [
       "Please add our bot to your server to start the delivery.",
       "",
-      "🔑 Required Permissions: Create Invite, Kick Members and Manage Server.",
+      "🔑 Required Permissions: Create Invite and Kick Members.",
       "",
       "You can remove the bot from your server after all members have been added.",
       "",
