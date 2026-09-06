@@ -380,6 +380,97 @@ async function checkCommunityMemberVerification(config, guildId, invite) {
   }
 }
 
+const communityApplicationFieldTypes = new Set(["TEXT_INPUT", "PARAGRAPH", "MULTIPLE_CHOICE"]);
+
+function hasCommunityApplyToJoin(guild) {
+  const features = new Set(Array.isArray(guild?.features) ? guild.features : []);
+  return features.has("MEMBER_VERIFICATION_GATE_ENABLED")
+    && features.has("MEMBER_VERIFICATION_MANUAL_APPROVAL");
+}
+
+async function ensureCommunityApplyToJoin(config, guildId) {
+  const normalizedGuildId = String(guildId ?? "").trim();
+  const authorization = { Authorization: `Bot ${config.botToken}` };
+  let guildResult = await requestDiscord(`guilds/${encodeURIComponent(normalizedGuildId)}`, {
+    headers: authorization
+  });
+  if (!guildResult.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord server access check", guildResult));
+    error.statusCode = guildResult.response.status === 403 ? 409 : 502;
+    throw error;
+  }
+  if (hasCommunityApplyToJoin(guildResult.payload)) return { changed: false };
+
+  const verificationResult = await requestDiscord(
+    `guilds/${encodeURIComponent(normalizedGuildId)}/member-verification?with_guild=false`,
+    { headers: authorization }
+  );
+  if (!verificationResult.response.ok && verificationResult.response.status !== 404) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord Apply-to-Join form read", verificationResult));
+    error.statusCode = verificationResult.response.status === 403 ? 409 : 502;
+    throw error;
+  }
+
+  const formFields = Array.isArray(verificationResult.payload?.form_fields)
+    ? verificationResult.payload.form_fields.map(({ response: _response, ...field }) => field)
+    : [];
+  const hasApplicationQuestion = formFields.some((field) =>
+    communityApplicationFieldTypes.has(String(field?.field_type ?? "").toUpperCase())
+  );
+  if (!hasApplicationQuestion) {
+    if (formFields.length >= 5) {
+      const error = new Error("Apply to Join could not be enabled automatically because the server verification form already has five fields and none is an application question.");
+      error.statusCode = 409;
+      throw error;
+    }
+    formFields.push({
+      field_type: "PARAGRAPH",
+      label: "Why do you want to join this server?",
+      description: null,
+      required: true
+    });
+  }
+
+  let updateResult = await requestDiscord(`guilds/${encodeURIComponent(normalizedGuildId)}/member-verification`, {
+    method: "PATCH",
+    headers: {
+      ...authorization,
+      "Content-Type": "application/json",
+      "X-Audit-Log-Reason": encodeURIComponent("Members 2 requires Apply to Join")
+    },
+    body: JSON.stringify({ enabled: true, form_fields: formFields })
+  });
+  if (updateResult.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(updateResult.payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    updateResult = await requestDiscord(`guilds/${encodeURIComponent(normalizedGuildId)}/member-verification`, {
+      method: "PATCH",
+      headers: {
+        ...authorization,
+        "Content-Type": "application/json",
+        "X-Audit-Log-Reason": encodeURIComponent("Members 2 requires Apply to Join")
+      },
+      body: JSON.stringify({ enabled: true, form_fields: formFields })
+    });
+  }
+  if (!updateResult.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord Apply-to-Join setup", updateResult));
+    error.statusCode = updateResult.response.status === 403 ? 409 : 502;
+    throw error;
+  }
+
+  guildResult = await requestDiscord(`guilds/${encodeURIComponent(normalizedGuildId)}`, {
+    headers: authorization
+  });
+  if (!guildResult.response.ok || !hasCommunityApplyToJoin(guildResult.payload)) {
+    const error = new Error("Discord accepted the verification form but did not switch the server access method to Apply to Join.");
+    error.statusCode = 409;
+    throw error;
+  }
+  cacheCommunityGuild(normalizedGuildId, guildResult.payload);
+  return { changed: true };
+}
+
 async function checkDcordBoostMembershipScreening(invite, serverInfo) {
   const config = await getCommunityOAuthConfig();
   if (!config.botToken || !isDiscordGuildId(String(serverInfo?.guildId ?? ""))) {
@@ -3050,6 +3141,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       });
     }
   }
+  await ensureCommunityApplyToJoin(config, serverInfo.guildId);
   await loadCommunityGuild(config);
   return { config, invite, serverInfo };
 }
