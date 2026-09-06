@@ -161,6 +161,13 @@ export function cancelDcordBoostOrder(uniqid: string) {
   );
 }
 
+export function cancelCommunityOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/cancel`,
+    { method: "POST" }
+  );
+}
+
 export function replaceCommunityMember(uniqid: string, resultIndex: number) {
   return requestJson<OrderStatusResponse>(
     `/api/community/orders/${encodeURIComponent(uniqid)}/replace-member`,

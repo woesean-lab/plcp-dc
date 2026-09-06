@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -326,6 +326,8 @@ export default function OrderPage() {
   const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
+  const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
+  const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
@@ -342,6 +344,7 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
+  const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
@@ -412,13 +415,14 @@ export default function OrderPage() {
   }, []);
 
   useEffect(() => {
-    if (!showCancelDcordModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
+      if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, cancellingDcordOrder]);
+  }, [showCancelDcordModal, showCancelCommunityModal, cancellingDcordOrder, cancellingCommunityOrder]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -553,6 +557,23 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Dcord delivery could not be cancelled.");
     } finally {
       setCancellingDcordOrder(false);
+    }
+  }
+
+  async function handleCancelCommunityOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !canCancelCommunityOrder || cancellingCommunityOrder) return;
+
+    try {
+      setCancellingCommunityOrder(true);
+      const data = await cancelCommunityOrder(target);
+      setResult(data);
+      setShowCancelCommunityModal(false);
+      toast.success("Members delivery cancelled and stock reservations released.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Members delivery could not be cancelled.");
+    } finally {
+      setCancellingCommunityOrder(false);
     }
   }
 
@@ -885,6 +906,12 @@ export default function OrderPage() {
                 <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay()} disabled={updatingDelay}>
                   {updatingDelay ? "Updating..." : "Update"}
                 </Button>
+                {canCancelCommunityOrder ? (
+                  <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
+                    <X className="h-4 w-4" aria-hidden="true" />
+                    {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
+                  </Button>
+                ) : null}
               </section>
             ) : null}
           </div>
@@ -1045,6 +1072,30 @@ export default function OrderPage() {
               <Button type="button" variant="destructive" disabled={cancellingDcordOrder} onClick={() => void handleCancelDcordOrder()}>
                 <X className={`h-4 w-4 ${cancellingDcordOrder ? "animate-spin" : ""}`} aria-hidden="true" />
                 {cancellingDcordOrder ? "Cancelling..." : "Cancel and return"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {showCancelCommunityModal ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="cancel-community-title" aria-describedby="cancel-community-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Cancel Members delivery</p>
+            <h2 id="cancel-community-title">Stop this order?</h2>
+            <p id="cancel-community-description">
+              Automatic delivery will stop and every reserved member will be released back to Members Stock. Members already sent—or currently being sent—to Discord cannot be removed automatically.
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={cancellingCommunityOrder} onClick={() => setShowCancelCommunityModal(false)}>Keep running</Button>
+              <Button type="button" variant="destructive" disabled={cancellingCommunityOrder} onClick={() => void handleCancelCommunityOrder()}>
+                <X className={`h-4 w-4 ${cancellingCommunityOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
               </Button>
             </div>
           </div>

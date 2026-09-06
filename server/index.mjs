@@ -1422,10 +1422,17 @@ async function processCommunityOrder(order, members, config) {
   let blockedByMembershipScreening = false;
 
   async function saveCommunityProgress(payload) {
-    const latest = await pool.query("SELECT payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+    const latest = await pool.query("SELECT payload->>'delay' AS delay, payload->>'status' AS status FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+    if (!latest.rowCount || String(latest.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return false;
     const latestDelay = Number.parseInt(latest.rows[0]?.delay, 10);
     if (Number.isFinite(latestDelay) && latestDelay > 0) order.delay = latestDelay;
-    await saveTrackedOrderPayload({ ...payload, delay: order.delay });
+    const updated = await pool.query(
+      `UPDATE tracked_orders
+       SET payload = $2::jsonb, updated_at = NOW()
+       WHERE uniqid = $1 AND payload->>'status' <> 'CANCELLED'`,
+      [order.uniqid, JSON.stringify({ ...payload, delay: order.delay })]
+    );
+    return updated.rowCount > 0;
   }
 
   async function detectMissingCommunityBot() {
@@ -1469,7 +1476,7 @@ async function processCommunityOrder(order, members, config) {
       results.push({ discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "queued", details: "Waiting for delivery." });
     }
     results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
-    await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+    if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
     let state = "failed";
     let details = "Member could not be added.";
@@ -1518,7 +1525,7 @@ async function processCommunityOrder(order, members, config) {
        WHERE discord_user_id = $1 AND guild_id = $2`,
       [member.discord_user_id, config.guildId]
     );
-    await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results });
+    if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
     if (blockedByMembershipScreening) {
       for (let remainingIndex = index + 1; remainingIndex < members.length; remainingIndex += 1) {
@@ -1549,6 +1556,8 @@ async function processCommunityOrder(order, members, config) {
         const delayEndsAt = Date.now() + currentDelay * 1000;
         while (Date.now() < delayEndsAt) {
           await new Promise((resolve) => setTimeout(resolve, Math.min(5_000, delayEndsAt - Date.now())));
+          const control = await pool.query("SELECT payload->>'status' AS status FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+          if (!control.rowCount || String(control.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return;
           const missingBotStatus = await detectMissingCommunityBot();
           if (missingBotStatus) {
             await pauseForMissingCommunityBot(index + 1, missingBotStatus);
@@ -3110,7 +3119,7 @@ async function hydrateCommunityOrderAvatars(order) {
 }
 
 async function reconcileCommunityPendingJoinResults(order) {
-  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults) || !order.serverId) return order;
+  if (!order || order.provider !== "community" || String(order.status ?? "").toUpperCase() === "CANCELLED" || !Array.isArray(order.communityResults) || !order.serverId) return order;
   const candidates = order.communityResults.filter((item) =>
     item
     && typeof item === "object"
@@ -3211,6 +3220,60 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
     res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
+  }
+});
+
+app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    const currentStatus = String(order.status ?? "").toUpperCase();
+    if (!["WAITING", "PROCESS"].includes(currentStatus)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: `This Members order is already ${currentStatus || "finished"}.` });
+    }
+
+    const cancelledAt = new Date().toISOString();
+    const communityResults = Array.isArray(order.communityResults)
+      ? order.communityResults.map((item) => {
+          if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+          if (!["queued", "joining", "replacing"].includes(String(item.state ?? "").toLowerCase())) return item;
+          return { ...item, state: "cancelled", details: "Delivery cancelled before this member completed.", completedAt: cancelledAt };
+        })
+      : order.communityResults;
+    const cancelledOrder = {
+      ...order,
+      status: "CANCELLED",
+      waitingCode: null,
+      details: "Members delivery cancelled by an administrator.",
+      cancelledAt,
+      communityResults
+    };
+
+    await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]);
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(cancelledOrder)]
+    );
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json(cancelledOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 });
 
