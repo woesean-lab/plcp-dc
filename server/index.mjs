@@ -1491,22 +1491,62 @@ async function processCommunityOrder(order, members, config) {
   let blockedByMembershipScreening = false;
 
   async function saveCommunityProgress(payload) {
-    const updated = await pool.query(
-      `UPDATE tracked_orders
-       SET payload = jsonb_set(
-             $2::jsonb,
-             '{delay}',
-             COALESCE(payload->'delay', $2::jsonb->'delay'),
-             true
-           ),
-           updated_at = NOW()
-       WHERE uniqid = $1 AND payload->>'status' <> 'CANCELLED'
-       RETURNING payload->>'delay' AS delay`,
-      [order.uniqid, JSON.stringify({ ...payload, delay: order.delay })]
-    );
-    const latestDelay = Number.parseInt(updated.rows[0]?.delay, 10);
-    if (Number.isFinite(latestDelay) && latestDelay > 0) order.delay = latestDelay;
-    return updated.rowCount > 0;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [order.uniqid]);
+      const currentPayload = locked.rows[0]?.payload;
+      if (!currentPayload || String(currentPayload.status ?? "").toUpperCase() === "CANCELLED") {
+        await client.query("ROLLBACK");
+        return false;
+      }
+
+      const incomingResults = Array.isArray(payload.communityResults) ? payload.communityResults : [];
+      const storedResults = Array.isArray(currentPayload.communityResults) ? currentPayload.communityResults : [];
+      const resultCount = Math.max(incomingResults.length, storedResults.length);
+      const mergedResults = Array.from({ length: resultCount }, (_, resultIndex) => {
+        const incoming = incomingResults[resultIndex];
+        const stored = storedResults[resultIndex];
+        if (!incoming) return stored;
+        if (!stored) return incoming;
+        const incomingReplacementAttempt = Number(incoming?.replacementAttempt ?? 0);
+        const storedReplacementAttempt = Number(stored?.replacementAttempt ?? 0);
+        return storedReplacementAttempt > incomingReplacementAttempt ? stored : incoming;
+      }).filter(Boolean);
+      const mergedAdded = mergedResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+      const amount = Number(payload.amount ?? currentPayload.amount ?? order.amount) || mergedResults.length;
+      const requestedStatus = String(payload.status ?? "PROCESS").toUpperCase();
+      const terminalStatusRequested = ["COMPLETED", "PARTIAL", "ERROR"].includes(requestedStatus);
+      const status = terminalStatusRequested
+        ? mergedAdded >= amount ? "COMPLETED" : mergedAdded > 0 ? "PARTIAL" : "ERROR"
+        : payload.status;
+      const details = terminalStatusRequested
+        ? mergedAdded >= amount
+          ? `${mergedAdded}/${amount} members delivered.`
+          : `${mergedAdded}/${amount} members delivered. Review the member results.`
+        : `${mergedAdded}/${amount} members delivered.`;
+      const latestDelay = Number.parseInt(currentPayload.delay, 10);
+      const nextPayload = {
+        ...payload,
+        added: mergedAdded,
+        status,
+        details,
+        delay: Number.isFinite(latestDelay) && latestDelay > 0 ? latestDelay : order.delay,
+        communityResults: mergedResults
+      };
+      await client.query(
+        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+        [order.uniqid, JSON.stringify(nextPayload)]
+      );
+      await client.query("COMMIT");
+      order.delay = nextPayload.delay;
+      return true;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async function detectMissingCommunityBot() {
@@ -1713,34 +1753,58 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
     [member.discord_user_id, config.guildId]
   );
 
-  const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [orderId]);
-  const order = tracked.rows[0]?.payload;
-  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) return;
-  const results = [...order.communityResults];
-  const current = results[resultIndex];
-  if (!current || current.discordUserId !== member.discord_user_id || String(current.state).toLowerCase() !== "replacing") return;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    const results = [...order.communityResults];
+    const current = results[resultIndex];
+    if (!current || current.discordUserId !== member.discord_user_id || String(current.state).toLowerCase() !== "replacing") {
+      await client.query("ROLLBACK");
+      return;
+    }
 
-  if (["joined", "already_member"].includes(state)) {
-    communityMemberPresenceCache.set(`${config.guildId}:${member.discord_user_id}`, {
-      present: true,
-      expiresAt: Date.now() + 60_000
-    });
+    if (["joined", "already_member"].includes(state)) {
+      communityMemberPresenceCache.set(`${config.guildId}:${member.discord_user_id}`, {
+        present: true,
+        expiresAt: Date.now() + 60_000
+      });
+    }
+    results[resultIndex] = {
+      ...current,
+      state,
+      details,
+      completedAt: new Date().toISOString()
+    };
+    const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+    const amount = Number(order.amount) || results.length;
+    const deliveryStillActive = results.some((item) => ["queued", "joining", "replacing"].includes(String(item?.state ?? "").toLowerCase()));
+    const nextStatus = added >= amount ? "COMPLETED" : deliveryStillActive ? "PROCESS" : added > 0 ? "PARTIAL" : "ERROR";
+    const updatedOrder = {
+      ...order,
+      added,
+      status: nextStatus,
+      details: nextStatus === "PROCESS"
+        ? `${added}/${amount} members delivered.`
+        : added >= amount ? `${added}/${amount} members delivered.` : `${added}/${amount} members delivered. Review the member results.`,
+      communityResults: results
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [orderId, JSON.stringify(updatedOrder)]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-  results[resultIndex] = {
-    ...current,
-    state,
-    details,
-    completedAt: new Date().toISOString()
-  };
-  const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
-  const amount = Number(order.amount) || results.length;
-  await saveTrackedOrderPayload({
-    ...order,
-    added,
-    status: added >= amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR",
-    details: added >= amount ? `${added}/${amount} members delivered.` : `${added}/${amount} members delivered. Review the member results.`,
-    communityResults: results
-  });
 }
 
 function normalizeDcordJoinResult(result, token) {
@@ -3300,7 +3364,6 @@ async function hydrateCommunityOrderAvatars(order) {
     return avatarUrl ? { ...item, avatarUrl } : item;
   });
   const hydrated = { ...order, communityResults };
-  await saveTrackedOrderPayload(hydrated);
   return hydrated;
 }
 
