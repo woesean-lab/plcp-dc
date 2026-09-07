@@ -1075,7 +1075,7 @@ export default function HomePage() {
     if (!communityImportFile) return;
     try {
       setImportingCommunityStock(true);
-      if (communityImportFile.size > 2 * 1024 * 1024) throw new Error("OAuth stock JSON must be smaller than 2 MB.");
+      if (communityImportFile.size > 10 * 1024 * 1024) throw new Error("OAuth stock JSON must be smaller than 10 MB.");
       const parsed = JSON.parse(await communityImportFile.text()) as unknown;
       const records = Array.isArray(parsed)
         ? parsed
@@ -1822,7 +1822,7 @@ export default function HomePage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3>Import OAuth stock</h3>
-              <span className="community-stock-import-format">JSON · max 2 MB</span>
+              <span className="community-stock-import-format">JSON · max 10 MB · 5,000 records</span>
             </div>
             <p>Import users into the <strong>{communityVisibleCategory?.name ?? "selected category"}</strong> pool using their current OAuth access tokens without refreshing them.</p>
           </div>

@@ -3005,7 +3005,7 @@ async function hasActiveSession(req) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
   try {
@@ -3220,8 +3220,8 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
       return res.status(400).json({ message: "Choose a valid Members Stock category before importing." });
     }
-    if (!Array.isArray(records) || !records.length || records.length > 500) {
-      return res.status(400).json({ message: "Upload a JSON array containing between 1 and 500 OAuth records." });
+    if (!Array.isArray(records) || !records.length || records.length > 5_000) {
+      return res.status(400).json({ message: "Upload a JSON array containing between 1 and 5,000 OAuth records." });
     }
 
     const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [] };
