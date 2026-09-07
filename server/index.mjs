@@ -1903,6 +1903,7 @@ async function processCommunityOrder(order, members, config) {
 async function processCommunityReplacement(orderId, resultIndex, member, config) {
   let state = "failed";
   let details = "Replacement member could not be added.";
+  let botPauseIssue = null;
   try {
     const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
     if (isCommunityMembershipScreeningResponse(joined)) {
@@ -1925,18 +1926,31 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       state = "already_member";
       details = "Replacement user was already in the server.";
     } else {
+      const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
+      if (botUnavailableStatus) {
+        const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
+        if (!confirmedAccess.accessible) {
+          botPauseIssue = {
+            waitingCode: `discord_${botUnavailableStatus}`,
+            details: "The Members bot was removed or lost access. Add it to the server to continue the replacement.",
+            memberDetails: "Waiting for the Members bot to return to the server."
+          };
+        }
+      }
       details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
   }
 
-  await pool.query(
-    `UPDATE community_oauth_joins
-     SET reserved_order_id = NULL
-     WHERE discord_user_id = $1 AND guild_id = $2`,
-    [member.discord_user_id, config.guildId]
-  );
+  if (!botPauseIssue) {
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET reserved_order_id = NULL
+       WHERE discord_user_id = $1 AND guild_id = $2`,
+      [member.discord_user_id, config.guildId]
+    );
+  }
 
   const client = await pool.connect();
   try {
@@ -1951,6 +1965,30 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
     const current = results[resultIndex];
     if (!current || current.discordUserId !== member.discord_user_id || String(current.state).toLowerCase() !== "replacing") {
       await client.query("ROLLBACK");
+      return;
+    }
+
+    if (botPauseIssue) {
+      results[resultIndex] = {
+        ...current,
+        state: "queued",
+        details: botPauseIssue.memberDetails
+      };
+      const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+      const waitingOrder = {
+        ...order,
+        added,
+        status: "WAITING",
+        waitingCode: botPauseIssue.waitingCode,
+        botInvite: createCommunityBotInvite(config, config.guildId),
+        details: botPauseIssue.details,
+        communityResults: results
+      };
+      await client.query(
+        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+        [orderId, JSON.stringify(waitingOrder)]
+      );
+      await client.query("COMMIT");
       return;
     }
 
