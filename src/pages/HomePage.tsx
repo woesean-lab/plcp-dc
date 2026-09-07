@@ -2038,18 +2038,6 @@ export default function HomePage() {
                         })}
                         {!communityCategories.length ? <p className="service-selector-copy">Create a Members Stock category before placing an order.</p> : null}
                       </div>
-                      {selectedCommunityCategory?.isPeriodic ? (
-                        <div className="community-order-duration">
-                          <div><span className={fieldLabelClass}>Order support period</span><p className="service-selector-copy">Choose how long Check Members and Replace stay available for this order.</p></div>
-                          <div className="community-order-duration-options">
-                            {[1, 2, 3, 4, 5, 6].map((month) => (
-                              <button key={month} type="button" className={form.communityDurationMonths === month ? "is-selected" : ""} onClick={() => setForm((current) => ({ ...current, communityDurationMonths: month }))}>
-                                <strong>{month}</strong><small>month{month === 1 ? "" : "s"}</small>
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
                     </fieldset>
                   ) : null}
 
@@ -2215,7 +2203,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
-                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -2259,6 +2247,17 @@ export default function HomePage() {
                               onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
                             />
                           </label>
+
+                          {selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? (
+                            <div className="boost-order-field community-order-month-field">
+                              <span className="boost-order-label">Month</span>
+                              <div className="community-order-month-options" aria-label="Order support period">
+                                {[1, 2, 3, 4, 5, 6].map((month) => (
+                                  <button key={month} type="button" title={`${month} month${month === 1 ? "" : "s"}`} aria-pressed={form.communityDurationMonths === month} className={form.communityDurationMonths === month ? "is-selected" : ""} onClick={() => setForm((current) => ({ ...current, communityDurationMonths: month }))}>{month}</button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
 
                           {form.service === "OAUTH-ONLINE" ? (
                             <label className="boost-order-field">

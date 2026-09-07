@@ -1674,6 +1674,45 @@
     grid-template-columns: minmax(155px, 185px) minmax(260px, 1fr) minmax(112px, 132px) minmax(112px, 132px);
   }
 
+  .members-order-grid.is-periodic {
+    grid-template-columns: minmax(150px, 180px) minmax(250px, 1fr) minmax(96px, 116px) minmax(210px, 236px);
+  }
+
+  .community-order-month-options {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 4px;
+    height: 40px;
+  }
+
+  .community-order-month-options button {
+    min-width: 0;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    background: rgba(4, 5, 11, .32);
+    color: var(--app-muted);
+    font-size: 11px;
+    font-weight: 750;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease;
+  }
+
+  .community-order-month-options button:hover {
+    border-color: var(--app-accent-border);
+    color: var(--app-text-secondary);
+  }
+
+  .community-order-month-options button.is-selected {
+    border-color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+    color: var(--app-accent-bright);
+  }
+
+  .community-order-month-options button:focus-visible {
+    outline: 2px solid var(--app-accent-bright);
+    outline-offset: 2px;
+  }
+
   .boost-order-field {
     display: grid;
     grid-template-rows: 14px 40px;
@@ -6186,6 +6225,7 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
+  margin-top: 8px;
 }
 
 .community-category-period-options label {
@@ -6222,52 +6262,6 @@
   font-size: 9px;
 }
 
-.community-order-duration {
-  display: grid;
-  gap: 12px;
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--app-accent-border);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--app-accent-soft) 46%, transparent);
-}
-
-.community-order-duration-options {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 7px;
-}
-
-.community-order-duration-options button {
-  min-height: 48px;
-  padding: 7px;
-  border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: rgba(4, 5, 11, .32);
-  color: var(--app-muted);
-}
-
-.community-order-duration-options button.is-selected {
-  border-color: var(--app-accent-bright);
-  background: var(--app-accent-soft);
-  color: var(--app-accent-bright);
-}
-
-.community-order-duration-options strong,
-.community-order-duration-options small {
-  display: block;
-}
-
-.community-order-duration-options strong {
-  font-size: 14px;
-}
-
-.community-order-duration-options small {
-  margin-top: 2px;
-  font-size: 8px;
-  text-transform: uppercase;
-}
-
 @media (max-width: 640px) {
   .community-category-manager-heading {
     align-items: flex-start;
@@ -6282,9 +6276,6 @@
     grid-template-columns: 1fr;
   }
 
-  .community-order-duration-options {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
 }
 
 .community-stock-type-tabs strong {
