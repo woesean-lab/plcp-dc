@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,13 +15,6 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?searchQuery=members";
-
-function buildEldoradoExtensionUrl(orderId: string) {
-  const url = new URL(ELDORADO_STORE_URL);
-  url.searchParams.set("orderId", orderId);
-  url.searchParams.set("request", "extend");
-  return url.toString();
-}
 
 type DcordTokenResult = {
   index: number;
@@ -222,6 +216,7 @@ export default function PublicOrderPage() {
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
   const [supportClock, setSupportClock] = useState(() => Date.now());
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
@@ -236,6 +231,15 @@ export default function PublicOrderPage() {
       document.title = previousTitle;
     };
   }, []);
+
+  useEffect(() => {
+    if (!showExtensionModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowExtensionModal(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showExtensionModal]);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -391,7 +395,6 @@ export default function PublicOrderPage() {
     (value) => normalizedStatus.includes(value)
   );
   const botInvite = useMemo(() => extractBotInvite(status), [status]);
-  const eldoradoExtensionUrl = useMemo(() => buildEldoradoExtensionUrl(uniqid), [uniqid]);
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
@@ -498,10 +501,13 @@ export default function PublicOrderPage() {
     }
   }
 
-  function copyOrderIdForExtension() {
-    void navigator.clipboard.writeText(uniqid)
-      .then(() => toast.success("Order ID copied. Opening Eldorado..."))
-      .catch(() => toast("Opening Eldorado. Use the order ID shown on this page."));
+  async function copyOrderIdForExtension() {
+    try {
+      await navigator.clipboard.writeText(uniqid);
+      toast.success("Order ID copied.");
+    } catch {
+      toast.error("Order ID could not be copied.");
+    }
   }
 
   async function handleReplaceDcordToken(resultIndex: number) {
@@ -677,9 +683,9 @@ export default function PublicOrderPage() {
                   <span>
                     <small>{supportExpired ? "Expired" : "Expires"}</small>
                     <strong>{formatDateTime(expiredAt)}</strong>
-                    <a className="monitor-extend-link" href={eldoradoExtensionUrl} target="_blank" rel="noreferrer" onClick={copyOrderIdForExtension}>
-                      Extend · {uniqid} <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                    </a>
+                    <button type="button" className="monitor-extend-link" onClick={() => setShowExtensionModal(true)}>
+                      Extend support
+                    </button>
                   </span>
                 </div>
               ) : null}
@@ -880,6 +886,31 @@ export default function PublicOrderPage() {
           <span>Order #{uniqid ? uniqid.slice(-8).toUpperCase() : "-"}</span>
         </footer>
       </main>
+      {showExtensionModal ? createPortal(
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExtensionModal(false); }}>
+          <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-extension-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Timer className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Order support</p>
+            <h2 id="public-extension-title">Extend your support period</h2>
+            <p>Copy the order ID below, then open Eldorado and send it to Pulcip Store with your extension request.</p>
+            <div className="public-extension-order-id">
+              <span><small>Order ID</small><code>{uniqid}</code></span>
+              <Button type="button" variant="secondary" size="sm" onClick={() => void copyOrderIdForExtension()}>
+                <Copy className="h-4 w-4" aria-hidden="true" /> Copy ID
+              </Button>
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" onClick={() => setShowExtensionModal(false)}>Close</Button>
+              <Button asChild>
+                <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                  Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
     </section>
   );
 }

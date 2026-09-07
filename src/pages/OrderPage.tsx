@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1116,7 +1117,7 @@ export default function OrderPage() {
           </div>
         </div>
       )}
-      {showExtendCommunityModal ? (
+      {showExtendCommunityModal ? createPortal(
         <div
           className="confirm-modal-backdrop"
           onMouseDown={(event) => {
@@ -1149,7 +1150,8 @@ export default function OrderPage() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
       {showCancelDcordModal ? (
         <div
