@@ -92,8 +92,6 @@ const EMPTY_FORM = {
   communityDurationMonths: 1
 };
 
-const MEMBER_AMOUNT_PRESETS = [50, 100, 250] as const;
-
 function getBoostConcurrency(amount: number) {
   return Math.max(1, Math.floor(amount / 2));
 }
@@ -563,8 +561,6 @@ export default function HomePage() {
   const [availability, setAvailability] = useState("");
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [memberAmountCustom, setMemberAmountCustom] = useState(false);
-  const [memberCustomAmountDraft, setMemberCustomAmountDraft] = useState("");
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
@@ -622,7 +618,6 @@ export default function HomePage() {
   const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
-  const selectedMemberAmountIsCustom = memberAmountCustom || !MEMBER_AMOUNT_PRESETS.some((amount) => amount === form.amount);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -2211,51 +2206,18 @@ export default function HomePage() {
                         <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
-                            <div className="member-amount-options" aria-label="Number of members">
-                              {MEMBER_AMOUNT_PRESETS.map((amount) => (
-                                <button
-                                  key={amount}
-                                  type="button"
-                                  disabled={selectedIsCommunity && amount > selectedCommunityReady}
-                                  aria-pressed={!selectedMemberAmountIsCustom && form.amount === amount}
-                                  className={!selectedMemberAmountIsCustom && form.amount === amount ? "is-selected" : ""}
-                                  onClick={() => {
-                                    setMemberAmountCustom(false);
-                                    setMemberCustomAmountDraft("");
-                                    setForm((current) => ({ ...current, amount }));
-                                  }}
-                                >
-                                  {amount}
-                                </button>
-                              ))}
-                              <input
-                                className={`member-amount-custom-input ${selectedMemberAmountIsCustom ? "is-selected" : ""}`}
-                                type="number"
-                                min={1}
-                                max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
-                                aria-label="Custom member amount"
-                                placeholder="Custom"
-                                value={selectedMemberAmountIsCustom ? (memberAmountCustom ? memberCustomAmountDraft : String(form.amount)) : ""}
-                                onFocus={() => {
-                                  if (selectedMemberAmountIsCustom) setMemberCustomAmountDraft(String(form.amount));
-                                  else setMemberCustomAmountDraft("");
-                                  setMemberAmountCustom(true);
-                                }}
-                                onBlur={() => {
-                                  if (!memberCustomAmountDraft.trim()) setMemberAmountCustom(false);
-                                }}
-                                onChange={(event) => {
-                                  const value = event.target.value;
-                                  setMemberAmountCustom(true);
-                                  setMemberCustomAmountDraft(value);
-                                  if (!value) return;
-                                  const requested = Math.max(1, Number(value) || 1);
-                                  const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
-                                  if (amount !== requested) setMemberCustomAmountDraft(String(amount));
-                                  setForm((current) => ({ ...current, amount }));
-                                }}
-                              />
-                            </div>
+                            <input
+                              className="boost-number-input"
+                              type="number"
+                              min={1}
+                              max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
+                              value={form.amount}
+                              onChange={(event) => {
+                                const requested = Math.max(1, Number(event.target.value) || 1);
+                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
+                                setForm((current) => ({ ...current, amount }));
+                              }}
+                            />
                           </div>
 
                           <label className="boost-order-field">
