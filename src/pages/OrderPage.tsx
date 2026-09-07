@@ -798,6 +798,8 @@ export default function OrderPage() {
           "",
           "After the order is completed, you can remove the bot from your server. Once removed, its permissions are revoked and it can no longer access or make changes to your server.",
           "",
+          "After the order is completed, remember to change your server access setting back to Invite Only (Server Settings → Access → Invite Only).",
+          "",
           "🤖 Add Bot:",
           botInvite,
           "",
