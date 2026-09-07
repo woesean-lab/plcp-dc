@@ -556,7 +556,7 @@ async function loadCommunityStockCategories(config) {
 async function ensureCommunityStockCategories(config) {
   await pool.query(
     `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-     SELECT $1, defaults.id, defaults.name, FALSE, NULL
+     SELECT $1, defaults.id, defaults.name, FALSE, NULL::INTEGER
      FROM (VALUES ('offline', 'Offline'), ('online', 'Online')) AS defaults(id, name)
      WHERE NOT EXISTS (SELECT 1 FROM community_stock_categories WHERE guild_id = $1)
      ON CONFLICT (guild_id, id) DO NOTHING`,
@@ -2837,12 +2837,12 @@ async function initializeDatabase() {
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
   await pool.query(`
     INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, NULL FROM community_oauth_joins
+    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, NULL::INTEGER FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query(`
     INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, NULL FROM community_oauth_joins
+    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, NULL::INTEGER FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
@@ -2976,7 +2976,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
     }));
     await pool.query(
       `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-       VALUES ($1, 'offline', 'Offline', FALSE, NULL), ($1, 'online', 'Online', FALSE, NULL)
+       VALUES ($1, 'offline', 'Offline', FALSE, NULL::INTEGER), ($1, 'online', 'Online', FALSE, NULL::INTEGER)
        ON CONFLICT (guild_id, id) DO NOTHING`,
       [candidate.guildId]
     );
