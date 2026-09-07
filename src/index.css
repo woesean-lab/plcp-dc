@@ -1732,7 +1732,8 @@
   }
 
   .community-service-option-footer .service-option-code-badge > span {
-    transform: translateY(1px);
+    display: inline-block;
+    transform: translateY(2px);
   }
 
   .boost-order-block {
