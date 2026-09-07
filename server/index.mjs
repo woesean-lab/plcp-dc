@@ -3976,8 +3976,27 @@ function sanitizePublicCommunityOrder(order) {
     communityResults: order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };
+      const state = String(item.state ?? "").toLowerCase();
+      sanitized.details = item.authorizationStatus === "inactive"
+        ? "This member is inactive and can be replaced."
+        : state === "joined"
+          ? "Member delivered successfully."
+          : state === "already_member"
+            ? "This member was already in the server and can be replaced."
+            : state === "failed"
+              ? "This member could not be delivered and can be replaced."
+              : state === "blocked"
+                ? "Delivery could not continue for this member."
+                : state === "replacing"
+                  ? "A replacement member is being delivered."
+                  : state === "joining"
+                    ? "Member delivery is in progress."
+                    : state === "cancelled"
+                      ? "Delivery was cancelled before this member completed."
+                      : "Waiting for delivery.";
       delete sanitized.discordUserId;
       delete sanitized.replacementHistoryUserIds;
+      delete sanitized.authorizationDetails;
       return sanitized;
     })
   };
