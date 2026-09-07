@@ -1690,7 +1690,7 @@
   }
 
   .member-amount-options {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(58px, 1.45fr);
   }
 
   .community-order-month-options {
