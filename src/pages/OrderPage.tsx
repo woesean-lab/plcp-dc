@@ -395,6 +395,7 @@ export default function OrderPage() {
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
+  const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const replaceableCommunityMemberIndices = communityMemberResults
@@ -659,7 +660,7 @@ export default function OrderPage() {
 
   async function handleReplaceCommunityMember(resultIndex: number) {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || replacingCommunityMemberIndex !== null) return;
+    if (!target || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null) return;
 
     try {
       setReplacingCommunityMemberIndex(resultIndex);
@@ -696,7 +697,7 @@ export default function OrderPage() {
 
   function handleReplaceAllCommunityMembers() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
+    if (!target || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
     setCommunityReplaceQueue(replaceableCommunityMemberIndices);
     toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
   }
@@ -704,7 +705,7 @@ export default function OrderPage() {
   useEffect(() => {
     const nextIndex = communityReplaceQueue[0];
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (nextIndex === undefined || !target || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
+    if (nextIndex === undefined || !target || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
 
     void (async () => {
       try {
@@ -719,7 +720,7 @@ export default function OrderPage() {
         setReplacingCommunityMemberIndex(null);
       }
     })();
-  }, [communityReplaceQueue, communityReplacementRunning, replacingCommunityMemberIndex, result?.uniqid, uniqid]);
+  }, [communityReplaceQueue, communityReplacementRunning, communityReplacementStatusAllowed, replacingCommunityMemberIndex, result?.uniqid, uniqid]);
 
   async function copyBotInvite() {
     if (!botInvite) return;
@@ -1039,7 +1040,7 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
-                    <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                    <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                       <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                       {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : "Replace all"}
                     </Button>
@@ -1061,7 +1062,7 @@ export default function OrderPage() {
                       </span>
                       <span className="community-order-result-state">
                         {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                           </Button>

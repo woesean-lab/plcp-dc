@@ -410,6 +410,7 @@ export default function PublicOrderPage() {
     .map((item) => item.index);
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
+  const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true && !supportExpired;
   const boostDuration = status?.duration === 1 || status?.duration === 3
@@ -526,7 +527,7 @@ export default function PublicOrderPage() {
   }
 
   async function handleReplaceCommunityMember(resultIndex: number) {
-    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
+    if (!uniqid || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
 
     try {
       setReplacingCommunityMemberIndex(resultIndex);
@@ -555,14 +556,14 @@ export default function PublicOrderPage() {
   }
 
   function handleReplaceAllCommunityMembers() {
-    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
+    if (!uniqid || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
     setCommunityReplaceQueue(replaceableCommunityMemberIndices);
     toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
   }
 
   useEffect(() => {
     const nextIndex = communityReplaceQueue[0];
-    if (nextIndex === undefined || !uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
+    if (nextIndex === undefined || !uniqid || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
 
     void (async () => {
       try {
@@ -577,7 +578,7 @@ export default function PublicOrderPage() {
         setReplacingCommunityMemberIndex(null);
       }
     })();
-  }, [communityReplaceQueue, communityReplacementRunning, replacingCommunityMemberIndex, uniqid]);
+  }, [communityReplaceQueue, communityReplacementRunning, communityReplacementStatusAllowed, replacingCommunityMemberIndex, uniqid]);
 
   const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
@@ -780,7 +781,7 @@ export default function PublicOrderPage() {
                           </Button>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
@@ -798,7 +799,7 @@ export default function PublicOrderPage() {
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
                               {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>

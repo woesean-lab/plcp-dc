@@ -481,7 +481,38 @@ async function checkDcordBoostMembershipScreening(invite, serverInfo) {
   return checkCommunityMemberVerification(config, serverInfo.guildId, invite);
 }
 
+async function markCommunityFailedDeliveriesInactive(queryable, guildId) {
+  return queryable.query(
+    `UPDATE community_oauth_joins AS stock
+     SET status = 'failed',
+         details = 'A previous delivery failed; this member was disabled automatically.',
+         reserved_order_id = NULL
+     WHERE stock.guild_id = $1
+       AND stock.status = 'authorized'
+       AND EXISTS (
+         SELECT 1
+         FROM tracked_orders
+         CROSS JOIN LATERAL jsonb_to_recordset(
+           CASE
+             WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+             ELSE '[]'::jsonb
+           END
+         ) AS member_result("discordUserId" text, state text, "completedAt" text)
+         WHERE payload->>'provider' = 'community'
+           AND payload->>'serverId' = $1
+           AND member_result."discordUserId" = stock.discord_user_id
+           AND LOWER(COALESCE(member_result.state, '')) = 'failed'
+           AND CASE
+             WHEN member_result."completedAt" ~ '^\\d{4}-\\d{2}-\\d{2}T' THEN member_result."completedAt"::timestamptz
+             ELSE NULL
+           END >= stock.authorized_at
+       )`,
+    [guildId]
+  );
+}
+
 async function loadCommunityJoinSummary(config) {
+  await markCommunityFailedDeliveriesInactive(pool, config.guildId);
   await pool.query(
     `UPDATE community_oauth_joins
      SET status = 'failed',
@@ -574,7 +605,6 @@ async function normalizeCommunityStockRecords(config) {
        AND access_token_expires_at > NOW()
        AND (
          status IN ('joined', 'already_member')
-         OR (status = 'failed' AND COALESCE(details, '') NOT ILIKE 'OAuth access token expired or became invalid%')
          OR (status = 'authorized' AND details IS NOT NULL)
        )`,
     [config.guildId]
@@ -3557,6 +3587,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
       return res.status(400).json({ message: "Choose a valid Members 2 category." });
     }
+    await markCommunityFailedDeliveriesInactive(pool, config.guildId);
     const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(pool, config, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
@@ -3608,6 +3639,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
+    await markCommunityFailedDeliveriesInactive(client, config.guildId);
     const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, config, serverInfo.guildId);
     const selected = await client.query(
        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
@@ -4195,6 +4227,11 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "The Members bot is no longer configured for this order's server." });
     }
+    const replacementAllowedStatuses = new Set(["PARTIAL", "COMPLETED", "ERROR"]);
+    if (!replacementAllowedStatuses.has(String(order.status ?? "").toUpperCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Wait for the current delivery to finish before replacing members." });
+    }
 
     const results = [...order.communityResults];
     if (results.some((item) => String(item?.state ?? "").toLowerCase() === "replacing")) {
@@ -4246,7 +4283,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       failedResult.previousUsername,
       failedResult.username
     ].map((value) => String(value ?? "").trim()).filter(Boolean)));
-    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, config, config.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, config.guildId);
     const usedUserIds = Array.from(new Set([
       ...replacementHistoryUserIds,
       ...previouslyDeliveredUserIds,
