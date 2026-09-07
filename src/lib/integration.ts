@@ -226,6 +226,14 @@ export async function updateOrderDelay(uniqid: string, delay: number, provider: 
   });
 }
 
+export function extendCommunityOrderSupport(uniqid: string, months: number) {
+  return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/extend`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ months })
+  });
+}
+
 export function saveDcordApiKey(apiKey: string) {
   return requestJson<{ configured: true }>("/api/dcord/config", {
     method: "PUT",

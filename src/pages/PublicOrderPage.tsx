@@ -15,6 +15,13 @@ const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?searchQuery=members";
 
+function buildEldoradoExtensionUrl(orderId: string) {
+  const url = new URL(ELDORADO_STORE_URL);
+  url.searchParams.set("orderId", orderId);
+  url.searchParams.set("request", "extend");
+  return url.toString();
+}
+
 type DcordTokenResult = {
   index: number;
   token: string;
@@ -379,14 +386,12 @@ export default function PublicOrderPage() {
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
-  const waitingForBotDetails = typeof status?.details === "string" && status.details.trim()
-    ? status.details.trim()
-    : "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
   );
   const botInvite = useMemo(() => extractBotInvite(status), [status]);
+  const eldoradoExtensionUrl = useMemo(() => buildEldoradoExtensionUrl(uniqid), [uniqid]);
   const progress =
     typeof totalMembers === "number" && typeof membersAdded === "number" && totalMembers > 0
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
@@ -491,6 +496,12 @@ export default function PublicOrderPage() {
     } catch {
       toast.error("Bot invite link could not be copied.");
     }
+  }
+
+  function copyOrderIdForExtension() {
+    void navigator.clipboard.writeText(uniqid)
+      .then(() => toast.success("Order ID copied. Opening Eldorado..."))
+      .catch(() => toast("Opening Eldorado. Use the order ID shown on this page."));
   }
 
   async function handleReplaceDcordToken(resultIndex: number) {
@@ -661,9 +672,15 @@ export default function PublicOrderPage() {
                 <span><small>Created</small><strong>{isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong></span>
               </div>
               {isCommunityOrder && expiredAt ? (
-                <div>
+                <div className={`monitor-support-context ${supportExpired ? "is-expired" : ""}`}>
                   <Timer className="h-4 w-4" aria-hidden="true" />
-                  <span><small>{supportExpired ? "Expired" : "Support until"}</small><strong>{formatDateTime(expiredAt)}</strong></span>
+                  <span>
+                    <small>{supportExpired ? "Expired" : "Expires"}</small>
+                    <strong>{formatDateTime(expiredAt)}</strong>
+                    <a className="monitor-extend-link" href={eldoradoExtensionUrl} target="_blank" rel="noreferrer" onClick={copyOrderIdForExtension}>
+                      Extend · {uniqid} <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                    </a>
+                  </span>
                 </div>
               ) : null}
             </div>
@@ -682,7 +699,7 @@ export default function PublicOrderPage() {
             <div className={`monitor-content ${isBoostOrder ? "is-boost-monitor" : ""}`}>
               {isWaiting && botInvite ? (
                 <div className="monitor-bot-alert">
-                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>{waitingForBotDetails}</strong></span>
+                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>To continue delivery, please add the bot to your Discord server.</strong></span>
                   <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
                     <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
                   </Button>

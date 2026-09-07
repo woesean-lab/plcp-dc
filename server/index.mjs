@@ -3349,9 +3349,8 @@ function createCommunityBotInvite(config, guildId) {
 
 function createCommunityBotGuildAccessError(status, context = {}) {
   const discordStatus = Number(status);
-  const targetGuildId = String(context.guildId ?? "").trim();
   const message = context.tokenVerified === true
-    ? `The saved bot token is valid, but that bot is not a member of the target Discord server${targetGuildId ? ` (${targetGuildId})` : ""}. Re-add it using this order's generated bot link.`
+    ? "To continue delivery, please add the bot to your Discord server."
     : discordStatus === 401
     ? "Discord rejected the saved Members bot token. Update it in Settings."
     : discordStatus === 403
@@ -4031,6 +4030,56 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
     res.json(updated.rows[0].payload);
   } catch (error) {
     next(error);
+  }
+});
+
+app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const months = Number.parseInt(req.body?.months, 10);
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(months) || months < 1 || months > 6) {
+      return res.status(400).json({ message: "Choose an extension between 1 and 6 months." });
+    }
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (order.categoryIsPeriodic !== true && !order.expiredAt) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This Members order does not have a support period." });
+    }
+
+    const now = new Date();
+    const currentExpiration = new Date(order.expiredAt);
+    const extensionBase = Number.isFinite(currentExpiration.getTime()) && currentExpiration > now ? currentExpiration : now;
+    const nextExpiration = addUtcMonths(extensionBase, months).toISOString();
+    const extendedAt = now.toISOString();
+    const updatedOrder = {
+      ...order,
+      durationMonths: Math.max(0, Number(order.durationMonths) || 0) + months,
+      expiredAt: nextExpiration,
+      supportExtensions: [
+        ...(Array.isArray(order.supportExtensions) ? order.supportExtensions : []),
+        { months, previousExpiredAt: order.expiredAt ?? null, expiredAt: nextExpiration, extendedAt }
+      ]
+    };
+
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(updatedOrder)]
+    );
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json(updatedOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 });
 

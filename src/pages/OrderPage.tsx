@@ -3,10 +3,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -334,6 +334,9 @@ export default function OrderPage() {
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
   const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
+  const [showExtendCommunityModal, setShowExtendCommunityModal] = useState(false);
+  const [communityExtensionMonths, setCommunityExtensionMonths] = useState(1);
+  const [extendingCommunityOrder, setExtendingCommunityOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
@@ -424,14 +427,15 @@ export default function OrderPage() {
   }, []);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
+      if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, cancellingDcordOrder, cancellingCommunityOrder]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -513,6 +517,23 @@ export default function OrderPage() {
       void lookup(target);
     } finally {
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleExtendCommunityOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isCommunityProvider || extendingCommunityOrder) return;
+
+    try {
+      setExtendingCommunityOrder(true);
+      const updated = await extendCommunityOrderSupport(target, communityExtensionMonths);
+      setResult((current) => mergeOrderStatus(current, updated));
+      setShowExtendCommunityModal(false);
+      toast.success(`Support period extended by ${communityExtensionMonths} month${communityExtensionMonths === 1 ? "" : "s"}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Support period could not be extended.");
+    } finally {
+      setExtendingCommunityOrder(false);
     }
   }
 
@@ -854,9 +875,14 @@ export default function OrderPage() {
 
           <div className="lookup-metrics" aria-label="Order summary">
             {summary.map((item) => (
-              <div key={item.label}>
+              <div key={item.label} className={item.label === "Expiration" && isCommunityProvider && expiration ? "lookup-expiration-metric" : undefined}>
                 <span>{item.label}</span>
                 <strong title={item.value}>{item.value}</strong>
+                {item.label === "Expiration" && isCommunityProvider && expiration ? (
+                  <Button type="button" variant="secondary" size="xs" onClick={() => setShowExtendCommunityModal(true)}>
+                    <CalendarPlus className="h-3.5 w-3.5" aria-hidden="true" /> Extend period
+                  </Button>
+                ) : null}
               </div>
             ))}
           </div>
@@ -1090,6 +1116,41 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showExtendCommunityModal ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !extendingCommunityOrder) setShowExtendCommunityModal(false);
+          }}
+        >
+          <div className="confirm-modal lookup-extend-modal" role="dialog" aria-modal="true" aria-labelledby="extend-community-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><CalendarPlus className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Support period</p>
+            <h2 id="extend-community-title">Extend this order</h2>
+            <p>Current expiration: <strong>{formatTime(expiration ?? undefined)}</strong>. Choose how many months to add.</p>
+            <div className="lookup-extension-options" aria-label="Extension duration">
+              {[1, 2, 3, 4, 5, 6].map((months) => (
+                <button
+                  key={months}
+                  type="button"
+                  aria-pressed={communityExtensionMonths === months}
+                  className={communityExtensionMonths === months ? "is-selected" : ""}
+                  onClick={() => setCommunityExtensionMonths(months)}
+                >
+                  <strong>{months}</strong><small>{months === 1 ? "month" : "months"}</small>
+                </button>
+              ))}
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={extendingCommunityOrder} onClick={() => setShowExtendCommunityModal(false)}>Cancel</Button>
+              <Button type="button" disabled={extendingCommunityOrder} onClick={() => void handleExtendCommunityOrder()}>
+                <CalendarPlus className={`h-4 w-4 ${extendingCommunityOrder ? "animate-pulse" : ""}`} aria-hidden="true" />
+                {extendingCommunityOrder ? "Extending..." : `Extend ${communityExtensionMonths} month${communityExtensionMonths === 1 ? "" : "s"}`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {showCancelDcordModal ? (
         <div
           className="confirm-modal-backdrop"
