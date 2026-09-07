@@ -48,7 +48,7 @@ export type CommunityStockCategory = {
   summary: CommunityStockSummary;
 };
 
-export type CommunityCategoryColorKey = "violet" | "cyan" | "emerald" | "amber" | "rose";
+export type CommunityCategoryColorKey = "violet" | "cyan" | "emerald" | "amber" | "rose" | "black";
 
 export type CommunityStockCategoryInput = {
   name: string;

@@ -121,7 +121,8 @@ const COMMUNITY_CATEGORY_COLORS: Array<{ key: CommunityCategoryColorKey; label: 
   { key: "cyan", label: "Cyan", tone: "#67c7ff" },
   { key: "emerald", label: "Emerald", tone: "#69ddb2" },
   { key: "amber", label: "Amber", tone: "#f5c76b" },
-  { key: "rose", label: "Rose", tone: "#ff8297" }
+  { key: "rose", label: "Rose", tone: "#ff8297" },
+  { key: "black", label: "Black", tone: "#343541" }
 ];
 
 function getCommunityCategoryIcon(iconName: string) {
@@ -1763,7 +1764,7 @@ export default function HomePage() {
             const hasStock = category.summary.authorized + category.summary.failed > 0;
             const CategoryIcon = getCommunityCategoryIcon(category.iconName);
             return (
-              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`} style={getCommunityCategoryAppearance(category.colorKey)}>
+              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`}>
                 <button
                   type="button"
                   role="tab"
@@ -2963,22 +2964,30 @@ export default function HomePage() {
               <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
             </label>
             <div className="community-category-appearance" style={getCommunityCategoryAppearance(communityCategoryDraft.colorKey)}>
-              <label>
-                <span className={fieldLabelClass}>Lucide icon</span>
-                <span className="community-category-icon-input">
-                  <span aria-hidden="true"><CommunityCategoryDraftIcon className="h-4 w-4" /></span>
-                  <Input
-                    list="community-category-icon-list"
-                    value={communityCategoryDraft.iconName}
-                    placeholder="Example: Crown"
-                    onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, iconName: event.target.value }))}
-                  />
-                </span>
-                <datalist id="community-category-icon-list">
-                  {Object.keys(COMMUNITY_CATEGORY_ICONS).map((iconName) => <option key={iconName} value={iconName} />)}
-                </datalist>
-              </label>
-              <fieldset>
+              <div className="community-category-appearance-heading">
+                <span aria-hidden="true"><CommunityCategoryDraftIcon className="h-5 w-5" /></span>
+                <div><strong>Category appearance</strong><small>Choose an icon and accent color for order selection.</small></div>
+              </div>
+              <fieldset className="community-category-icon-picker">
+                <legend className={fieldLabelClass}>Icon</legend>
+                <div className="community-category-icon-options">
+                  {Object.entries(COMMUNITY_CATEGORY_ICONS).map(([iconName, Icon]) => (
+                    <button
+                      key={iconName}
+                      type="button"
+                      title={iconName}
+                      aria-label={iconName}
+                      aria-pressed={communityCategoryDraft.iconName === iconName}
+                      className={communityCategoryDraft.iconName === iconName ? "is-selected" : ""}
+                      onClick={() => setCommunityCategoryDraft((current) => ({ ...current, iconName }))}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <small>{iconName}</small>
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              <fieldset className="community-category-color-picker">
                 <legend className={fieldLabelClass}>Color</legend>
                 <div className="community-category-color-options">
                   {COMMUNITY_CATEGORY_COLORS.map((color) => (
@@ -2993,6 +3002,7 @@ export default function HomePage() {
                       onClick={() => setCommunityCategoryDraft((current) => ({ ...current, colorKey: color.key }))}
                     >
                       <span />
+                      <small>{color.label}</small>
                     </button>
                   ))}
                 </div>

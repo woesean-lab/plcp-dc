@@ -604,7 +604,7 @@ function createCommunityCategoryId() {
 }
 
 const COMMUNITY_CATEGORY_ICON_NAMES = new Set(["Users", "Timer", "Crown", "Gem", "Gamepad2", "Globe2", "Heart", "Rocket", "Shield", "Star", "Zap"]);
-const COMMUNITY_CATEGORY_COLOR_KEYS = new Set(["violet", "cyan", "emerald", "amber", "rose"]);
+const COMMUNITY_CATEGORY_COLOR_KEYS = new Set(["violet", "cyan", "emerald", "amber", "rose", "black"]);
 
 function parseCommunityCategoryIconName(value) {
   const iconName = String(value ?? "").trim();

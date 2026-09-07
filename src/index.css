@@ -6242,19 +6242,20 @@
 }
 
 .community-category-modal {
-  width: min(560px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
 }
 
 .community-category-appearance {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 12px;
-  margin-top: 6px;
+  gap: 16px;
+  margin-top: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 11px;
+  padding: 14px;
+  background: rgba(4, 5, 11, .24);
   text-align: left;
 }
 
-.community-category-appearance > label,
 .community-category-appearance > fieldset {
   display: grid;
   min-width: 0;
@@ -6264,47 +6265,98 @@
   padding: 0;
 }
 
-.community-category-icon-input {
-  position: relative;
+.community-category-appearance-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.community-category-appearance-heading > span {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--category-tone) 34%, var(--app-border));
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--category-tone) 12%, transparent);
+  color: var(--category-tone);
+}
+
+.community-category-appearance-heading strong,
+.community-category-appearance-heading small {
   display: block;
 }
 
-.community-category-icon-input > span {
-  position: absolute;
-  z-index: 1;
-  top: 50%;
-  left: 12px;
-  display: grid;
-  width: 24px;
-  height: 24px;
-  place-items: center;
-  border-radius: 6px;
-  background: color-mix(in srgb, var(--category-tone) 12%, transparent);
-  color: var(--category-tone);
-  pointer-events: none;
-  transform: translateY(-50%);
+.community-category-appearance-heading strong {
+  color: var(--app-text-secondary);
+  font-size: 12px;
 }
 
-.community-category-icon-input input {
-  padding-left: 44px;
+.community-category-appearance-heading small {
+  margin-top: 3px;
+  color: var(--app-subtle);
+  font-size: 9px;
 }
 
-.community-category-color-options {
+.community-category-icon-options {
   display: grid;
-  grid-template-columns: repeat(5, 34px);
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 6px;
 }
 
+.community-category-icon-options button,
 .community-category-color-options button {
   display: grid;
-  width: 34px;
-  height: 36px;
+  min-width: 0;
   place-items: center;
   border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-input-bg);
+  color: var(--app-muted);
   cursor: pointer;
-  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease, box-shadow .15s ease;
+}
+
+.community-category-icon-options button {
+  min-height: 58px;
+  grid-template-rows: 20px auto;
+  gap: 5px;
+  padding: 7px 4px;
+}
+
+.community-category-icon-options button small,
+.community-category-color-options button small {
+  max-width: 100%;
+  overflow: hidden;
+  font-size: 8px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-category-icon-options button:hover,
+.community-category-icon-options button.is-selected {
+  border-color: color-mix(in srgb, var(--category-tone) 55%, var(--app-border));
+  background: color-mix(in srgb, var(--category-tone) 9%, var(--app-input-bg));
+  color: var(--category-tone);
+}
+
+.community-category-icon-options button.is-selected {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--category-tone) 34%, transparent);
+}
+
+.community-category-color-options {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.community-category-color-options button {
+  min-height: 48px;
+  grid-template-rows: 16px auto;
+  gap: 5px;
+  padding: 6px 4px;
 }
 
 .community-category-color-options button:hover,
@@ -6318,8 +6370,9 @@
 }
 
 .community-category-color-options button > span {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
+  border: 1px solid rgba(255, 255, 255, .16);
   border-radius: 50%;
   background: var(--category-tone);
   box-shadow: 0 0 10px color-mix(in srgb, var(--category-tone) 38%, transparent);
@@ -6381,15 +6434,15 @@
   }
 
   .community-category-appearance {
-    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .community-category-icon-options {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .community-category-color-options {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-  }
-
-  .community-category-color-options button {
-    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
 }
