@@ -6330,8 +6330,8 @@
   gap: 7px;
 }
 
-.community-category-color-picker {
-  margin-top: 8px !important;
+.community-category-appearance legend {
+  margin-bottom: 10px;
 }
 
 .community-category-color-options button {
