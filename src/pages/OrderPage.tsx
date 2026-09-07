@@ -787,21 +787,42 @@ export default function OrderPage() {
       return;
     }
 
-    const message = [
-      "Please add our bot to your server to start the delivery.",
-      "",
-      "🔑 Required Permissions: Create Invite and Kick Members.",
-      "",
-      "You can remove the bot from your server after all members have been added.",
-      "",
-      "🤖 Add Bot:",
-      botInvite,
-      "",
-      "📊 Order Monitor:",
-      getPublicMonitorLink(target),
-      "",
-      `⚙️ Join Delay: ${formatTemplateDelay(result?.delay)} seconds (Fully customizable.)`
-    ].join("\n");
+    const deliveryTiming = speedProfile === "balanced"
+      ? "Balanced (variable 30–300 second delay)"
+      : `${formatTemplateDelay(result?.delay)} seconds (fully customizable)`;
+    const message = isCommunityProvider
+      ? [
+          "Please add the Members bot to your Discord server so we can begin delivery.",
+          "",
+          "Use an account with Manage Server permission. Discord will automatically select the server linked to this order.",
+          "",
+          "🔑 Required bot permissions: Manage Server, Kick Members and Create Invite.",
+          "",
+          "You can remove the bot after the order has been completed.",
+          "",
+          "🤖 Add Bot:",
+          botInvite,
+          "",
+          "📊 Order Monitor:",
+          getPublicMonitorLink(target),
+          "",
+          `⚙️ Delivery Speed: ${deliveryTiming}`
+        ].join("\n")
+      : [
+          "Please add our bot to your server to start the delivery.",
+          "",
+          "🔑 Required Permissions: Create Invite and Kick Members.",
+          "",
+          "You can remove the bot from your server after all members have been added.",
+          "",
+          "🤖 Add Bot:",
+          botInvite,
+          "",
+          "📊 Order Monitor:",
+          getPublicMonitorLink(target),
+          "",
+          `⚙️ Join Delay: ${formatTemplateDelay(result?.delay)} seconds (Fully customizable.)`
+        ].join("\n");
 
     try {
       await navigator.clipboard.writeText(message);
@@ -846,7 +867,7 @@ export default function OrderPage() {
                 <span aria-hidden="true" />
                 {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
-              {!isDcordProvider && !isCommunityProvider && isWaitingForBot ? (
+              {!isDcordProvider && isWaitingForBot ? (
                 <Button
                   type="button"
                   variant="secondary"
