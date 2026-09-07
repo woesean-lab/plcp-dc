@@ -1852,7 +1852,8 @@ async function processCommunityOrder(order, members, config) {
       await client.query("BEGIN");
       const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [order.uniqid]);
       const currentPayload = locked.rows[0]?.payload;
-      if (!currentPayload || String(currentPayload.status ?? "").toUpperCase() === "CANCELLED") {
+      const currentStatus = String(currentPayload?.status ?? "").toUpperCase();
+      if (!currentPayload || currentStatus === "CANCELLED") {
         await client.query("ROLLBACK");
         return false;
       }
@@ -1882,13 +1883,20 @@ async function processCommunityOrder(order, members, config) {
           : `${mergedAdded}/${amount} members delivered. Review the member results.`
         : `${mergedAdded}/${amount} members delivered.`;
       const latestDelay = Number.parseInt(currentPayload.delay, 10);
+      const deliveryPaused = currentStatus === "PAUSED";
       const nextPayload = {
         ...payload,
         added: mergedAdded,
-        status,
-        details,
+        status: deliveryPaused ? "PAUSED" : status,
+        details: deliveryPaused ? "Delivery paused." : details,
         delay: Number.isFinite(latestDelay) && latestDelay >= 0 ? latestDelay : order.delay,
-        communityResults: mergedResults
+        communityResults: mergedResults,
+        ...(deliveryPaused ? {
+          waitingCode: "manual_pause",
+          pausedAt: currentPayload.pausedAt ?? new Date().toISOString(),
+          pausedFromStatus: currentPayload.pausedFromStatus ?? "PROCESS",
+          pausedWaitingCode: currentPayload.pausedWaitingCode ?? null
+        } : {})
       };
       await client.query(
         "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
@@ -1896,7 +1904,7 @@ async function processCommunityOrder(order, members, config) {
       );
       await client.query("COMMIT");
       order.delay = nextPayload.delay;
-      return true;
+      return !deliveryPaused;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
       throw error;
@@ -2053,7 +2061,7 @@ async function processCommunityOrder(order, members, config) {
       let lastBotCheckAt = 0;
       while (true) {
         const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-        if (!control.rowCount || String(control.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return;
+        if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return;
         const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
         const originalDelay = Number(order.delay);
         const delaySeconds = Number.isFinite(currentDelay) && currentDelay >= 0
@@ -3542,8 +3550,8 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
        FROM tracked_orders
        WHERE payload->>'provider' = 'community'
          AND (
-           ($1::text IS NULL AND payload->>'status' IN ('WAITING', 'PROCESS'))
-           OR ($1::text IS NOT NULL AND payload->>'status' = 'PROCESS')
+           ($1::text IS NULL AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED'))
+           OR ($1::text IS NOT NULL AND payload->>'status' IN ('PROCESS', 'PAUSED'))
          )
          AND ($1::text IS NULL OR uniqid <> $1)
        LIMIT 1`,
@@ -4136,7 +4144,7 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
     const currentStatus = String(order.status ?? "").toUpperCase();
     const delivered = Number(order.added ?? 0);
     const ordered = Number(order.amount ?? 0);
-    if (!["WAITING", "PROCESS", "ERROR", "PARTIAL"].includes(currentStatus) || (ordered > 0 && delivered >= ordered)) {
+    if (!["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(currentStatus) || (ordered > 0 && delivered >= ordered)) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: `This Members order is already ${currentStatus || "finished"}.` });
     }
@@ -4173,6 +4181,115 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
   }
 });
 
+async function pauseCommunityOrder(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const isPublicRequest = req.path.startsWith("/api/public/");
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    const currentStatus = String(order.status ?? "").toUpperCase();
+    if (currentStatus === "PAUSED") {
+      await client.query("COMMIT");
+      return res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(order) : order);
+    }
+    if (!["WAITING", "PROCESS"].includes(currentStatus)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Only an active Members delivery can be paused." });
+    }
+    if (Array.isArray(order.communityResults) && order.communityResults.some((item) => String(item?.state ?? "").toLowerCase() === "replacing")) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Wait for the current replacement to finish before pausing delivery." });
+    }
+
+    const pausedAt = new Date().toISOString();
+    const pausedOrder = {
+      ...order,
+      status: "PAUSED",
+      details: "Delivery paused.",
+      pausedAt,
+      pausedFromStatus: currentStatus,
+      pausedWaitingCode: order.waitingCode ?? null,
+      waitingCode: "manual_pause",
+      communityResults: Array.isArray(order.communityResults)
+        ? order.communityResults.map((item) => String(item?.state ?? "").toLowerCase() === "joining"
+          ? { ...item, state: "queued", details: "Waiting for delivery to resume." }
+          : item)
+        : order.communityResults
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(pausedOrder)]
+    );
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(pausedOrder) : pausedOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+}
+
+async function resumeCommunityOrder(req, res, next) {
+  const client = await pool.connect();
+  try {
+    const isPublicRequest = req.path.startsWith("/api/public/");
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (String(order.status ?? "").toUpperCase() !== "PAUSED") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This Members delivery is not paused." });
+    }
+
+    const resumedOrder = {
+      ...order,
+      status: "WAITING",
+      details: "Preparing to resume delivery.",
+      waitingCode: order.pausedFromStatus === "WAITING" ? order.pausedWaitingCode : "manual_resume",
+      resumedAt: new Date().toISOString()
+    };
+    delete resumedOrder.pausedAt;
+    delete resumedOrder.pausedFromStatus;
+    delete resumedOrder.pausedWaitingCode;
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(resumedOrder)]
+    );
+    await client.query("COMMIT");
+
+    activateWaitingCommunityOrder.lastChecks?.delete(uniqid);
+    const activeOrder = await activateWaitingCommunityOrder(resumedOrder);
+    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(activeOrder) : activeOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+}
+
+app.post("/api/community/orders/:uniqid/pause", requireSession, pauseCommunityOrder);
+app.post("/api/community/orders/:uniqid/resume", requireSession, resumeCommunityOrder);
+app.post("/api/public/orders/:uniqid/pause", pauseCommunityOrder);
+app.post("/api/public/orders/:uniqid/resume", resumeCommunityOrder);
+
 app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -4183,7 +4300,7 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
     const updated = await pool.query(
       `UPDATE tracked_orders
        SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
-       WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS')
+       WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED')
        RETURNING payload`,
       [uniqid, delay]
     );
@@ -4542,7 +4659,7 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
       const updated = await pool.query(
         `UPDATE tracked_orders
          SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
-         WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS')
+         WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED')
          RETURNING payload`,
         [uniqid, delay]
       );

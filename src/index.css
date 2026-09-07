@@ -5092,7 +5092,7 @@
 }
 
 .monitor-delay-controls.has-cancel {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
 
 .monitor-delay-controls .ui-input {

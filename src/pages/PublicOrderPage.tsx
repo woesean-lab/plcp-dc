@@ -4,11 +4,11 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartPublicOrder, updatePublicOrderDelay } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -205,6 +205,7 @@ export default function PublicOrderPage() {
   const [loading, setLoading] = useState(true);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
@@ -390,6 +391,7 @@ export default function PublicOrderPage() {
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
+  const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
@@ -469,6 +471,23 @@ export default function PublicOrderPage() {
     } finally {
       delayUpdateInFlightRef.current = false;
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleToggleDeliveryPause() {
+    if (!uniqid || !isCommunityOrder || togglingDeliveryPause || isTerminalStatus) return;
+
+    try {
+      setTogglingDeliveryPause(true);
+      const data = isDeliveryPaused
+        ? await resumePublicCommunityOrder(uniqid)
+        : await pausePublicCommunityOrder(uniqid);
+      setStatus((current) => mergeOrderStatus(current, data));
+      toast.success(isDeliveryPaused ? "Delivery resumed." : "Delivery paused.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delivery state could not be changed.");
+    } finally {
+      setTogglingDeliveryPause(false);
     }
   }
 
@@ -596,7 +615,9 @@ export default function PublicOrderPage() {
           <p className="app-kicker">Delivery control</p>
           <h2>Join delay</h2>
         </div>
-        <strong className="monitor-current-delay">{currentDelay === 0 ? "No delay" : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+        {currentDelay !== 0 ? (
+          <strong className="monitor-current-delay">{typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+        ) : null}
       </div>
 
       <div className={`monitor-delay-controls ${isCommunityOrder ? "has-cancel" : ""}`}>
@@ -618,6 +639,17 @@ export default function PublicOrderPage() {
           <Timer className="h-4 w-4" aria-hidden="true" />
           {isInvitesPaused ? "Invites paused" : updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
         </Button>
+        {isCommunityOrder ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleToggleDeliveryPause()}
+            disabled={isInvitesPaused || togglingDeliveryPause}
+          >
+            {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+            {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
+          </Button>
+        ) : null}
         {isCommunityOrder ? (
           <Button
             type="button"
@@ -742,7 +774,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{isCompleted ? "Order completed" : isDeliveryPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
                       {isCompleted ? "Your order has been completed successfully." : "We keep this page updated automatically while your order is processed."}
                     </p>
@@ -758,7 +790,7 @@ export default function PublicOrderPage() {
                   <div className="is-remaining">
                     <small>Remaining</small>
                     <strong>{formatNumber(membersRemaining)}</strong>
-                    {!isBoostOrder && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
+                    {!isBoostOrder && !isDeliveryPaused && currentDelay !== 0 && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
                   </div>
                 </div>
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
@@ -766,7 +798,9 @@ export default function PublicOrderPage() {
                 </div>
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
-                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : currentDelay === 0 ? "No delay" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                  {isBoostOrder || currentDelay !== 0 ? (
+                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                  ) : null}
                 </div>
               </section>
 

@@ -4,10 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -329,6 +329,7 @@ export default function OrderPage() {
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
+  const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
@@ -355,7 +356,8 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
-  const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "ERROR", "PARTIAL"].includes(normalizedStatus);
+  const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
+  const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
@@ -381,7 +383,7 @@ export default function OrderPage() {
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const currentDelay = getNumberField(result, ["delay"]);
   const expiration = result?.expiredAt ?? result?.expired_at;
-  const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused
+  const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
@@ -519,6 +521,24 @@ export default function OrderPage() {
       void lookup(target);
     } finally {
       setUpdatingDelay(false);
+    }
+  }
+
+  async function handleToggleDeliveryPause() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isCommunityProvider || togglingDeliveryPause || terminal) return;
+
+    try {
+      setTogglingDeliveryPause(true);
+      const data = isDeliveryPaused
+        ? await resumeCommunityOrder(target)
+        : await pauseCommunityOrder(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success(isDeliveryPaused ? "Delivery resumed." : "Delivery paused.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Delivery state could not be changed.");
+    } finally {
+      setTogglingDeliveryPause(false);
     }
   }
 
@@ -845,7 +865,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isDeliveryPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -961,6 +981,12 @@ export default function OrderPage() {
                 <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay()} disabled={updatingDelay}>
                   {updatingDelay ? "Updating..." : "Update"}
                 </Button>
+                {isCommunityProvider ? (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
+                    {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+                    {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
+                  </Button>
+                ) : null}
                 {canCancelCommunityOrder ? (
                   <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
                     <X className="h-4 w-4" aria-hidden="true" />
