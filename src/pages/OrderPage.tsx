@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, ChevronDown, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
@@ -336,7 +336,6 @@ export default function OrderPage() {
   const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
   const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
   const [showExtendCommunityModal, setShowExtendCommunityModal] = useState(false);
-  const [communityLogOpen, setCommunityLogOpen] = useState(false);
   const [communityExtensionMonths, setCommunityExtensionMonths] = useState(1);
   const [extendingCommunityOrder, setExtendingCommunityOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
@@ -973,21 +972,7 @@ export default function OrderPage() {
 
           {isDcordProvider ? (
             <section className="lookup-token-panel">
-              <div
-                className="lookup-section-heading is-collapsible"
-                role="button"
-                tabIndex={0}
-                aria-expanded={communityLogOpen}
-                onClick={(event) => {
-                  if ((event.target as HTMLElement).closest("button, a")) return;
-                  setCommunityLogOpen((open) => !open);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key !== "Enter" && event.key !== " ") return;
-                  event.preventDefault();
-                  setCommunityLogOpen((open) => !open);
-                }}
-              >
+              <div className="lookup-section-heading">
                 <div>
                   <p className="app-kicker">Token results</p>
                   <h3>Per-token boost log</h3>
@@ -1060,11 +1045,10 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
-                  <ChevronDown className={`community-log-chevron h-4 w-4 ${communityLogOpen ? "rotate-180" : ""}`} aria-hidden="true" />
                 </span>
               </div>
 
-              {communityLogOpen && communityMemberResults.length ? (
+              {communityMemberResults.length ? (
                 <div className="community-order-result-list">
                   {communityMemberResults.map((item) => (
                     <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
@@ -1093,10 +1077,10 @@ export default function OrderPage() {
                     </div>
                   ))}
                 </div>
-              ) : communityLogOpen ? (
+              ) : (
                 <p className="public-token-results-empty">Waiting for member results.</p>
-              ) : null}
-              {communityLogOpen && inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
+              )}
+              {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
             </section>
           ) : null}
 

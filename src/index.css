@@ -1105,20 +1105,6 @@
     letter-spacing: 0;
   }
 
-  .lookup-section-heading.is-collapsible {
-    cursor: pointer;
-  }
-
-  .community-log-chevron {
-    flex: 0 0 auto;
-    color: var(--app-muted);
-    transition: transform 160ms ease, color 160ms ease;
-  }
-
-  .lookup-section-heading.is-collapsible:hover .community-log-chevron {
-    color: var(--app-text-secondary);
-  }
-
   .lookup-token-panel .public-token-results-list { gap: .45rem; margin-top: .75rem; }
   .lookup-token-panel .public-token-result-row { padding-block: .48rem; border-radius: 7px; }
   .lookup-token-panel .public-token-result-index { width: 27px; height: 27px; border-radius: 7px; }
@@ -7931,12 +7917,11 @@
   max-width: 100%;
   align-items: center;
   gap: 5px;
-  margin-top: 5px;
-  border: 1px solid var(--app-border);
-  border-radius: 6px;
-  padding: 5px 8px;
-  background: var(--app-control-bg);
-  color: var(--app-text-secondary);
+  margin-top: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--app-accent-bright);
   font-size: 10px;
   font-weight: 800;
   line-height: 1.2;
@@ -7946,8 +7931,6 @@
 }
 
 .monitor-extend-link:hover {
-  border-color: var(--app-border-strong);
-  background: var(--app-control-hover);
   color: var(--app-text);
 }
 
