@@ -1857,7 +1857,7 @@ async function processCommunityOrder(order, members, config) {
         added: mergedAdded,
         status,
         details,
-        delay: Number.isFinite(latestDelay) && latestDelay > 0 ? latestDelay : order.delay,
+        delay: Number.isFinite(latestDelay) && latestDelay >= 0 ? latestDelay : order.delay,
         communityResults: mergedResults
       };
       await client.query(
