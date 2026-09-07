@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -36,6 +36,9 @@ type CommunityMemberResult = {
   state: string;
   details: string;
   completedAt?: string;
+  authorizationStatus?: string;
+  authorizationDetails?: string;
+  authorizationCheckedAt?: string;
 };
 
 function formatDcordTiming(value: unknown) {
@@ -55,7 +58,10 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
-      completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined
+      completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
+      authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
+      authorizationDetails: typeof row.authorizationDetails === "string" ? row.authorizationDetails : undefined,
+      authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined
     }];
   });
 }
@@ -332,6 +338,7 @@ export default function OrderPage() {
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
+  const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "tokenu" ? 10 : 2);
@@ -384,6 +391,7 @@ export default function OrderPage() {
   const communityMemberResults = getCommunityMemberResults(result);
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
+  const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const replaceableCommunityMemberIndices = communityMemberResults
     .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()))
     .map((item) => item.index);
@@ -645,6 +653,21 @@ export default function OrderPage() {
       }
     } finally {
       setReplacingCommunityMemberIndex(null);
+    }
+  }
+
+  async function handleCheckCommunityMembers() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || checkingCommunityMembers) return;
+    try {
+      setCheckingCommunityMembers(true);
+      const data = await checkCommunityOrderMembers(target);
+      setResult((current) => mergeOrderStatus(current, data.order));
+      toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Members could not be checked.");
+    } finally {
+      setCheckingCommunityMembers(false);
     }
   }
 
@@ -981,6 +1004,12 @@ export default function OrderPage() {
                   <h3>Per-member delivery log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
+                  {normalizedStatus === "COMPLETED" ? (
+                    <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
+                      <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                      {checkingCommunityMembers ? "Checking..." : "Check members"}
+                    </Button>
+                  ) : null}
                   {replaceableCommunityMemberIndices.length ? (
                     <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                       <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -1009,6 +1038,11 @@ export default function OrderPage() {
                             {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                           </Button>
                         ) : null}
+                        {item.authorizationStatus ? (
+                          <span className="public-token-result-pill" data-state={item.authorizationStatus} title={item.authorizationDetails}>
+                            OAuth {item.authorizationStatus}
+                          </span>
+                        ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
                       </span>
                       <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
@@ -1018,6 +1052,7 @@ export default function OrderPage() {
               ) : (
                 <p className="public-token-results-empty">Waiting for member results.</p>
               )}
+              {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
             </section>
           ) : null}
 

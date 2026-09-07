@@ -42,6 +42,8 @@ const publicRestartCooldownMs = 60 * 1000;
 const publicRestartCooldowns = new Map();
 const publicCommunityReplaceCooldownMs = 60 * 1000;
 const publicCommunityReplaceCooldowns = new Map();
+const publicCommunityCheckCooldownMs = 60 * 1000;
+const publicCommunityCheckCooldowns = new Map();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 let dcordCircuitOpenUntil = 0;
@@ -1377,6 +1379,98 @@ async function syncCommunityAuthorizations(config) {
   }
 
   return summary;
+}
+
+async function checkCommunityOrderAuthorizations(order) {
+  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+    const error = new Error("This order does not contain Members 2 delivery results.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const config = await getCommunityOAuthConfig();
+  if (!config.configured || String(order.serverId ?? "") !== config.guildId) {
+    const error = new Error("The Members bot configuration no longer matches this order's server.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const discordUserIds = order.communityResults
+    .map((item) => String(item?.discordUserId ?? ""))
+    .filter(isDiscordGuildId);
+  const stock = discordUserIds.length
+    ? await pool.query(
+        `SELECT discord_user_id, encrypted_access_token, access_token_expires_at
+         FROM community_oauth_joins
+         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+        [config.guildId, discordUserIds]
+      )
+    : { rows: [] };
+  const stockByUserId = new Map(stock.rows.map((row) => [String(row.discord_user_id), row]));
+  const checks = new Map();
+
+  for (let start = 0; start < discordUserIds.length; start += 10) {
+    const batch = discordUserIds.slice(start, start + 10);
+    const results = await Promise.all(batch.map(async (discordUserId) => {
+      const record = stockByUserId.get(discordUserId);
+      const expiresAt = new Date(record?.access_token_expires_at).getTime();
+      if (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired." }];
+      }
+      try {
+        let identity = await requestDiscord("oauth2/@me", {
+          headers: { Authorization: `Bearer ${decryptCredential(record.encrypted_access_token)}` }
+        });
+        if (identity.response.status === 429) {
+          const retrySeconds = Math.min(Math.max(Number(identity.payload?.retry_after) || 1, 1), 5);
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          identity = await requestDiscord("oauth2/@me", {
+            headers: { Authorization: `Bearer ${decryptCredential(record.encrypted_access_token)}` }
+          });
+        }
+        if (identity.response.ok && String(identity.payload?.user?.id ?? "") === discordUserId) {
+          return [discordUserId, { status: "active", details: "OAuth authorization is active." }];
+        }
+        if ([401, 403].includes(identity.response.status) || identity.response.ok) {
+          return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid." }];
+        }
+        return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).` }];
+      } catch {
+        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now." }];
+      }
+    }));
+    results.forEach(([discordUserId, result]) => checks.set(discordUserId, result));
+  }
+
+  const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
+  if (inactiveUserIds.length) {
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+      [config.guildId, inactiveUserIds]
+    );
+  }
+
+  const checkedAt = new Date().toISOString();
+  const communityResults = order.communityResults.map((item) => {
+    const check = checks.get(String(item?.discordUserId ?? ""));
+    return check ? {
+      ...item,
+      authorizationStatus: check.status,
+      authorizationDetails: check.details,
+      authorizationCheckedAt: checkedAt
+    } : item;
+  });
+  const summary = {
+    checked: checks.size,
+    active: [...checks.values()].filter((check) => check.status === "active").length,
+    inactive: inactiveUserIds.length,
+    unknown: [...checks.values()].filter((check) => check.status === "unknown").length,
+    checkedAt
+  };
+  const checkedOrder = { ...order, communityResults, memberCheckSummary: summary };
+  await saveTrackedOrderPayload(checkedOrder);
+  return { order: checkedOrder, summary };
 }
 
 async function addCommunityGuildMember(config, discordUserId, accessToken) {
@@ -3563,6 +3657,19 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
   }
 });
 
+app.post("/api/community/orders/:uniqid/check-members", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    const result = await checkCommunityOrderAuthorizations(order);
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -3871,6 +3978,26 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       ? { ...payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds }
       : { data: payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds };
     res.set("Cache-Control", "no-store").json(responsePayload);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/orders/:uniqid/check-members", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+    const cooldownKey = `${req.ip}:${uniqid}`;
+    const cooldownUntil = publicCommunityCheckCooldowns.get(cooldownKey) ?? 0;
+    if (cooldownUntil > Date.now()) {
+      return res.status(429).json({ message: `Wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)}s before checking these members again.` });
+    }
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    publicCommunityCheckCooldowns.set(cooldownKey, Date.now() + publicCommunityCheckCooldownMs);
+    const result = await checkCommunityOrderAuthorizations(order);
+    res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });
   } catch (error) {
     next(error);
   }

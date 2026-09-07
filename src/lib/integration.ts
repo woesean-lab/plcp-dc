@@ -179,6 +179,25 @@ export function replaceCommunityMember(uniqid: string, resultIndex: number) {
   );
 }
 
+export type CommunityMemberCheckResult = {
+  order: OrderStatusResponse;
+  summary: { checked: number; active: number; inactive: number; unknown: number; checkedAt: string };
+};
+
+export function checkCommunityOrderMembers(uniqid: string) {
+  return requestJson<CommunityMemberCheckResult>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/check-members`,
+    { method: "POST" }
+  );
+}
+
+export function checkPublicCommunityOrderMembers(uniqid: string) {
+  return requestJson<CommunityMemberCheckResult>(
+    `/api/public/orders/${encodeURIComponent(uniqid)}/check-members`,
+    { method: "POST" }
+  );
+}
+
 export async function checkAvailableAmount(service: string, id: string, duration = 1) {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(

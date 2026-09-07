@@ -3739,7 +3739,8 @@
   }
 
   .public-token-result-pill[data-state="joined"],
-  .public-token-result-pill[data-state="boosted"] {
+  .public-token-result-pill[data-state="boosted"],
+  .public-token-result-pill[data-state="active"] {
     border-color: rgba(105, 221, 178, .18);
     color: #8be0bf;
     background: rgba(105, 221, 178, .085);
@@ -3760,8 +3761,15 @@
     background: rgba(255,255,255,.035);
   }
 
+  .public-token-result-pill[data-state="unknown"] {
+    border-color: var(--app-border);
+    color: var(--app-muted);
+    background: rgba(255,255,255,.035);
+  }
+
   .public-token-result-pill[data-state="blocked"],
-  .public-token-result-pill[data-state="failed"] {
+  .public-token-result-pill[data-state="failed"],
+  .public-token-result-pill[data-state="inactive"] {
     border-color: var(--app-danger-button-border);
     color: var(--app-danger-text);
     background: var(--app-danger-soft);
