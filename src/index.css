@@ -6239,10 +6239,14 @@
   width: min(600px, calc(100vw - 32px));
 }
 
+.community-category-modal > label {
+  margin-top: 18px;
+}
+
 .community-category-appearance {
   display: grid;
-  gap: 12px;
-  margin-top: 8px;
+  gap: 18px;
+  margin-top: 14px;
   border: 1px solid var(--app-border);
   border-radius: 11px;
   padding: 12px;
@@ -6253,7 +6257,7 @@
 .community-category-appearance > fieldset {
   display: grid;
   min-width: 0;
-  gap: 8px;
+  gap: 11px;
   margin: 0;
   border: 0;
   padding: 0;
@@ -6265,7 +6269,7 @@
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--app-divider);
-  padding-bottom: 10px;
+  padding-bottom: 12px;
 }
 
 .community-category-appearance-heading strong,

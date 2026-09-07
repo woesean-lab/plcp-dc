@@ -122,7 +122,7 @@ const COMMUNITY_CATEGORY_COLORS: Array<{ key: CommunityCategoryColorKey; label: 
   { key: "emerald", label: "Emerald", tone: "#69ddb2" },
   { key: "amber", label: "Amber", tone: "#f5c76b" },
   { key: "rose", label: "Rose", tone: "#ff8297" },
-  { key: "black", label: "Black", tone: "#343541" }
+  { key: "black", label: "Black", tone: "#e6e8ef" }
 ];
 
 function getCommunityCategoryIcon(iconName: string) {
