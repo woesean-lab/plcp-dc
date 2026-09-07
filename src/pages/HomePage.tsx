@@ -56,6 +56,7 @@ import {
   importCommunityOAuthStock,
   removeCommunityAuthorization,
   saveCommunityConfig,
+  syncCommunityAuthorizations,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
   type CommunityCategoryColorKey,
@@ -928,6 +929,19 @@ export default function HomePage() {
       setCommunityStatus(await getCommunityAdminStatus());
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
+    } finally {
+      setLoadingCommunityStatus(false);
+    }
+  }
+
+  async function refreshCommunityStock() {
+    try {
+      setLoadingCommunityStatus(true);
+      const summary = await syncCommunityAuthorizations();
+      setCommunityStatus(await getCommunityAdminStatus());
+      notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
     } finally {
       setLoadingCommunityStatus(false);
     }
@@ -1901,7 +1915,7 @@ export default function HomePage() {
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void refreshCommunityStatus()}>
+        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void refreshCommunityStock()}>
           <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
         </Button>
       </div>

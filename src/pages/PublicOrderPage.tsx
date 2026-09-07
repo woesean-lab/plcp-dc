@@ -405,10 +405,10 @@ export default function PublicOrderPage() {
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
-  const inactiveCommunityMemberIndices = communityMemberResults
-    .filter((item) => item.authorizationStatus === "inactive")
+  const replaceableCommunityMemberIndices = communityMemberResults
+    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
     .map((item) => item.index);
-  const inactiveCommunityMemberCount = inactiveCommunityMemberIndices.length;
+  const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true && !supportExpired;
@@ -555,9 +555,9 @@ export default function PublicOrderPage() {
   }
 
   function handleReplaceAllCommunityMembers() {
-    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !inactiveCommunityMemberIndices.length) return;
-    setCommunityReplaceQueue(inactiveCommunityMemberIndices);
-    toast.success(`${inactiveCommunityMemberIndices.length} inactive member replacement${inactiveCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
+    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
+    setCommunityReplaceQueue(replaceableCommunityMemberIndices);
+    toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
   }
 
   useEffect(() => {
@@ -779,10 +779,10 @@ export default function PublicOrderPage() {
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>
                         ) : null}
-                        {inactiveCommunityMemberIndices.length ? (
+                        {replaceableCommunityMemberIndices.length ? (
                           <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
-                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing inactive..." : `Replace all inactive (${inactiveCommunityMemberIndices.length})`}
+                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>

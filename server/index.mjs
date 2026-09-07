@@ -1425,7 +1425,7 @@ function parseCommunityAccessTokenExpiry(record) {
 
 async function syncCommunityAuthorizations(config) {
   const result = await pool.query(
-    `SELECT discord_user_id, encrypted_access_token, access_token_expires_at
+    `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at
      FROM community_oauth_joins
      WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL AND status <> 'failed'
      ORDER BY authorized_at ASC`,
@@ -1433,8 +1433,41 @@ async function syncCommunityAuthorizations(config) {
   );
   const summary = { checked: 0, inactive: 0, removed: 0, errors: 0 };
 
+  const failedResults = await pool.query(
+    `SELECT result->>'discordUserId' AS discord_user_id, result->>'completedAt' AS completed_at
+     FROM tracked_orders
+     CROSS JOIN LATERAL jsonb_array_elements(
+       CASE WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults' ELSE '[]'::jsonb END
+     ) AS result
+     WHERE payload->>'provider' = 'community'
+       AND payload->>'serverId' = $1
+       AND LOWER(COALESCE(result->>'state', '')) = 'failed'`,
+    [config.guildId]
+  );
+  const latestFailureByUserId = new Map();
+  for (const failed of failedResults.rows) {
+    const discordUserId = String(failed.discord_user_id ?? "");
+    const failedAt = new Date(failed.completed_at).getTime();
+    if (!isDiscordGuildId(discordUserId) || !Number.isFinite(failedAt)) continue;
+    latestFailureByUserId.set(discordUserId, Math.max(latestFailureByUserId.get(discordUserId) ?? 0, failedAt));
+  }
+  const deliveryFailedUserIds = result.rows
+    .filter((member) => (latestFailureByUserId.get(String(member.discord_user_id)) ?? 0) >= new Date(member.authorized_at).getTime())
+    .map((member) => String(member.discord_user_id));
+  if (deliveryFailedUserIds.length) {
+    const disabled = await pool.query(
+      `UPDATE community_oauth_joins
+       SET status = 'failed', details = 'A previous delivery failed; this member was disabled automatically.', reserved_order_id = NULL
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status <> 'failed'`,
+      [config.guildId, deliveryFailedUserIds]
+    );
+    summary.inactive += disabled.rowCount;
+  }
+  const deliveryFailedUserIdSet = new Set(deliveryFailedUserIds);
+
   for (const member of result.rows) {
     summary.checked += 1;
+    if (deliveryFailedUserIdSet.has(String(member.discord_user_id))) continue;
     try {
       const expiresAt = new Date(member.access_token_expires_at).getTime();
       if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error("expired");
@@ -1455,6 +1488,7 @@ async function syncCommunityAuthorizations(config) {
     }
   }
 
+  summary.removed = summary.inactive;
   return summary;
 }
 
@@ -1908,12 +1942,27 @@ async function processCommunityOrder(order, members, config) {
         expiresAt: Date.now() + 60_000
       });
     }
-    results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state, details, completedAt: new Date().toISOString() };
+    const memberFailed = state === "failed";
+    results[resultIndex] = {
+      discordUserId: member.discord_user_id,
+      username: member.username,
+      avatarUrl: member.avatar_url ?? null,
+      state,
+      details,
+      completedAt: new Date().toISOString(),
+      ...(memberFailed ? {
+        authorizationStatus: "inactive",
+        authorizationDetails: "This member failed delivery and was disabled in Members Stock.",
+        authorizationCheckedAt: new Date().toISOString()
+      } : {})
+    };
     await pool.query(
       `UPDATE community_oauth_joins
-       SET reserved_order_id = NULL
+       SET reserved_order_id = NULL,
+           status = CASE WHEN $3 THEN 'failed' ELSE status END,
+           details = CASE WHEN $3 THEN $4 ELSE details END
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId]
+      [member.discord_user_id, config.guildId, memberFailed, memberFailed ? `Delivery failed: ${details}` : null]
     );
     if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
@@ -2021,11 +2070,14 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
   }
 
   if (!botPauseIssue) {
+    const memberFailed = state === "failed";
     await pool.query(
       `UPDATE community_oauth_joins
-       SET reserved_order_id = NULL
+       SET reserved_order_id = NULL,
+           status = CASE WHEN $3 THEN 'failed' ELSE status END,
+           details = CASE WHEN $3 THEN $4 ELSE details END
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId]
+      [member.discord_user_id, config.guildId, memberFailed, memberFailed ? `Replacement failed: ${details}` : null]
     );
   }
 
@@ -2079,7 +2131,12 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       ...current,
       state,
       details,
-      completedAt: new Date().toISOString()
+      completedAt: new Date().toISOString(),
+      ...(state === "failed" ? {
+        authorizationStatus: "inactive",
+        authorizationDetails: "This replacement failed delivery and was disabled in Members Stock.",
+        authorizationCheckedAt: new Date().toISOString()
+      } : {})
     };
     const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
     const amount = Number(order.amount) || results.length;
@@ -4151,11 +4208,14 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
     }
 
+    const failedState = String(failedResult.state ?? "").toLowerCase() === "failed" || hasInactiveAuthorization;
     await client.query(
       `UPDATE community_oauth_joins
-       SET reserved_order_id = NULL
+       SET reserved_order_id = NULL,
+           status = CASE WHEN $3 THEN 'failed' ELSE status END,
+           details = CASE WHEN $3 THEN 'Previous delivery failed; disabled before replacement.' ELSE details END
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [failedUserId, config.guildId]
+      [failedUserId, config.guildId, failedState]
     );
 
     const replacementHistoryUserIds = Array.from(new Set([
