@@ -973,7 +973,21 @@ export default function OrderPage() {
 
           {isDcordProvider ? (
             <section className="lookup-token-panel">
-              <div className="lookup-section-heading">
+              <div
+                className="lookup-section-heading is-collapsible"
+                role="button"
+                tabIndex={0}
+                aria-expanded={communityLogOpen}
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest("button, a")) return;
+                  setCommunityLogOpen((open) => !open);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return;
+                  event.preventDefault();
+                  setCommunityLogOpen((open) => !open);
+                }}
+              >
                 <div>
                   <p className="app-kicker">Token results</p>
                   <h3>Per-token boost log</h3>
@@ -1046,10 +1060,7 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
-                  <Button type="button" variant="secondary" size="xs" aria-expanded={communityLogOpen} onClick={() => setCommunityLogOpen((open) => !open)}>
-                    {communityLogOpen ? "Hide log" : "Show log"}
-                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${communityLogOpen ? "rotate-180" : ""}`} aria-hidden="true" />
-                  </Button>
+                  <ChevronDown className={`community-log-chevron h-4 w-4 ${communityLogOpen ? "rotate-180" : ""}`} aria-hidden="true" />
                 </span>
               </div>
 
