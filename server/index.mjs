@@ -596,6 +596,36 @@ async function ensureCommunityStockCategories(config) {
   );
 }
 
+async function moveCommunityStockCategories(queryable, sourceGuildId, targetGuildId) {
+  if (!sourceGuildId || !targetGuildId || sourceGuildId === targetGuildId) return;
+
+  await queryable.query(
+    `DELETE FROM community_stock_categories AS target
+     WHERE target.guild_id = $2
+       AND EXISTS (
+         SELECT 1
+         FROM community_stock_categories AS source
+         WHERE source.guild_id = $1
+       )`,
+    [sourceGuildId, targetGuildId]
+  );
+  await queryable.query(
+    `INSERT INTO community_stock_categories
+       (guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, is_periodic, icon_name, color_key, created_at, NOW()
+     FROM community_stock_categories
+     WHERE guild_id = $1
+     ON CONFLICT (guild_id, id) DO UPDATE SET
+       name = EXCLUDED.name,
+       is_periodic = EXCLUDED.is_periodic,
+       icon_name = EXCLUDED.icon_name,
+       color_key = EXCLUDED.color_key,
+       updated_at = NOW()`,
+    [sourceGuildId, targetGuildId]
+  );
+  await queryable.query("DELETE FROM community_stock_categories WHERE guild_id = $1", [sourceGuildId]);
+}
+
 async function normalizeCommunityStockRecords(config) {
   await pool.query(
     `UPDATE community_oauth_joins
@@ -3080,18 +3110,35 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "The bot is not able to access the selected Discord server." });
     }
 
-    await saveEncryptedSetting("community_oauth_config", JSON.stringify({
+    const encryptedConfig = encryptCredential(JSON.stringify({
       clientId: candidate.clientId,
       clientSecret: candidate.clientSecret,
       botToken: candidate.botToken,
       guildId: candidate.guildId
     }));
-    await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-       VALUES ($1, 'offline', 'Offline', FALSE, 'Users', 'emerald'), ($1, 'online', 'Online', FALSE, 'Timer', 'violet')
-       ON CONFLICT (guild_id, id) DO NOTHING`,
-      [candidate.guildId]
-    );
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await moveCommunityStockCategories(client, current.guildId, candidate.guildId);
+      await client.query(
+        `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
+         VALUES ('community_oauth_config', $1, NOW())
+         ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+        [encryptedConfig]
+      );
+      await client.query(
+        `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+         VALUES ($1, 'offline', 'Offline', FALSE, 'Users', 'emerald'), ($1, 'online', 'Online', FALSE, 'Timer', 'violet')
+         ON CONFLICT (guild_id, id) DO NOTHING`,
+        [candidate.guildId]
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
     communityGuildCache = null;
     communityBotCache = null;
     res.json({
@@ -3512,6 +3559,9 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // Category configuration belongs to the shared Members 2 stock and must
+      // move with it when an order points the bot at another Discord server.
+      await moveCommunityStockCategories(client, config.guildId, nextConfig.guildId);
       await client.query(
           `INSERT INTO community_oauth_joins
            (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
