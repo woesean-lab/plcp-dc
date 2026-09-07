@@ -106,7 +106,11 @@ export async function restartOrder(uniqid: string) {
   return requestJson<unknown>(`/api/integration/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart" | "pause" | "resume", init?: RequestInit) {
+export function restartCommunityOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
+}
+
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart" | "community-restart" | "pause" | "resume", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -134,6 +138,10 @@ export function updatePublicOrderDelay(uniqid: string, delay: number) {
 
 export function restartPublicOrder(uniqid: string) {
   return requestPublicOrderApi<unknown>(uniqid, "restart", { method: "POST" });
+}
+
+export function restartPublicCommunityOrder(uniqid: string) {
+  return requestPublicOrderApi<OrderStatusResponse>(uniqid, "community-restart", { method: "POST" });
 }
 
 export function pausePublicCommunityOrder(uniqid: string) {

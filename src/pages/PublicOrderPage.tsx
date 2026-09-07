@@ -8,7 +8,7 @@ import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -397,6 +397,7 @@ export default function PublicOrderPage() {
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
+  const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
@@ -502,7 +503,12 @@ export default function PublicOrderPage() {
     try {
       restartInFlightRef.current = true;
       setRestartingOrder(true);
-      await restartPublicOrder(uniqid);
+      if (isCommunityOrder) {
+        const restarted = await restartPublicCommunityOrder(uniqid);
+        setStatus((current) => mergeOrderStatus(current, restarted));
+      } else {
+        await restartPublicOrder(uniqid);
+      }
       restartCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
       setRestartCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
       toast.success("Restart request sent successfully.");
@@ -775,11 +781,26 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
+              {isGuildAccessRestricted ? (
+                <div className="monitor-restart-warning" role="alert">
+                  <span className="monitor-warning-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+                  <div>
+                    <p className="app-kicker">Server access limited</p>
+                    <h2>Discord has temporarily limited new members for this server</h2>
+                    <p>The delivery is paused and your member accounts remain active. Check again after Discord removes the restriction.</p>
+                  </div>
+                  <Button type="button" variant="destructive" onClick={() => void handleRestartOrder()} disabled={restartingOrder || restartCooldown > 0}>
+                    <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {restartingOrder ? "Checking..." : restartCooldown > 0 ? `Wait ${restartCooldown}s` : "Check server restriction"}
+                  </Button>
+                </div>
+              ) : null}
+
               <section className="monitor-live-progress">
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isDeliveryPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{isCompleted ? "Order completed" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
                       {isCompleted ? "Your order has been completed successfully." : "We keep this page updated automatically while your order is processed."}
                     </p>
@@ -795,7 +816,7 @@ export default function PublicOrderPage() {
                   <div className="is-remaining">
                     <small>Remaining</small>
                     <strong>{formatNumber(membersRemaining)}</strong>
-                    {!isBoostOrder && !isDeliveryPaused && currentDelay !== 0 && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
+                    {!isBoostOrder && !isDeliveryPaused && !isInvitesPaused && currentDelay !== 0 && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
                   </div>
                 </div>
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>

@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -570,8 +570,13 @@ export default function OrderPage() {
 
     try {
       setRestartingOrder(true);
-      await restartIntegrationOrder(target);
-      toast.success("Restart request sent.");
+      if (isCommunityProvider) {
+        const restarted = await restartCommunityOrder(target);
+        setResult((current) => mergeOrderStatus(current, restarted));
+      } else {
+        await restartIntegrationOrder(target);
+      }
+      toast.success(isCommunityProvider ? "Server restriction checked." : "Restart request sent.");
 
       try {
         const data = await getOrderStatus(target, provider);
@@ -889,7 +894,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isDeliveryPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -933,17 +938,17 @@ export default function OrderPage() {
             ))}
           </div>
 
-          {isInvitesPaused && !isDcordProvider && !isCommunityProvider ? (
+          {isInvitesPaused && !isDcordProvider ? (
             <section className="lookup-invites-warning" role="alert">
               <span className="lookup-invites-warning-icon" aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
               <div>
-                <p className="app-kicker">Invites paused</p>
-                <strong>Discord invites need attention</strong>
-                <span>Confirm that the server invite works, then restart the order.</span>
+                <p className="app-kicker">{isCommunityProvider ? "Server access paused" : "Invites paused"}</p>
+                <strong>{isCommunityProvider ? "Check Discord server restriction" : "Discord invites need attention"}</strong>
+                <span>{isCommunityProvider ? "Discord has limited new member access. No member accounts were disabled." : "Confirm that the server invite works, then restart the order."}</span>
               </div>
               <Button type="button" variant="destructive" size="sm" onClick={() => void handleRestartOrder()} disabled={restartingOrder}>
                 <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
-                {restartingOrder ? "Restarting..." : "Restart order"}
+                {restartingOrder ? "Checking..." : isCommunityProvider ? "Check server restriction" : "Restart order"}
               </Button>
             </section>
           ) : null}
