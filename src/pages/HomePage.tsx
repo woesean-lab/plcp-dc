@@ -622,6 +622,10 @@ export default function HomePage() {
   const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
+  const availableMemberAmountPresets = MEMBER_AMOUNT_PRESETS.filter((amount) => !selectedIsCommunity || amount <= selectedCommunityReady);
+  const memberAmountPresetFallback = availableMemberAmountPresets.includes(100)
+    ? 100
+    : availableMemberAmountPresets[availableMemberAmountPresets.length - 1];
   const selectedMemberAmountIsCustom = memberAmountCustom || !MEMBER_AMOUNT_PRESETS.some((amount) => amount === form.amount);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
@@ -2210,35 +2214,33 @@ export default function HomePage() {
                       <div className="boost-order-panel">
                         <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
-                            <span className="boost-order-label">Number of Members</span>
-                            <div className="member-amount-options" aria-label="Number of members">
-                              {MEMBER_AMOUNT_PRESETS.map((amount) => (
+                            <div className="member-amount-label-row">
+                              <span className="boost-order-label">Number of Members</span>
+                              {selectedMemberAmountIsCustom && memberAmountPresetFallback ? (
                                 <button
-                                  key={amount}
                                   type="button"
-                                  disabled={selectedIsCommunity && amount > selectedCommunityReady}
-                                  aria-pressed={!selectedMemberAmountIsCustom && form.amount === amount}
-                                  className={!selectedMemberAmountIsCustom && form.amount === amount ? "is-selected" : ""}
                                   onClick={() => {
                                     setMemberAmountCustom(false);
                                     setMemberCustomAmountDraft("");
-                                    setForm((current) => ({ ...current, amount }));
+                                    setForm((current) => ({ ...current, amount: memberAmountPresetFallback }));
                                   }}
                                 >
-                                  {amount}
+                                  Presets
                                 </button>
-                              ))}
+                              ) : null}
+                            </div>
+                            {selectedMemberAmountIsCustom ? (
                               <input
-                                className={`member-amount-custom-input ${selectedMemberAmountIsCustom ? "is-selected" : ""}`}
+                                autoFocus={memberAmountCustom}
+                                className="boost-number-input"
                                 type="number"
                                 min={1}
                                 max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
                                 aria-label="Custom member amount"
-                                placeholder="Custom"
-                                value={selectedMemberAmountIsCustom ? (memberAmountCustom ? memberCustomAmountDraft : String(form.amount)) : ""}
+                                placeholder="Enter member amount"
+                                value={memberAmountCustom ? memberCustomAmountDraft : String(form.amount)}
                                 onFocus={() => {
-                                  if (selectedMemberAmountIsCustom) setMemberCustomAmountDraft(String(form.amount));
-                                  else setMemberCustomAmountDraft("");
+                                  if (!memberAmountCustom) setMemberCustomAmountDraft(String(form.amount));
                                   setMemberAmountCustom(true);
                                 }}
                                 onBlur={() => {
@@ -2255,7 +2257,31 @@ export default function HomePage() {
                                   setForm((current) => ({ ...current, amount }));
                                 }}
                               />
-                            </div>
+                            ) : (
+                              <div className="member-amount-options" aria-label="Number of members">
+                                {MEMBER_AMOUNT_PRESETS.map((amount) => (
+                                  <button
+                                    key={amount}
+                                    type="button"
+                                    disabled={selectedIsCommunity && amount > selectedCommunityReady}
+                                    aria-pressed={form.amount === amount}
+                                    className={form.amount === amount ? "is-selected" : ""}
+                                    onClick={() => setForm((current) => ({ ...current, amount }))}
+                                  >
+                                    {amount}
+                                  </button>
+                                ))}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setMemberCustomAmountDraft("");
+                                    setMemberAmountCustom(true);
+                                  }}
+                                >
+                                  Custom
+                                </button>
+                              </div>
+                            )}
                           </div>
 
                           <label className="boost-order-field">
