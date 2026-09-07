@@ -614,6 +614,9 @@ export default function HomePage() {
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
+  const [availabilityMaximum, setAvailabilityMaximum] = useState<number | null>(null);
+  const availabilityRequestRef = useRef(0);
+  const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
@@ -673,8 +676,17 @@ export default function HomePage() {
   const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
+  const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
-  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
+  const selectedCanCreate = selectedApiConfigured && (
+    !selectedIsCommunity || (
+      Boolean(form.serverId.trim()) &&
+      !checkingAvailability &&
+      availabilityMaximum !== null &&
+      availabilityMaximum > 0 &&
+      form.amount <= availabilityMaximum
+    )
+  );
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
     () => {
@@ -876,14 +888,20 @@ export default function HomePage() {
   useEffect(() => {
     if (activeTab !== "create") return;
 
+    const requestId = ++availabilityRequestRef.current;
+
     if (!form.serverId.trim()) {
       setAvailability("");
+      setAvailabilityMaximum(null);
       setCheckingAvailability(false);
       return;
     }
 
+    setCheckingAvailability(true);
+    setAvailability("");
+    setAvailabilityMaximum(null);
     const handle = window.setTimeout(() => {
-      void refreshAvailability();
+      void refreshAvailability(requestId);
     }, 350);
 
     return () => window.clearTimeout(handle);
@@ -924,26 +942,31 @@ export default function HomePage() {
   }
 
   async function refreshCommunityStatus() {
+    const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
-      setCommunityStatus(await getCommunityAdminStatus());
+      const nextStatus = await getCommunityAdminStatus();
+      if (requestId === communityStatusRequestRef.current) setCommunityStatus(nextStatus);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
+      if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
     } finally {
-      setLoadingCommunityStatus(false);
+      if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
     }
   }
 
   async function refreshCommunityStock() {
+    const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
       const summary = await syncCommunityAuthorizations();
-      setCommunityStatus(await getCommunityAdminStatus());
+      const nextStatus = await getCommunityAdminStatus();
+      if (requestId !== communityStatusRequestRef.current) return;
+      setCommunityStatus(nextStatus);
       notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}.`);
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
+      if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
     } finally {
-      setLoadingCommunityStatus(false);
+      if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
     }
   }
 
@@ -951,7 +974,7 @@ export default function HomePage() {
     try {
       setRemovingCommunityUserId(record.id);
       await removeCommunityAuthorization(record.id);
-      setCommunityStatus(await getCommunityAdminStatus());
+      await refreshCommunityStatus();
       setCommunityMemberPendingDeletion(null);
       notifySuccess(`${record.username} disconnected and removed from Members Stock.`);
     } catch (error) {
@@ -983,7 +1006,7 @@ export default function HomePage() {
       const config = await saveCommunityConfig(communityConfigDraft);
       setCommunityConfig(config);
       setCommunityConfigDraft((current) => ({ ...current, clientSecret: "", botToken: "" }));
-      setCommunityStatus(null);
+      await refreshCommunityStatus();
       notifySuccess(`${config.guildName ?? "Members bot"} verified and saved securely.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Members bot settings could not be saved.");
@@ -997,7 +1020,9 @@ export default function HomePage() {
       setSavingCommunityConfig(true);
       await clearCommunityConfig();
       await loadCommunityConfiguration();
+      communityStatusRequestRef.current += 1;
       setCommunityStatus(null);
+      setLoadingCommunityStatus(false);
       notifySuccess("Saved Members bot settings removed.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Members bot settings could not be removed.");
@@ -1106,16 +1131,22 @@ export default function HomePage() {
     }
   }
 
-  async function refreshAvailability() {
+  async function refreshAvailability(requestId: number) {
     try {
-      setCheckingAvailability(true);
       const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
       const data = await checkAvailableAmount(form.service, serverId, form.duration, selectedIsCommunity ? form.communityCategoryId : undefined);
+      if (requestId !== availabilityRequestRef.current) return;
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
+      setAvailabilityMaximum(data.maximum);
+      if (selectedIsCommunity && data.maximum > 0) {
+        setForm((current) => ({ ...current, amount: Math.min(current.amount, data.maximum) }));
+      }
     } catch {
-      setAvailability("");
+      if (requestId !== availabilityRequestRef.current) return;
+      setAvailability("Availability could not be loaded. Try the invite again.");
+      setAvailabilityMaximum(null);
     } finally {
-      setCheckingAvailability(false);
+      if (requestId === availabilityRequestRef.current) setCheckingAvailability(false);
     }
   }
 
@@ -1604,6 +1635,15 @@ export default function HomePage() {
 
   function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
+
+    if (selectedIsCommunity && (checkingAvailability || availabilityMaximum === null)) {
+      notifyError("Wait for the available member count to load.");
+      return;
+    }
+    if (selectedIsCommunity && form.amount > (availabilityMaximum ?? 0)) {
+      notifyError(`You can order up to ${availabilityMaximum ?? 0} available members for this server.`);
+      return;
+    }
 
     const payload: CreateOrderPayload = {
       service: form.service,
@@ -2095,12 +2135,17 @@ export default function HomePage() {
                                 name="communityService"
                                 value={category.id}
                                 checked={selected}
-                                onChange={() => setForm((current) => ({
-                                  ...current,
-                                  service: "COMMUNITY-OFFLINE",
-                                  communityCategoryId: category.id,
-                                  amount: Math.max(1, Math.min(current.amount, ready || 1))
-                                }))}
+                                onChange={() => {
+                                  availabilityRequestRef.current += 1;
+                                  setAvailability("");
+                                  setAvailabilityMaximum(null);
+                                  setForm((current) => ({
+                                    ...current,
+                                    service: "COMMUNITY-OFFLINE",
+                                    communityCategoryId: category.id,
+                                    amount: Math.max(1, Math.min(current.amount, ready || 1))
+                                  }));
+                                }}
                               />
                               <span className="service-option-head" aria-hidden="true">
                                 <span className="service-option-icon"><Icon className="h-5 w-5" /></span>
@@ -2234,6 +2279,9 @@ export default function HomePage() {
                                 value={form.serverId}
                                 onChange={(event) => {
                                   const value = event.target.value;
+                                  availabilityRequestRef.current += 1;
+                                  setAvailability("");
+                                  setAvailabilityMaximum(null);
                                   setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
                                 }}
                                 placeholder="yourcode"
@@ -2286,11 +2334,11 @@ export default function HomePage() {
                               className="boost-number-input"
                               type="number"
                               min={1}
-                              max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
+                              max={selectedIsCommunity ? Math.max(1, selectedCommunityOrderLimit) : undefined}
                               value={form.amount}
                               onChange={(event) => {
                                 const requested = Math.max(1, Number(event.target.value) || 1);
-                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
+                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityOrderLimit)) : requested;
                                 setForm((current) => ({ ...current, amount }));
                               }}
                             />

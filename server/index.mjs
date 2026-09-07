@@ -3575,7 +3575,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    const { config, serverInfo, invite } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
+    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
     const requestedCategoryId = req.query?.categoryId ?? getCommunityStockTypeFromService(service);
@@ -3588,7 +3588,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       return res.status(400).json({ message: "Choose a valid Members 2 category." });
     }
     await markCommunityFailedDeliveriesInactive(pool, config.guildId);
-    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(pool, config, serverInfo.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(pool, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
@@ -3597,8 +3597,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       [config.guildId, stockType, previouslyDeliveredUserIds]
     );
     const available = Number(result.rows[0]?.available ?? 0);
-    const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
-    res.set("Cache-Control", "no-store").json({ available, maximum: available, memberVerification });
+    res.set("Cache-Control", "no-store").json({ available, maximum: available });
   } catch (error) {
     next(error);
   }
@@ -3640,7 +3639,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     client = await pool.connect();
     await client.query("BEGIN");
     await markCommunityFailedDeliveriesInactive(client, config.guildId);
-    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, config, serverInfo.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, serverInfo.guildId);
     const selected = await client.query(
        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
