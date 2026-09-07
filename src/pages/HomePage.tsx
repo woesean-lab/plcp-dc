@@ -2010,7 +2010,7 @@ export default function HomePage() {
                         </div>
                         <span className="service-selector-count">{communityCategories.length} categories</span>
                       </div>
-                      <div className="service-grid service-grid-compact community-mode-grid">
+                      <div className="service-grid community-mode-grid">
                         {communityCategories.map((category) => {
                           const Icon = category.isPeriodic ? Timer : Users;
                           const selected = form.communityCategoryId === category.id;
