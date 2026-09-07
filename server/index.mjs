@@ -2907,15 +2907,13 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       pool.query(
         `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL
+         WHERE guild_id = $1
          ORDER BY
            CASE
-             WHEN status <> 'failed' AND reserved_order_id IS NULL THEN 0
-             WHEN reserved_order_id IS NOT NULL THEN 1
-             ELSE 2
+             WHEN status <> 'failed' THEN 0
+             ELSE 1
            END,
-           authorized_at DESC
-         LIMIT 100`,
+           authorized_at DESC`,
         [config.guildId]
       )
     ]);
