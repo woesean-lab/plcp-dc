@@ -564,6 +564,7 @@ export default function HomePage() {
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const [memberAmountCustom, setMemberAmountCustom] = useState(false);
+  const [memberCustomAmountDraft, setMemberCustomAmountDraft] = useState("");
   const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
@@ -2220,30 +2221,40 @@ export default function HomePage() {
                                   className={!selectedMemberAmountIsCustom && form.amount === amount ? "is-selected" : ""}
                                   onClick={() => {
                                     setMemberAmountCustom(false);
+                                    setMemberCustomAmountDraft("");
                                     setForm((current) => ({ ...current, amount }));
                                   }}
                                 >
                                   {amount}
                                 </button>
                               ))}
-                              {selectedMemberAmountIsCustom ? (
-                                <input
-                                  autoFocus
-                                  className="member-amount-custom-input"
-                                  type="number"
-                                  min={1}
-                                  max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
-                                  aria-label="Custom member amount"
-                                  value={form.amount}
-                                  onChange={(event) => {
-                                    const requested = Number(event.target.value) || 1;
-                                    const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
-                                    setForm((current) => ({ ...current, amount }));
-                                  }}
-                                />
-                              ) : (
-                                <button type="button" onClick={() => setMemberAmountCustom(true)}>Custom</button>
-                              )}
+                              <input
+                                className={`member-amount-custom-input ${selectedMemberAmountIsCustom ? "is-selected" : ""}`}
+                                type="number"
+                                min={1}
+                                max={selectedIsCommunity ? Math.max(1, selectedCommunityReady) : undefined}
+                                aria-label="Custom member amount"
+                                placeholder="Custom"
+                                value={selectedMemberAmountIsCustom ? (memberAmountCustom ? memberCustomAmountDraft : String(form.amount)) : ""}
+                                onFocus={() => {
+                                  if (selectedMemberAmountIsCustom) setMemberCustomAmountDraft(String(form.amount));
+                                  else setMemberCustomAmountDraft("");
+                                  setMemberAmountCustom(true);
+                                }}
+                                onBlur={() => {
+                                  if (!memberCustomAmountDraft.trim()) setMemberAmountCustom(false);
+                                }}
+                                onChange={(event) => {
+                                  const value = event.target.value;
+                                  setMemberAmountCustom(true);
+                                  setMemberCustomAmountDraft(value);
+                                  if (!value) return;
+                                  const requested = Math.max(1, Number(value) || 1);
+                                  const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityReady)) : requested;
+                                  if (amount !== requested) setMemberCustomAmountDraft(String(amount));
+                                  setForm((current) => ({ ...current, amount }));
+                                }}
+                              />
                             </div>
                           </div>
 
