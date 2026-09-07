@@ -14,6 +14,7 @@ import type { OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
+const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 
 type DcordTokenResult = {
   index: number;
@@ -383,7 +384,9 @@ export default function OrderPage() {
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const currentDelay = getNumberField(result, ["delay"]);
   const speedProfile = typeof result?.speedProfile === "string" ? result.speedProfile : "custom";
-  const effectiveEstimateDelay = speedProfile === "balanced" ? (30 + 300 + 100) / 3 : currentDelay;
+  const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : BALANCED_DELAY_PATTERN[0];
+  const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
+  const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
   const expiration = result?.expiredAt ?? result?.expired_at;
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
@@ -412,7 +415,7 @@ export default function OrderPage() {
       ]
     : [
         { label: "Expiration", value: formatTime(expiration ?? undefined) },
-        { label: "Join delay", value: speedProfile === "balanced" ? "Balanced · 30 / 300 / 100s" : formatDelay(result?.delay) }
+        { label: "Join delay", value: speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result?.delay) }
       ];
 
   useEffect(() => {
@@ -970,7 +973,7 @@ export default function OrderPage() {
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>
-                  <strong>{speedProfile === "balanced" ? "Balanced" : formatDelay(result.delay)}</strong>
+                  <strong>{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
                 </div>
                 <Input
                   type="number"

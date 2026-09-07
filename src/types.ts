@@ -72,6 +72,7 @@ export interface OrderStatusResponse {
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  activeDelay?: number | null;
   liveBoostStock?: {
     oneMonth: number;
     threeMonth: number;

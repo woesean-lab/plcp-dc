@@ -1821,7 +1821,7 @@ function loadCommunityAccessToken(member) {
   return decryptCredential(member.encrypted_access_token);
 }
 
-const communityBalancedDelayPattern = [30, 300, 100];
+const communityBalancedDelayPattern = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 
 function normalizeCommunitySpeedProfile(value) {
   const profile = String(value ?? "custom").trim().toLowerCase();
@@ -1899,6 +1899,7 @@ async function processCommunityOrder(order, members, config) {
         details: deliveryPaused ? "Delivery paused." : details,
         delay: Number.isFinite(latestDelay) && latestDelay >= 0 ? latestDelay : order.delay,
         speedProfile: latestSpeedProfile,
+        activeDelay: terminalStatusRequested ? null : currentPayload.activeDelay ?? payload.activeDelay ?? null,
         communityResults: mergedResults,
         ...(deliveryPaused ? {
           waitingCode: "manual_pause",
@@ -2080,6 +2081,15 @@ async function processCommunityOrder(order, members, config) {
         const delaySeconds = speedProfile === "balanced" && configuredDelay > 0
           ? communityBalancedDelayPattern[index % communityBalancedDelayPattern.length]
           : configuredDelay;
+        const activeDelayUpdate = await pool.query(
+          `UPDATE tracked_orders
+           SET payload = jsonb_set(payload, '{activeDelay}', to_jsonb($2::int)), updated_at = NOW()
+           WHERE uniqid = $1 AND payload->>'status' = 'PROCESS'
+           RETURNING uniqid`,
+          [order.uniqid, delaySeconds]
+        );
+        if (!activeDelayUpdate.rowCount) return;
+        order.activeDelay = delaySeconds;
         const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
         const remainingDelay = delayEndsAt - Date.now();
         if (remainingDelay <= 0) break;

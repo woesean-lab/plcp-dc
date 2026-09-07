@@ -15,6 +15,7 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
+const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 
 type DcordTokenResult = {
   index: number;
@@ -383,7 +384,9 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const speedProfile = typeof status?.speedProfile === "string" ? status.speedProfile : "custom";
-  const effectiveEstimateDelay = speedProfile === "balanced" ? (30 + 300 + 100) / 3 : currentDelay;
+  const balancedActiveDelay = typeof status?.activeDelay === "number" ? status.activeDelay : BALANCED_DELAY_PATTERN[0];
+  const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
+  const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
   const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof effectiveEstimateDelay === "number"
     ? membersRemaining * effectiveEstimateDelay
     : undefined;
@@ -618,7 +621,7 @@ export default function PublicOrderPage() {
           <h2>Join delay</h2>
         </div>
         {currentDelay !== 0 ? (
-          <strong className="monitor-current-delay">{speedProfile === "balanced" ? "Balanced" : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+          <strong className="monitor-current-delay">{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
         ) : null}
       </div>
 
@@ -801,7 +804,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
                   {isBoostOrder || currentDelay !== 0 ? (
-                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : speedProfile === "balanced" ? "Balanced · 30 / 300 / 100s" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                   ) : null}
                 </div>
               </section>

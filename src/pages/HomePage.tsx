@@ -106,7 +106,7 @@ const EMPTY_FORM = {
 
 const COMMUNITY_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
-  { key: "balanced", label: "Balanced", delay: 300, timing: "30 · 300 · 100s", description: "Variable rhythm", icon: Timer },
+  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
   { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
 ] as const;
 
