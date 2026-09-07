@@ -38,8 +38,6 @@ type CommunityMemberResult = {
   details: string;
   completedAt?: string;
   authorizationStatus?: string;
-  authorizationDetails?: string;
-  authorizationCheckedAt?: string;
 };
 
 function formatDcordTiming(value: unknown) {
@@ -67,9 +65,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
-      authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
-      authorizationDetails: typeof row.authorizationDetails === "string" ? row.authorizationDetails : undefined,
-      authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined
+      authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined
     }];
   });
 }
@@ -396,11 +392,11 @@ export default function PublicOrderPage() {
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
-  const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
-  const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
-  const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
+  const inactiveCommunityMemberIndices = communityMemberResults
+    .filter((item) => item.authorizationStatus === "inactive")
     .map((item) => item.index);
+  const inactiveCommunityMemberCount = inactiveCommunityMemberIndices.length;
+  const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true;
   const boostDuration = status?.duration === 1 || status?.duration === 3
@@ -532,9 +528,9 @@ export default function PublicOrderPage() {
   }
 
   function handleReplaceAllCommunityMembers() {
-    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
-    setCommunityReplaceQueue(replaceableCommunityMemberIndices);
-    toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
+    if (!uniqid || replacingCommunityMemberIndex !== null || communityReplacementRunning || !inactiveCommunityMemberIndices.length) return;
+    setCommunityReplaceQueue(inactiveCommunityMemberIndices);
+    toast.success(`${inactiveCommunityMemberIndices.length} inactive member replacement${inactiveCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
   }
 
   useEffect(() => {
@@ -744,10 +740,10 @@ export default function PublicOrderPage() {
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>
                         ) : null}
-                        {canManageCommunityMembers && replaceableCommunityMemberIndices.length ? (
+                        {canManageCommunityMembers && inactiveCommunityMemberIndices.length ? (
                           <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
-                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : "Replace all"}
+                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing inactive..." : `Replace all inactive (${inactiveCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
@@ -768,9 +764,9 @@ export default function PublicOrderPage() {
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>
                               ) : null}
-                              {item.authorizationStatus ? (
-                                <span className="public-token-result-pill" data-state={item.authorizationStatus} title={item.authorizationDetails}>
-                                  OAuth {item.authorizationStatus}
+                              {item.authorizationStatus === "inactive" ? (
+                                <span className="public-token-result-pill" data-state="inactive">
+                                  Inactive
                                 </span>
                               ) : null}
                               <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
@@ -780,7 +776,7 @@ export default function PublicOrderPage() {
                         ))}
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
-                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
+                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} inactive member{inactiveCommunityMemberCount === 1 ? "" : "s"} found. You can replace them with available members.</p> : null}
                   </div>
                 ) : null}
 
