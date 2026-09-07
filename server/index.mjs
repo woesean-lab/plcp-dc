@@ -2025,7 +2025,11 @@ async function processCommunityOrder(order, members, config) {
         const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
         if (!control.rowCount || String(control.rows[0]?.status ?? "").toUpperCase() === "CANCELLED") return;
         const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
-        const delayEndsAt = delayStartedAt + (Number.isFinite(currentDelay) && currentDelay > 0 ? currentDelay : Number(order.delay) || 1) * 1_000;
+        const originalDelay = Number(order.delay);
+        const delaySeconds = Number.isFinite(currentDelay) && currentDelay >= 0
+          ? currentDelay
+          : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
+        const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
         const remainingDelay = delayEndsAt - Date.now();
         if (remainingDelay <= 0) break;
 
@@ -4123,8 +4127,8 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const delay = Number.parseInt(req.body?.delay, 10);
-    if (!uniqid || uniqid.length > 160 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
-      return res.status(400).json({ message: "A valid order ID and delay are required." });
+    if (!uniqid || uniqid.length > 160 || !Number.isInteger(delay) || delay < 0 || delay > 1200) {
+      return res.status(400).json({ message: "A valid order ID and delay between 0 and 1200 seconds are required." });
     }
     const updated = await pool.query(
       `UPDATE tracked_orders
@@ -4470,13 +4474,13 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const delay = Number.parseInt(req.body?.delay, 10);
-    if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay <= 0 || delay > 1200) {
-      return res.status(400).json({ message: "A valid order ID and delay are required." });
+    if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay < 0 || delay > 1200) {
+      return res.status(400).json({ message: "A valid order ID and delay between 0 and 1200 seconds are required." });
     }
 
     const cooldownKey = `${req.ip}:${uniqid}`;
     const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
-    if (cooldownUntil > Date.now()) {
+    if (delay !== 0 && cooldownUntil > Date.now()) {
       return res.status(429).json({
         message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before updating again.`
       });
@@ -4493,7 +4497,8 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
         [uniqid, delay]
       );
       if (!updated.rowCount) return res.status(409).json({ message: "This Members order is no longer active." });
-      publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
+      if (delay === 0) publicDelayCooldowns.delete(cooldownKey);
+      else publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
       return res.json({ delay, updated: true });
     }
 

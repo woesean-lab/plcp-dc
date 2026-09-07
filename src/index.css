@@ -5091,6 +5091,10 @@
   margin-top: 14px;
 }
 
+.monitor-delay-controls.has-cancel {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
 .monitor-delay-controls .ui-input {
   min-width: 0;
 }
@@ -5447,6 +5451,10 @@
   }
 
   .monitor-delay-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .monitor-delay-controls.has-cancel {
     grid-template-columns: 1fr;
   }
 

@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -427,12 +427,13 @@ export default function PublicOrderPage() {
     }
   }, [currentDelay]);
 
-  async function handleUpdateDelay() {
-    if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
+  async function handleUpdateDelay(delayOverride?: number) {
+    const cancellingDelay = delayOverride === 0;
+    if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || (!cancellingDelay && delayUpdateCooldownUntilRef.current > Date.now())) return;
 
-    const nextDelay = Number.parseInt(delayDraft, 10);
+    const nextDelay = cancellingDelay ? 0 : Number.parseInt(delayDraft, 10);
 
-    if (!Number.isFinite(nextDelay) || nextDelay <= 0) {
+    if (!Number.isFinite(nextDelay) || nextDelay < 0) {
       toast.error("Delay must be a positive number.");
       return;
     }
@@ -446,6 +447,7 @@ export default function PublicOrderPage() {
       delayUpdateInFlightRef.current = true;
       setUpdatingDelay(true);
       await updatePublicOrderDelay(uniqid, nextDelay);
+      setStatus((current) => current ? { ...current, delay: nextDelay } : current);
       try {
         const verifiedStatus = await getPublicOrderStatus(uniqid);
         syncDelayUpdateCooldown(verifiedStatus);
@@ -453,9 +455,15 @@ export default function PublicOrderPage() {
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.
       }
-      delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
-      setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
-      toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
+      if (cancellingDelay) {
+        delayUpdateCooldownUntilRef.current = 0;
+        setDelayUpdateCooldown(0);
+        toast.success("Delay cancelled. Remaining members will continue without waiting.");
+      } else {
+        delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
+        setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
+        toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
     } finally {
@@ -588,10 +596,10 @@ export default function PublicOrderPage() {
           <p className="app-kicker">Delivery control</p>
           <h2>Join delay</h2>
         </div>
-        <strong className="monitor-current-delay">{typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+        <strong className="monitor-current-delay">{currentDelay === 0 ? "No delay" : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
       </div>
 
-      <div className="monitor-delay-controls">
+      <div className={`monitor-delay-controls ${isCommunityOrder ? "has-cancel" : ""}`}>
         <Input
           type="number"
           min={1}
@@ -610,6 +618,17 @@ export default function PublicOrderPage() {
           <Timer className="h-4 w-4" aria-hidden="true" />
           {isInvitesPaused ? "Invites paused" : updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
         </Button>
+        {isCommunityOrder ? (
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => void handleUpdateDelay(0)}
+            disabled={isInvitesPaused || updatingDelay || currentDelay === 0}
+          >
+            <X className="h-4 w-4" aria-hidden="true" />
+            {currentDelay === 0 ? "Delay cancelled" : "Cancel delay"}
+          </Button>
+        ) : null}
       </div>
 
       <div className="monitor-safety-note" role="note">
@@ -747,7 +766,7 @@ export default function PublicOrderPage() {
                 </div>
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
-                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                  <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : currentDelay === 0 ? "No delay" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                 </div>
               </section>
 
