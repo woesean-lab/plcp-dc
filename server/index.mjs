@@ -3787,9 +3787,10 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
     const failedResult = results[resultIndex];
     const replaceableStates = new Set(["failed", "already_member"]);
-    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || !replaceableStates.has(String(failedResult.state ?? "").toLowerCase())) {
+    const hasInactiveAuthorization = String(failedResult?.authorizationStatus ?? "").toLowerCase() === "inactive";
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !hasInactiveAuthorization)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Only failed or already-member results can be replaced." });
+      return res.status(409).json({ message: "Only failed, already-member or OAuth-inactive results can be replaced." });
     }
 
     let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;

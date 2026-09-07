@@ -399,7 +399,7 @@ export default function PublicOrderPage() {
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()))
+    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
     .map((item) => item.index);
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true;
@@ -762,7 +762,7 @@ export default function PublicOrderPage() {
                             </span>
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
-                              {canManageCommunityMembers && ["failed", "already_member"].includes(item.state.toLowerCase()) ? (
+                              {canManageCommunityMembers && (["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive") ? (
                                 <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}

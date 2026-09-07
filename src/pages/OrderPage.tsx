@@ -393,7 +393,7 @@ export default function OrderPage() {
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()))
+    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
     .map((item) => item.index);
   const summary = isDcordProvider
     ? [
@@ -1032,7 +1032,7 @@ export default function OrderPage() {
                         <small>{item.details}</small>
                       </span>
                       <span className="community-order-result-state">
-                        {["failed", "already_member"].includes(item.state.toLowerCase()) ? (
+                        {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
                           <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
