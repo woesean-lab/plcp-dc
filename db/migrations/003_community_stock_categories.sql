@@ -3,6 +3,8 @@ CREATE TABLE IF NOT EXISTS community_stock_categories (
   id TEXT NOT NULL,
   name TEXT NOT NULL,
   is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
+  icon_name TEXT NOT NULL DEFAULT 'Users',
+  color_key TEXT NOT NULL DEFAULT 'violet',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (guild_id, id)

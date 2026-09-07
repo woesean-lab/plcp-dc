@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,29 +10,38 @@ import {
   CircleDollarSign,
   Check,
   Copy,
+  Crown,
   ExternalLink,
   FileJson,
+  Gamepad2,
+  Gem,
+  Globe2,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
   Download,
   History,
+  Heart,
   KeyRound,
   ListChecks,
   LoaderCircle,
   Minus,
   Plus,
   RefreshCw,
+  Rocket,
   RotateCcw,
   Search,
   Settings2,
+  Shield,
   ShieldCheck,
+  Star,
   Timer,
   TriangleAlert,
   Trash2,
   UploadCloud,
   Users,
   X,
+  Zap,
 } from "lucide-react";
 import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite } from "../lib/bot-invite";
@@ -49,6 +58,7 @@ import {
   saveCommunityConfig,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
+  type CommunityCategoryColorKey,
   type CommunityConfig,
   type CommunityStockCategory,
   type CommunityStockType
@@ -91,6 +101,44 @@ const EMPTY_FORM = {
   communityCategoryId: "offline",
   communityDurationMonths: 1
 };
+
+const COMMUNITY_CATEGORY_ICONS: Record<string, typeof Users> = {
+  Users,
+  Timer,
+  Crown,
+  Gem,
+  Gamepad2,
+  Globe2,
+  Heart,
+  Rocket,
+  Shield,
+  Star,
+  Zap
+};
+
+const COMMUNITY_CATEGORY_COLORS: Array<{ key: CommunityCategoryColorKey; label: string; tone: string }> = [
+  { key: "violet", label: "Violet", tone: "#9b8cff" },
+  { key: "cyan", label: "Cyan", tone: "#67c7ff" },
+  { key: "emerald", label: "Emerald", tone: "#69ddb2" },
+  { key: "amber", label: "Amber", tone: "#f5c76b" },
+  { key: "rose", label: "Rose", tone: "#ff8297" }
+];
+
+function getCommunityCategoryIcon(iconName: string) {
+  return COMMUNITY_CATEGORY_ICONS[iconName] ?? Users;
+}
+
+function getCommunityCategoryAppearance(colorKey: CommunityCategoryColorKey): CSSProperties {
+  const tone = COMMUNITY_CATEGORY_COLORS.find((color) => color.key === colorKey)?.tone ?? COMMUNITY_CATEGORY_COLORS[0].tone;
+  return {
+    "--category-tone": tone,
+    "--service-tone": tone,
+    "--service-tone-soft": `color-mix(in srgb, ${tone} 12%, transparent)`,
+    "--service-tone-border": `color-mix(in srgb, ${tone} 34%, transparent)`,
+    "--service-tone-glow": `color-mix(in srgb, ${tone} 18%, transparent)`,
+    "--service-tone-ink": `color-mix(in srgb, ${tone} 62%, white)`
+  } as CSSProperties;
+}
 
 function getBoostConcurrency(amount: number) {
   return Math.max(1, Math.floor(amount / 2));
@@ -543,7 +591,12 @@ export default function HomePage() {
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState({ name: "", isPeriodic: false });
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+    name: "",
+    isPeriodic: false,
+    iconName: "Users",
+    colorKey: "violet"
+  });
   const [editingCommunityCategoryId, setEditingCommunityCategoryId] = useState<string | null>(null);
   const [communityCategoryModalOpen, setCommunityCategoryModalOpen] = useState(false);
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
@@ -618,6 +671,7 @@ export default function HomePage() {
   const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
+  const CommunityCategoryDraftIcon = getCommunityCategoryIcon(communityCategoryDraft.iconName);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -942,20 +996,22 @@ export default function HomePage() {
     setEditingCommunityCategoryId(category.id);
     setCommunityCategoryDraft({
       name: category.name,
-      isPeriodic: category.isPeriodic
+      isPeriodic: category.isPeriodic,
+      iconName: category.iconName || (category.isPeriodic ? "Timer" : "Users"),
+      colorKey: category.colorKey || "violet"
     });
     setCommunityCategoryModalOpen(true);
   }
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -963,9 +1019,12 @@ export default function HomePage() {
     event.preventDefault();
     const input = {
       name: communityCategoryDraft.name.trim(),
-      isPeriodic: communityCategoryDraft.isPeriodic
+      isPeriodic: communityCategoryDraft.isPeriodic,
+      iconName: communityCategoryDraft.iconName.trim(),
+      colorKey: communityCategoryDraft.colorKey
     };
     if (!input.name) return notifyError("Category name is required.");
+    if (!COMMUNITY_CATEGORY_ICONS[input.iconName]) return notifyError("Choose a valid Lucide icon name.");
     try {
       setSavingCommunityCategory(true);
       if (editingCommunityCategoryId) await updateCommunityStockCategory(editingCommunityCategoryId, input);
@@ -1702,8 +1761,9 @@ export default function HomePage() {
           {communityCategories.map((category) => {
             const selected = communityStockType === category.id;
             const hasStock = category.summary.authorized + category.summary.failed > 0;
+            const CategoryIcon = getCommunityCategoryIcon(category.iconName);
             return (
-              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`}>
+              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`} style={getCommunityCategoryAppearance(category.colorKey)}>
                 <button
                   type="button"
                   role="tab"
@@ -1715,7 +1775,7 @@ export default function HomePage() {
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
                   }}
                 >
-                  <span className="community-category-icon" aria-hidden="true">{category.isPeriodic ? <Timer className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
+                  <span className="community-category-icon" aria-hidden="true"><CategoryIcon className="h-4 w-4" /></span>
                   <span className="community-category-copy"><strong>{category.name}</strong><small>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</small></span>
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
                 </button>
@@ -2008,11 +2068,11 @@ export default function HomePage() {
                       </div>
                       <div className="service-grid community-mode-grid">
                         {communityCategories.map((category) => {
-                          const Icon = category.isPeriodic ? Timer : Users;
+                          const Icon = getCommunityCategoryIcon(category.iconName);
                           const selected = form.communityCategoryId === category.id;
                           const ready = category.summary.ready;
                           return (
-                            <label key={category.id} className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY">
+                            <label key={category.id} className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY" style={getCommunityCategoryAppearance(category.colorKey)}>
                               <input
                                 className="sr-only"
                                 type="radio"
@@ -2902,6 +2962,42 @@ export default function HomePage() {
               <span className={fieldLabelClass}>Category name</span>
               <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
             </label>
+            <div className="community-category-appearance" style={getCommunityCategoryAppearance(communityCategoryDraft.colorKey)}>
+              <label>
+                <span className={fieldLabelClass}>Lucide icon</span>
+                <span className="community-category-icon-input">
+                  <span aria-hidden="true"><CommunityCategoryDraftIcon className="h-4 w-4" /></span>
+                  <Input
+                    list="community-category-icon-list"
+                    value={communityCategoryDraft.iconName}
+                    placeholder="Example: Crown"
+                    onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, iconName: event.target.value }))}
+                  />
+                </span>
+                <datalist id="community-category-icon-list">
+                  {Object.keys(COMMUNITY_CATEGORY_ICONS).map((iconName) => <option key={iconName} value={iconName} />)}
+                </datalist>
+              </label>
+              <fieldset>
+                <legend className={fieldLabelClass}>Color</legend>
+                <div className="community-category-color-options">
+                  {COMMUNITY_CATEGORY_COLORS.map((color) => (
+                    <button
+                      key={color.key}
+                      type="button"
+                      title={color.label}
+                      aria-label={color.label}
+                      aria-pressed={communityCategoryDraft.colorKey === color.key}
+                      className={communityCategoryDraft.colorKey === color.key ? "is-selected" : ""}
+                      style={{ "--category-tone": color.tone } as CSSProperties}
+                      onClick={() => setCommunityCategoryDraft((current) => ({ ...current, colorKey: color.key }))}
+                    >
+                      <span />
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+            </div>
             <div className="community-category-period-options">
               <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
                 <input className="sr-only" type="radio" name="categoryPeriod" checked={!communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: false }))} />

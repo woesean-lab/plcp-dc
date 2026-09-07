@@ -1574,6 +1574,12 @@
     box-shadow: inset 0 0 0 1px var(--service-tone-border), 0 8px 20px var(--service-tone-glow);
   }
 
+  .service-option[data-service="COMMUNITY-CATEGORY"] .service-option-icon {
+    border-color: var(--service-tone-border);
+    background: var(--service-tone-soft);
+    color: var(--service-tone);
+  }
+
   .service-option-state {
     display: inline-flex;
     min-height: 22px;
@@ -6163,6 +6169,7 @@
 
 .community-category-card {
   overflow: hidden;
+  --category-tone: var(--app-accent);
   border: 1px solid var(--app-border);
   border-radius: 9px;
   background: rgba(4, 5, 11, .3);
@@ -6170,14 +6177,14 @@
 }
 
 .community-category-card:hover {
-  border-color: color-mix(in srgb, var(--app-accent-bright) 28%, var(--app-border));
+  border-color: color-mix(in srgb, var(--category-tone) 35%, var(--app-border));
   transform: translateY(-1px);
 }
 
 .community-category-card.is-active {
-  border-color: var(--app-accent-border);
-  background: color-mix(in srgb, var(--app-accent-soft) 55%, rgba(4, 5, 11, .3));
-  box-shadow: inset 3px 0 0 var(--app-accent-bright);
+  border-color: color-mix(in srgb, var(--category-tone) 42%, var(--app-border));
+  background: color-mix(in srgb, var(--category-tone) 8%, rgba(4, 5, 11, .3));
+  box-shadow: inset 3px 0 0 var(--category-tone);
 }
 
 .community-category-select {
@@ -6196,10 +6203,10 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid var(--app-border);
+  border: 1px solid color-mix(in srgb, var(--category-tone) 32%, var(--app-border));
   border-radius: 8px;
-  background: var(--app-panel);
-  color: var(--app-accent-bright);
+  background: color-mix(in srgb, var(--category-tone) 10%, var(--app-panel));
+  color: var(--category-tone);
 }
 
 .community-category-copy {
@@ -6235,7 +6242,87 @@
 }
 
 .community-category-modal {
-  width: min(520px, calc(100vw - 32px));
+  width: min(560px, calc(100vw - 32px));
+}
+
+.community-category-appearance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+  margin-top: 6px;
+  text-align: left;
+}
+
+.community-category-appearance > label,
+.community-category-appearance > fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.community-category-icon-input {
+  position: relative;
+  display: block;
+}
+
+.community-category-icon-input > span {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 12px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--category-tone) 12%, transparent);
+  color: var(--category-tone);
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+.community-category-icon-input input {
+  padding-left: 44px;
+}
+
+.community-category-color-options {
+  display: grid;
+  grid-template-columns: repeat(5, 34px);
+  gap: 6px;
+}
+
+.community-category-color-options button {
+  display: grid;
+  width: 34px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  background: var(--app-input-bg);
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
+}
+
+.community-category-color-options button:hover,
+.community-category-color-options button.is-selected {
+  border-color: color-mix(in srgb, var(--category-tone) 65%, var(--app-border));
+  background: color-mix(in srgb, var(--category-tone) 10%, var(--app-input-bg));
+}
+
+.community-category-color-options button.is-selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--category-tone) 18%, transparent);
+}
+
+.community-category-color-options button > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--category-tone);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--category-tone) 38%, transparent);
 }
 
 .community-category-period-options {
@@ -6291,6 +6378,18 @@
 
   .community-category-period-options {
     grid-template-columns: 1fr;
+  }
+
+  .community-category-appearance {
+    grid-template-columns: 1fr;
+  }
+
+  .community-category-color-options {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .community-category-color-options button {
+    width: 100%;
   }
 
 }

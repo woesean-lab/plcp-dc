@@ -534,7 +534,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, created_at, updated_at
+      `SELECT id, name, is_periodic, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories
        WHERE guild_id = $1
        ORDER BY created_at ASC, name ASC`,
@@ -546,6 +546,8 @@ async function loadCommunityStockCategories(config) {
     id: row.id,
     name: row.name,
     isPeriodic: row.is_periodic === true,
+    iconName: row.icon_name,
+    colorKey: row.color_key,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     summary: summary.categories[row.id] ?? { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 }
@@ -554,9 +556,9 @@ async function loadCommunityStockCategories(config) {
 
 async function ensureCommunityStockCategories(config) {
   await pool.query(
-    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
-     SELECT $1, defaults.id, defaults.name, FALSE
-     FROM (VALUES ('offline', 'Offline'), ('online', 'Online')) AS defaults(id, name)
+    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+     SELECT $1, defaults.id, defaults.name, FALSE, defaults.icon_name, defaults.color_key
+     FROM (VALUES ('offline', 'Offline', 'Users', 'emerald'), ('online', 'Online', 'Timer', 'violet')) AS defaults(id, name, icon_name, color_key)
      WHERE NOT EXISTS (SELECT 1 FROM community_stock_categories WHERE guild_id = $1)
      ON CONFLICT (guild_id, id) DO NOTHING`,
     [config.guildId]
@@ -599,6 +601,19 @@ function getCommunityOrderStockType(order) {
 
 function createCommunityCategoryId() {
   return `cat_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+const COMMUNITY_CATEGORY_ICON_NAMES = new Set(["Users", "Timer", "Crown", "Gem", "Gamepad2", "Globe2", "Heart", "Rocket", "Shield", "Star", "Zap"]);
+const COMMUNITY_CATEGORY_COLOR_KEYS = new Set(["violet", "cyan", "emerald", "amber", "rose"]);
+
+function parseCommunityCategoryIconName(value) {
+  const iconName = String(value ?? "").trim();
+  return COMMUNITY_CATEGORY_ICON_NAMES.has(iconName) ? iconName : null;
+}
+
+function parseCommunityCategoryColorKey(value) {
+  const colorKey = String(value ?? "").trim().toLowerCase();
+  return COMMUNITY_CATEGORY_COLOR_KEYS.has(colorKey) ? colorKey : null;
 }
 
 function addUtcMonths(value, months) {
@@ -2799,6 +2814,8 @@ async function initializeDatabase() {
       id TEXT NOT NULL,
       name TEXT NOT NULL,
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
+      icon_name TEXT NOT NULL DEFAULT 'Users',
+      color_key TEXT NOT NULL DEFAULT 'violet',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       PRIMARY KEY (guild_id, id)
@@ -2806,6 +2823,14 @@ async function initializeDatabase() {
   `);
   await pool.query("ALTER TABLE community_stock_categories DROP CONSTRAINT IF EXISTS community_stock_categories_duration_check");
   await pool.query("ALTER TABLE community_stock_categories DROP COLUMN IF EXISTS duration_months");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS icon_name TEXT");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
+  await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
+  await pool.query("UPDATE community_stock_categories SET color_key = CASE WHEN id = 'offline' THEN 'emerald' ELSE 'violet' END WHERE color_key IS NULL OR BTRIM(color_key) = ''");
+  await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET DEFAULT 'Users'");
+  await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET NOT NULL");
+  await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN color_key SET DEFAULT 'violet'");
+  await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN color_key SET NOT NULL");
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS community_stock_categories_guild_name_idx ON community_stock_categories (guild_id, LOWER(name))");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_oauth_joins (
@@ -2832,13 +2857,13 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
   await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
-    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE FROM community_oauth_joins
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, 'Users', 'emerald' FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
-    SELECT DISTINCT guild_id, 'online', 'Online', FALSE FROM community_oauth_joins
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, 'Timer', 'violet' FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
@@ -2971,8 +2996,8 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       guildId: candidate.guildId
     }));
     await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
-       VALUES ($1, 'offline', 'Offline', FALSE), ($1, 'online', 'Online', FALSE)
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+       VALUES ($1, 'offline', 'Offline', FALSE, 'Users', 'emerald'), ($1, 'online', 'Online', FALSE, 'Timer', 'violet')
        ON CONFLICT (guild_id, id) DO NOTHING`,
       [candidate.guildId]
     );
@@ -3009,15 +3034,19 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before creating a category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
+    const iconName = parseCommunityCategoryIconName(req.body?.iconName);
+    const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
+    if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
+    if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, is_periodic, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic]
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id, name, is_periodic, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic, iconName, colorKey]
     );
     res.status(201).json(inserted.rows[0]);
   } catch (error) {
@@ -3034,15 +3063,19 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
+    const iconName = parseCommunityCategoryIconName(req.body?.iconName);
+    const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
+    if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
+    if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const updated = await pool.query(
       `UPDATE community_stock_categories
-       SET name = $3, is_periodic = $4, updated_at = NOW()
+       SET name = $3, is_periodic = $4, icon_name = $5, color_key = $6, updated_at = NOW()
        WHERE guild_id = $1 AND id = $2
-       RETURNING id, name, is_periodic, created_at, updated_at`,
-      [config.guildId, categoryId, name, isPeriodic]
+       RETURNING id, name, is_periodic, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, categoryId, name, isPeriodic, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     res.json(updated.rows[0]);

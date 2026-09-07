@@ -41,14 +41,20 @@ export type CommunityStockCategory = {
   id: string;
   name: string;
   isPeriodic: boolean;
+  iconName: string;
+  colorKey: CommunityCategoryColorKey;
   createdAt: string;
   updatedAt: string;
   summary: CommunityStockSummary;
 };
 
+export type CommunityCategoryColorKey = "violet" | "cyan" | "emerald" | "amber" | "rose";
+
 export type CommunityStockCategoryInput = {
   name: string;
   isPeriodic: boolean;
+  iconName: string;
+  colorKey: CommunityCategoryColorKey;
 };
 
 export type CommunityJoinRecord = {
