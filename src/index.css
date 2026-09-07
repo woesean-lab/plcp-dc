@@ -1731,6 +1731,10 @@
     line-height: 1;
   }
 
+  .community-service-option-footer .service-option-code-badge > span {
+    transform: translateY(1px);
+  }
+
   .boost-order-block {
     display: grid;
     max-width: 860px;
