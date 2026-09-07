@@ -7862,7 +7862,7 @@
 .monitor-order-context {
   display: flex;
   min-width: 0;
-  align-items: center;
+  align-items: flex-start;
 }
 
 .monitor-order-context > div {
@@ -7879,6 +7879,7 @@
 
 .monitor-order-context > div > svg {
   flex: 0 0 auto;
+  margin-top: 8px;
   color: var(--app-muted);
 }
 
@@ -8064,7 +8065,7 @@
   }
 
   .monitor-order-context {
-    align-items: stretch;
+    align-items: flex-start;
   }
 
   .monitor-order-context > div {
