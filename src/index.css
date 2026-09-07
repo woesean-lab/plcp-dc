@@ -1744,22 +1744,36 @@
     cursor: not-allowed;
   }
 
-  .member-amount-label-row {
-    display: flex;
+  .member-amount-custom-input {
+    width: 100%;
     min-width: 0;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    outline: 0;
+    padding: 0 8px;
+    background: var(--app-input-bg);
+    color: var(--app-text);
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease;
   }
 
-  .member-amount-label-row > button {
-    border: 0;
-    padding: 0;
-    background: transparent;
-    color: var(--app-accent-bright);
-    font-size: 9px;
-    font-weight: 700;
-    cursor: pointer;
+  .member-amount-custom-input::placeholder {
+    color: var(--app-placeholder);
+    opacity: 1;
+  }
+
+  .member-amount-custom-input:hover {
+    border-color: var(--app-border-strong);
+  }
+
+  .member-amount-custom-input.is-selected,
+  .member-amount-custom-input:focus-visible {
+    border-color: var(--app-accent);
+    background: var(--app-input-focus-bg);
+    box-shadow: 0 0 0 2px var(--app-accent-soft), inset 0 1px 3px rgba(0, 0, 0, .08);
   }
 
   .boost-order-field {
