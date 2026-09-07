@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, ChevronDown, Copy, ExternalLink, FileJson, Hash, MessageSquareText, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, replaceCommunityMember, replaceDcordBoostToken, restartOrder as restartIntegrationOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
@@ -336,6 +336,7 @@ export default function OrderPage() {
   const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
   const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
   const [showExtendCommunityModal, setShowExtendCommunityModal] = useState(false);
+  const [communityLogOpen, setCommunityLogOpen] = useState(false);
   const [communityExtensionMonths, setCommunityExtensionMonths] = useState(1);
   const [extendingCommunityOrder, setExtendingCommunityOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
@@ -1045,10 +1046,14 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
+                  <Button type="button" variant="secondary" size="xs" aria-expanded={communityLogOpen} onClick={() => setCommunityLogOpen((open) => !open)}>
+                    {communityLogOpen ? "Hide log" : "Show log"}
+                    <ChevronDown className={`h-3.5 w-3.5 transition-transform ${communityLogOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+                  </Button>
                 </span>
               </div>
 
-              {communityMemberResults.length ? (
+              {communityLogOpen && communityMemberResults.length ? (
                 <div className="community-order-result-list">
                   {communityMemberResults.map((item) => (
                     <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
@@ -1077,10 +1082,10 @@ export default function OrderPage() {
                     </div>
                   ))}
                 </div>
-              ) : (
+              ) : communityLogOpen ? (
                 <p className="public-token-results-empty">Waiting for member results.</p>
-              )}
-              {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
+              ) : null}
+              {communityLogOpen && inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
             </section>
           ) : null}
 

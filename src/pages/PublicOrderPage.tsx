@@ -684,7 +684,7 @@ export default function PublicOrderPage() {
                     <small>{supportExpired ? "Expired" : "Expires"}</small>
                     <strong>{formatDateTime(expiredAt)}</strong>
                     <button type="button" className="monitor-extend-link" onClick={() => setShowExtensionModal(true)}>
-                      Extend support
+                      Extend period
                     </button>
                   </span>
                 </div>
@@ -774,13 +774,13 @@ export default function PublicOrderPage() {
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
                       <span className="flex items-center gap-2">
                         {isCompleted ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
+                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                             <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>
                         ) : null}
                         {inactiveCommunityMemberIndices.length ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
+                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing inactive..." : `Replace all inactive (${inactiveCommunityMemberIndices.length})`}
                           </Button>
@@ -798,7 +798,7 @@ export default function PublicOrderPage() {
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
                               {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
+                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>
@@ -816,7 +816,7 @@ export default function PublicOrderPage() {
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} inactive member{inactiveCommunityMemberCount === 1 ? "" : "s"} found. You can replace them with available members.</p> : null}
-                    {supportExpired ? <p className="public-token-results-empty">The support period for this order has expired. Member checks and replacements are no longer available.</p> : null}
+                    {supportExpired ? <p className="public-token-results-empty">This order has expired. Member checks and replacements are no longer available.</p> : null}
                   </div>
                 ) : null}
 
@@ -890,8 +890,8 @@ export default function PublicOrderPage() {
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExtensionModal(false); }}>
           <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-extension-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Timer className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-accent)]">Order support</p>
-            <h2 id="public-extension-title">Extend your support period</h2>
+            <p className="app-kicker text-[var(--app-accent)]">Order extension</p>
+            <h2 id="public-extension-title">Extend your order period</h2>
             <p>Copy the order ID below, then open Eldorado and send it to Pulcip Store with your extension request.</p>
             <div className="public-extension-order-id">
               <span><small>Order ID</small><code>{uniqid}</code></span>

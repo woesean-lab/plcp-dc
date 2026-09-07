@@ -1431,6 +1431,7 @@ export default function HomePage() {
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
       serverName: typeof status.serverName === "string" ? status.serverName : order.serverName,
       duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
+      expiredAt: typeof (status.expiredAt ?? status.expired_at) === "string" ? String(status.expiredAt ?? status.expired_at) : order.expiredAt,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details
     };
@@ -1451,7 +1452,8 @@ export default function HomePage() {
       a.serverMemberCount === b.serverMemberCount &&
       a.service === b.service &&
       a.provider === b.provider &&
-      a.duration === b.duration
+      a.duration === b.duration &&
+      a.expiredAt === b.expiredAt
     );
   }
 
@@ -2424,7 +2426,7 @@ export default function HomePage() {
                 {filteredOrders.length ? (
                   <div className="orders-table" role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
@@ -2463,6 +2465,7 @@ export default function HomePage() {
                                 {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
+                              <time className="orders-row-expiration" dateTime={order.expiredAt ?? undefined} title={order.expiredAt ?? undefined}>{order.expiredAt ? formatTrackedDate(order.expiredAt) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
