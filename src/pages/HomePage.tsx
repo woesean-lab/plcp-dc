@@ -100,8 +100,15 @@ const EMPTY_FORM = {
   useProxy: true,
   concurrency: 7,
   communityCategoryId: "offline",
-  communityDurationMonths: 1
+  communityDurationMonths: 1,
+  communitySpeedProfile: "balanced" as "safe" | "balanced" | "fast" | "custom"
 };
+
+const COMMUNITY_SPEED_PROFILES = [
+  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
+  { key: "balanced", label: "Balanced", delay: 300, timing: "30 · 300 · 100s", description: "Variable rhythm", icon: Timer },
+  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
+] as const;
 
 const COMMUNITY_CATEGORY_ICONS: Record<string, typeof Users> = {
   Users,
@@ -1610,6 +1617,7 @@ export default function HomePage() {
       amount: payload.amount,
       added: 0,
       delay: payloadIsBoost ? undefined : payload.delay,
+      speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
       billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
@@ -1655,7 +1663,8 @@ export default function HomePage() {
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
-      durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined
+      durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined,
+      speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -2034,6 +2043,8 @@ export default function HomePage() {
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
                                   communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
                                   amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityCategories[0]?.summary.ready ?? 1)) : 100,
+                                  delay: option.value === "community" ? 300 : current.delay,
+                                  communitySpeedProfile: option.value === "community" ? "balanced" : current.communitySpeedProfile,
                                   concurrency: option.value === "boosts" ? 1 : current.concurrency
                                 }))
                               }
@@ -2330,6 +2341,33 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
+                        {selectedIsCommunity ? (
+                          <div className="community-speed-profile-field">
+                            <div className="community-speed-profile-copy">
+                              <span className="boost-order-label">Delivery speed</span>
+                              <small>Select a profile or enter a custom delay below.</small>
+                            </div>
+                            <div className="community-speed-profile-options" aria-label="Delivery speed profile">
+                              {COMMUNITY_SPEED_PROFILES.map((profile) => {
+                                const Icon = profile.icon;
+                                const selected = form.communitySpeedProfile === profile.key;
+                                return (
+                                  <button
+                                    key={profile.key}
+                                    type="button"
+                                    className={selected ? "is-selected" : ""}
+                                    aria-pressed={selected}
+                                    onClick={() => setForm((current) => ({ ...current, delay: profile.delay, communitySpeedProfile: profile.key }))}
+                                  >
+                                    <Icon className="h-4 w-4" aria-hidden="true" />
+                                    <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                                    <em>{profile.timing}</em>
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ) : null}
                         <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
@@ -2364,14 +2402,14 @@ export default function HomePage() {
                           </label>
 
                           <label className="boost-order-field">
-                            <span className="boost-order-label">Delay</span>
+                            <span className="boost-order-label">{selectedIsCommunity ? "Custom delay" : "Delay"}</span>
                             <input
                               className="boost-number-input"
                               type="number"
                               min={1}
                               max={1200}
                               value={form.delay}
-                              onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
+                              onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1, communitySpeedProfile: "custom" }))}
                             />
                           </label>
 

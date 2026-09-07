@@ -26,6 +26,7 @@ export interface CreateOrderPayload {
   allowMembershipScreening?: boolean;
   categoryId?: string;
   durationMonths?: number;
+  speedProfile?: "safe" | "balanced" | "fast" | "custom";
 }
 
 export interface CreateOrderResponse {
@@ -70,6 +71,7 @@ export interface OrderStatusResponse {
   canManageCommunityMembers?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
+  speedProfile?: "safe" | "balanced" | "fast" | "custom";
   liveBoostStock?: {
     oneMonth: number;
     threeMonth: number;
@@ -88,6 +90,7 @@ export interface TrackedOrder {
   amount?: number;
   added?: number;
   delay?: number;
+  speedProfile?: "safe" | "balanced" | "fast" | "custom";
   statusDelay?: number;
   billingCycle?: number;
   duration?: BoostDuration;

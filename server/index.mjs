@@ -1821,6 +1821,13 @@ function loadCommunityAccessToken(member) {
   return decryptCredential(member.encrypted_access_token);
 }
 
+const communityBalancedDelayPattern = [30, 300, 100];
+
+function normalizeCommunitySpeedProfile(value) {
+  const profile = String(value ?? "custom").trim().toLowerCase();
+  return ["safe", "balanced", "fast"].includes(profile) ? profile : "custom";
+}
+
 function getCommunityBotUnavailableStatus(result) {
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
@@ -1883,6 +1890,7 @@ async function processCommunityOrder(order, members, config) {
           : `${mergedAdded}/${amount} members delivered. Review the member results.`
         : `${mergedAdded}/${amount} members delivered.`;
       const latestDelay = Number.parseInt(currentPayload.delay, 10);
+      const latestSpeedProfile = normalizeCommunitySpeedProfile(currentPayload.speedProfile ?? order.speedProfile);
       const deliveryPaused = currentStatus === "PAUSED";
       const nextPayload = {
         ...payload,
@@ -1890,6 +1898,7 @@ async function processCommunityOrder(order, members, config) {
         status: deliveryPaused ? "PAUSED" : status,
         details: deliveryPaused ? "Delivery paused." : details,
         delay: Number.isFinite(latestDelay) && latestDelay >= 0 ? latestDelay : order.delay,
+        speedProfile: latestSpeedProfile,
         communityResults: mergedResults,
         ...(deliveryPaused ? {
           waitingCode: "manual_pause",
@@ -2060,13 +2069,17 @@ async function processCommunityOrder(order, members, config) {
       const delayStartedAt = Date.now();
       let lastBotCheckAt = 0;
       while (true) {
-        const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
+        const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
         if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return;
         const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
         const originalDelay = Number(order.delay);
-        const delaySeconds = Number.isFinite(currentDelay) && currentDelay >= 0
+        const configuredDelay = Number.isFinite(currentDelay) && currentDelay >= 0
           ? currentDelay
           : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
+        const speedProfile = normalizeCommunitySpeedProfile(control.rows[0]?.speed_profile);
+        const delaySeconds = speedProfile === "balanced" && configuredDelay > 0
+          ? communityBalancedDelayPattern[index % communityBalancedDelayPattern.length]
+          : configuredDelay;
         const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
         const remainingDelay = delayEndsAt - Date.now();
         if (remainingDelay <= 0) break;
@@ -3670,6 +3683,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
   try {
     const amount = Number.parseInt(req.body?.amount, 10);
     const delay = Number.parseInt(req.body?.delay, 10);
+    const speedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
     const service = String(req.body?.service ?? "");
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
@@ -3747,6 +3761,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       amount,
       added: 0,
       delay,
+      speedProfile,
       createdAt: createdAt.toISOString(),
       expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null,
       status: waitingForBot ? "WAITING" : "PROCESS",
@@ -4299,7 +4314,7 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
     }
     const updated = await pool.query(
       `UPDATE tracked_orders
-       SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
+       SET payload = jsonb_set(jsonb_set(payload, '{delay}', to_jsonb($2::int)), '{speedProfile}', '"custom"'::jsonb), updated_at = NOW()
        WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED')
        RETURNING payload`,
       [uniqid, delay]
@@ -4658,7 +4673,7 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
     if (trackedPayload?.provider === "community") {
       const updated = await pool.query(
         `UPDATE tracked_orders
-         SET payload = jsonb_set(payload, '{delay}', to_jsonb($2::int)), updated_at = NOW()
+         SET payload = jsonb_set(jsonb_set(payload, '{delay}', to_jsonb($2::int)), '{speedProfile}', '"custom"'::jsonb), updated_at = NOW()
          WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED')
          RETURNING payload`,
         [uniqid, delay]

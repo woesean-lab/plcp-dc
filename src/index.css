@@ -1768,6 +1768,109 @@
     grid-column: 1 / -1;
   }
 
+  .community-speed-profile-field {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--app-divider);
+  }
+
+  .community-speed-profile-copy {
+    display: grid;
+    flex: 0 0 142px;
+    gap: .28rem;
+  }
+
+  .community-speed-profile-copy small {
+    color: var(--app-subtle);
+    font-size: 9px;
+    line-height: 1.35;
+  }
+
+  .community-speed-profile-options {
+    display: grid;
+    flex: 1;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .community-speed-profile-options button {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-width: 0;
+    min-height: 46px;
+    align-items: center;
+    gap: .55rem;
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    padding: .45rem .65rem;
+    color: var(--app-muted);
+    background: rgba(4, 5, 11, .3);
+    text-align: left;
+    cursor: pointer;
+    transition: border-color .15s ease, background .15s ease, color .15s ease;
+  }
+
+  .community-speed-profile-options button:hover {
+    border-color: rgba(255, 255, 255, .14);
+    color: var(--app-text-secondary);
+    background: rgba(255, 255, 255, .035);
+  }
+
+  .community-speed-profile-options button > span {
+    display: grid;
+    min-width: 0;
+    gap: 1px;
+  }
+
+  .community-speed-profile-options strong {
+    overflow: hidden;
+    color: inherit;
+    font-size: 11px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-speed-profile-options small {
+    overflow: hidden;
+    color: var(--app-subtle);
+    font-size: 8px;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-speed-profile-options em {
+    color: var(--app-subtle);
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-size: 9px;
+    font-style: normal;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .community-speed-profile-options button.is-selected {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+    box-shadow: inset 0 0 0 1px rgba(155, 140, 255, .08);
+  }
+
+  .community-speed-profile-options button.is-selected small,
+  .community-speed-profile-options button.is-selected em {
+    color: var(--app-text-secondary);
+  }
+
+  .community-speed-profile-options button:focus-visible {
+    outline: 2px solid var(--app-accent-bright);
+    outline-offset: 2px;
+  }
+
   .members-order-grid {
     grid-template-columns: minmax(170px, 210px) minmax(280px, 1fr) minmax(120px, 150px);
   }
@@ -6980,6 +7083,21 @@
 .landing-footer span:first-child { color: var(--app-text-secondary); font-weight: 700; }
 @media (max-width:1100px) { .landing-service-grid { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:760px) { .boost-order-grid,.service-grid.boost-duration-grid { grid-template-columns:1fr; } .boost-order-panel { max-width:100%; } }
+
+@media (max-width: 760px) {
+  .community-speed-profile-field {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .community-speed-profile-copy {
+    flex-basis: auto;
+  }
+
+  .community-speed-profile-options {
+    grid-template-columns: 1fr;
+  }
+}
 
 @media (max-width:520px) {
   .boost-proxy-toggle {

@@ -382,10 +382,12 @@ export default function OrderPage() {
     : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const currentDelay = getNumberField(result, ["delay"]);
+  const speedProfile = typeof result?.speedProfile === "string" ? result.speedProfile : "custom";
+  const effectiveEstimateDelay = speedProfile === "balanced" ? (30 + 300 + 100) / 3 : currentDelay;
   const expiration = result?.expiredAt ?? result?.expired_at;
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
-    : formatEstimatedDuration(remainingAmount, currentDelay);
+    : formatEstimatedDuration(remainingAmount, effectiveEstimateDelay);
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordTokenCount = getNumberField(result, ["tokenCount"]);
   const hasQueuedDcordTokens = dcordTokenResults.some((item) => item.status.toLowerCase() === "queued");
@@ -410,7 +412,7 @@ export default function OrderPage() {
       ]
     : [
         { label: "Expiration", value: formatTime(expiration ?? undefined) },
-        { label: "Join delay", value: formatDelay(result?.delay) }
+        { label: "Join delay", value: speedProfile === "balanced" ? "Balanced · 30 / 300 / 100s" : formatDelay(result?.delay) }
       ];
 
   useEffect(() => {
@@ -968,7 +970,7 @@ export default function OrderPage() {
               <section className="lookup-delay-control">
                 <div>
                   <p className={labelClass}>Join delay</p>
-                  <strong>{formatDelay(result.delay)}</strong>
+                  <strong>{speedProfile === "balanced" ? "Balanced" : formatDelay(result.delay)}</strong>
                 </div>
                 <Input
                   type="number"

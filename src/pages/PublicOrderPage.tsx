@@ -382,8 +382,10 @@ export default function PublicOrderPage() {
   const membersRemaining =
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
-  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof currentDelay === "number"
-    ? membersRemaining * currentDelay
+  const speedProfile = typeof status?.speedProfile === "string" ? status.speedProfile : "custom";
+  const effectiveEstimateDelay = speedProfile === "balanced" ? (30 + 300 + 100) / 3 : currentDelay;
+  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof effectiveEstimateDelay === "number"
+    ? membersRemaining * effectiveEstimateDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
   const expiredAt = parseTimestamp(status?.expiredAt ?? status?.expired_at ?? undefined);
@@ -616,7 +618,7 @@ export default function PublicOrderPage() {
           <h2>Join delay</h2>
         </div>
         {currentDelay !== 0 ? (
-          <strong className="monitor-current-delay">{typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+          <strong className="monitor-current-delay">{speedProfile === "balanced" ? "Balanced" : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
         ) : null}
       </div>
 
@@ -799,7 +801,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
                   {isBoostOrder || currentDelay !== 0 ? (
-                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : speedProfile === "balanced" ? "Balanced · 30 / 300 / 100s" : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                   ) : null}
                 </div>
               </section>
