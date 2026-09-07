@@ -672,7 +672,6 @@ export default function HomePage() {
   const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
-  const CommunityCategoryDraftIcon = getCommunityCategoryIcon(communityCategoryDraft.iconName);
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -2964,10 +2963,7 @@ export default function HomePage() {
               <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
             </label>
             <div className="community-category-appearance" style={getCommunityCategoryAppearance(communityCategoryDraft.colorKey)}>
-              <div className="community-category-appearance-heading">
-                <span aria-hidden="true"><CommunityCategoryDraftIcon className="h-5 w-5" /></span>
-                <div><strong>Category appearance</strong><small>Choose an icon and accent color for order selection.</small></div>
-              </div>
+              <div className="community-category-appearance-heading"><strong>Appearance</strong><small>Applied when this category is selected in an order.</small></div>
               <fieldset className="community-category-icon-picker">
                 <legend className={fieldLabelClass}>Icon</legend>
                 <div className="community-category-icon-options">
@@ -2982,7 +2978,6 @@ export default function HomePage() {
                       onClick={() => setCommunityCategoryDraft((current) => ({ ...current, iconName }))}
                     >
                       <Icon className="h-4 w-4" />
-                      <small>{iconName}</small>
                     </button>
                   ))}
                 </div>
@@ -3002,7 +2997,6 @@ export default function HomePage() {
                       onClick={() => setCommunityCategoryDraft((current) => ({ ...current, colorKey: color.key }))}
                     >
                       <span />
-                      <small>{color.label}</small>
                     </button>
                   ))}
                 </div>
