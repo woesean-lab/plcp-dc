@@ -2153,7 +2153,10 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
-                              <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>
+                              <span className="community-service-option-footer">
+                                <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>
+                                <span className="service-option-code service-option-code-badge">{ready} MEMBERS</span>
+                              </span>
                             </label>
                           );
                         })}
