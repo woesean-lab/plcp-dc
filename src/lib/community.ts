@@ -12,7 +12,7 @@ export type CommunityBot = {
   avatarUrl: string | null;
 };
 
-export type CommunityStockType = "offline" | "online";
+export type CommunityStockType = string;
 
 export type CommunityStockSummary = {
   joined: number;
@@ -33,7 +33,24 @@ export type CommunityJoinSummary = {
   alreadyMember?: number;
   failed?: number;
   syncing?: boolean;
-  categories?: Record<CommunityStockType, CommunityStockSummary>;
+  categories?: Record<string, CommunityStockSummary>;
+  stockCategories?: CommunityStockCategory[];
+};
+
+export type CommunityStockCategory = {
+  id: string;
+  name: string;
+  isPeriodic: boolean;
+  durationMonths: number | null;
+  createdAt: string;
+  updatedAt: string;
+  summary: CommunityStockSummary;
+};
+
+export type CommunityStockCategoryInput = {
+  name: string;
+  isPeriodic: boolean;
+  durationMonths: number | null;
 };
 
 export type CommunityJoinRecord = {
@@ -75,6 +92,8 @@ export type CommunityOAuthImportResult = {
   failed: number;
   skipped: number;
   errors: Array<{ record: string; message: string }>;
+  categoryId?: string;
+  categoryName?: string;
 };
 
 async function parseResponse<T>(response: Response) {
@@ -129,12 +148,44 @@ export async function clearCommunityConfig() {
   }
 }
 
-export function importCommunityOAuthStock(records: unknown[], stockType: CommunityStockType) {
+export function importCommunityOAuthStock(records: unknown[], categoryId: CommunityStockType) {
   return fetch("/api/community/import-oauth-stock", {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records, stockType })
+    body: JSON.stringify({ records, categoryId })
   }).then(parseResponse<CommunityOAuthImportResult>);
+}
+
+export function createCommunityStockCategory(input: CommunityStockCategoryInput) {
+  return fetch("/api/community/categories", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  }).then(parseResponse<unknown>);
+}
+
+export function updateCommunityStockCategory(categoryId: string, input: CommunityStockCategoryInput) {
+  return fetch(`/api/community/categories/${encodeURIComponent(categoryId)}`, {
+    method: "PATCH",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  }).then(parseResponse<unknown>);
+}
+
+export async function deleteCommunityStockCategory(categoryId: string) {
+  const response = await fetch(`/api/community/categories/${encodeURIComponent(categoryId)}`, {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "same-origin"
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { message?: string };
+    throw new Error(payload.message ?? `Request failed with ${response.status}`);
+  }
 }

@@ -24,12 +24,19 @@ export interface CreateOrderPayload {
   useProxy?: boolean;
   concurrency?: number;
   allowMembershipScreening?: boolean;
+  categoryId?: string;
 }
 
 export interface CreateOrderResponse {
   uniqid: string;
   bot_invite?: string;
   cost?: number;
+  categoryId?: string;
+  categoryName?: string;
+  categoryIsPeriodic?: boolean;
+  durationMonths?: number | null;
+  createdAt?: string;
+  expiredAt?: string | null;
 }
 
 export interface BalanceResponse {
@@ -44,15 +51,19 @@ export interface OrderStatusResponse {
   amount?: number;
   quantity?: number;
   delay?: string | number;
-  createdAt?: number;
-  created_at?: number;
-  expiredAt?: number;
-  expired_at?: number;
+  createdAt?: string | number;
+  created_at?: string | number;
+  expiredAt?: string | number | null;
+  expired_at?: string | number | null;
   type?: string;
   serverId?: string;
   serverName?: string;
   serverInvite?: string;
   serverMemberCount?: number;
+  categoryId?: string;
+  categoryName?: string;
+  categoryIsPeriodic?: boolean;
+  durationMonths?: number | null;
   error?: string;
   canManageDcordTokens?: boolean;
   canManageCommunityMembers?: boolean;
@@ -86,6 +97,11 @@ export interface TrackedOrder {
   createdAt: string;
   status?: string;
   details?: string;
+  categoryId?: string;
+  categoryName?: string;
+  categoryIsPeriodic?: boolean;
+  durationMonths?: number | null;
+  expiredAt?: string | null;
 }
 
 export interface BoostStock {

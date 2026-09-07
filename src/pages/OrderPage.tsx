@@ -359,7 +359,7 @@ export default function OrderPage() {
   const serverName = getStringField(result, ["serverName", "server_name", "guildName", "guild_name"]);
   const serverCreatedAt = getDiscordServerCreatedAt(serverId);
   const serviceType = normalizeOrderService(getStringField(result, ["service", "type"]), isDcordProvider);
-  const serviceName = getServiceTitle(serviceType);
+  const serviceName = isCommunityProvider && typeof result?.categoryName === "string" ? result.categoryName : getServiceTitle(serviceType);
   const serverMemberCount = getNumberField(result, [
     "serverMemberCount",
     "approximateMemberCount",
@@ -381,6 +381,7 @@ export default function OrderPage() {
     ? null
     : formatEstimatedDuration(remainingAmount, currentDelay);
   const dcordTokenResults = getDcordTokenResults(result);
+  const dcordTokenCount = getNumberField(result, ["tokenCount"]);
   const hasQueuedDcordTokens = dcordTokenResults.some((item) => item.status.toLowerCase() === "queued");
   const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
@@ -401,7 +402,7 @@ export default function OrderPage() {
         { label: "Token progress", value: `${dcordCompletedTokenCount}/${result?.tokenCount ?? "-"}` }
       ]
     : [
-        { label: "Expiration", value: formatTime(expiration) },
+        { label: "Expiration", value: formatTime(expiration ?? undefined) },
         { label: "Join delay", value: formatDelay(result?.delay) }
       ];
 
@@ -894,7 +895,7 @@ export default function OrderPage() {
                     <Copy className="h-4 w-4" aria-hidden="true" /> Copy invite
                   </Button>
                   <Button asChild size="sm">
-                    <a href={botInvite} target="_blank" rel="noreferrer">
+                    <a href={botInvite ?? undefined} target="_blank" rel="noreferrer">
                       <Bot className="h-4 w-4" aria-hidden="true" /> Add bot <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                     </a>
                   </Button>
@@ -956,7 +957,7 @@ export default function OrderPage() {
                       {dcordReplaceQueue.length > 0 ? `Replacing all (${dcordReplaceQueue.length})` : "Replace all"}
                     </Button>
                   ) : null}
-                  <span><ShieldCheck className="inline h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{result.tokenCount ?? "-"} completed</span>
+                  <span><ShieldCheck className="inline h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{dcordTokenCount ?? "-"} completed</span>
                 </span>
               </div>
 
@@ -1043,7 +1044,7 @@ export default function OrderPage() {
                             OAuth {item.authorizationStatus}
                           </span>
                         ) : null}
-                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                       </span>
                       <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
                     </div>

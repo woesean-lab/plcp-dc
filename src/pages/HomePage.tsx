@@ -22,7 +22,6 @@ import {
   LoaderCircle,
   Minus,
   Plus,
-  Radio,
   RefreshCw,
   RotateCcw,
   Search,
@@ -36,18 +35,22 @@ import {
   X,
 } from "lucide-react";
 import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
-import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
+import { extractBotInvite } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import {
   clearCommunityConfig,
+  createCommunityStockCategory,
+  deleteCommunityStockCategory,
   getCommunityAdminStatus,
   getCommunityConfig,
   importCommunityOAuthStock,
   removeCommunityAuthorization,
   saveCommunityConfig,
+  updateCommunityStockCategory,
   type CommunityAdminStatus,
   type CommunityConfig,
+  type CommunityStockCategory,
   type CommunityStockType
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
@@ -82,9 +85,10 @@ const EMPTY_FORM = {
   amount: 100,
   delay: 1,
   billingCycle: 1,
-  duration: 1 as const,
+  duration: 1 as 1 | 3,
   useProxy: true,
-  concurrency: 7
+  concurrency: 7,
+  communityCategoryId: "offline"
 };
 
 function getBoostConcurrency(amount: number) {
@@ -242,10 +246,6 @@ function getTrackedTimestamp(value?: string) {
   if (!value) return Number.NEGATIVE_INFINITY;
   const timestamp = new Date(value).getTime();
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
-}
-
-function getServiceLabel(service?: ServiceType) {
-  return SERVICE_OPTIONS.find((option) => option.value === service)?.title ?? "—";
 }
 
 function formatDelay(value?: number) {
@@ -542,6 +542,9 @@ export default function HomePage() {
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState({ name: "", isPeriodic: false, durationMonths: 1 });
+  const [editingCommunityCategoryId, setEditingCommunityCategoryId] = useState<string | null>(null);
+  const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -608,9 +611,10 @@ export default function HomePage() {
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
-  const selectedCommunityStockType: CommunityStockType = form.service === "COMMUNITY-ONLINE" ? "online" : "offline";
-  const selectedCommunitySummary = communityStatus?.categories?.[selectedCommunityStockType];
-  const selectedCommunityReady = selectedCommunitySummary?.ready ?? (selectedCommunityStockType === "offline" ? communityStatus?.ready ?? 0 : 0);
+  const communityCategories = communityStatus?.stockCategories ?? [];
+  const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
+  const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
+  const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
   const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || selectedCommunityReady > 0);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -630,7 +634,6 @@ export default function HomePage() {
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
-  const communityServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "community");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
@@ -825,7 +828,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -838,6 +841,15 @@ export default function HomePage() {
     // Members Stock is loaded once when Create opens, not on every invite keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    const categories = communityStatus?.stockCategories ?? [];
+    if (!categories.length) return;
+    if (!categories.some((category) => category.id === communityStockType)) setCommunityStockType(categories[0].id);
+    if (!categories.some((category) => category.id === form.communityCategoryId)) {
+      setForm((current) => ({ ...current, communityCategoryId: categories[0].id }));
+    }
+  }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryId]);
 
   async function refreshBalance() {
     try {
@@ -921,6 +933,57 @@ export default function HomePage() {
     }
   }
 
+  function beginEditingCommunityCategory(category: CommunityStockCategory) {
+    setEditingCommunityCategoryId(category.id);
+    setCommunityCategoryDraft({
+      name: category.name,
+      isPeriodic: category.isPeriodic,
+      durationMonths: category.durationMonths ?? 1
+    });
+  }
+
+  function resetCommunityCategoryDraft() {
+    setEditingCommunityCategoryId(null);
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, durationMonths: 1 });
+  }
+
+  async function handleSaveCommunityCategory(event: FormEvent) {
+    event.preventDefault();
+    const input = {
+      name: communityCategoryDraft.name.trim(),
+      isPeriodic: communityCategoryDraft.isPeriodic,
+      durationMonths: communityCategoryDraft.isPeriodic ? communityCategoryDraft.durationMonths : null
+    };
+    if (!input.name) return notifyError("Category name is required.");
+    try {
+      setSavingCommunityCategory(true);
+      if (editingCommunityCategoryId) await updateCommunityStockCategory(editingCommunityCategoryId, input);
+      else await createCommunityStockCategory(input);
+      await refreshCommunityStatus();
+      resetCommunityCategoryDraft();
+      notifySuccess(editingCommunityCategoryId ? "Category updated." : "Category created.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Category could not be saved.");
+    } finally {
+      setSavingCommunityCategory(false);
+    }
+  }
+
+  async function handleDeleteCommunityCategory(category: CommunityStockCategory) {
+    if (!window.confirm(`Delete the “${category.name}” category?`)) return;
+    try {
+      setSavingCommunityCategory(true);
+      await deleteCommunityStockCategory(category.id);
+      await refreshCommunityStatus();
+      if (editingCommunityCategoryId === category.id) resetCommunityCategoryDraft();
+      notifySuccess("Category deleted.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Category could not be deleted.");
+    } finally {
+      setSavingCommunityCategory(false);
+    }
+  }
+
   async function handleImportCommunityStock(event: FormEvent) {
     event.preventDefault();
     if (!communityImportFile) return;
@@ -947,7 +1010,7 @@ export default function HomePage() {
       await refreshCommunityStatus();
       setCommunityImportFile(null);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-      const summary = `${result.imported} imported to ${communityStockType}, ${result.skipped} skipped, ${result.failed} failed.`;
+      const summary = `${result.imported} imported to ${result.categoryName ?? communityVisibleCategory?.name ?? "category"}, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) notifyError(summary);
       else notifySuccess(summary);
     } catch (error) {
@@ -961,7 +1024,7 @@ export default function HomePage() {
     try {
       setCheckingAvailability(true);
       const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
-      const data = await checkAvailableAmount(form.service, serverId, form.duration);
+      const data = await checkAvailableAmount(form.service, serverId, form.duration, selectedIsCommunity ? form.communityCategoryId : undefined);
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
     } catch {
       setAvailability("");
@@ -1434,9 +1497,14 @@ export default function HomePage() {
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
       botInvite: created.bot_invite,
+      categoryId: created.categoryId,
+      categoryName: created.categoryName,
+      categoryIsPeriodic: created.categoryIsPeriodic,
+      durationMonths: created.durationMonths,
+      expiredAt: created.expiredAt,
       serverInvite: extractDiscordInviteCode(targetId) ? targetId : undefined,
       serverMemberCount: serverInfo.approximateMemberCount,
-      createdAt: new Date().toISOString(),
+      createdAt: created.createdAt ?? new Date().toISOString(),
       status: "NEW"
     };
 
@@ -1457,7 +1525,8 @@ export default function HomePage() {
       billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
       duration: selectedIsBoost ? form.duration : undefined,
       useProxy: selectedIsBoost ? true : undefined,
-      concurrency: selectedIsBoost ? form.concurrency : undefined
+      concurrency: selectedIsBoost ? form.concurrency : undefined,
+      categoryId: selectedIsCommunity ? form.communityCategoryId : undefined
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -1548,12 +1617,13 @@ export default function HomePage() {
     : communityStockConfigured
       ? { label: "Ready", variant: "success" as const }
       : { label: "Setup required", variant: "destructive" as const };
-  const communityVisibleSummary = communityStatus?.categories?.[communityStockType] ?? {
+  const communityVisibleCategory = communityCategories.find((category) => category.id === communityStockType);
+  const communityVisibleSummary = communityVisibleCategory?.summary ?? communityStatus?.categories?.[communityStockType] ?? {
     joined: 0,
-    authorized: communityStockType === "offline" ? communityStatus?.authorized ?? 0 : 0,
-    ready: communityStockType === "offline" ? communityStatus?.ready ?? 0 : 0,
-    alreadyMember: communityStockType === "offline" ? communityStatus?.alreadyMember ?? 0 : 0,
-    failed: communityStockType === "offline" ? communityStatus?.failed ?? 0 : 0
+    authorized: 0,
+    ready: 0,
+    alreadyMember: 0,
+    failed: 0
   };
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
   const communityVisibleRecords = (communityStatus?.recent ?? []).filter((record) => record.stockType === communityStockType);
@@ -1610,32 +1680,58 @@ export default function HomePage() {
       </div>
 
       <div className="community-stock-type-tabs" role="tablist" aria-label="Members Stock category">
-        {([
-          { value: "offline", label: "Offline", icon: Users },
-          { value: "online", label: "Online", icon: Radio }
-        ] as const).map((option) => {
-          const Icon = option.icon;
-          const count = communityStatus?.categories?.[option.value]?.ready ?? 0;
-          const selected = communityStockType === option.value;
+        {communityCategories.map((category) => {
+          const Icon = category.isPeriodic ? Timer : Users;
+          const count = category.summary.ready;
+          const selected = communityStockType === category.id;
           return (
             <button
-              key={option.value}
+              key={category.id}
               type="button"
               role="tab"
               aria-selected={selected}
               className={selected ? "is-active" : ""}
               onClick={() => {
-                setCommunityStockType(option.value);
+                setCommunityStockType(category.id);
                 setCommunityImportFile(null);
                 if (communityImportInputRef.current) communityImportInputRef.current.value = "";
               }}
             >
               <Icon className="h-4 w-4" aria-hidden="true" />
-              <span><strong>{option.label}</strong><small>{count} available</small></span>
+              <span><strong>{category.name}</strong><small>{count} available{category.isPeriodic ? ` · ${category.durationMonths} month${category.durationMonths === 1 ? "" : "s"}` : ""}</small></span>
             </button>
           );
         })}
       </div>
+
+      <form onSubmit={handleSaveCommunityCategory} className="community-stock-import">
+        <div className="community-stock-import-heading">
+          <span className="community-stock-import-icon" aria-hidden="true"><Settings2 className="h-4 w-4" /></span>
+          <div><h3>{editingCommunityCategoryId ? "Edit category" : "Create category"}</h3><p>Each category has its own member stock and optional support period.</p></div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
+          <label className="grid gap-2">
+            <span className={fieldLabelClass}>Category name</span>
+            <Input value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
+          </label>
+          <label className="flex h-10 items-center gap-2 rounded-lg border border-[var(--app-border)] px-3 text-sm">
+            <input type="checkbox" checked={communityCategoryDraft.isPeriodic} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: event.target.checked }))} />
+            Period based
+          </label>
+          <label className="grid gap-2">
+            <span className={fieldLabelClass}>Duration</span>
+            <select className="h-10 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-3 text-sm" disabled={!communityCategoryDraft.isPeriodic} value={communityCategoryDraft.durationMonths} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, durationMonths: Number(event.target.value) }))}>
+              {[1, 2, 3, 4, 5, 6].map((month) => <option key={month} value={month}>{month} month{month === 1 ? "" : "s"}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="submit" disabled={!communityStockConfigured || savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}{editingCommunityCategoryId ? "Save category" : "Create category"}</Button>
+          {communityVisibleCategory ? <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={() => beginEditingCommunityCategory(communityVisibleCategory)}>Edit selected</Button> : null}
+          {editingCommunityCategoryId ? <Button type="button" variant="ghost" onClick={resetCommunityCategoryDraft}>Cancel</Button> : null}
+          {communityVisibleCategory ? <Button type="button" variant="dangerGhost" disabled={savingCommunityCategory || communityVisibleSummary.authorized + communityVisibleSummary.failed > 0} onClick={() => void handleDeleteCommunityCategory(communityVisibleCategory)}><Trash2 className="h-4 w-4" /> Delete selected</Button> : null}
+        </div>
+      </form>
 
       <div className="community-admin-progress members-connected-summary">
         <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
@@ -1656,7 +1752,7 @@ export default function HomePage() {
               <h3>Import OAuth stock</h3>
               <span className="community-stock-import-format">JSON · max 2 MB</span>
             </div>
-            <p>Import users into the <strong>{communityStockType}</strong> pool using their current OAuth access tokens without refreshing them.</p>
+            <p>Import users into the <strong>{communityVisibleCategory?.name ?? "selected category"}</strong> pool using their current OAuth access tokens without refreshing them.</p>
           </div>
         </div>
 
@@ -1743,7 +1839,7 @@ export default function HomePage() {
           })}
         </div>
       ) : communityStatus?.configured ? (
-        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityStockType} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
+        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
       ) : null}
 
       <div className="mt-5 flex flex-wrap gap-3">
@@ -1824,7 +1920,8 @@ export default function HomePage() {
                                     : option.value === "community"
                                       ? "COMMUNITY-OFFLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
-                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityStatus?.categories?.offline.ready ?? communityStatus?.ready ?? 1)) : 100,
+                                  communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
+                                  amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityCategories[0]?.summary.ready ?? 1)) : 100,
                                   concurrency: option.value === "boosts" ? 1 : current.concurrency
                                 }))
                               }
@@ -1911,25 +2008,25 @@ export default function HomePage() {
                           <span className={fieldLabelClass}>Member mode</span>
                           <p className="service-selector-copy">Members are delivered from your connected OAuth stock.</p>
                         </div>
-                        <span className="service-selector-count">2 modes</span>
+                        <span className="service-selector-count">{communityCategories.length} categories</span>
                       </div>
                       <div className="service-grid service-grid-compact community-mode-grid">
-                        {communityServiceOptions.map((option) => {
-                          const Icon = option.icon;
-                          const selected = form.service === option.value;
-                          const stockType = option.value === "COMMUNITY-ONLINE" ? "online" : "offline";
-                          const ready = communityStatus?.categories?.[stockType]?.ready ?? 0;
+                        {communityCategories.map((category) => {
+                          const Icon = category.isPeriodic ? Timer : Users;
+                          const selected = form.communityCategoryId === category.id;
+                          const ready = category.summary.ready;
                           return (
-                            <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
+                            <label key={category.id} className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY">
                               <input
                                 className="sr-only"
                                 type="radio"
                                 name="communityService"
-                                value={option.value}
+                                value={category.id}
                                 checked={selected}
                                 onChange={() => setForm((current) => ({
                                   ...current,
-                                  service: option.value,
+                                  service: "COMMUNITY-OFFLINE",
+                                  communityCategoryId: category.id,
                                   amount: Math.max(1, Math.min(current.amount, ready || 1))
                                 }))}
                               />
@@ -1937,12 +2034,13 @@ export default function HomePage() {
                                 <span className="service-option-icon"><Icon className="h-5 w-5" /></span>
                                 <span className="service-option-state">{selected ? <><Check className="h-3 w-3" /> Selected</> : "Select"}</span>
                               </span>
-                              <span className="service-option-title">{option.title}</span>
+                              <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
-                              <span className="service-option-code">{option.value}</span>
+                              <span className="service-option-code">{category.isPeriodic ? `${category.durationMonths} month support` : "No expiration"}</span>
                             </label>
                           );
                         })}
+                        {!communityCategories.length ? <p className="service-selector-copy">Create a Members Stock category before placing an order.</p> : null}
                       </div>
                     </fieldset>
                   ) : null}
@@ -2187,7 +2285,7 @@ export default function HomePage() {
                     </Button>
                   ) : null}
                   {selectedIsCommunity && selectedApiConfigured && selectedCommunityReady === 0 ? (
-                    <span className="self-center text-sm text-[var(--app-muted)]">No {selectedCommunityStockType} members are available.</span>
+                    <span className="self-center text-sm text-[var(--app-muted)]">No {selectedCommunityCategory?.name ?? "category"} members are available.</span>
                   ) : null}
                 </div>
 
@@ -2286,8 +2384,8 @@ export default function HomePage() {
                                 </span>
                               </div>
                               <div className="orders-row-service">
-                                <strong>{serviceOption?.title ?? "Manual"}</strong>
-                                <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? "Members 2" : "Members"}</span>
+                                <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
+                                <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
                               </div>
                               <div className="orders-row-status">
                                 <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
@@ -2834,7 +2932,7 @@ export default function HomePage() {
                 <span className="order-confirm-service-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
                 <span className="order-confirm-primary-copy">
                   <small>Service</small>
-                  <strong>{SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.label ?? orderConfirmationPayload.service}</strong>
+                  <strong>{isCommunityService(orderConfirmationPayload.service) ? (communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.name ?? "Members 2") : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)}</strong>
                 </span>
                 <span className="order-confirm-amount"><small>Amount</small><strong>{orderConfirmationPayload.amount}</strong></span>
               </div>
@@ -2848,6 +2946,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
+                  {confirmationCommunityCategory?.isPeriodic ? <span><History className="h-3.5 w-3.5" />{confirmationCommunityCategory.durationMonths} month support</span> : null}
                 </div>
               ) : null}
             </div>

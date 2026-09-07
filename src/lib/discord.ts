@@ -1,5 +1,6 @@
 export interface DiscordGuildResolution {
   guildId: string;
+  guildName?: string;
   approximateMemberCount?: number;
 }
 
@@ -72,6 +73,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
 
   const payload = (await response.json().catch(() => ({}))) as {
     guildId?: string;
+    guildName?: string;
     approximateMemberCount?: number;
     message?: string;
   };
@@ -87,6 +89,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
 
   const resolution = {
     guildId,
+    guildName: typeof payload.guildName === "string" ? payload.guildName : undefined,
     approximateMemberCount: typeof payload.approximateMemberCount === "number" ? payload.approximateMemberCount : undefined
   };
   inviteResolutionCache.set(inviteCode, resolution);

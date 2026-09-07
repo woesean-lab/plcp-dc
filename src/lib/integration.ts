@@ -198,10 +198,10 @@ export function checkPublicCommunityOrderMembers(uniqid: string) {
   );
 }
 
-export async function checkAvailableAmount(service: string, id: string, duration = 1) {
+export async function checkAvailableAmount(service: string, id: string, duration = 1, categoryId?: string) {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(
-      `/api/community/availability?invite=${encodeURIComponent(id)}&service=${encodeURIComponent(service)}`
+      `/api/community/availability?invite=${encodeURIComponent(id)}&service=${encodeURIComponent(service)}${categoryId ? `&categoryId=${encodeURIComponent(categoryId)}` : ""}`
     );
   }
   if (isBoostService(service)) {

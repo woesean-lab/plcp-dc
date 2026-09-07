@@ -507,7 +507,7 @@ async function loadCommunityJoinSummary(config) {
     [config.guildId]
   );
   const empty = () => ({ joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 });
-  const categories = { offline: empty(), online: empty() };
+  const categories = {};
   for (const row of result.rows) {
     const type = normalizeCommunityStockType(row.stock_type);
     categories[type] = {
@@ -531,6 +531,39 @@ async function loadCommunityJoinSummary(config) {
   };
 }
 
+async function loadCommunityStockCategories(config) {
+  const [categoryResult, summary] = await Promise.all([
+    pool.query(
+      `SELECT id, name, is_periodic, duration_months, created_at, updated_at
+       FROM community_stock_categories
+       WHERE guild_id = $1
+       ORDER BY created_at ASC, name ASC`,
+      [config.guildId]
+    ),
+    loadCommunityJoinSummary(config)
+  ]);
+  return categoryResult.rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    isPeriodic: row.is_periodic === true,
+    durationMonths: row.is_periodic === true ? Number(row.duration_months) : null,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    summary: summary.categories[row.id] ?? { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 }
+  }));
+}
+
+async function ensureCommunityStockCategories(config) {
+  await pool.query(
+    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
+     SELECT $1, defaults.id, defaults.name, FALSE, NULL
+     FROM (VALUES ('offline', 'Offline'), ('online', 'Online')) AS defaults(id, name)
+     WHERE NOT EXISTS (SELECT 1 FROM community_stock_categories WHERE guild_id = $1)
+     ON CONFLICT (guild_id, id) DO NOTHING`,
+    [config.guildId]
+  );
+}
+
 async function normalizeCommunityStockRecords(config) {
   await pool.query(
     `UPDATE community_oauth_joins
@@ -548,11 +581,41 @@ async function normalizeCommunityStockRecords(config) {
 }
 
 function normalizeCommunityStockType(value) {
-  return String(value ?? "").trim().toLowerCase() === "online" ? "online" : "offline";
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized) ? normalized : "offline";
+}
+
+function parseCommunityCategoryId(value) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return /^[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized) ? normalized : null;
 }
 
 function getCommunityStockTypeFromService(service) {
   return service === "COMMUNITY-ONLINE" ? "online" : "offline";
+}
+
+function getCommunityOrderStockType(order) {
+  return normalizeCommunityStockType(order?.categoryId ?? order?.stockType ?? getCommunityStockTypeFromService(order?.service));
+}
+
+function createCommunityCategoryId() {
+  return `cat_${crypto.randomBytes(8).toString("hex")}`;
+}
+
+function addUtcMonths(value, months) {
+  const date = new Date(value);
+  const day = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+  date.setUTCDate(Math.min(day, lastDay));
+  return date;
+}
+
+function isCommunityOrderManagementExpired(order) {
+  if (!order?.expiredAt) return false;
+  const expiresAt = new Date(order.expiredAt).getTime();
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
 function isCommunityServiceType(service) {
@@ -2732,6 +2795,23 @@ async function initializeDatabase() {
   `);
   await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_stock_categories (
+      guild_id TEXT NOT NULL,
+      id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
+      duration_months INTEGER,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (guild_id, id),
+      CONSTRAINT community_stock_categories_duration_check CHECK (
+        (is_periodic = FALSE AND duration_months IS NULL)
+        OR (is_periodic = TRUE AND duration_months BETWEEN 1 AND 6)
+      )
+    )
+  `);
+  await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS community_stock_categories_guild_name_idx ON community_stock_categories (guild_id, LOWER(name))");
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS community_oauth_joins (
       discord_user_id TEXT NOT NULL,
       guild_id TEXT NOT NULL,
@@ -2754,7 +2834,17 @@ async function initializeDatabase() {
   await pool.query("UPDATE community_oauth_joins SET encrypted_refresh_token = NULL WHERE encrypted_refresh_token IS NOT NULL");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
-  await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type NOT IN ('offline', 'online') OR stock_type IS NULL");
+  await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
+  await pool.query(`
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
+    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, NULL FROM community_oauth_joins
+    ON CONFLICT (guild_id, id) DO NOTHING
+  `);
+  await pool.query(`
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
+    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, NULL FROM community_oauth_joins
+    ON CONFLICT (guild_id, id) DO NOTHING
+  `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_type_status_idx ON community_oauth_joins (guild_id, stock_type, status)");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_reservation_idx ON community_oauth_joins (guild_id, reserved_order_id)");
@@ -2884,6 +2974,12 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       botToken: candidate.botToken,
       guildId: candidate.guildId
     }));
+    await pool.query(
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
+       VALUES ($1, 'offline', 'Offline', FALSE, NULL), ($1, 'online', 'Online', FALSE, NULL)
+       ON CONFLICT (guild_id, id) DO NOTHING`,
+      [candidate.guildId]
+    );
     communityGuildCache = null;
     communityBotCache = null;
     res.json({
@@ -2911,6 +3007,88 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post("/api/community/categories", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before creating a category." });
+    const name = String(req.body?.name ?? "").trim();
+    const isPeriodic = req.body?.isPeriodic === true;
+    const durationMonths = isPeriodic ? Number.parseInt(req.body?.durationMonths, 10) : null;
+    if (!name || name.length > 60 || (isPeriodic && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6))) {
+      return res.status(400).json({ message: "Enter a category name and choose a duration between 1 and 6 months." });
+    }
+    const id = createCommunityCategoryId();
+    const inserted = await pool.query(
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id, name, is_periodic, duration_months, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic, durationMonths]
+    );
+    res.status(201).json(inserted.rows[0]);
+  } catch (error) {
+    if (error?.code === "23505") return res.status(409).json({ message: "A category with this name already exists." });
+    next(error);
+  }
+});
+
+app.patch("/api/community/categories/:categoryId", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before updating a category." });
+    const categoryId = parseCommunityCategoryId(req.params.categoryId);
+    if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
+    const name = String(req.body?.name ?? "").trim();
+    const isPeriodic = req.body?.isPeriodic === true;
+    const durationMonths = isPeriodic ? Number.parseInt(req.body?.durationMonths, 10) : null;
+    if (!name || name.length > 60 || (isPeriodic && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6))) {
+      return res.status(400).json({ message: "Enter a category name and choose a duration between 1 and 6 months." });
+    }
+    const updated = await pool.query(
+      `UPDATE community_stock_categories
+       SET name = $3, is_periodic = $4, duration_months = $5, updated_at = NOW()
+       WHERE guild_id = $1 AND id = $2
+       RETURNING id, name, is_periodic, duration_months, created_at, updated_at`,
+      [config.guildId, categoryId, name, isPeriodic, durationMonths]
+    );
+    if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
+    res.json(updated.rows[0]);
+  } catch (error) {
+    if (error?.code === "23505") return res.status(409).json({ message: "A category with this name already exists." });
+    next(error);
+  }
+});
+
+app.delete("/api/community/categories/:categoryId", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before deleting a category." });
+    const categoryId = parseCommunityCategoryId(req.params.categoryId);
+    if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
+    await client.query("BEGIN");
+    const stock = await client.query(
+      "SELECT COUNT(*)::int AS count FROM community_oauth_joins WHERE guild_id = $1 AND stock_type = $2",
+      [config.guildId, categoryId]
+    );
+    if (Number(stock.rows[0]?.count ?? 0) > 0) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Remove or move this category's stock before deleting it." });
+    }
+    const removed = await client.query(
+      "DELETE FROM community_stock_categories WHERE guild_id = $1 AND id = $2 RETURNING id",
+      [config.guildId, categoryId]
+    );
+    await client.query("COMMIT");
+    if (!removed.rowCount) return res.status(404).json({ message: "Category not found." });
+    res.status(204).end();
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/api/community/import-oauth-stock", requireSession, async (req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
@@ -2919,9 +3097,14 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     }
 
     const records = Array.isArray(req.body) ? req.body : req.body?.records;
-    const stockType = normalizeCommunityStockType(Array.isArray(req.body) ? "offline" : req.body?.stockType);
-    if (!Array.isArray(req.body) && !["offline", "online"].includes(String(req.body?.stockType ?? "").toLowerCase())) {
-      return res.status(400).json({ message: "Choose Online or Offline before importing OAuth stock." });
+    const requestedCategoryId = Array.isArray(req.body) ? "offline" : (req.body?.categoryId ?? req.body?.stockType);
+    const stockType = normalizeCommunityStockType(requestedCategoryId);
+    const category = await pool.query(
+      "SELECT id, name FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [config.guildId, stockType]
+    );
+    if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
+      return res.status(400).json({ message: "Choose a valid Members Stock category before importing." });
     }
     if (!Array.isArray(records) || !records.length || records.length > 500) {
       return res.status(400).json({ message: "Upload a JSON array containing between 1 and 500 OAuth records." });
@@ -3004,7 +3187,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       }
     }
 
-    res.json({ ...result, stockType });
+    res.json({ ...result, stockType, categoryId: stockType, categoryName: category.rows[0].name });
   } catch (error) {
     next(error);
   }
@@ -3023,19 +3206,19 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         alreadyMember: 0,
         failed: 0,
         syncing: false,
-        categories: {
-          offline: { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 },
-          online: { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 }
-        },
+        categories: {},
+        stockCategories: [],
         recent: []
       });
     }
 
+    await ensureCommunityStockCategories(config);
     await normalizeCommunityStockRecords(config);
-    const [bot, guild, summary, recentResult] = await Promise.all([
+    const [bot, guild, summary, stockCategories, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
+      loadCommunityStockCategories(config),
       pool.query(
         `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id
          FROM community_oauth_joins
@@ -3054,6 +3237,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       bot,
       guild,
       ...summary,
+      stockCategories,
       recent: recentResult.rows.map((row) => ({
         id: row.discord_user_id,
         username: row.username,
@@ -3281,7 +3465,15 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     const { config, serverInfo, invite } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
-    const stockType = getCommunityStockTypeFromService(service);
+    const requestedCategoryId = req.query?.categoryId ?? getCommunityStockTypeFromService(service);
+    const stockType = normalizeCommunityStockType(requestedCategoryId);
+    const category = await pool.query(
+      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [config.guildId, stockType]
+    );
+    if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
+      return res.status(400).json({ message: "Choose a valid Members 2 category." });
+    }
     const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(pool, config, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
@@ -3307,9 +3499,20 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
-    const stockType = getCommunityStockTypeFromService(service);
-
     const { config, serverInfo, waitingForBot, waitingDetails, waitingCode, botInvite, invite } = await resolveConfiguredCommunityInvite(req.body?.id, { allowWaitingForBot: true });
+    const requestedCategoryId = req.body?.categoryId ?? getCommunityStockTypeFromService(service);
+    const stockType = normalizeCommunityStockType(requestedCategoryId);
+    const categoryResult = await pool.query(
+      `SELECT id, name, is_periodic, duration_months
+       FROM community_stock_categories
+       WHERE guild_id = $1 AND id = $2
+       LIMIT 1`,
+      [config.guildId, stockType]
+    );
+    if (!categoryResult.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
+      return res.status(400).json({ message: "Choose a valid Members 2 category." });
+    }
+    const category = categoryResult.rows[0];
     const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
     if (memberVerification.status === "open" && !experimentalCommunityJoinEnabled) {
       return res.status(409).json({ message: "This server has a Discord membership screening form enabled. Disable it before creating a Members 2 order." });
@@ -3347,11 +3550,16 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
       [uniqid, config.guildId, selected.rows.map((row) => row.discord_user_id)]
     );
+    const createdAt = new Date();
     const order = {
       uniqid,
       provider: "community",
       service,
       stockType,
+      categoryId: category.id,
+      categoryName: category.name,
+      categoryIsPeriodic: category.is_periodic === true,
+      durationMonths: category.is_periodic === true ? Number(category.duration_months) : null,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
       serverInvite: String(req.body?.id ?? "").trim(),
@@ -3359,7 +3567,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       amount,
       added: 0,
       delay,
-      createdAt: new Date().toISOString(),
+      createdAt: createdAt.toISOString(),
+      expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, Number(category.duration_months)).toISOString() : null,
       status: waitingForBot ? "WAITING" : "PROCESS",
       waitingCode: waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
@@ -3381,7 +3590,16 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         await saveTrackedOrderPayload({ ...order, status: "ERROR", details: error instanceof Error ? error.message : "Members order failed." }).catch(() => {});
       });
     }
-    res.json({ uniqid, bot_invite: botInvite });
+    res.json({
+      uniqid,
+      bot_invite: botInvite,
+      categoryId: order.categoryId,
+      categoryName: order.categoryName,
+      categoryIsPeriodic: order.categoryIsPeriodic,
+      durationMonths: order.durationMonths,
+      createdAt: order.createdAt,
+      expiredAt: order.expiredAt
+    });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -3488,7 +3706,7 @@ async function activateWaitingCommunityOrder(order) {
         WHERE guild_id = $1 AND reserved_order_id = $2 AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
        ORDER BY authorized_at ASC
        FOR UPDATE`,
-      [resolved.config.guildId, current.uniqid, getCommunityStockTypeFromService(current.service)]
+      [resolved.config.guildId, current.uniqid, getCommunityOrderStockType(current)]
     )).rows;
 
     const remainingAmount = Math.max(0, Number(current.amount) - Number(current.added ?? 0));
@@ -3510,7 +3728,7 @@ async function activateWaitingCommunityOrder(order) {
          ORDER BY authorized_at ASC
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [resolved.config.guildId, getCommunityStockTypeFromService(current.service), missing, excludedUserIds]
+        [resolved.config.guildId, getCommunityOrderStockType(current), missing, excludedUserIds]
       );
       if (extra.rowCount) {
         await client.query(
@@ -3522,7 +3740,7 @@ async function activateWaitingCommunityOrder(order) {
     }
 
     if (members.length < remainingAmount) {
-      const failedOrder = { ...current, status: "ERROR", details: `Only ${members.length} ${getCommunityStockTypeFromService(current.service)} members are available.` };
+      const failedOrder = { ...current, status: "ERROR", details: `Only ${members.length} ${current.categoryName ?? getCommunityOrderStockType(current)} members are available.` };
       await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [current.uniqid]);
       await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [current.uniqid, JSON.stringify(failedOrder)]);
       await client.query("COMMIT");
@@ -3813,6 +4031,10 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
+    if (!isAdminRequest && isCommunityOrderManagementExpired(order)) {
+      await client.query("ROLLBACK");
+      return res.status(410).json({ message: "This order's member support period has expired." });
+    }
     if (String(order.serverId ?? "") !== config.guildId) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "The Members bot is no longer configured for this order's server." });
@@ -3896,7 +4118,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        ORDER BY authorized_at ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, getCommunityStockTypeFromService(order.service)]
+      [config.guildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order)]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -3969,7 +4191,11 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
       trackedPayload = await reconcileCommunityPendingJoinResults(trackedPayload);
       trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
-      return res.set("Cache-Control", "no-store").json({ ...sanitizePublicCommunityOrder(trackedPayload), liveBoostStock, canManageCommunityMembers: true });
+      return res.set("Cache-Control", "no-store").json({
+        ...sanitizePublicCommunityOrder(trackedPayload),
+        liveBoostStock,
+        canManageCommunityMembers: !isCommunityOrderManagementExpired(trackedPayload)
+      });
     }
     if (
       trackedPayload &&
@@ -4034,6 +4260,9 @@ app.post("/api/public/orders/:uniqid/check-members", async (req, res, next) => {
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    if (isCommunityOrderManagementExpired(order)) {
+      return res.status(410).json({ message: "This order's member support period has expired." });
+    }
     publicCommunityCheckCooldowns.set(cooldownKey, Date.now() + publicCommunityCheckCooldownMs);
     const result = await checkCommunityOrderAuthorizations(order);
     res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });

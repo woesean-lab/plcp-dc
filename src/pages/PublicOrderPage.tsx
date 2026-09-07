@@ -50,7 +50,7 @@ function maskUsername(value: string) {
   const username = value.trim();
   if (username.length <= 1) return "*";
   if (username.length === 2) return `${username[0]}*`;
-  return `${username[0]}${"*".repeat(username.length - 2)}${username.at(-1)}`;
+  return `${username[0]}${"*".repeat(username.length - 2)}${username[username.length - 1]}`;
 }
 
 function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
@@ -214,6 +214,7 @@ export default function PublicOrderPage() {
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
+  const [supportClock, setSupportClock] = useState(() => Date.now());
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
@@ -358,9 +359,10 @@ export default function PublicOrderPage() {
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
   const isCommunityOrder = status?.provider === "community";
-  const unitLabel = isBoostOrder ? "Boosts" : "Members";
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
-  const serviceName = serviceType ? getServiceTitle(serviceType) : "Service unavailable";
+  const serviceName = isCommunityOrder && typeof status?.categoryName === "string"
+    ? status.categoryName
+    : serviceType ? getServiceTitle(serviceType) : "Service unavailable";
   const statusLabel = status?.status ?? (error ? "UNAVAILABLE" : "PENDING");
   const totalMembers =
     typeof status?.amount === "number" ? status.amount : typeof status?.quantity === "number" ? status.quantity : seed.amount;
@@ -372,6 +374,8 @@ export default function PublicOrderPage() {
     ? membersRemaining * currentDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
+  const expiredAt = parseTimestamp(status?.expiredAt ?? status?.expired_at ?? undefined);
+  const supportExpired = expiredAt !== undefined && expiredAt <= supportClock;
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
@@ -389,6 +393,7 @@ export default function PublicOrderPage() {
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const dcordTokenResults = getDcordTokenResults(status);
+  const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
@@ -398,10 +403,15 @@ export default function PublicOrderPage() {
   const inactiveCommunityMemberCount = inactiveCommunityMemberIndices.length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const canManageDcordTokens = status?.canManageDcordTokens === true;
-  const canManageCommunityMembers = status?.canManageCommunityMembers === true;
+  const canManageCommunityMembers = status?.canManageCommunityMembers === true && !supportExpired;
   const boostDuration = status?.duration === 1 || status?.duration === 3
     ? `${status.duration} ${status.duration === 1 ? "Month" : "Months"}`
     : "-";
+  useEffect(() => {
+    if (expiredAt === undefined || expiredAt <= supportClock) return;
+    const timer = window.setTimeout(() => setSupportClock(Date.now()), Math.min(expiredAt - supportClock + 50, 30_000));
+    return () => window.clearTimeout(timer);
+  }, [expiredAt, supportClock]);
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
       setDelayDraft(String(currentDelay));
@@ -650,6 +660,12 @@ export default function PublicOrderPage() {
                 <CalendarDays className="h-4 w-4" aria-hidden="true" />
                 <span><small>Created</small><strong>{isInitialLoading ? "Loading..." : formatDateTime(createdAt)}</strong></span>
               </div>
+              {isCommunityOrder && expiredAt ? (
+                <div>
+                  <Timer className="h-4 w-4" aria-hidden="true" />
+                  <span><small>{supportExpired ? "Expired" : "Support until"}</small><strong>{formatDateTime(expiredAt)}</strong></span>
+                </div>
+              ) : null}
             </div>
           </div>
 
@@ -735,13 +751,13 @@ export default function PublicOrderPage() {
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
                       <span className="flex items-center gap-2">
                         {isCompleted ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
+                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
                             <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>
                         ) : null}
-                        {canManageCommunityMembers && inactiveCommunityMemberIndices.length ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                        {inactiveCommunityMemberIndices.length ? (
+                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing inactive..." : `Replace all inactive (${inactiveCommunityMemberIndices.length})`}
                           </Button>
@@ -758,8 +774,8 @@ export default function PublicOrderPage() {
                             </span>
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
-                              {canManageCommunityMembers && (["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive") ? (
-                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                              {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
+                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's support period has expired." : undefined}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>
@@ -769,7 +785,7 @@ export default function PublicOrderPage() {
                                   Inactive
                                 </span>
                               ) : null}
-                              <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replaceAll("_", " ")}</span>
+                              <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                             </span>
                             <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
                           </div>
@@ -777,6 +793,7 @@ export default function PublicOrderPage() {
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} inactive member{inactiveCommunityMemberCount === 1 ? "" : "s"} found. You can replace them with available members.</p> : null}
+                    {supportExpired ? <p className="public-token-results-empty">The support period for this order has expired. Member checks and replacements are no longer available.</p> : null}
                   </div>
                 ) : null}
 
@@ -784,7 +801,7 @@ export default function PublicOrderPage() {
                   <div className="monitor-token-panel">
                     <div className="monitor-token-heading">
                       <div><p className="app-kicker">Token results</p><h2>Per-token boost log</h2></div>
-                      <span>{dcordCompletedTokenCount}/{status?.tokenCount ?? "-"} completed</span>
+                      <span>{dcordCompletedTokenCount}/{dcordTokenCount} completed</span>
                     </div>
 
                   {dcordTokenResults.length ? (
