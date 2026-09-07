@@ -621,7 +621,7 @@ export default function PublicOrderPage() {
         {isCommunityOrder ? (
           <Button
             type="button"
-            variant="secondary"
+            variant="destructive"
             onClick={() => void handleUpdateDelay(0)}
             disabled={isInvitesPaused || updatingDelay || currentDelay === 0}
           >
