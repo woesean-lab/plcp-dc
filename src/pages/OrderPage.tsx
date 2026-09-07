@@ -1153,7 +1153,7 @@ export default function OrderPage() {
         </div>,
         document.body
       ) : null}
-      {showCancelDcordModal ? (
+      {showCancelDcordModal ? createPortal(
         <div
           className="confirm-modal-backdrop"
           onMouseDown={(event) => {
@@ -1177,9 +1177,10 @@ export default function OrderPage() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
-      {showCancelCommunityModal ? (
+      {showCancelCommunityModal ? createPortal(
         <div
           className="confirm-modal-backdrop"
           onMouseDown={(event) => {
@@ -1201,7 +1202,8 @@ export default function OrderPage() {
               </Button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       ) : null}
     </section>
   );
