@@ -534,7 +534,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, duration_months, created_at, updated_at
+      `SELECT id, name, is_periodic, created_at, updated_at
        FROM community_stock_categories
        WHERE guild_id = $1
        ORDER BY created_at ASC, name ASC`,
@@ -546,7 +546,6 @@ async function loadCommunityStockCategories(config) {
     id: row.id,
     name: row.name,
     isPeriodic: row.is_periodic === true,
-    durationMonths: row.is_periodic === true ? Number(row.duration_months) : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     summary: summary.categories[row.id] ?? { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0 }
@@ -555,8 +554,8 @@ async function loadCommunityStockCategories(config) {
 
 async function ensureCommunityStockCategories(config) {
   await pool.query(
-    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-     SELECT $1, defaults.id, defaults.name, FALSE, NULL::INTEGER
+    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
+     SELECT $1, defaults.id, defaults.name, FALSE
      FROM (VALUES ('offline', 'Offline'), ('online', 'Online')) AS defaults(id, name)
      WHERE NOT EXISTS (SELECT 1 FROM community_stock_categories WHERE guild_id = $1)
      ON CONFLICT (guild_id, id) DO NOTHING`,
@@ -2800,16 +2799,13 @@ async function initializeDatabase() {
       id TEXT NOT NULL,
       name TEXT NOT NULL,
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
-      duration_months INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      PRIMARY KEY (guild_id, id),
-      CONSTRAINT community_stock_categories_duration_check CHECK (
-        (is_periodic = FALSE AND duration_months IS NULL)
-        OR (is_periodic = TRUE AND duration_months BETWEEN 1 AND 6)
-      )
+      PRIMARY KEY (guild_id, id)
     )
   `);
+  await pool.query("ALTER TABLE community_stock_categories DROP CONSTRAINT IF EXISTS community_stock_categories_duration_check");
+  await pool.query("ALTER TABLE community_stock_categories DROP COLUMN IF EXISTS duration_months");
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS community_stock_categories_guild_name_idx ON community_stock_categories (guild_id, LOWER(name))");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_oauth_joins (
@@ -2836,13 +2832,13 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
   await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, NULL::INTEGER FROM community_oauth_joins
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
+    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, NULL::INTEGER FROM community_oauth_joins
+    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
+    SELECT DISTINCT guild_id, 'online', 'Online', FALSE FROM community_oauth_joins
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
@@ -2975,8 +2971,8 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       guildId: candidate.guildId
     }));
     await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-       VALUES ($1, 'offline', 'Offline', FALSE, NULL::INTEGER), ($1, 'online', 'Online', FALSE, NULL::INTEGER)
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
+       VALUES ($1, 'offline', 'Offline', FALSE), ($1, 'online', 'Online', FALSE)
        ON CONFLICT (guild_id, id) DO NOTHING`,
       [candidate.guildId]
     );
@@ -3013,16 +3009,15 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before creating a category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
-    const durationMonths = isPeriodic ? Number.parseInt(req.body?.durationMonths, 10) : null;
-    if (!name || name.length > 60 || (isPeriodic && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6))) {
-      return res.status(400).json({ message: "Enter a category name and choose a duration between 1 and 6 months." });
+    if (!name || name.length > 60) {
+      return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, duration_months)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, name, is_periodic, duration_months, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic, durationMonths]
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, name, is_periodic, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic]
     );
     res.status(201).json(inserted.rows[0]);
   } catch (error) {
@@ -3039,16 +3034,15 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
-    const durationMonths = isPeriodic ? Number.parseInt(req.body?.durationMonths, 10) : null;
-    if (!name || name.length > 60 || (isPeriodic && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6))) {
-      return res.status(400).json({ message: "Enter a category name and choose a duration between 1 and 6 months." });
+    if (!name || name.length > 60) {
+      return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
     const updated = await pool.query(
       `UPDATE community_stock_categories
-       SET name = $3, is_periodic = $4, duration_months = $5, updated_at = NOW()
+       SET name = $3, is_periodic = $4, updated_at = NOW()
        WHERE guild_id = $1 AND id = $2
-       RETURNING id, name, is_periodic, duration_months, created_at, updated_at`,
-      [config.guildId, categoryId, name, isPeriodic, durationMonths]
+       RETURNING id, name, is_periodic, created_at, updated_at`,
+      [config.guildId, categoryId, name, isPeriodic]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     res.json(updated.rows[0]);
@@ -3503,7 +3497,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const requestedCategoryId = req.body?.categoryId ?? getCommunityStockTypeFromService(service);
     const stockType = normalizeCommunityStockType(requestedCategoryId);
     const categoryResult = await pool.query(
-      `SELECT id, name, is_periodic, duration_months
+      `SELECT id, name, is_periodic
        FROM community_stock_categories
        WHERE guild_id = $1 AND id = $2
        LIMIT 1`,
@@ -3513,6 +3507,10 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Choose a valid Members 2 category." });
     }
     const category = categoryResult.rows[0];
+    const durationMonths = category.is_periodic === true ? Number.parseInt(req.body?.durationMonths, 10) : null;
+    if (category.is_periodic === true && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
+      return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
+    }
     const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
     if (memberVerification.status === "open" && !experimentalCommunityJoinEnabled) {
       return res.status(409).json({ message: "This server has a Discord membership screening form enabled. Disable it before creating a Members 2 order." });
@@ -3559,7 +3557,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryId: category.id,
       categoryName: category.name,
       categoryIsPeriodic: category.is_periodic === true,
-      durationMonths: category.is_periodic === true ? Number(category.duration_months) : null,
+      durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
       serverInvite: String(req.body?.id ?? "").trim(),
@@ -3568,7 +3566,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       added: 0,
       delay,
       createdAt: createdAt.toISOString(),
-      expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, Number(category.duration_months)).toISOString() : null,
+      expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null,
       status: waitingForBot ? "WAITING" : "PROCESS",
       waitingCode: waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,

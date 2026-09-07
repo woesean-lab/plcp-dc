@@ -25,6 +25,7 @@ export interface CreateOrderPayload {
   concurrency?: number;
   allowMembershipScreening?: boolean;
   categoryId?: string;
+  durationMonths?: number;
 }
 
 export interface CreateOrderResponse {

@@ -41,7 +41,6 @@ export type CommunityStockCategory = {
   id: string;
   name: string;
   isPeriodic: boolean;
-  durationMonths: number | null;
   createdAt: string;
   updatedAt: string;
   summary: CommunityStockSummary;
@@ -50,7 +49,6 @@ export type CommunityStockCategory = {
 export type CommunityStockCategoryInput = {
   name: string;
   isPeriodic: boolean;
-  durationMonths: number | null;
 };
 
 export type CommunityJoinRecord = {

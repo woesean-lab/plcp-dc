@@ -88,7 +88,8 @@ const EMPTY_FORM = {
   duration: 1 as 1 | 3,
   useProxy: true,
   concurrency: 7,
-  communityCategoryId: "offline"
+  communityCategoryId: "offline",
+  communityDurationMonths: 1
 };
 
 function getBoostConcurrency(amount: number) {
@@ -542,8 +543,10 @@ export default function HomePage() {
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState({ name: "", isPeriodic: false, durationMonths: 1 });
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState({ name: "", isPeriodic: false });
   const [editingCommunityCategoryId, setEditingCommunityCategoryId] = useState<string | null>(null);
+  const [communityCategoryModalOpen, setCommunityCategoryModalOpen] = useState(false);
+  const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
@@ -695,20 +698,22 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityCategoryModalOpen && !communityCategoryPendingDeletion) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (orderPendingDeletion && !deletingTrackedOrder) setOrderPendingDeletion(null);
       if (communityMemberPendingDeletion && removingCommunityUserId === null) setCommunityMemberPendingDeletion(null);
+      if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
+      if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, deletingTrackedOrder, removingCommunityUserId]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, communityCategoryModalOpen, communityCategoryPendingDeletion, deletingTrackedOrder, removingCommunityUserId, savingCommunityCategory]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -937,22 +942,28 @@ export default function HomePage() {
     setEditingCommunityCategoryId(category.id);
     setCommunityCategoryDraft({
       name: category.name,
-      isPeriodic: category.isPeriodic,
-      durationMonths: category.durationMonths ?? 1
+      isPeriodic: category.isPeriodic
     });
+    setCommunityCategoryModalOpen(true);
+  }
+
+  function beginCreatingCommunityCategory() {
+    setEditingCommunityCategoryId(null);
+    setCommunityCategoryDraft({ name: "", isPeriodic: false });
+    setCommunityCategoryModalOpen(true);
   }
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, durationMonths: 1 });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false });
+    setCommunityCategoryModalOpen(false);
   }
 
   async function handleSaveCommunityCategory(event: FormEvent) {
     event.preventDefault();
     const input = {
       name: communityCategoryDraft.name.trim(),
-      isPeriodic: communityCategoryDraft.isPeriodic,
-      durationMonths: communityCategoryDraft.isPeriodic ? communityCategoryDraft.durationMonths : null
+      isPeriodic: communityCategoryDraft.isPeriodic
     };
     if (!input.name) return notifyError("Category name is required.");
     try {
@@ -969,13 +980,15 @@ export default function HomePage() {
     }
   }
 
-  async function handleDeleteCommunityCategory(category: CommunityStockCategory) {
-    if (!window.confirm(`Delete the “${category.name}” category?`)) return;
+  async function handleDeleteCommunityCategory() {
+    const category = communityCategoryPendingDeletion;
+    if (!category) return;
     try {
       setSavingCommunityCategory(true);
       await deleteCommunityStockCategory(category.id);
       await refreshCommunityStatus();
       if (editingCommunityCategoryId === category.id) resetCommunityCategoryDraft();
+      setCommunityCategoryPendingDeletion(null);
       notifySuccess("Category deleted.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Category could not be deleted.");
@@ -1526,7 +1539,8 @@ export default function HomePage() {
       duration: selectedIsBoost ? form.duration : undefined,
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
-      categoryId: selectedIsCommunity ? form.communityCategoryId : undefined
+      categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
+      durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -1679,59 +1693,41 @@ export default function HomePage() {
         <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
       </div>
 
-      <div className="community-stock-type-tabs" role="tablist" aria-label="Members Stock category">
-        {communityCategories.map((category) => {
-          const Icon = category.isPeriodic ? Timer : Users;
-          const count = category.summary.ready;
-          const selected = communityStockType === category.id;
-          return (
-            <button
-              key={category.id}
-              type="button"
-              role="tab"
-              aria-selected={selected}
-              className={selected ? "is-active" : ""}
-              onClick={() => {
-                setCommunityStockType(category.id);
-                setCommunityImportFile(null);
-                if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-              }}
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              <span><strong>{category.name}</strong><small>{count} available{category.isPeriodic ? ` · ${category.durationMonths} month${category.durationMonths === 1 ? "" : "s"}` : ""}</small></span>
-            </button>
-          );
-        })}
+      <div className="community-category-manager">
+        <div className="community-category-manager-heading">
+          <div><p className={labelClass}>Stock categories</p><h3>Choose a member pool</h3><span>Each category keeps its own inventory.</span></div>
+          <Button type="button" size="sm" disabled={!communityStockConfigured} onClick={beginCreatingCommunityCategory}><Plus className="h-4 w-4" /> New category</Button>
+        </div>
+        <div className="community-category-grid" role="tablist" aria-label="Members Stock category">
+          {communityCategories.map((category) => {
+            const selected = communityStockType === category.id;
+            const hasStock = category.summary.authorized + category.summary.failed > 0;
+            return (
+              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`}>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  className="community-category-select"
+                  onClick={() => {
+                    setCommunityStockType(category.id);
+                    setCommunityImportFile(null);
+                    if (communityImportInputRef.current) communityImportInputRef.current.value = "";
+                  }}
+                >
+                  <span className="community-category-icon" aria-hidden="true">{category.isPeriodic ? <Timer className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
+                  <span className="community-category-copy"><strong>{category.name}</strong><small>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</small></span>
+                  <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
+                </button>
+                <div className="community-category-actions">
+                  <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
+                  <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </div>
-
-      <form onSubmit={handleSaveCommunityCategory} className="community-stock-import">
-        <div className="community-stock-import-heading">
-          <span className="community-stock-import-icon" aria-hidden="true"><Settings2 className="h-4 w-4" /></span>
-          <div><h3>{editingCommunityCategoryId ? "Edit category" : "Create category"}</h3><p>Each category has its own member stock and optional support period.</p></div>
-        </div>
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-end">
-          <label className="grid gap-2">
-            <span className={fieldLabelClass}>Category name</span>
-            <Input value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
-          </label>
-          <label className="flex h-10 items-center gap-2 rounded-lg border border-[var(--app-border)] px-3 text-sm">
-            <input type="checkbox" checked={communityCategoryDraft.isPeriodic} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: event.target.checked }))} />
-            Period based
-          </label>
-          <label className="grid gap-2">
-            <span className={fieldLabelClass}>Duration</span>
-            <select className="h-10 rounded-lg border border-[var(--app-border)] bg-[var(--app-panel)] px-3 text-sm" disabled={!communityCategoryDraft.isPeriodic} value={communityCategoryDraft.durationMonths} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, durationMonths: Number(event.target.value) }))}>
-              {[1, 2, 3, 4, 5, 6].map((month) => <option key={month} value={month}>{month} month{month === 1 ? "" : "s"}</option>)}
-            </select>
-          </label>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button type="submit" disabled={!communityStockConfigured || savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}{editingCommunityCategoryId ? "Save category" : "Create category"}</Button>
-          {communityVisibleCategory ? <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={() => beginEditingCommunityCategory(communityVisibleCategory)}>Edit selected</Button> : null}
-          {editingCommunityCategoryId ? <Button type="button" variant="ghost" onClick={resetCommunityCategoryDraft}>Cancel</Button> : null}
-          {communityVisibleCategory ? <Button type="button" variant="dangerGhost" disabled={savingCommunityCategory || communityVisibleSummary.authorized + communityVisibleSummary.failed > 0} onClick={() => void handleDeleteCommunityCategory(communityVisibleCategory)}><Trash2 className="h-4 w-4" /> Delete selected</Button> : null}
-        </div>
-      </form>
 
       <div className="community-admin-progress members-connected-summary">
         <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
@@ -2005,8 +2001,8 @@ export default function HomePage() {
                       <legend className="sr-only">Members 2 service</legend>
                       <div className="service-selector-heading">
                         <div>
-                          <span className={fieldLabelClass}>Member mode</span>
-                          <p className="service-selector-copy">Members are delivered from your connected OAuth stock.</p>
+                          <span className={fieldLabelClass}>Stock category</span>
+                          <p className="service-selector-copy">Choose which category and its private stock will be used for this order.</p>
                         </div>
                         <span className="service-selector-count">{communityCategories.length} categories</span>
                       </div>
@@ -2036,12 +2032,24 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
-                              <span className="service-option-code">{category.isPeriodic ? `${category.durationMonths} month support` : "No expiration"}</span>
+                              <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>
                             </label>
                           );
                         })}
                         {!communityCategories.length ? <p className="service-selector-copy">Create a Members Stock category before placing an order.</p> : null}
                       </div>
+                      {selectedCommunityCategory?.isPeriodic ? (
+                        <div className="community-order-duration">
+                          <div><span className={fieldLabelClass}>Order support period</span><p className="service-selector-copy">Choose how long Check Members and Replace stay available for this order.</p></div>
+                          <div className="community-order-duration-options">
+                            {[1, 2, 3, 4, 5, 6].map((month) => (
+                              <button key={month} type="button" className={form.communityDurationMonths === month ? "is-selected" : ""} onClick={() => setForm((current) => ({ ...current, communityDurationMonths: month }))}>
+                                <strong>{month}</strong><small>month{month === 1 ? "" : "s"}</small>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                     </fieldset>
                   ) : null}
 
@@ -2884,6 +2892,50 @@ export default function HomePage() {
         </div>
       </TimedReveal>
 
+      {communityCategoryModalOpen ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingCommunityCategory) resetCommunityCategoryDraft(); }}>
+          <form className="confirm-modal community-category-modal" onSubmit={handleSaveCommunityCategory} role="dialog" aria-modal="true" aria-labelledby="community-category-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Settings2 className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Members Stock</p>
+            <h2 id="community-category-title">{editingCommunityCategoryId ? "Edit category" : "Create category"}</h2>
+            <p>Give this member pool a clear name and choose whether orders from it have a support period.</p>
+            <label className="grid gap-2 text-left">
+              <span className={fieldLabelClass}>Category name</span>
+              <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
+            </label>
+            <div className="community-category-period-options">
+              <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
+                <input className="sr-only" type="radio" name="categoryPeriod" checked={!communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: false }))} />
+                <Users className="h-4 w-4" /><span><strong>Standard</strong><small>No order support deadline</small></span>
+              </label>
+              <label className={communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
+                <input className="sr-only" type="radio" name="categoryPeriod" checked={communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: true }))} />
+                <Timer className="h-4 w-4" /><span><strong>Period based</strong><small>Duration is selected per order</small></span>
+              </label>
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={resetCommunityCategoryDraft}>Cancel</Button>
+              <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>
+            </div>
+          </form>
+        </div>
+      ) : null}
+
+      {communityCategoryPendingDeletion ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null); }}>
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-category-title">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Delete category</p>
+            <h2 id="delete-category-title">Delete “{communityCategoryPendingDeletion.name}”?</h2>
+            <p>This removes the empty category permanently. Categories containing members cannot be deleted.</p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(null)}>Keep category</Button>
+              <Button type="button" variant="destructive" disabled={savingCommunityCategory} onClick={() => void handleDeleteCommunityCategory()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{savingCommunityCategory ? "Deleting..." : "Delete category"}</Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {orderPendingDeletion ? (
         <div
           className="confirm-modal-backdrop"
@@ -2946,7 +2998,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
-                  {confirmationCommunityCategory?.isPeriodic ? <span><History className="h-3.5 w-3.5" />{confirmationCommunityCategory.durationMonths} month support</span> : null}
+                  {confirmationCommunityCategory?.isPeriodic && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>
               ) : null}
             </div>
