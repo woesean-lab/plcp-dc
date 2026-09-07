@@ -867,7 +867,7 @@ export default function OrderPage() {
                 <span aria-hidden="true" />
                 {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
-              {!isDcordProvider && isWaitingForBot ? (
+              {!isDcordProvider && Boolean(botInvite) ? (
                 <Button
                   type="button"
                   variant="secondary"
