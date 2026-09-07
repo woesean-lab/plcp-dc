@@ -794,8 +794,6 @@ export default function OrderPage() {
       ? [
           "Please add the Members bot to your Discord server so we can begin delivery.",
           "",
-          "Use an account with Manage Server permission. Discord will automatically select the server linked to this order.",
-          "",
           "🔑 Required bot permissions: Manage Server, Kick Members and Create Invite.",
           "",
           "You can remove the bot after the order has been completed.",
@@ -811,7 +809,7 @@ export default function OrderPage() {
       : [
           "Please add our bot to your server to start the delivery.",
           "",
-          "🔑 Required Permissions: Create Invite and Kick Members.",
+          "🔑 Required Permission: Create Invite.",
           "",
           "You can remove the bot from your server after all members have been added.",
           "",
