@@ -6330,6 +6330,10 @@
   gap: 7px;
 }
 
+.community-category-color-picker {
+  margin-top: 8px !important;
+}
+
 .community-category-color-options button {
   width: 40px;
   height: 40px;
