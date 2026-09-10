@@ -1594,8 +1594,16 @@ async function checkCommunityOrderAuthorizations(order) {
     throw error;
   }
   const config = await getCommunityOAuthConfig();
-  if (!config.configured || String(order.serverId ?? "") !== config.guildId) {
-    const error = new Error("The Members bot configuration no longer matches this order's server.");
+  const targetGuildId = String(order.serverId ?? "").trim();
+  if (!config.configured || !isDiscordGuildId(targetGuildId)) {
+    const error = new Error("To check members, please add the bot to your Discord server.");
+    error.statusCode = 409;
+    throw error;
+  }
+  const orderConfig = normalizeCommunityOAuthConfig({ ...config, guildId: targetGuildId });
+  const botAccess = await checkCommunityBotGuildAccess(orderConfig, targetGuildId);
+  if (!botAccess.accessible) {
+    const error = new Error("To check members, please add the bot to your Discord server.");
     error.statusCode = 409;
     throw error;
   }
@@ -1608,7 +1616,7 @@ async function checkCommunityOrderAuthorizations(order) {
         `SELECT discord_user_id, encrypted_access_token, access_token_expires_at
          FROM community_oauth_joins
          WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-        [config.guildId, discordUserIds]
+        [targetGuildId, discordUserIds]
       )
     : { rows: [] };
   const stockByUserId = new Map(stock.rows.map((row) => [String(row.discord_user_id), row]));
@@ -1653,7 +1661,7 @@ async function checkCommunityOrderAuthorizations(order) {
       `UPDATE community_oauth_joins
        SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-      [config.guildId, inactiveUserIds]
+      [targetGuildId, inactiveUserIds]
     );
   }
 
@@ -4206,8 +4214,12 @@ async function reconcileCommunityPendingJoinResults(order) {
 
 function sanitizePublicCommunityOrder(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.communityResults)) return order;
+  const generatedBotInvite = !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
+    ? createCommunityBotInvite({ clientId: String(order.botApplicationId) }, String(order.serverId))
+    : order.botInvite;
   return {
     ...order,
+    botInvite: generatedBotInvite,
     communityResults: order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };

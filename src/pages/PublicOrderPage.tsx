@@ -212,6 +212,7 @@ export default function PublicOrderPage() {
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -585,9 +586,12 @@ export default function PublicOrderPage() {
       setCheckingCommunityMembers(true);
       const data = await checkPublicCommunityOrderMembers(uniqid);
       setStatus((current) => mergeOrderStatus(current, data.order));
+      setCommunityCheckNeedsBot(false);
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Members could not be checked.");
+      const message = err instanceof Error ? err.message : "Members could not be checked.";
+      if (/add the bot to your discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
     }
@@ -868,6 +872,20 @@ export default function PublicOrderPage() {
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>
+                    {communityCheckNeedsBot && botInvite ? (
+                      <div className="monitor-bot-alert" role="alert">
+                        <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>To check members, please add the bot to your Discord server.</strong></span>
+                        <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
+                          <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
+                        </Button>
+                        <Button asChild size="xs">
+                          <a href={botInvite} target="_blank" rel="noreferrer">
+                            <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
+                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                          </a>
+                        </Button>
+                      </div>
+                    ) : null}
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list">
                         {communityMemberResults.map((item) => (
