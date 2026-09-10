@@ -1641,13 +1641,14 @@ async function checkCommunityOrderAuthorizations(order) {
             headers: { Authorization: `Bearer ${decryptCredential(record.encrypted_access_token)}` }
           });
         }
-        if (identity.response.ok && String(identity.payload?.user?.id ?? "") === discordUserId) {
-          return [discordUserId, { status: "active", details: "OAuth authorization is active." }];
+        if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId) {
+          if ([401, 403].includes(identity.response.status) || identity.response.ok) {
+            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid." }];
+          }
+          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).` }];
         }
-        if ([401, 403].includes(identity.response.status) || identity.response.ok) {
-          return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid." }];
-        }
-        return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).` }];
+
+        return [discordUserId, { status: "active", details: "OAuth authorization is active." }];
       } catch {
         return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now." }];
       }
