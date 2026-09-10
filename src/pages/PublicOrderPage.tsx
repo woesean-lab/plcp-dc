@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -16,6 +16,11 @@ const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
+const MONITOR_SPEED_PROFILES = [
+  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
+  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
+  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
+] as const;
 
 type DcordTokenResult = {
   index: number;
@@ -500,11 +505,11 @@ export default function PublicOrderPage() {
     }
   }, [currentDelay]);
 
-  async function handleUpdateDelay(delayOverride?: number) {
-    const cancellingDelay = delayOverride === 0;
-    if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || (!cancellingDelay && delayUpdateCooldownUntilRef.current > Date.now())) return;
+  async function handleUpdateDelay(profileOverride: "safe" | "balanced" | "fast" | "custom" = "custom") {
+    if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
 
-    const nextDelay = cancellingDelay ? 0 : Number.parseInt(delayDraft, 10);
+    const profileDelay = MONITOR_SPEED_PROFILES.find((profile) => profile.key === profileOverride)?.delay;
+    const nextDelay = profileDelay ?? Number.parseInt(delayDraft, 10);
 
     if (!Number.isFinite(nextDelay) || nextDelay < 0) {
       toast.error("Delay must be a positive number.");
@@ -519,8 +524,9 @@ export default function PublicOrderPage() {
     try {
       delayUpdateInFlightRef.current = true;
       setUpdatingDelay(true);
-      await updatePublicOrderDelay(uniqid, nextDelay);
-      setStatus((current) => current ? { ...current, delay: nextDelay } : current);
+      const nextSpeedProfile = isCommunityOrder ? profileOverride : undefined;
+      await updatePublicOrderDelay(uniqid, nextDelay, nextSpeedProfile);
+      setStatus((current) => current ? { ...current, delay: nextDelay, ...(nextSpeedProfile ? { speedProfile: nextSpeedProfile } : {}) } : current);
       try {
         const verifiedStatus = await getPublicOrderStatus(uniqid);
         syncDelayUpdateCooldown(verifiedStatus);
@@ -528,15 +534,9 @@ export default function PublicOrderPage() {
       } catch {
         // Keep the last server-confirmed value until the next automatic refresh.
       }
-      if (cancellingDelay) {
-        delayUpdateCooldownUntilRef.current = 0;
-        setDelayUpdateCooldown(0);
-        toast.success("Delay cancelled. Remaining members will continue without waiting.");
-      } else {
-        delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
-        setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
-        toast.success("Updated Successfully. The changes may take a few minutes to take effect.");
-      }
+      delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
+      setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
+      toast.success(`${nextSpeedProfile ? `${MONITOR_SPEED_PROFILES.find((profile) => profile.key === nextSpeedProfile)?.label ?? "Custom"} profile` : "Delay"} updated.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
     } finally {
@@ -699,7 +699,29 @@ export default function PublicOrderPage() {
         ) : null}
       </div>
 
-      <div className={`monitor-delay-controls ${isCommunityOrder ? "has-cancel" : ""}`}>
+      {isCommunityOrder ? (
+        <div className="monitor-speed-profile-options" aria-label="Delivery speed profile">
+          {MONITOR_SPEED_PROFILES.map((profile) => {
+            const Icon = profile.icon;
+            return (
+              <button
+                key={profile.key}
+                type="button"
+                className={speedProfile === profile.key ? "is-selected" : ""}
+                aria-pressed={speedProfile === profile.key}
+                disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
+                onClick={() => void handleUpdateDelay(profile.key)}
+              >
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                <em>{profile.timing}</em>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
+      <div className="monitor-delay-controls">
         <Input
           type="number"
           min={1}
@@ -712,11 +734,11 @@ export default function PublicOrderPage() {
         <Button
           type="button"
           variant="secondary"
-          onClick={() => void handleUpdateDelay()}
+          onClick={() => void handleUpdateDelay("custom")}
           disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
         >
           <Timer className="h-4 w-4" aria-hidden="true" />
-          {isInvitesPaused ? "Invites paused" : updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : "Update delay"}
+          {isInvitesPaused ? "Invites paused" : updatingDelay ? "Updating..." : delayUpdateCooldown > 0 ? `Wait ${delayUpdateCooldown}s` : isCommunityOrder ? "Apply custom" : "Update delay"}
         </Button>
         {isCommunityOrder ? (
           <Button
@@ -727,17 +749,6 @@ export default function PublicOrderPage() {
           >
             {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
             {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
-          </Button>
-        ) : null}
-        {isCommunityOrder ? (
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={() => void handleUpdateDelay(0)}
-            disabled={isInvitesPaused || updatingDelay || currentDelay === 0}
-          >
-            <X className="h-4 w-4" aria-hidden="true" />
-            {currentDelay === 0 ? "Delay cancelled" : "Cancel delay"}
           </Button>
         ) : null}
       </div>

@@ -128,11 +128,11 @@ export function getPublicOrderStatus(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "status");
 }
 
-export function updatePublicOrderDelay(uniqid: string, delay: number) {
+export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfile?: "safe" | "balanced" | "fast" | "custom") {
   return requestPublicOrderApi<unknown>(uniqid, "delay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ delay })
+    body: JSON.stringify({ delay, speedProfile })
   });
 }
 

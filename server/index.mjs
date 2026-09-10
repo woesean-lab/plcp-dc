@@ -5407,7 +5407,9 @@ app.post("/api/public/orders/:uniqid/check-members", async (req, res, next) => {
 app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
-    const delay = Number.parseInt(req.body?.delay, 10);
+    const requestedSpeedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
+    const profileDelay = requestedSpeedProfile === "safe" ? 700 : requestedSpeedProfile === "balanced" ? 300 : requestedSpeedProfile === "fast" ? 60 : null;
+    const delay = profileDelay ?? Number.parseInt(req.body?.delay, 10);
     if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay < 0 || delay > 1200) {
       return res.status(400).json({ message: "A valid order ID and delay between 0 and 1200 seconds are required." });
     }
@@ -5425,15 +5427,15 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
     if (trackedPayload?.provider === "community") {
       const updated = await pool.query(
         `UPDATE tracked_orders
-         SET payload = jsonb_set(jsonb_set(payload, '{delay}', to_jsonb($2::int)), '{speedProfile}', '"custom"'::jsonb), updated_at = NOW()
+         SET payload = jsonb_set(jsonb_set(payload, '{delay}', to_jsonb($2::int)), '{speedProfile}', to_jsonb($3::text)), updated_at = NOW()
          WHERE uniqid = $1 AND payload->>'provider' = 'community' AND payload->>'status' IN ('WAITING', 'PROCESS', 'PAUSED')
          RETURNING payload`,
-        [uniqid, delay]
+        [uniqid, delay, requestedSpeedProfile]
       );
       if (!updated.rowCount) return res.status(409).json({ message: "This Members order is no longer active." });
       if (delay === 0) publicDelayCooldowns.delete(cooldownKey);
       else publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
-      return res.json({ delay, updated: true });
+      return res.json({ delay, speedProfile: requestedSpeedProfile, updated: true });
     }
 
     const payload = await requestTokenu(tokenuOauthApiBase, "delay", {

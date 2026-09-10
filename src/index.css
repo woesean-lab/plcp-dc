@@ -5349,6 +5349,65 @@
   margin-top: 14px;
 }
 
+.monitor-speed-profile-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.monitor-speed-profile-options button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-width: 0;
+  min-height: 48px;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: rgba(4, 5, 11, .3);
+  color: var(--app-muted);
+  text-align: left;
+  transition: border-color .15s ease, background .15s ease, color .15s ease;
+}
+
+.monitor-speed-profile-options button:hover:not(:disabled),
+.monitor-speed-profile-options button.is-selected {
+  border-color: var(--app-accent-border);
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+
+.monitor-speed-profile-options button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.monitor-speed-profile-options button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.monitor-speed-profile-options strong,
+.monitor-speed-profile-options small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monitor-speed-profile-options strong { font-size: 11px; }
+.monitor-speed-profile-options small { color: var(--app-subtle); font-size: 8px; }
+.monitor-speed-profile-options em {
+  color: var(--app-subtle);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
 .monitor-delay-controls.has-cancel {
   grid-template-columns: minmax(0, 1fr) auto auto auto;
 }
