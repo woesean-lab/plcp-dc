@@ -2197,6 +2197,7 @@ async function runCommunityOrder(order, members, config) {
     let state = "failed";
     let details = "Member could not be added.";
     let botPauseIssue = null;
+    let memberAuthorizationInvalid = false;
     try {
       const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
       if (isCommunityMembershipScreeningResponse(joined)) {
@@ -2222,6 +2223,7 @@ async function runCommunityOrder(order, members, config) {
         state = "already_member";
         details = "User was already in the server.";
       } else {
+        memberAuthorizationInvalid = isDiscordUnknownUser(joined);
         if (isDiscordGuildInviteLimited(joined)) {
           botPauseIssue = {
             status: "INVITES PAUSED",
@@ -2246,6 +2248,7 @@ async function runCommunityOrder(order, members, config) {
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
+      memberAuthorizationInvalid = isDiscordUnknownUser(error);
     }
 
     if (botPauseIssue) {
@@ -2260,6 +2263,7 @@ async function runCommunityOrder(order, members, config) {
       });
     }
     const memberFailed = state === "failed";
+    const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
     results[resultIndex] = {
       discordUserId: member.discord_user_id,
       username: member.username,
@@ -2267,9 +2271,9 @@ async function runCommunityOrder(order, members, config) {
       state,
       details,
       completedAt: new Date().toISOString(),
-      ...(memberFailed ? {
+      ...(memberShouldBeInactive ? {
         authorizationStatus: "inactive",
-        authorizationDetails: "This member failed delivery and was disabled in Members Stock.",
+        authorizationDetails: "Discord reported Unknown User, so this member was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
     };
@@ -2279,7 +2283,7 @@ async function runCommunityOrder(order, members, config) {
            status = CASE WHEN $3 THEN 'failed' ELSE status END,
            details = CASE WHEN $3 THEN $4 ELSE details END
        WHERE discord_user_id = $1 AND guild_id = $2`,
-      [member.discord_user_id, config.guildId, memberFailed, memberFailed ? `Delivery failed: ${details}` : null]
+      [member.discord_user_id, config.guildId, memberShouldBeInactive, memberShouldBeInactive ? `Delivery failed: ${details}` : null]
     );
     if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
@@ -2342,6 +2346,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
   let state = "failed";
   let details = "Replacement member could not be added.";
   let botPauseIssue = null;
+  let memberAuthorizationInvalid = false;
   try {
     const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
     if (isCommunityMembershipScreeningResponse(joined)) {
@@ -2364,6 +2369,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       state = "already_member";
       details = "Replacement user was already in the server.";
     } else {
+      memberAuthorizationInvalid = isDiscordUnknownUser(joined);
       if (isDiscordGuildInviteLimited(joined)) {
         botPauseIssue = {
           status: "INVITES PAUSED",
@@ -2388,10 +2394,11 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
+    memberAuthorizationInvalid = isDiscordUnknownUser(error);
   }
 
   if (!botPauseIssue) {
-    const memberFailed = state === "failed";
+    const memberFailed = state === "failed" && memberAuthorizationInvalid;
     await pool.query(
       `UPDATE community_oauth_joins
        SET reserved_order_id = NULL,
@@ -2454,9 +2461,9 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       state,
       details,
       completedAt: new Date().toISOString(),
-      ...(state === "failed" ? {
+      ...(state === "failed" && memberAuthorizationInvalid ? {
         authorizationStatus: "inactive",
-        authorizationDetails: "This replacement failed delivery and was disabled in Members Stock.",
+        authorizationDetails: "Discord reported Unknown User, so this replacement was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
     };
@@ -3272,6 +3279,41 @@ async function initializeDatabase() {
     UPDATE community_oauth_joins
     SET details = 'Re-import OAuth stock to store its current access token. Automatic refresh is disabled.'
     WHERE encrypted_access_token IS NULL AND status = 'authorized'
+  `);
+  await pool.query(`
+    UPDATE community_oauth_joins
+    SET status = 'authorized',
+        details = 'The previous delivery attempt failed, but the OAuth authorization remains active.'
+    WHERE status = 'failed'
+      AND details ~* '^(Delivery|Replacement) failed:'
+      AND details !~* '(Unknown User|10013)'
+  `);
+  await pool.query(`
+    UPDATE tracked_orders
+    SET payload = jsonb_set(
+      payload,
+      '{communityResults}',
+      (
+        SELECT jsonb_agg(
+          CASE
+            WHEN item->>'authorizationStatus' = 'inactive'
+              AND COALESCE(item->>'details', '') !~* '(Unknown User|10013)'
+            THEN item - 'authorizationStatus' - 'authorizationDetails' - 'authorizationCheckedAt'
+            ELSE item
+          END
+          ORDER BY ordinal
+        )
+        FROM jsonb_array_elements(payload->'communityResults') WITH ORDINALITY AS entries(item, ordinal)
+      )
+    ), updated_at = NOW()
+    WHERE payload->>'provider' = 'community'
+      AND jsonb_typeof(payload->'communityResults') = 'array'
+      AND EXISTS (
+        SELECT 1
+        FROM jsonb_array_elements(payload->'communityResults') AS entries(item)
+        WHERE item->>'authorizationStatus' = 'inactive'
+          AND COALESCE(item->>'details', '') !~* '(Unknown User|10013)'
+      )
   `);
   await pool.query(`
     UPDATE community_oauth_joins AS stock
@@ -4919,7 +4961,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
     }
 
-    const failedState = String(failedResult.state ?? "").toLowerCase() === "failed" || hasInactiveAuthorization;
+    const failedState = hasInactiveAuthorization;
     await client.query(
       `UPDATE community_oauth_joins
        SET reserved_order_id = NULL,
