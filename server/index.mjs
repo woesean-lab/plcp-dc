@@ -4198,15 +4198,21 @@ async function activateWaitingCommunityOrder(order) {
   const isLegacyInterruptedOrder = ["ERROR", "PARTIAL"].includes(String(order.status ?? "").toUpperCase())
     && Array.isArray(order.communityResults)
     && order.communityResults.some((item) => String(item?.details ?? "") === legacyStoppedMessage);
-  if (isLegacyInterruptedOrder) {
+  const isInventoryRecoveryError = String(order.status ?? "").toUpperCase() === "ERROR"
+    && /^Only \d+ .+ members are available\.$/i.test(String(order.details ?? ""))
+    && Array.isArray(order.communityResults)
+    && order.communityResults.some((item) => ["queued", "joining"].includes(String(item?.state ?? "").toLowerCase()));
+  if (isLegacyInterruptedOrder || isInventoryRecoveryError) {
     const revivedOrder = {
       ...order,
       status: "WAITING",
-      waitingCode: "legacy_delivery_retry",
+      waitingCode: isInventoryRecoveryError ? "inventory_recovery_retry" : "legacy_delivery_retry",
       details: "Retrying the unfinished Members delivery.",
-      communityResults: order.communityResults.map((item) => String(item?.details ?? "") === legacyStoppedMessage
-        ? { ...item, state: "queued", details: "Waiting for delivery." }
-        : item)
+      communityResults: isLegacyInterruptedOrder
+        ? order.communityResults.map((item) => String(item?.details ?? "") === legacyStoppedMessage
+          ? { ...item, state: "queued", details: "Waiting for delivery." }
+          : item)
+        : order.communityResults
     };
     const revived = await pool.query(
       `UPDATE tracked_orders
@@ -4300,6 +4306,13 @@ async function activateWaitingCommunityOrder(order) {
       return current ?? order;
     }
 
+    const pendingStates = new Set(["queued", "joining", "replacing"]);
+    const existingResults = Array.isArray(current.communityResults) ? current.communityResults : [];
+    const pendingResultCount = existingResults.filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase())).length;
+    const remainingAmount = existingResults.length
+      ? pendingResultCount
+      : Math.max(0, Number(current.amount) - Number(current.added ?? 0));
+
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
@@ -4309,7 +4322,6 @@ async function activateWaitingCommunityOrder(order) {
       [resolved.config.guildId, current.uniqid, getCommunityOrderStockType(current)]
     )).rows;
 
-    const remainingAmount = Math.max(0, Number(current.amount) - Number(current.added ?? 0));
     const usedDiscordUserIds = Array.isArray(current.communityResults)
       ? current.communityResults
           .filter((item) => ["joined", "pending_join"].includes(String(item?.state ?? "").toLowerCase()))
@@ -4339,18 +4351,21 @@ async function activateWaitingCommunityOrder(order) {
       }
     }
 
-    if (members.length < remainingAmount) {
-      const failedOrder = { ...current, status: "ERROR", details: `Only ${members.length} ${current.categoryName ?? getCommunityOrderStockType(current)} members are available.` };
-      await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [current.uniqid]);
-      await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [current.uniqid, JSON.stringify(failedOrder)]);
-      await client.query("COMMIT");
-      return failedOrder;
-    }
-
-    const pendingStates = new Set(["queued", "joining", "replacing"]);
-    const existingResults = Array.isArray(current.communityResults) ? current.communityResults : [];
     const existingByUserId = new Map(existingResults.map((item) => [String(item?.discordUserId ?? ""), item]));
-    const settledResults = existingResults.filter((item) => !pendingStates.has(String(item?.state ?? "").toLowerCase()));
+    const availableUserIds = new Set(members.map((member) => String(member.discord_user_id)));
+    const unavailablePendingResults = existingResults
+      .filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase()) && !availableUserIds.has(String(item?.discordUserId ?? "")))
+      .slice(0, Math.max(0, remainingAmount - members.length))
+      .map((item) => ({
+        ...item,
+        state: "failed",
+        details: "This member was no longer available when delivery resumed.",
+        completedAt: new Date().toISOString()
+      }));
+    const settledResults = [
+      ...existingResults.filter((item) => !pendingStates.has(String(item?.state ?? "").toLowerCase())),
+      ...unavailablePendingResults
+    ];
     const pendingResults = members.map((member) => {
       const existing = existingByUserId.get(String(member.discord_user_id));
       return existing && pendingStates.has(String(existing?.state ?? "").toLowerCase())

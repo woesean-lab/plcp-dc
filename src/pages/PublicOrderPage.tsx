@@ -448,6 +448,7 @@ export default function PublicOrderPage() {
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
   const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
+  const isErrorStatus = ["ERROR", "INVALID", "TERMINATED"].includes(normalizedStatus);
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
   );
@@ -873,13 +874,20 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
+              {isErrorStatus ? (
+                <div className="monitor-error" role="alert">
+                  <TriangleAlert className="h-5 w-5" aria-hidden="true" />
+                  <div><strong>Delivery stopped</strong><p>{typeof status?.details === "string" ? status.details : "The order could not continue."}</p></div>
+                </div>
+              ) : null}
+
               <section className="monitor-live-progress">
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
-                      {isCompleted ? "Your order has been completed successfully." : "We keep this page updated automatically while your order is processed."}
+                      {isCompleted ? "Your order has been completed successfully." : isErrorStatus ? "Review the error above for the reason." : "We keep this page updated automatically while your order is processed."}
                     </p>
                   </div>
                   <div className="monitor-live-progress-value">

@@ -383,6 +383,7 @@ export default function OrderPage() {
     ? Math.max(0, Math.ceil((nextMemberTimestamp - deliveryClock) / 1_000))
     : null;
   const terminal = isTerminalStatus(result?.status);
+  const isErrorStatus = ["ERROR", "INVALID", "TERMINATED"].includes(normalizedStatus);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
@@ -938,7 +939,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{terminal && normalizedStatus === "COMPLETED" ? "Order completed" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -998,12 +999,12 @@ export default function OrderPage() {
           ) : null}
 
           <div className="lookup-context-row">
-            <section className={`lookup-order-note ${isWaitingForBot ? "is-action" : ""}`}>
+            <section className={`lookup-order-note ${isWaitingForBot ? "is-action" : ""} ${isErrorStatus ? "is-error" : ""}`}>
               <span className="lookup-note-icon" aria-hidden="true">
-                {isWaitingForBot ? <Bot className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
+                {isWaitingForBot ? <Bot className="h-4 w-4" /> : isErrorStatus ? <TriangleAlert className="h-4 w-4" /> : <Hash className="h-4 w-4" />}
               </span>
               <div className="min-w-0">
-                <p className={labelClass}>{isWaitingForBot ? "Action required" : "Order details"}</p>
+                <p className={labelClass}>{isWaitingForBot ? "Action required" : isErrorStatus ? "Delivery error" : "Order details"}</p>
                 {isWaitingForBot ? (
                   <p>{waitingForBotDetails}</p>
                 ) : (
