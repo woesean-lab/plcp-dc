@@ -3698,6 +3698,50 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
   }
 });
 
+app.get("/api/community/export-oauth-stock", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before exporting OAuth stock." });
+    }
+
+    const requestedCategoryId = req.query?.categoryId ?? req.query?.stockType;
+    const stockType = normalizeCommunityStockType(requestedCategoryId);
+    const category = await pool.query(
+      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [config.guildId, stockType]
+    );
+    if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
+      return res.status(400).json({ message: "Choose a valid Members Stock category before exporting." });
+    }
+
+    const result = await pool.query(
+      `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND stock_type = $2 AND encrypted_access_token IS NOT NULL
+       ORDER BY CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC, sort_position ASC, authorized_at ASC`,
+      [config.guildId, stockType]
+    );
+    const records = result.rows.map((row) => {
+      const authorizedAtSeconds = Math.floor(new Date(row.authorized_at).getTime() / 1000);
+      const expiresAtSeconds = Math.floor(new Date(row.access_token_expires_at).getTime() / 1000);
+      return {
+        user_id: row.discord_user_id,
+        access_token: decryptCredential(row.encrypted_access_token),
+        authed_timestamp: authorizedAtSeconds,
+        expires_in: Math.max(0, expiresAtSeconds - authorizedAtSeconds)
+      };
+    });
+
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      Pragma: "no-cache"
+    }).json(records);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/community/status", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();

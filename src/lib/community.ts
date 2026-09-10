@@ -101,6 +101,13 @@ export type CommunityOAuthImportResult = {
   categoryName?: string;
 };
 
+export type CommunityOAuthExportRecord = {
+  user_id: string;
+  access_token: string;
+  authed_timestamp: number;
+  expires_in: number;
+};
+
 async function parseResponse<T>(response: Response) {
   const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(payload.message ?? `Request failed with ${response.status}`);
@@ -181,6 +188,13 @@ export function importCommunityOAuthStock(records: unknown[], categoryId: Commun
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ records, categoryId })
   }).then(parseResponse<CommunityOAuthImportResult>);
+}
+
+export function exportCommunityOAuthStock(categoryId: CommunityStockType) {
+  return fetch(`/api/community/export-oauth-stock?categoryId=${encodeURIComponent(categoryId)}`, {
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<CommunityOAuthExportRecord[]>);
 }
 
 export function createCommunityStockCategory(input: CommunityStockCategoryInput) {

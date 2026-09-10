@@ -54,6 +54,7 @@ import {
   clearCommunityConfig,
   createCommunityStockCategory,
   deleteCommunityStockCategory,
+  exportCommunityOAuthStock,
   getCommunityAdminStatus,
   getCommunityConfig,
   importCommunityOAuthStock,
@@ -618,6 +619,7 @@ export default function HomePage() {
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
+  const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
   const [refreshingManage, setRefreshingManage] = useState(false);
@@ -1191,6 +1193,32 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "OAuth stock could not be imported.");
     } finally {
       setImportingCommunityStock(false);
+    }
+  }
+
+  async function handleExportCommunityStock() {
+    try {
+      setExportingCommunityStock(true);
+      const records = await exportCommunityOAuthStock(communityStockType);
+      if (!records.length) throw new Error("There are no OAuth records in this category to export.");
+
+      const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const categoryName = (communityVisibleCategory?.name ?? communityStockType)
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "") || "stock";
+      link.href = url;
+      link.download = `members-${categoryName}-oauth-stock.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      notifySuccess(`${records.length} OAuth record${records.length === 1 ? "" : "s"} exported.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "OAuth stock could not be exported.");
+    } finally {
+      setExportingCommunityStock(false);
     }
   }
 
@@ -1946,6 +1974,10 @@ export default function HomePage() {
           <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {importingCommunityStock ? "Validating & importing..." : "Import stock"}
+          </Button>
+          <Button type="button" variant="secondary" disabled={!communityStockConfigured || !communityVisibleRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
+            {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
         </div>
       </form>
