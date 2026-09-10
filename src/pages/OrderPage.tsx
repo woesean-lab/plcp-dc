@@ -45,6 +45,15 @@ type CommunityMemberResult = {
   membershipDetails?: string;
 };
 
+function getCommunityMemberLogPriority(item: CommunityMemberResult) {
+  if (item.authorizationStatus === "inactive") return 0;
+  if (item.membershipStatus === "removed") return 1;
+  if (["failed", "blocked", "already_member"].includes(item.state.toLowerCase())) return 2;
+  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 3;
+  if (["replacing", "joining", "queued"].includes(item.state.toLowerCase())) return 4;
+  return 5;
+}
+
 function formatDcordTiming(value: unknown) {
   const milliseconds = typeof value === "number" && Number.isFinite(value) ? value : null;
   if (milliseconds === null) return "";
@@ -69,7 +78,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined
     }];
-  });
+  }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
 
 function getDcordTokenResults(source: OrderStatusResponse | null): DcordTokenResult[] {
