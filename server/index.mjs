@@ -3185,7 +3185,12 @@ async function initializeDatabase() {
   await pool.query(`
     WITH ranked AS (
       SELECT discord_user_id, guild_id,
-             ROW_NUMBER() OVER (PARTITION BY guild_id, stock_type ORDER BY authorized_at ASC, discord_user_id ASC) * 1024 AS position
+             ROW_NUMBER() OVER (
+               PARTITION BY guild_id, stock_type
+               ORDER BY CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC,
+                        authorized_at ASC,
+                        discord_user_id ASC
+             ) * 1024 AS position
       FROM community_oauth_joins
       WHERE sort_position IS NULL
     )
@@ -3617,7 +3622,10 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position
          FROM community_oauth_joins
          WHERE guild_id = $1
-         ORDER BY stock_type ASC, sort_position ASC, authorized_at ASC`,
+         ORDER BY stock_type ASC,
+                  CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC,
+                  sort_position ASC,
+                  authorized_at ASC`,
         [config.guildId]
       )
     ]);
@@ -3739,7 +3747,10 @@ app.post("/api/community/members/reorder", requireSession, async (req, res, next
       `SELECT discord_user_id
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2
-       ORDER BY sort_position ASC, authorized_at ASC, discord_user_id ASC
+       ORDER BY CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC,
+                sort_position ASC,
+                authorized_at ASC,
+                discord_user_id ASC
        FOR UPDATE`,
       [config.guildId, categoryId]
     );
