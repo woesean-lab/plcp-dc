@@ -633,10 +633,10 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
   await copyCommunityStockCategories(queryable, sourceGuildId, targetGuildId);
   await queryable.query(
     `INSERT INTO community_oauth_joins
-       (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
+       (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
      SELECT discord_user_id, $2, username, avatar_url, NULL, encrypted_access_token, access_token_expires_at,
             CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
-            stock_type, NULL, authorized_at, NULL, NULL
+            stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
      WHERE guild_id = $1
      ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
@@ -654,7 +654,8 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        stock_type = EXCLUDED.stock_type,
        details = CASE WHEN community_oauth_joins.reserved_order_id IS NOT NULL THEN community_oauth_joins.details ELSE EXCLUDED.details END,
        joined_at = community_oauth_joins.joined_at,
-       reserved_order_id = community_oauth_joins.reserved_order_id`,
+       reserved_order_id = community_oauth_joins.reserved_order_id,
+       sort_position = community_oauth_joins.sort_position`,
     [sourceGuildId, targetGuildId]
   );
 }
@@ -3179,7 +3180,22 @@ async function initializeDatabase() {
   await pool.query("UPDATE community_oauth_joins SET encrypted_refresh_token = NULL WHERE encrypted_refresh_token IS NOT NULL");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS sort_position BIGINT");
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
+  await pool.query(`
+    WITH ranked AS (
+      SELECT discord_user_id, guild_id,
+             ROW_NUMBER() OVER (PARTITION BY guild_id, stock_type ORDER BY authorized_at ASC, discord_user_id ASC) * 1024 AS position
+      FROM community_oauth_joins
+      WHERE sort_position IS NULL
+    )
+    UPDATE community_oauth_joins AS stock
+    SET sort_position = ranked.position
+    FROM ranked
+    WHERE stock.discord_user_id = ranked.discord_user_id AND stock.guild_id = ranked.guild_id
+  `);
+  await pool.query("ALTER TABLE community_oauth_joins ALTER COLUMN sort_position SET DEFAULT 1024");
+  await pool.query("ALTER TABLE community_oauth_joins ALTER COLUMN sort_position SET NOT NULL");
   await pool.query(`
     INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
     SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, 'Users', 'emerald' FROM community_oauth_joins
@@ -3481,6 +3497,11 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [] };
     const seenSourceUserIds = new Set();
     const seenDiscordUserIds = new Set();
+    const positionResult = await pool.query(
+      "SELECT COALESCE(MAX(sort_position), 0)::bigint AS maximum FROM community_oauth_joins WHERE guild_id = $1 AND stock_type = $2",
+      [config.guildId, stockType]
+    );
+    let nextSortPosition = Number(positionResult.rows[0]?.maximum ?? 0) + 1024;
 
     for (let index = 0; index < records.length; index += 1) {
       const record = records[index];
@@ -3529,8 +3550,8 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
           : null;
         await pool.query(
           `INSERT INTO community_oauth_joins
-             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id)
-           VALUES ($1, $2, $3, $4, NULL, $5, $6, 'authorized', $7, $8, NOW(), NULL, NULL)
+             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+           VALUES ($1, $2, $3, $4, NULL, $5, $6, 'authorized', $7, $8, NOW(), NULL, NULL, $9)
            ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
              username = EXCLUDED.username,
              avatar_url = EXCLUDED.avatar_url,
@@ -3542,9 +3563,14 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
              details = EXCLUDED.details,
              authorized_at = NOW(),
              joined_at = NULL,
-             reserved_order_id = NULL`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(accessToken), accessTokenExpiresAt, stockType, details]
+             reserved_order_id = NULL,
+             sort_position = CASE
+               WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position
+               ELSE community_oauth_joins.sort_position
+             END`,
+          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(accessToken), accessTokenExpiresAt, stockType, details, nextSortPosition]
         );
+        nextSortPosition += 1024;
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
       } catch (error) {
@@ -3588,15 +3614,10 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityJoinSummary(config),
       loadCommunityStockCategories(config),
       pool.query(
-        `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id
+        `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position
          FROM community_oauth_joins
          WHERE guild_id = $1
-         ORDER BY
-           CASE
-             WHEN status <> 'failed' THEN 0
-             ELSE 1
-           END,
-           authorized_at DESC`,
+         ORDER BY stock_type ASC, sort_position ASC, authorized_at ASC`,
         [config.guildId]
       )
     ]);
@@ -3614,6 +3635,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         stockType: normalizeCommunityStockType(row.stock_type),
         details: row.details,
         reservedOrderId: row.reserved_order_id,
+        sortPosition: Number(row.sort_position),
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at
       }))
@@ -3669,6 +3691,93 @@ app.delete("/api/community/members/:discordUserId", requireSession, async (req, 
     );
     await client.query("COMMIT");
     res.json({ removed: true, username: member.rows[0].username, revoked: false });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/community/members/bulk-delete", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing Members Stock." });
+    const ids = Array.from(new Set((Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(isDiscordGuildId)));
+    if (!ids.length || ids.length > 5_000) return res.status(400).json({ message: "Select between 1 and 5,000 members." });
+
+    const removed = await pool.query(
+      `DELETE FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND reserved_order_id IS NULL
+       RETURNING discord_user_id`,
+      [config.guildId, ids]
+    );
+    res.json({ removed: removed.rowCount, skippedReserved: Math.max(0, ids.length - removed.rowCount) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/members/reorder", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing Members Stock." });
+    const categoryId = parseCommunityCategoryId(req.body?.categoryId);
+    const direction = String(req.body?.direction ?? "").trim().toLowerCase();
+    const ids = Array.from(new Set((Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(isDiscordGuildId)));
+    if (!categoryId || !["top", "up", "down", "bottom"].includes(direction) || !ids.length || ids.length > 5_000) {
+      return res.status(400).json({ message: "Choose members and a valid priority action." });
+    }
+
+    await client.query("BEGIN");
+    const rows = await client.query(
+      `SELECT discord_user_id
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND stock_type = $2
+       ORDER BY sort_position ASC, authorized_at ASC, discord_user_id ASC
+       FOR UPDATE`,
+      [config.guildId, categoryId]
+    );
+    const currentIds = rows.rows.map((row) => String(row.discord_user_id));
+    const currentIdSet = new Set(currentIds);
+    const selected = new Set(ids.filter((id) => currentIdSet.has(id)));
+    if (!selected.size) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "The selected members are no longer in this category." });
+    }
+
+    let orderedIds = [...currentIds];
+    if (direction === "top") orderedIds = [...orderedIds.filter((id) => selected.has(id)), ...orderedIds.filter((id) => !selected.has(id))];
+    if (direction === "bottom") orderedIds = [...orderedIds.filter((id) => !selected.has(id)), ...orderedIds.filter((id) => selected.has(id))];
+    if (direction === "up") {
+      for (let index = 1; index < orderedIds.length; index += 1) {
+        if (selected.has(orderedIds[index]) && !selected.has(orderedIds[index - 1])) {
+          [orderedIds[index - 1], orderedIds[index]] = [orderedIds[index], orderedIds[index - 1]];
+        }
+      }
+    }
+    if (direction === "down") {
+      for (let index = orderedIds.length - 2; index >= 0; index -= 1) {
+        if (selected.has(orderedIds[index]) && !selected.has(orderedIds[index + 1])) {
+          [orderedIds[index], orderedIds[index + 1]] = [orderedIds[index + 1], orderedIds[index]];
+        }
+      }
+    }
+
+    await client.query(
+      `UPDATE community_oauth_joins AS stock
+       SET sort_position = ordered.position * 1024
+       FROM unnest($3::text[]) WITH ORDINALITY AS ordered(discord_user_id, position)
+       WHERE stock.guild_id = $1 AND stock.stock_type = $2 AND stock.discord_user_id = ordered.discord_user_id`,
+      [config.guildId, categoryId, orderedIds]
+    );
+    await client.query("COMMIT");
+    res.json({ moved: selected.size, direction });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
@@ -3890,7 +3999,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW() AND reserved_order_id IS NULL
          AND NOT (discord_user_id = ANY($4::text[]))
-       ORDER BY authorized_at ASC
+       ORDER BY sort_position ASC, authorized_at ASC
        LIMIT $3
        FOR UPDATE SKIP LOCKED`,
       [config.guildId, stockType, amount, previouslyDeliveredUserIds]
@@ -4085,7 +4194,7 @@ async function activateWaitingCommunityOrder(order) {
       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
         WHERE guild_id = $1 AND reserved_order_id = $2 AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-       ORDER BY authorized_at ASC
+       ORDER BY sort_position ASC, authorized_at ASC
        FOR UPDATE`,
       [resolved.config.guildId, current.uniqid, getCommunityOrderStockType(current)]
     )).rows;
@@ -4106,7 +4215,7 @@ async function activateWaitingCommunityOrder(order) {
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND reserved_order_id IS NULL AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
            AND NOT (discord_user_id = ANY($4::text[]))
-         ORDER BY authorized_at ASC
+         ORDER BY sort_position ASC, authorized_at ASC
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
         [resolved.config.guildId, getCommunityOrderStockType(current), missing, excludedUserIds]
@@ -4741,7 +4850,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
          AND reserved_order_id IS NULL
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
-       ORDER BY authorized_at ASC
+       ORDER BY sort_position ASC, authorized_at ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
       [config.guildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order)]

@@ -19,6 +19,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronDown,
+  ChevronUp,
+  ChevronsDown,
+  ChevronsUp,
   Download,
   History,
   Heart,
@@ -55,6 +58,8 @@ import {
   getCommunityConfig,
   importCommunityOAuthStock,
   removeCommunityAuthorization,
+  removeCommunityAuthorizations,
+  reorderCommunityAuthorizations,
   saveCommunityConfig,
   syncCommunityAuthorizations,
   updateCommunityStockCategory,
@@ -618,6 +623,9 @@ export default function HomePage() {
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
+  const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
+  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | null>(null);
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
@@ -773,13 +781,14 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityCategoryModalOpen && !communityCategoryPendingDeletion) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (orderPendingDeletion && !deletingTrackedOrder) setOrderPendingDeletion(null);
       if (communityMemberPendingDeletion && removingCommunityUserId === null) setCommunityMemberPendingDeletion(null);
+      if (communityBulkDeleteOpen && communityBulkAction === null) setCommunityBulkDeleteOpen(false);
       if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
       if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
     };
@@ -788,7 +797,7 @@ export default function HomePage() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, communityCategoryModalOpen, communityCategoryPendingDeletion, deletingTrackedOrder, removingCommunityUserId, savingCommunityCategory]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -937,6 +946,10 @@ export default function HomePage() {
     }
   }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryId]);
 
+  useEffect(() => {
+    setSelectedCommunityMemberIds([]);
+  }, [communityStockType]);
+
   async function refreshBalance() {
     try {
       setLoadingBalance(true);
@@ -983,12 +996,43 @@ export default function HomePage() {
       setRemovingCommunityUserId(record.id);
       await removeCommunityAuthorization(record.id);
       await refreshCommunityStatus();
+      setSelectedCommunityMemberIds((current) => current.filter((id) => id !== record.id));
       setCommunityMemberPendingDeletion(null);
       notifySuccess(`${record.username} disconnected and removed from Members Stock.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Connected user could not be removed.");
     } finally {
       setRemovingCommunityUserId(null);
+    }
+  }
+
+  async function reorderSelectedCommunityMembers(direction: "top" | "up" | "down" | "bottom") {
+    if (!selectedCommunityMemberIds.length || communityBulkAction) return;
+    try {
+      setCommunityBulkAction(direction);
+      await reorderCommunityAuthorizations(selectedCommunityMemberIds, communityStockType, direction);
+      await refreshCommunityStatus();
+      notifySuccess(`${selectedCommunityMemberIds.length} member${selectedCommunityMemberIds.length === 1 ? "" : "s"} moved ${direction}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Member priority could not be updated.");
+    } finally {
+      setCommunityBulkAction(null);
+    }
+  }
+
+  async function removeSelectedCommunityMembers() {
+    if (!selectedCommunityMemberIds.length || communityBulkAction) return;
+    try {
+      setCommunityBulkAction("delete");
+      const result = await removeCommunityAuthorizations(selectedCommunityMemberIds);
+      await refreshCommunityStatus();
+      setSelectedCommunityMemberIds([]);
+      setCommunityBulkDeleteOpen(false);
+      notifySuccess(`${result.removed} member${result.removed === 1 ? "" : "s"} removed${result.skippedReserved ? `; ${result.skippedReserved} reserved member${result.skippedReserved === 1 ? " was" : "s were"} kept` : ""}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected members could not be removed.");
+    } finally {
+      setCommunityBulkAction(null);
     }
   }
 
@@ -1837,6 +1881,7 @@ export default function HomePage() {
                   className="community-category-select"
                   onClick={() => {
                     setCommunityStockType(category.id);
+                    setSelectedCommunityMemberIds([]);
                     setCommunityImportFile(null);
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
                   }}
@@ -1869,13 +1914,7 @@ export default function HomePage() {
       <form onSubmit={handleImportCommunityStock} className="community-stock-import">
         <div className="community-stock-import-heading">
           <span className="community-stock-import-icon" aria-hidden="true"><FileJson className="h-4 w-4" /></span>
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h3>Import OAuth stock</h3>
-              <span className="community-stock-import-format">JSON · max 10 MB · 5,000 records</span>
-            </div>
-            <p>Import users into the <strong>{communityVisibleCategory?.name ?? "selected category"}</strong> pool using their current OAuth access tokens without refreshing them.</p>
-          </div>
+          <div><h3>Import OAuth stock</h3><p><strong>{communityVisibleCategory?.name ?? "Selected category"}</strong> · JSON up to 10 MB / 5,000 records</p></div>
         </div>
 
         <input
@@ -1888,40 +1927,11 @@ export default function HomePage() {
           onChange={(event) => setCommunityImportFile(event.target.files?.[0] ?? null)}
         />
 
-        {communityImportFile ? (
-          <div className="community-stock-import-selected">
-            <span className="community-stock-import-file-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>
-            <span className="min-w-0 flex-1">
-              <strong>{communityImportFile.name}</strong>
-              <small>{Math.max(0.1, communityImportFile.size / 1024).toFixed(1)} KB · Ready to import</small>
-            </span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              title="Remove selected file"
-              aria-label="Remove selected file"
-              disabled={importingCommunityStock}
-              onClick={() => {
-                setCommunityImportFile(null);
-                if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-              }}
-            >
-              <X className="h-4 w-4" />
-            </Button>
-          </div>
-        ) : (
-          <label
-            htmlFor="community-oauth-stock-file"
-            className={`community-stock-import-dropzone ${!communityStockConfigured || importingCommunityStock ? "is-disabled" : ""}`}
-          >
-            <UploadCloud className="h-5 w-5" aria-hidden="true" />
-            <span><strong>Choose OAuth JSON</strong><small>Select the export file from your computer</small></span>
-          </label>
-        )}
-
         <div className="community-stock-import-actions">
-          <p><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" /> Account and refresh tokens are ignored. Access tokens are encrypted, expire automatically and are never refreshed.</p>
+          {communityImportFile ? <span className="community-stock-import-file"><FileJson className="h-3.5 w-3.5" /><strong>{communityImportFile.name}</strong><small>{Math.max(0.1, communityImportFile.size / 1024).toFixed(1)} KB</small><button type="button" aria-label="Clear selected file" onClick={() => { setCommunityImportFile(null); if (communityImportInputRef.current) communityImportInputRef.current.value = ""; }}><X className="h-3 w-3" /></button></span> : null}
+          <Button type="button" variant="secondary" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => communityImportInputRef.current?.click()}>
+            <FileJson className="h-4 w-4" /> {communityImportFile ? "Change JSON" : "Choose JSON"}
+          </Button>
           <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {importingCommunityStock ? "Validating & importing..." : "Import stock"}
@@ -1929,12 +1939,40 @@ export default function HomePage() {
         </div>
       </form>
 
+      <div className="community-member-toolbar">
+          <label className="community-member-select-all">
+            <input
+              type="checkbox"
+              disabled={!communityVisibleRecords.length}
+              checked={communityVisibleRecords.length > 0 && selectedCommunityMemberIds.length === communityVisibleRecords.length}
+              ref={(element) => { if (element) element.indeterminate = selectedCommunityMemberIds.length > 0 && selectedCommunityMemberIds.length < communityVisibleRecords.length; }}
+              onChange={(event) => setSelectedCommunityMemberIds(event.target.checked ? communityVisibleRecords.map((record) => record.id) : [])}
+            />
+            <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
+          </label>
+          <div className="community-member-priority-actions">
+            <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
+            <Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>
+            <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}><RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh</Button>
+          </div>
+        </div>
+
       {communityVisibleRecords.length ? (
         <div className="community-recent-list">
           {communityVisibleRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
             return (
               <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
+                <input
+                  className="community-member-checkbox"
+                  type="checkbox"
+                  checked={selectedCommunityMemberIds.includes(record.id)}
+                  onChange={(event) => setSelectedCommunityMemberIds((current) => event.target.checked ? [...current, record.id] : current.filter((id) => id !== record.id))}
+                  aria-label={`Select ${record.username}`}
+                />
                 <span className="community-recent-avatar" aria-hidden="true">
                   {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
                 </span>
@@ -1964,11 +2002,6 @@ export default function HomePage() {
         <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Button type="button" variant="secondary" disabled={loadingCommunityStatus || !communityStockConfigured} onClick={() => void refreshCommunityStock()}>
-          <RefreshCw className={`h-4 w-4 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh
-        </Button>
-      </div>
     </section>
   );
 
@@ -3257,6 +3290,29 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={removingCommunityUserId !== null} onClick={() => void removeConnectedCommunityUser(communityMemberPendingDeletion)}>
                 {removingCommunityUserId === communityMemberPendingDeletion.id ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                 {removingCommunityUserId === communityMemberPendingDeletion.id ? "Removing..." : "Remove user"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {communityBulkDeleteOpen ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && communityBulkAction === null) setCommunityBulkDeleteOpen(false);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="bulk-delete-members-title" aria-describedby="bulk-delete-members-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Bulk remove</p>
+            <h2 id="bulk-delete-members-title">Remove {selectedCommunityMemberIds.length} selected members?</h2>
+            <p id="bulk-delete-members-description">This removes the selected users from Members Stock. Members reserved by an active order will be kept.</p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(false)}>Keep members</Button>
+              <Button type="button" variant="destructive" disabled={communityBulkAction !== null} onClick={() => void removeSelectedCommunityMembers()}>
+                {communityBulkAction === "delete" ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
+                {communityBulkAction === "delete" ? "Removing..." : "Remove selected"}
               </Button>
             </div>
           </div>

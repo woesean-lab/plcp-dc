@@ -64,6 +64,7 @@ export type CommunityJoinRecord = {
   status: "authorized" | "joined" | "already_member" | "failed";
   details: string | null;
   reservedOrderId?: string | null;
+  sortPosition: number;
   authorizedAt: string;
   joinedAt: string | null;
   stockType: CommunityStockType;
@@ -124,6 +125,26 @@ export function removeCommunityAuthorization(discordUserId: string) {
     cache: "no-store",
     credentials: "same-origin"
   }).then(parseResponse<{ removed: boolean; username: string; revoked: boolean }>);
+}
+
+export function removeCommunityAuthorizations(ids: string[]) {
+  return fetch("/api/community/members/bulk-delete", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids })
+  }).then(parseResponse<{ removed: number; skippedReserved: number }>);
+}
+
+export function reorderCommunityAuthorizations(ids: string[], categoryId: CommunityStockType, direction: "top" | "up" | "down" | "bottom") {
+  return fetch("/api/community/members/reorder", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, categoryId, direction })
+  }).then(parseResponse<{ moved: number; direction: string }>);
 }
 
 export function getCommunityConfig() {
