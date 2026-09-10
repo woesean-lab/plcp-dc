@@ -35,6 +35,8 @@ const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCOR
 const experimentalCommunityJoinEnabled = !["0", "false", "no", "off"].includes(
   String(process.env.EXPERIMENTAL_JOIN_ENABLED ?? "true").trim().toLowerCase()
 );
+const communityWorkerInstanceId = `${process.pid}-${crypto.randomBytes(8).toString("hex")}`;
+const communityWorkerLeaseSeconds = 60;
 const discordApiBase = "https://discord.com/api/v10";
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
@@ -124,6 +126,10 @@ const pool = new Pool({
   ssl: process.env.PGSSL === "true" ? { rejectUnauthorized: false } : undefined
 });
 
+pool.on("error", (error) => {
+  console.error("Unexpected PostgreSQL pool error:", error instanceof Error ? error.message : error);
+});
+
 function parseCookies(header = "") {
   return Object.fromEntries(
     header
@@ -188,6 +194,18 @@ async function requestDiscord(pathname, init = {}) {
   });
   const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
   return { response, payload };
+}
+
+async function forEachWithConcurrency(values, concurrency, task) {
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, concurrency), values.length);
+  await Promise.all(Array.from({ length: workerCount }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      await task(values[index], index);
+    }
+  }));
 }
 
 let communityGuildCache = null;
@@ -811,7 +829,10 @@ async function loadCommunityDeliveredUsersStillPresent(queryable, config, guildI
   return presentIds;
 }
 
+let credentialEncryptionKey = null;
+
 function getCredentialEncryptionKey() {
+  if (credentialEncryptionKey) return credentialEncryptionKey;
   const secret = process.env.ADMIN_PASSWORD ?? process.env.VITE_ADMIN_PASSWORD;
   if (!secret) {
     const error = new Error("Admin credentials are not configured.");
@@ -819,7 +840,8 @@ function getCredentialEncryptionKey() {
     throw error;
   }
 
-  return crypto.scryptSync(secret, "pulcip-members-tokenu-credential-v1", 32);
+  credentialEncryptionKey = crypto.scryptSync(secret, "pulcip-members-tokenu-credential-v1", 32);
+  return credentialEncryptionKey;
 }
 
 function encryptCredential(value) {
@@ -2330,22 +2352,42 @@ async function runCommunityOrder(order, members, config) {
 }
 
 async function processCommunityOrder(order, members, config) {
-  const lockClient = await pool.connect();
-  let locked = false;
+  const orderId = String(order?.uniqid ?? "").trim();
+  if (!orderId) return false;
+  const ownerToken = `${communityWorkerInstanceId}-${crypto.randomBytes(8).toString("hex")}`;
+  const lock = await pool.query(
+    `INSERT INTO community_order_worker_leases (order_id, owner_token, expires_at)
+     VALUES ($1, $2, NOW() + ($3 * INTERVAL '1 second'))
+     ON CONFLICT (order_id) DO UPDATE SET
+       owner_token = EXCLUDED.owner_token,
+       expires_at = EXCLUDED.expires_at
+     WHERE community_order_worker_leases.expires_at <= NOW()
+     RETURNING order_id`,
+    [orderId, ownerToken, communityWorkerLeaseSeconds]
+  );
+  if (!lock.rowCount) return false;
+
+  const heartbeat = setInterval(() => {
+    void pool.query(
+      `UPDATE community_order_worker_leases
+       SET expires_at = NOW() + ($3 * INTERVAL '1 second')
+       WHERE order_id = $1 AND owner_token = $2`,
+      [orderId, ownerToken, communityWorkerLeaseSeconds]
+    ).catch((error) => {
+      console.error(`Members worker lease heartbeat failed for ${orderId}:`, error instanceof Error ? error.message : error);
+    });
+  }, 15_000);
+  heartbeat.unref();
+
   try {
-    const lock = await lockClient.query(
-      "SELECT pg_try_advisory_lock(20260910, hashtext($1)) AS locked",
-      [order.uniqid]
-    );
-    locked = lock.rows[0]?.locked === true;
-    if (!locked) return false;
     await runCommunityOrder(order, members, config);
     return true;
   } finally {
-    if (locked) {
-      await lockClient.query("SELECT pg_advisory_unlock(20260910, hashtext($1))", [order.uniqid]).catch(() => {});
-    }
-    lockClient.release();
+    clearInterval(heartbeat);
+    await pool.query(
+      "DELETE FROM community_order_worker_leases WHERE order_id = $1 AND owner_token = $2",
+      [orderId, ownerToken]
+    ).catch(() => {});
   }
 }
 
@@ -3186,6 +3228,15 @@ async function initializeDatabase() {
     )
   `);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_order_worker_leases (
+      order_id TEXT PRIMARY KEY,
+      owner_token TEXT NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS community_order_worker_leases_expires_at_idx ON community_order_worker_leases (expires_at)");
+  await pool.query("DELETE FROM community_order_worker_leases WHERE expires_at <= NOW()");
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_sessions (
       token_hash TEXT PRIMARY KEY,
       expires_at TIMESTAMPTZ NOT NULL,
@@ -3601,8 +3652,8 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
       return res.status(400).json({ message: "Choose a valid Members Stock category before importing." });
     }
-    if (!Array.isArray(records) || !records.length || records.length > 5_000) {
-      return res.status(400).json({ message: "Upload a JSON array containing between 1 and 5,000 OAuth records." });
+    if (!Array.isArray(records) || !records.length || records.length > 250) {
+      return res.status(400).json({ message: "Each import batch must contain between 1 and 250 OAuth records." });
     }
 
     const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [] };
@@ -3614,8 +3665,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
     );
     let nextSortPosition = Number(positionResult.rows[0]?.maximum ?? 0) + 1024;
 
-    for (let index = 0; index < records.length; index += 1) {
-      const record = records[index];
+    await forEachWithConcurrency(records, 4, async (record, index) => {
       const sourceUserId = String(record?.user_id ?? record?.userId ?? "").trim();
       const accessToken = String(record?.access_token ?? record?.accessToken ?? "").trim();
       const accessTokenExpiresAt = parseCommunityAccessTokenExpiry(record);
@@ -3624,23 +3674,33 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       if (!isDiscordGuildId(sourceUserId) || accessToken.length < 20 || accessToken.length > 4096 || !accessTokenExpiresAt) {
         result.failed += 1;
         if (result.errors.length < 25) result.errors.push({ record: recordLabel, message: "A valid user_id, access_token, authed_timestamp and expires_in are required." });
-        continue;
+        return;
       }
       if (accessTokenExpiresAt.getTime() <= Date.now()) {
         result.failed += 1;
         if (result.errors.length < 25) result.errors.push({ record: recordLabel, message: "The OAuth access token has expired. Export the stock again before importing it." });
-        continue;
+        return;
       }
       if (seenSourceUserIds.has(sourceUserId)) {
         result.skipped += 1;
-        continue;
+        return;
       }
       seenSourceUserIds.add(sourceUserId);
+      const sortPosition = nextSortPosition;
+      nextSortPosition += 1024;
 
       try {
-        const oauthIdentity = await requestDiscord("oauth2/@me", {
+        let oauthIdentity = await requestDiscord("oauth2/@me", {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
+        if (oauthIdentity.response.status === 429) {
+          const retrySeconds = Math.min(Math.max(Number(oauthIdentity.payload?.retry_after) || 1, 1), 5);
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          oauthIdentity = await requestDiscord("oauth2/@me", {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+        }
+        if (oauthIdentity.response.status === 429) throw new Error("Discord is rate limiting OAuth checks. Import this record again shortly.");
         if (!oauthIdentity.response.ok) throw new Error("The OAuth access token is expired or invalid. Export the stock again before importing it.");
         const verifiedUserId = String(oauthIdentity.payload?.user?.id ?? "").trim();
         const applicationId = String(oauthIdentity.payload?.application?.id ?? "").trim();
@@ -3679,9 +3739,8 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
                WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position
                ELSE community_oauth_joins.sort_position
              END`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(accessToken), accessTokenExpiresAt, stockType, details, nextSortPosition]
+          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(accessToken), accessTokenExpiresAt, stockType, details, sortPosition]
         );
-        nextSortPosition += 1024;
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
       } catch (error) {
@@ -3690,7 +3749,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
           result.errors.push({ record: recordLabel, message: error instanceof Error ? error.message : "OAuth record could not be imported." });
         }
       }
-    }
+    });
 
     res.json({ ...result, stockType, categoryId: stockType, categoryName: category.rows[0].name });
   } catch (error) {
@@ -5303,6 +5362,10 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.set("Cache-Control", "no-store").json({ ...publicPayload, liveBoostStock, canManageDcordTokens });
     }
 
+    if (!trackedPayload && /^(members_|dcord_)/i.test(uniqid)) {
+      return res.status(404).set("Cache-Control", "no-store").json({ message: "Order could not be found." });
+    }
+
     const cacheBuster = Date.now();
     const payload = await requestTokenu(
       tokenuApiBase,
@@ -5896,6 +5959,9 @@ app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/or
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
       return res.status(400).json({ message: "A valid order ID is required." });
+    }
+    if (/^(members_|dcord_)/i.test(uniqid)) {
+      return res.status(404).json({ message: "Use the matching Members or Boost order status endpoint." });
     }
 
     const payload = await requestTokenu(

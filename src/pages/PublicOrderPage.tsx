@@ -776,7 +776,7 @@ export default function PublicOrderPage() {
               {isTerminalStatus
                 ? "Refresh complete"
                 : isCommunityOrder && liveStreamConnected
-                  ? "Live connected"
+                  ? "Live refresh · connected"
                   : autoRefreshing ? "Updating order" : `Live refresh · ${secondsUntilRefresh}s`}
             </span>
             <Button asChild variant="secondary" size="sm" className="monitor-store-action">

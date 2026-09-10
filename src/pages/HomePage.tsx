@@ -1182,7 +1182,17 @@ export default function HomePage() {
           expires_in: value.expires_in ?? value.expiresIn
         };
       });
-      const result = await importCommunityOAuthStock(sanitizedRecords, communityStockType);
+      const result = { total: sanitizedRecords.length, imported: 0, failed: 0, skipped: 0, errors: [] as Array<{ record: string; message: string }>, categoryName: "" };
+      const importBatchSize = 100;
+      for (let start = 0; start < sanitizedRecords.length; start += importBatchSize) {
+        const batch = sanitizedRecords.slice(start, start + importBatchSize);
+        const batchResult = await importCommunityOAuthStock(batch, communityStockType);
+        result.imported += batchResult.imported;
+        result.failed += batchResult.failed;
+        result.skipped += batchResult.skipped;
+        result.errors.push(...batchResult.errors.slice(0, Math.max(0, 25 - result.errors.length)));
+        result.categoryName = batchResult.categoryName ?? result.categoryName;
+      }
       await refreshCommunityStatus();
       setCommunityImportFile(null);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
