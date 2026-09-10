@@ -228,6 +228,7 @@ export default function PublicOrderPage() {
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
+  const [liveStreamConnected, setLiveStreamConnected] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
@@ -391,6 +392,25 @@ export default function PublicOrderPage() {
       window.clearInterval(timer);
     };
   }, [uniqid, refreshSeconds]);
+
+  useEffect(() => {
+    if (!uniqid || status?.provider !== "community") return;
+    const stream = new EventSource(`/api/public/orders/${encodeURIComponent(uniqid)}/stream`);
+    stream.onopen = () => setLiveStreamConnected(true);
+    stream.onmessage = (event) => {
+      try {
+        const nextStatus = JSON.parse(event.data) as OrderStatusResponse;
+        setStatus((current) => mergeOrderStatus(current, nextStatus));
+      } catch {
+        // Keep the last valid status; the stream will deliver the next update.
+      }
+    };
+    stream.onerror = () => setLiveStreamConnected(false);
+    return () => {
+      stream.close();
+      setLiveStreamConnected(false);
+    };
+  }, [status?.provider, uniqid]);
 
   const isInitialLoading = loading && !status && !error;
   const statusService = typeof status?.service === "string" ? status.service : undefined;
@@ -751,7 +771,11 @@ export default function PublicOrderPage() {
           <div className="monitor-topbar-actions">
             <span className="lookup-live-refresh monitor-live-refresh" data-active={!isTerminalStatus} aria-live="polite">
               <span aria-hidden="true" />
-              {isTerminalStatus ? "Refresh complete" : autoRefreshing ? "Updating order" : `Live refresh · ${secondsUntilRefresh}s`}
+              {isTerminalStatus
+                ? "Refresh complete"
+                : isCommunityOrder && liveStreamConnected
+                  ? "Live connected"
+                  : autoRefreshing ? "Updating order" : `Live refresh · ${secondsUntilRefresh}s`}
             </span>
             <Button asChild variant="secondary" size="sm" className="monitor-store-action">
               <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">

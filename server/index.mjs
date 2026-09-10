@@ -5065,6 +5065,88 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
   }
 });
 
+const publicCommunityOrderStreams = new Map();
+let publicCommunityStreamPollRunning = false;
+
+async function pollPublicCommunityOrderStreams() {
+  if (publicCommunityStreamPollRunning || publicCommunityOrderStreams.size === 0) return;
+  publicCommunityStreamPollRunning = true;
+  try {
+    const orderIds = [...publicCommunityOrderStreams.keys()];
+    const tracked = await pool.query(
+      "SELECT uniqid, payload FROM tracked_orders WHERE uniqid = ANY($1::text[]) AND payload->>'provider' = 'community'",
+      [orderIds]
+    );
+    for (const row of tracked.rows) {
+      const listeners = publicCommunityOrderStreams.get(row.uniqid);
+      if (!listeners?.size) continue;
+      const snapshot = {
+        ...sanitizePublicCommunityOrder(row.payload),
+        canManageCommunityMembers: !isCommunityOrderManagementExpired(row.payload)
+      };
+      const serialized = JSON.stringify(snapshot);
+      for (const listener of listeners) {
+        if (listener.lastSnapshot === serialized) continue;
+        listener.lastSnapshot = serialized;
+        listener.response.write(`data: ${serialized}\n\n`);
+      }
+    }
+  } finally {
+    publicCommunityStreamPollRunning = false;
+  }
+}
+
+const publicCommunityStreamTimer = setInterval(() => {
+  void pollPublicCommunityOrderStreams().catch((error) => {
+    console.error("Community monitor stream failed:", error instanceof Error ? error.message : error);
+  });
+}, 750);
+publicCommunityStreamTimer.unref();
+
+app.get("/api/public/orders/:uniqid/stream", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+    const tracked = await pool.query(
+      "SELECT payload FROM tracked_orders WHERE uniqid = $1 AND payload->>'provider' = 'community' LIMIT 1",
+      [uniqid]
+    );
+    if (!tracked.rowCount) return res.status(404).json({ message: "Members order could not be found." });
+
+    res.status(200);
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+    res.flushHeaders?.();
+    res.write("retry: 2000\n\n");
+
+    const snapshot = {
+      ...sanitizePublicCommunityOrder(tracked.rows[0].payload),
+      canManageCommunityMembers: !isCommunityOrderManagementExpired(tracked.rows[0].payload)
+    };
+    const serialized = JSON.stringify(snapshot);
+    res.write(`data: ${serialized}\n\n`);
+
+    const listener = { response: res, lastSnapshot: serialized };
+    const listeners = publicCommunityOrderStreams.get(uniqid) ?? new Set();
+    listeners.add(listener);
+    publicCommunityOrderStreams.set(uniqid, listeners);
+    const heartbeat = setInterval(() => res.write(": keep-alive\n\n"), 20_000);
+    heartbeat.unref();
+
+    req.on("close", () => {
+      clearInterval(heartbeat);
+      listeners.delete(listener);
+      if (!listeners.size) publicCommunityOrderStreams.delete(uniqid);
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
