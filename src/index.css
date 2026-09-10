@@ -4035,6 +4035,12 @@
     background: rgba(255,255,255,.035);
   }
 
+  .public-token-result-pill[data-state="removed"] {
+    border-color: rgba(244, 190, 78, .28);
+    color: #f4c95e;
+    background: rgba(244, 190, 78, .09);
+  }
+
   .public-token-result-pill[data-state="blocked"],
   .public-token-result-pill[data-state="failed"],
   .public-token-result-pill[data-state="inactive"] {

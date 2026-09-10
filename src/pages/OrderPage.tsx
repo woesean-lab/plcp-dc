@@ -41,6 +41,8 @@ type CommunityMemberResult = {
   authorizationStatus?: string;
   authorizationDetails?: string;
   authorizationCheckedAt?: string;
+  membershipStatus?: string;
+  membershipDetails?: string;
 };
 
 function formatDcordTiming(value: unknown) {
@@ -63,7 +65,9 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
       authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
       authorizationDetails: typeof row.authorizationDetails === "string" ? row.authorizationDetails : undefined,
-      authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined
+      authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined,
+      membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
+      membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined
     }];
   });
 }
@@ -1125,6 +1129,11 @@ export default function OrderPage() {
                         {item.authorizationStatus ? (
                           <span className="public-token-result-pill" data-state={item.authorizationStatus} title={item.authorizationDetails}>
                             OAuth {item.authorizationStatus}
+                          </span>
+                        ) : null}
+                        {item.membershipStatus === "removed" ? (
+                          <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
+                            Removed from server
                           </span>
                         ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

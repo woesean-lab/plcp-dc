@@ -40,6 +40,8 @@ type CommunityMemberResult = {
   details: string;
   completedAt?: string;
   authorizationStatus?: string;
+  membershipStatus?: string;
+  membershipDetails?: string;
 };
 
 function formatDcordTiming(value: unknown) {
@@ -67,7 +69,9 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
-      authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined
+      authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
+      membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
+      membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined
     }];
   });
 }
@@ -906,6 +910,11 @@ export default function PublicOrderPage() {
                               {item.authorizationStatus === "inactive" ? (
                                 <span className="public-token-result-pill" data-state="inactive">
                                   Inactive
+                                </span>
+                              ) : null}
+                              {item.membershipStatus === "removed" ? (
+                                <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
+                                  Removed from server
                                 </span>
                               ) : null}
                               <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

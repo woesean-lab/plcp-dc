@@ -1648,7 +1648,32 @@ async function checkCommunityOrderAuthorizations(order) {
           return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).` }];
         }
 
-        return [discordUserId, { status: "active", details: "OAuth authorization is active." }];
+        let guildMember = await requestDiscord(
+          `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
+          { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
+        );
+        if (guildMember.response.status === 429) {
+          const retrySeconds = Math.min(Math.max(Number(guildMember.payload?.retry_after) || 1, 1), 5);
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          guildMember = await requestDiscord(
+            `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
+            { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
+          );
+        }
+        if (guildMember.response.status === 404 || Number(guildMember.payload?.code) === 10007) {
+          return [discordUserId, {
+            status: "active",
+            details: "OAuth authorization is active.",
+            membershipStatus: "removed",
+            membershipDetails: "This member is no longer in the Discord server."
+          }];
+        }
+        return [discordUserId, {
+          status: "active",
+          details: "OAuth authorization is active.",
+          membershipStatus: guildMember.response.ok ? "present" : "unknown",
+          membershipDetails: guildMember.response.ok ? "This member is in the Discord server." : "Server membership could not be verified right now."
+        }];
       } catch {
         return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now." }];
       }
@@ -1673,6 +1698,8 @@ async function checkCommunityOrderAuthorizations(order) {
       ...item,
       authorizationStatus: check.status,
       authorizationDetails: check.details,
+      membershipStatus: check.membershipStatus,
+      membershipDetails: check.membershipDetails,
       authorizationCheckedAt: checkedAt
     } : item;
   });
