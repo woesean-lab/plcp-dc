@@ -959,7 +959,11 @@
 
   .lookup-delay-control > div { margin-right: auto; }
   .lookup-delay-control strong { display: block; margin-top: .25rem; color: var(--app-text); font-size: 13px; }
-  .lookup-delay-control .ui-input { width: 76px; }
+  .lookup-delay-control .ui-input {
+    width: 104px;
+    min-width: 104px;
+    flex: 0 0 104px;
+  }
 
   .lookup-live-progress {
     padding: .95rem 1.15rem 1rem;
@@ -1215,7 +1219,21 @@
     .lookup-invites-warning .ui-button { grid-column: 1 / -1; width: 100%; }
     .lookup-note-actions { grid-column: 1 / -1; flex-wrap: wrap; }
     .lookup-note-actions .ui-button { flex: 1; }
-    .lookup-delay-control { padding: .8rem .85rem; }
+    .lookup-delay-control {
+      flex-wrap: wrap;
+      padding: .8rem .85rem;
+    }
+    .lookup-delay-control > div {
+      width: 100%;
+      flex: 1 0 100%;
+      margin-right: 0;
+    }
+    .lookup-delay-control .ui-input {
+      width: auto;
+      min-width: 120px;
+      flex: 1 1 120px;
+    }
+    .lookup-delay-control .ui-button { flex: 1 1 auto; }
     .lookup-live-progress { padding: .85rem; }
     .lookup-progress-stats strong { font-size: 16px; }
     .lookup-progress-foot { align-items: flex-start; flex-direction: column; gap: .35rem; }

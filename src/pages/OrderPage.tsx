@@ -512,28 +512,29 @@ export default function OrderPage() {
     }
   }
 
-  async function handleUpdateDelay() {
+  async function handleUpdateDelay(delayOverride?: number) {
     const target = (result?.uniqid ?? uniqid).trim();
-    const delay = Number.parseInt(delayDraft, 10);
+    const delay = delayOverride ?? Number.parseInt(delayDraft, 10);
 
     if (!target) {
       toast.error("Order ID is required.");
       return;
     }
 
-    if (!Number.isFinite(delay) || delay <= 0) {
-      toast.error("Delay must be a positive number.");
+    if (!Number.isFinite(delay) || delay < 0) {
+      toast.error("Delay must be zero or a positive number.");
       return;
     }
 
     try {
       setUpdatingDelay(true);
+      setDelayDraft(String(delay));
       setResult((current) => (current ? { ...current, delay } : current));
       const updated = await updateOrderDelay(target, delay, provider);
       if (updated && typeof updated === "object" && !Array.isArray(updated)) {
         setResult((current) => mergeOrderStatus(current, updated as OrderStatusResponse));
       }
-      toast.success("Delay updated.");
+      toast.success(delay === 0 ? "Delay cancelled." : "Delay updated.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Delay could not be updated.");
       void lookup(target);
@@ -1027,6 +1028,12 @@ export default function OrderPage() {
                   <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
                     {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
                     {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
+                  </Button>
+                ) : null}
+                {isCommunityProvider ? (
+                  <Button type="button" variant="destructive" size="sm" onClick={() => void handleUpdateDelay(0)} disabled={updatingDelay || Number(result.delay) === 0}>
+                    <X className="h-4 w-4" aria-hidden="true" />
+                    {Number(result.delay) === 0 ? "Delay cancelled" : "Cancel delay"}
                   </Button>
                 ) : null}
                 {canCancelCommunityOrder ? (
