@@ -731,18 +731,31 @@ function isCommunityServiceType(service) {
 
 async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
   const result = await queryable.query(
-    `SELECT DISTINCT member_result->>'discordUserId' AS discord_user_id
-     FROM tracked_orders
-     CROSS JOIN LATERAL jsonb_array_elements(
-       CASE
-         WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
-         ELSE '[]'::jsonb
-       END
-     ) AS member_result
-     WHERE payload->>'provider' = 'community'
-       AND payload->>'serverId' = $1
-       AND LOWER(COALESCE(member_result->>'state', '')) IN ('joined', 'pending_join', 'already_member')
-       AND COALESCE(member_result->>'discordUserId', '') <> ''`,
+    `WITH member_history AS (
+       SELECT
+         member_result->>'discordUserId' AS discord_user_id,
+         COALESCE(member_result->>'completedAt', payload->>'createdAt', '') AS delivered_at,
+         CASE
+           WHEN LOWER(COALESCE(member_result->>'membershipStatus', '')) = 'removed'
+             THEN COALESCE(member_result->>'authorizationCheckedAt', '')
+           ELSE ''
+         END AS removed_at
+       FROM tracked_orders
+       CROSS JOIN LATERAL jsonb_array_elements(
+         CASE
+           WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+           ELSE '[]'::jsonb
+         END
+       ) AS member_result
+       WHERE payload->>'provider' = 'community'
+         AND payload->>'serverId' = $1
+         AND LOWER(COALESCE(member_result->>'state', '')) IN ('joined', 'pending_join', 'already_member')
+         AND COALESCE(member_result->>'discordUserId', '') <> ''
+     )
+     SELECT discord_user_id
+     FROM member_history
+     GROUP BY discord_user_id
+     HAVING MAX(removed_at) < MAX(delivered_at)`,
     [guildId]
   );
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
@@ -1661,12 +1674,22 @@ async function checkCommunityOrderAuthorizations(order) {
           );
         }
         if (guildMember.response.status === 404 || Number(guildMember.payload?.code) === 10007) {
+          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, {
+            present: false,
+            expiresAt: Date.now() + 5 * 60_000
+          });
           return [discordUserId, {
             status: "active",
             details: "OAuth authorization is active.",
             membershipStatus: "removed",
             membershipDetails: "This member is no longer in the Discord server."
           }];
+        }
+        if (guildMember.response.ok) {
+          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, {
+            present: true,
+            expiresAt: Date.now() + 60_000
+          });
         }
         return [discordUserId, {
           status: "active",
