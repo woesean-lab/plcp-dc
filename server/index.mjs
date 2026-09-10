@@ -2138,14 +2138,12 @@ async function runCommunityOrder(order, members, config) {
     });
   }
 
-  async function waitForNextCommunityMember(patternIndex, queuedStartIndex, existingNextMemberAt = null) {
+  async function waitForNextCommunityMember(patternIndex, existingNextMemberAt = null) {
     const existingDeadline = Date.parse(String(existingNextMemberAt ?? ""));
     const existingActiveDelay = Number(order.activeDelay);
     const delayStartedAt = Number.isFinite(existingDeadline) && Number.isFinite(existingActiveDelay)
       ? existingDeadline - existingActiveDelay * 1_000
       : Date.now();
-    let lastBotCheckAt = 0;
-
     while (true) {
       const control = await pool.query(
         "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
@@ -2179,18 +2177,6 @@ async function runCommunityOrder(order, members, config) {
       const remainingDelay = delayEndsAt - Date.now();
       if (remainingDelay <= 0) break;
 
-      if (Date.now() - lastBotCheckAt >= 5_000) {
-        lastBotCheckAt = Date.now();
-        const missingBotStatus = await detectMissingCommunityBot();
-        if (missingBotStatus) {
-          await pauseForCommunityBotIssue(queuedStartIndex, {
-            waitingCode: `discord_${missingBotStatus}`,
-            details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
-            memberDetails: "Waiting for the Members bot to return to the server."
-          });
-          return false;
-        }
-      }
       await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, remainingDelay)));
     }
 
@@ -2210,11 +2196,20 @@ async function runCommunityOrder(order, members, config) {
 
   if (members.length && order.nextMemberAt) {
     const resumedPatternIndex = Math.max(0, added - 1);
-    if (!await waitForNextCommunityMember(resumedPatternIndex, 0, order.nextMemberAt)) return;
+    if (!await waitForNextCommunityMember(resumedPatternIndex, order.nextMemberAt)) return;
   }
 
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
+    const missingBotStatus = await detectMissingCommunityBot();
+    if (missingBotStatus) {
+      await pauseForCommunityBotIssue(index, {
+        waitingCode: `discord_${missingBotStatus}`,
+        details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
+        memberDetails: "Waiting for the Members bot to return to the server."
+      });
+      return;
+    }
     let resultIndex = results.findIndex((result) => result?.discordUserId === member.discord_user_id);
     if (resultIndex < 0) {
       resultIndex = results.length;
@@ -2338,7 +2333,7 @@ async function runCommunityOrder(order, members, config) {
       return;
     }
 
-    if (index < members.length - 1 && !await waitForNextCommunityMember(index, index + 1)) return;
+    if (index < members.length - 1 && !await waitForNextCommunityMember(index)) return;
   }
 
   const status = added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR";
