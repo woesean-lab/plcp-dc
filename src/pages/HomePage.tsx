@@ -101,7 +101,8 @@ const EMPTY_FORM = {
   concurrency: 7,
   communityCategoryId: "offline",
   communityDurationMonths: 1,
-  communitySpeedProfile: "balanced" as "safe" | "balanced" | "fast" | "custom"
+  communityCustomDelay: 1,
+  communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom"
 };
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -2043,8 +2044,8 @@ export default function HomePage() {
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
                                   communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
                                   amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityCategories[0]?.summary.ready ?? 1)) : 100,
-                                  delay: option.value === "community" ? 300 : current.delay,
-                                  communitySpeedProfile: option.value === "community" ? "balanced" : current.communitySpeedProfile,
+                                  delay: option.value === "community" ? current.communityCustomDelay : current.delay,
+                                  communitySpeedProfile: option.value === "community" ? "custom" : current.communitySpeedProfile,
                                   concurrency: option.value === "boosts" ? 1 : current.concurrency
                                 }))
                               }
@@ -2345,7 +2346,7 @@ export default function HomePage() {
                           <div className="community-speed-profile-field">
                             <div className="community-speed-profile-copy">
                               <span className="boost-order-label">Delivery speed</span>
-                              <small>Select a profile or enter a custom delay below.</small>
+                              <small>Select a profile or set an exact delay.</small>
                             </div>
                             <div className="community-speed-profile-options" aria-label="Delivery speed profile">
                               {COMMUNITY_SPEED_PROFILES.map((profile) => {
@@ -2360,15 +2361,34 @@ export default function HomePage() {
                                     onClick={() => setForm((current) => ({ ...current, delay: profile.delay, communitySpeedProfile: profile.key }))}
                                   >
                                     <Icon className="h-4 w-4" aria-hidden="true" />
-                                    <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                                    <span className="community-speed-option-copy"><strong>{profile.label}</strong><small>{profile.description}</small></span>
                                     <em>{profile.timing}</em>
                                   </button>
                                 );
                               })}
+                              <label className={`community-speed-custom-option ${form.communitySpeedProfile === "custom" ? "is-selected" : ""}`}>
+                                <Settings2 className="h-4 w-4" aria-hidden="true" />
+                                <span className="community-speed-option-copy"><strong>Custom</strong><small>Exact delay</small></span>
+                                <span className="community-speed-custom-control">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={1200}
+                                    value={form.communityCustomDelay}
+                                    aria-label="Custom delay in seconds"
+                                    onFocus={() => setForm((current) => ({ ...current, delay: current.communityCustomDelay, communitySpeedProfile: "custom" }))}
+                                    onChange={(event) => {
+                                      const delay = Number(event.target.value) || 1;
+                                      setForm((current) => ({ ...current, delay, communityCustomDelay: delay, communitySpeedProfile: "custom" }));
+                                    }}
+                                  />
+                                  <em>s</em>
+                                </span>
+                              </label>
                             </div>
                           </div>
                         ) : null}
-                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -2401,17 +2421,19 @@ export default function HomePage() {
                             </div>
                           </label>
 
-                          <label className="boost-order-field">
-                            <span className="boost-order-label">{selectedIsCommunity ? "Custom delay" : "Delay"}</span>
-                            <input
-                              className="boost-number-input"
-                              type="number"
-                              min={1}
-                              max={1200}
-                              value={form.delay}
-                              onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1, communitySpeedProfile: "custom" }))}
-                            />
-                          </label>
+                          {!selectedIsCommunity ? (
+                            <label className="boost-order-field">
+                              <span className="boost-order-label">Delay</span>
+                              <input
+                                className="boost-number-input"
+                                type="number"
+                                min={1}
+                                max={1200}
+                                value={form.delay}
+                                onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
+                              />
+                            </label>
+                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? (
                             <div className="boost-order-field community-order-month-field">

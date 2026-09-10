@@ -1811,12 +1811,13 @@
   .community-speed-profile-options {
     display: grid;
     flex: 1;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 6px;
     min-width: 0;
   }
 
-  .community-speed-profile-options button {
+  .community-speed-profile-options button,
+  .community-speed-custom-option {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     min-width: 0;
@@ -1833,13 +1834,14 @@
     transition: border-color .15s ease, background .15s ease, color .15s ease;
   }
 
-  .community-speed-profile-options button:hover {
+  .community-speed-profile-options button:hover,
+  .community-speed-custom-option:hover {
     border-color: rgba(255, 255, 255, .14);
     color: var(--app-text-secondary);
     background: rgba(255, 255, 255, .035);
   }
 
-  .community-speed-profile-options button > span {
+  .community-speed-option-copy {
     display: grid;
     min-width: 0;
     gap: 1px;
@@ -1872,7 +1874,8 @@
     white-space: nowrap;
   }
 
-  .community-speed-profile-options button.is-selected {
+  .community-speed-profile-options button.is-selected,
+  .community-speed-custom-option.is-selected {
     border-color: var(--app-accent-border);
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
@@ -1880,13 +1883,47 @@
   }
 
   .community-speed-profile-options button.is-selected small,
-  .community-speed-profile-options button.is-selected em {
+  .community-speed-profile-options button.is-selected em,
+  .community-speed-custom-option.is-selected small,
+  .community-speed-custom-option.is-selected em {
     color: var(--app-text-secondary);
   }
 
   .community-speed-profile-options button:focus-visible {
     outline: 2px solid var(--app-accent-bright);
     outline-offset: 2px;
+  }
+
+  .community-speed-custom-option:focus-within {
+    outline: 2px solid var(--app-accent-bright);
+    outline-offset: 2px;
+  }
+
+  .community-speed-custom-control {
+    display: flex;
+    width: 58px;
+    min-width: 0;
+    align-items: center;
+    gap: 3px;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    padding: 3px 5px;
+    background: var(--app-input-bg);
+  }
+
+  .community-speed-custom-control input {
+    width: 100%;
+    min-width: 0;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--app-text);
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .community-speed-custom-control em {
+    flex: 0 0 auto;
   }
 
   .members-order-grid {
@@ -1897,8 +1934,12 @@
     grid-template-columns: minmax(155px, 185px) minmax(260px, 1fr) minmax(112px, 132px) minmax(112px, 132px);
   }
 
+  .members-order-grid.is-community {
+    grid-template-columns: minmax(170px, 210px) minmax(280px, 1fr);
+  }
+
   .members-order-grid.is-periodic {
-    grid-template-columns: minmax(150px, 180px) minmax(250px, 1fr) minmax(96px, 116px) minmax(210px, 236px);
+    grid-template-columns: minmax(150px, 180px) minmax(250px, 1fr) minmax(210px, 236px);
   }
 
   .community-order-month-options {
