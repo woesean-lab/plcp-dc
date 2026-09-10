@@ -1449,7 +1449,9 @@
     top: calc(100% + 0.45rem);
     left: 0;
     right: 0;
-    overflow: hidden;
+    max-height: min(360px, calc(100vh - 9rem));
+    overflow-x: hidden;
+    overflow-y: auto;
     border: 1px solid var(--app-border-strong);
     border-radius: 14px;
     background: rgba(18, 18, 30, .98);
@@ -2847,11 +2849,13 @@
   .orders-summary-strip [data-tone="danger"] strong { color: var(--app-danger); }
 
   .orders-workspace {
-    overflow: hidden;
+    overflow: visible;
     padding: 0;
   }
 
   .orders-commandbar {
+    position: relative;
+    z-index: 20;
     display: grid;
     grid-template-columns: minmax(240px, 1fr) 170px 170px minmax(280px, .75fr);
     align-items: end;
