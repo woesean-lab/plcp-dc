@@ -640,6 +640,20 @@ export default function HomePage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
+  const orderStatusOptions = useMemo(() => {
+    const knownStatuses = ["NEW", "PROCESS", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
+    const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
+    const statuses = Array.from(new Set([...knownStatuses, ...actualStatuses]));
+    return [
+      { value: "all", label: "All statuses" },
+      ...statuses.map((status) => ({
+        value: status,
+        label: status === "INVITES PAUSED"
+          ? "Invites paused"
+          : status.charAt(0) + status.slice(1).toLowerCase()
+      }))
+    ];
+  }, [orders]);
 
   const activeOrders = useMemo(
     () => orders.filter((order) => !isTerminalOrder(order.status)),
@@ -654,7 +668,7 @@ export default function HomePage() {
     [orders]
   );
   const attentionOrderCount = useMemo(
-    () => orders.filter((order) => ["WAITING", "ERROR", "INVALID", "TERMINATED", "PAUSED"].some((value) => String(order.status ?? "").toUpperCase().includes(value))).length,
+    () => orders.filter((order) => ["WAITING", "ERROR", "INVALID", "TERMINATED", "PAUSED", "INVITE"].some((value) => String(order.status ?? "").toUpperCase().includes(value))).length,
     [orders]
   );
   const filteredOrders = useMemo(() => {
@@ -662,7 +676,6 @@ export default function HomePage() {
     return orders.filter((order) => {
       const normalizedStatus = String(order.status ?? "NEW").trim().toUpperCase();
       const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-      const terminal = isTerminalOrder(order.status);
       const matchesSearch = !query || [
         order.uniqid,
         order.serverName,
@@ -673,10 +686,7 @@ export default function HomePage() {
       ].some((value) => String(value ?? "").toLowerCase().includes(query));
       const matchesStatus =
         orderStatusFilter === "all" ||
-        (orderStatusFilter === "active" && !terminal) ||
-        (orderStatusFilter === "completed" && normalizedStatus === "COMPLETED") ||
-        (orderStatusFilter === "failed" && ["ERROR", "INVALID", "TERMINATED", "CANCELED", "CANCELLED"].some((value) => normalizedStatus.includes(value))) ||
-        (orderStatusFilter === "waiting" && ["NEW", "WAITING"].includes(normalizedStatus));
+        normalizedStatus === orderStatusFilter;
       const matchesType =
         orderTypeFilter === "all" ||
         (orderTypeFilter === "boosts" && boostOrder) ||
@@ -2563,10 +2573,7 @@ export default function HomePage() {
                     <Search className="h-4 w-4" aria-hidden="true" />
                     <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, server or service" aria-label="Search orders" />
                   </label>
-                  <FilterDropdown label="Status" showLabel={false} value={orderStatusFilter} onChange={setOrderStatusFilter} options={[
-                    { value: "all", label: "All statuses" }, { value: "active", label: "Active" }, { value: "waiting", label: "Waiting" },
-                    { value: "completed", label: "Completed" }, { value: "failed", label: "Failed" }
-                  ]} />
+                  <FilterDropdown label="Status" showLabel={false} value={orderStatusFilter} onChange={setOrderStatusFilter} options={orderStatusOptions} />
                   <FilterDropdown label="Type" showLabel={false} value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />

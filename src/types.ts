@@ -73,6 +73,7 @@ export interface OrderStatusResponse {
   restartCooldownSeconds?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
   activeDelay?: number | null;
+  nextMemberAt?: string | null;
   liveBoostStock?: {
     oneMonth: number;
     threeMonth: number;
@@ -92,6 +93,8 @@ export interface TrackedOrder {
   added?: number;
   delay?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  activeDelay?: number | null;
+  nextMemberAt?: string | null;
   statusDelay?: number;
   billingCycle?: number;
   duration?: BoostDuration;

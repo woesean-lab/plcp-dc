@@ -1987,7 +1987,7 @@ function getCommunityBotUnavailableStatus(result) {
     : null;
 }
 
-async function processCommunityOrder(order, members, config) {
+async function runCommunityOrder(order, members, config) {
   const savedResults = Array.isArray(order.communityResults) ? order.communityResults : [];
   const results = savedResults.length
     ? savedResults.map((result) => ({ ...result }))
@@ -2053,6 +2053,7 @@ async function processCommunityOrder(order, members, config) {
         delay: Number.isFinite(latestDelay) && latestDelay >= 0 ? latestDelay : order.delay,
         speedProfile: latestSpeedProfile,
         activeDelay: terminalStatusRequested ? null : currentPayload.activeDelay ?? payload.activeDelay ?? null,
+        nextMemberAt: terminalStatusRequested ? null : currentPayload.nextMemberAt ?? payload.nextMemberAt ?? null,
         communityResults: mergedResults,
         ...(deliveryPaused ? {
           waitingCode: "manual_pause",
@@ -2106,6 +2107,81 @@ async function processCommunityOrder(order, members, config) {
       ...(status === "PAUSED" ? { pausedAt: new Date().toISOString(), pausedFromStatus: "PROCESS" } : {}),
       communityResults: results
     });
+  }
+
+  async function waitForNextCommunityMember(patternIndex, queuedStartIndex, existingNextMemberAt = null) {
+    const existingDeadline = Date.parse(String(existingNextMemberAt ?? ""));
+    const existingActiveDelay = Number(order.activeDelay);
+    const delayStartedAt = Number.isFinite(existingDeadline) && Number.isFinite(existingActiveDelay)
+      ? existingDeadline - existingActiveDelay * 1_000
+      : Date.now();
+    let lastBotCheckAt = 0;
+
+    while (true) {
+      const control = await pool.query(
+        "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
+        [order.uniqid]
+      );
+      if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return false;
+      const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
+      const originalDelay = Number(order.delay);
+      const configuredDelay = Number.isFinite(currentDelay) && currentDelay >= 0
+        ? currentDelay
+        : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
+      const speedProfile = normalizeCommunitySpeedProfile(control.rows[0]?.speed_profile);
+      const delaySeconds = speedProfile === "balanced" && configuredDelay > 0
+        ? communityBalancedDelayPattern[patternIndex % communityBalancedDelayPattern.length]
+        : configuredDelay;
+      const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
+      const nextMemberAt = new Date(delayEndsAt).toISOString();
+      const activeDelayUpdate = await pool.query(
+        `UPDATE tracked_orders
+         SET payload = jsonb_set(
+           jsonb_set(payload, '{activeDelay}', to_jsonb($2::int)),
+           '{nextMemberAt}', to_jsonb($3::text)
+         ), updated_at = NOW()
+         WHERE uniqid = $1 AND payload->>'status' = 'PROCESS'
+         RETURNING uniqid`,
+        [order.uniqid, delaySeconds, nextMemberAt]
+      );
+      if (!activeDelayUpdate.rowCount) return false;
+      order.activeDelay = delaySeconds;
+      order.nextMemberAt = nextMemberAt;
+      const remainingDelay = delayEndsAt - Date.now();
+      if (remainingDelay <= 0) break;
+
+      if (Date.now() - lastBotCheckAt >= 5_000) {
+        lastBotCheckAt = Date.now();
+        const missingBotStatus = await detectMissingCommunityBot();
+        if (missingBotStatus) {
+          await pauseForCommunityBotIssue(queuedStartIndex, {
+            waitingCode: `discord_${missingBotStatus}`,
+            details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
+            memberDetails: "Waiting for the Members bot to return to the server."
+          });
+          return false;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, remainingDelay)));
+    }
+
+    await pool.query(
+      `UPDATE tracked_orders
+       SET payload = jsonb_set(
+         jsonb_set(payload, '{activeDelay}', 'null'::jsonb),
+         '{nextMemberAt}', 'null'::jsonb
+       ), updated_at = NOW()
+       WHERE uniqid = $1 AND payload->>'status' = 'PROCESS'`,
+      [order.uniqid]
+    );
+    order.activeDelay = null;
+    order.nextMemberAt = null;
+    return true;
+  }
+
+  if (members.length && order.nextMemberAt) {
+    const resumedPatternIndex = Math.max(0, added - 1);
+    if (!await waitForNextCommunityMember(resumedPatternIndex, 0, order.nextMemberAt)) return;
   }
 
   for (let index = 0; index < members.length; index += 1) {
@@ -2229,49 +2305,7 @@ async function processCommunityOrder(order, members, config) {
       return;
     }
 
-    if (index < members.length - 1) {
-      const delayStartedAt = Date.now();
-      let lastBotCheckAt = 0;
-      while (true) {
-        const control = await pool.query("SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid]);
-        if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return;
-        const currentDelay = Number.parseInt(control.rows[0]?.delay, 10);
-        const originalDelay = Number(order.delay);
-        const configuredDelay = Number.isFinite(currentDelay) && currentDelay >= 0
-          ? currentDelay
-          : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
-        const speedProfile = normalizeCommunitySpeedProfile(control.rows[0]?.speed_profile);
-        const delaySeconds = speedProfile === "balanced" && configuredDelay > 0
-          ? communityBalancedDelayPattern[index % communityBalancedDelayPattern.length]
-          : configuredDelay;
-        const activeDelayUpdate = await pool.query(
-          `UPDATE tracked_orders
-           SET payload = jsonb_set(payload, '{activeDelay}', to_jsonb($2::int)), updated_at = NOW()
-           WHERE uniqid = $1 AND payload->>'status' = 'PROCESS'
-           RETURNING uniqid`,
-          [order.uniqid, delaySeconds]
-        );
-        if (!activeDelayUpdate.rowCount) return;
-        order.activeDelay = delaySeconds;
-        const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
-        const remainingDelay = delayEndsAt - Date.now();
-        if (remainingDelay <= 0) break;
-
-        if (Date.now() - lastBotCheckAt >= 5_000) {
-          lastBotCheckAt = Date.now();
-          const missingBotStatus = await detectMissingCommunityBot();
-          if (missingBotStatus) {
-            await pauseForCommunityBotIssue(index + 1, {
-              waitingCode: `discord_${missingBotStatus}`,
-              details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
-              memberDetails: "Waiting for the Members bot to return to the server."
-            });
-            return;
-          }
-        }
-        await new Promise((resolve) => setTimeout(resolve, Math.min(1_000, remainingDelay)));
-      }
-    }
+    if (index < members.length - 1 && !await waitForNextCommunityMember(index, index + 1)) return;
   }
 
   const status = added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR";
@@ -2282,6 +2316,26 @@ async function processCommunityOrder(order, members, config) {
     details: added >= order.amount ? `${added}/${order.amount} members delivered.` : `${added}/${order.amount} members delivered. Review the member results.`,
     communityResults: results
   });
+}
+
+async function processCommunityOrder(order, members, config) {
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    const lock = await lockClient.query(
+      "SELECT pg_try_advisory_lock(20260910, hashtext($1)) AS locked",
+      [order.uniqid]
+    );
+    locked = lock.rows[0]?.locked === true;
+    if (!locked) return false;
+    await runCommunityOrder(order, members, config);
+    return true;
+  } finally {
+    if (locked) {
+      await lockClient.query("SELECT pg_advisory_unlock(20260910, hashtext($1))", [order.uniqid]).catch(() => {});
+    }
+    lockClient.release();
+  }
 }
 
 async function processCommunityReplacement(orderId, resultIndex, member, config) {
@@ -3219,19 +3273,22 @@ async function initializeDatabase() {
     SET details = 'Re-import OAuth stock to store its current access token. Automatic refresh is disabled.'
     WHERE encrypted_access_token IS NULL AND status = 'authorized'
   `);
-  await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
   await pool.query(`
-    UPDATE tracked_orders
-    SET payload = jsonb_set(
-      jsonb_set(payload, '{status}', '"ERROR"'::jsonb),
-      '{details}',
-      '"Delivery was interrupted by a server restart. Create a new order for the remaining members."'::jsonb
-    ), updated_at = NOW()
-    WHERE payload->>'provider' = 'community' AND payload->>'status' = 'PROCESS'
+    UPDATE community_oauth_joins AS stock
+    SET reserved_order_id = NULL
+    WHERE reserved_order_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM tracked_orders AS tracked
+        WHERE tracked.uniqid = stock.reserved_order_id
+          AND tracked.payload->>'provider' = 'community'
+          AND UPPER(tracked.payload->>'status') IN ('WAITING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
+      )
   `);
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
   await recoverBlockedDcordJobOrders();
   await recoverPendingDcordOrders();
+  await recoverInterruptedCommunityOrders();
 }
 
 async function requireSession(req, res, next) {
@@ -4281,6 +4338,54 @@ async function activateWaitingCommunityOrder(order) {
     throw error;
   } finally {
     client.release();
+  }
+}
+
+let communityRecoveryRunning = false;
+
+async function recoverInterruptedCommunityOrders() {
+  if (communityRecoveryRunning) return;
+  communityRecoveryRunning = true;
+  try {
+    const interrupted = await pool.query(
+      `SELECT payload
+       FROM tracked_orders
+       WHERE payload->>'provider' = 'community'
+         AND UPPER(payload->>'status') = 'PROCESS'
+         AND updated_at < NOW() - INTERVAL '5 seconds'
+       ORDER BY updated_at ASC`
+    );
+
+    for (const row of interrupted.rows) {
+      const order = row.payload;
+      if (!order?.uniqid) continue;
+      const resumable = {
+        ...order,
+        status: "WAITING",
+        waitingCode: "server_restart_resume",
+        details: "Resuming delivery after the service restart."
+      };
+      const claimed = await pool.query(
+        `UPDATE tracked_orders
+         SET payload = $2::jsonb, updated_at = NOW()
+         WHERE uniqid = $1
+           AND payload->>'provider' = 'community'
+           AND UPPER(payload->>'status') = 'PROCESS'
+           AND updated_at < NOW() - INTERVAL '5 seconds'
+         RETURNING payload`,
+        [order.uniqid, JSON.stringify(resumable)]
+      );
+      if (!claimed.rowCount) continue;
+
+      try {
+        await activateWaitingCommunityOrder(claimed.rows[0].payload);
+        console.log(`Resumed interrupted Members order ${order.uniqid}.`);
+      } catch (error) {
+        console.error(`Could not resume Members order ${order.uniqid}:`, error instanceof Error ? error.message : error);
+      }
+    }
+  } finally {
+    communityRecoveryRunning = false;
   }
 }
 
@@ -6071,3 +6176,9 @@ await initializeDatabase();
 app.listen(port, "0.0.0.0", () => {
   console.log(`Pulcip Members listening on port ${port}`);
 });
+const communityRecoveryTimer = setInterval(() => {
+  void recoverInterruptedCommunityOrders().catch((error) => {
+    console.error("Members recovery scan failed:", error instanceof Error ? error.message : error);
+  });
+}, 10_000);
+communityRecoveryTimer.unref();

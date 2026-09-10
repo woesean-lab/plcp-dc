@@ -91,6 +91,13 @@ function formatNumber(value?: number) {
     : "-";
 }
 
+function formatCountdown(seconds: number) {
+  const safeSeconds = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${String(remainder).padStart(2, "0")}s` : `${remainder}s`;
+}
+
 function parseNumber(value: string | null | undefined) {
   if (!value) return undefined;
   const parsed = Number(value);
@@ -232,6 +239,7 @@ export default function PublicOrderPage() {
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
   const [supportClock, setSupportClock] = useState(() => Date.now());
+  const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [showExtensionModal, setShowExtensionModal] = useState(false);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
@@ -408,6 +416,10 @@ export default function PublicOrderPage() {
   const expiredAt = parseTimestamp(status?.expiredAt ?? status?.expired_at ?? undefined);
   const supportExpired = expiredAt !== undefined && expiredAt <= supportClock;
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
+  const nextMemberTimestamp = parseTimestamp(status?.nextMemberAt ?? undefined);
+  const nextMemberSeconds = normalizedStatus === "PROCESS" && nextMemberTimestamp !== undefined
+    ? Math.max(0, Math.ceil((nextMemberTimestamp - deliveryClock) / 1_000))
+    : null;
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
@@ -443,6 +455,12 @@ export default function PublicOrderPage() {
     const timer = window.setTimeout(() => setSupportClock(Date.now()), Math.min(expiredAt - supportClock + 50, 30_000));
     return () => window.clearTimeout(timer);
   }, [expiredAt, supportClock]);
+  useEffect(() => {
+    if (normalizedStatus !== "PROCESS" || nextMemberTimestamp === undefined || nextMemberTimestamp <= Date.now()) return;
+    setDeliveryClock(Date.now());
+    const timer = window.setInterval(() => setDeliveryClock(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [nextMemberTimestamp, normalizedStatus]);
   useEffect(() => {
     if (typeof currentDelay === "number" && Number.isFinite(currentDelay)) {
       setDelayDraft(String(currentDelay));
@@ -690,6 +708,13 @@ export default function PublicOrderPage() {
           </Button>
         ) : null}
       </div>
+
+      {nextMemberSeconds !== null && nextMemberSeconds > 0 ? (
+        <div className="next-member-countdown" role="status" aria-live="polite">
+          <span><Activity className="h-4 w-4" aria-hidden="true" /> Next member joins in</span>
+          <strong>{formatCountdown(nextMemberSeconds)}</strong>
+        </div>
+      ) : null}
 
       <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />

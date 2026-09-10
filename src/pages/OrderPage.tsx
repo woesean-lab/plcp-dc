@@ -180,6 +180,13 @@ function formatDelay(value?: string | number) {
   return "-";
 }
 
+function formatCountdown(seconds: number) {
+  const safeSeconds = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(safeSeconds / 60);
+  const remainder = safeSeconds % 60;
+  return minutes > 0 ? `${minutes}m ${String(remainder).padStart(2, "0")}s` : `${remainder}s`;
+}
+
 function formatEstimatedDuration(remaining?: number, delay?: number) {
   if (typeof remaining !== "number" || typeof delay !== "number" || !Number.isFinite(remaining) || !Number.isFinite(delay)) {
     return null;
@@ -358,6 +365,7 @@ export default function OrderPage() {
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "tokenu" ? 10 : 2);
@@ -367,6 +375,10 @@ export default function OrderPage() {
 
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
+  const nextMemberTimestamp = typeof result?.nextMemberAt === "string" ? Date.parse(result.nextMemberAt) : Number.NaN;
+  const nextMemberSeconds = normalizedStatus === "PROCESS" && Number.isFinite(nextMemberTimestamp)
+    ? Math.max(0, Math.ceil((nextMemberTimestamp - deliveryClock) / 1_000))
+    : null;
   const terminal = isTerminalStatus(result?.status);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
@@ -447,6 +459,13 @@ export default function OrderPage() {
 
     return () => window.clearTimeout(timer);
   }, []);
+
+  useEffect(() => {
+    if (normalizedStatus !== "PROCESS" || !Number.isFinite(nextMemberTimestamp) || nextMemberTimestamp <= Date.now()) return;
+    setDeliveryClock(Date.now());
+    const timer = window.setInterval(() => setDeliveryClock(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
     if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal) return;
@@ -1041,6 +1060,12 @@ export default function OrderPage() {
                     <X className="h-4 w-4" aria-hidden="true" />
                     {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
                   </Button>
+                ) : null}
+                {nextMemberSeconds !== null && nextMemberSeconds > 0 ? (
+                  <span className="lookup-next-member" role="status" aria-live="polite">
+                    <Activity className="h-4 w-4" aria-hidden="true" />
+                    Next member in <strong>{formatCountdown(nextMemberSeconds)}</strong>
+                  </span>
                 ) : null}
               </section>
             ) : null}

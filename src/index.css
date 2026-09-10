@@ -950,6 +950,7 @@
 
   .lookup-delay-control {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: .65rem;
     min-width: 260px;
@@ -963,6 +964,28 @@
     width: 104px;
     min-width: 104px;
     flex: 0 0 104px;
+  }
+
+  .lookup-next-member {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1 0 100%;
+    border-top: 1px solid var(--app-divider);
+    padding-top: 9px;
+    color: var(--app-text-secondary);
+    font-size: 11px;
+  }
+
+  .lookup-next-member svg,
+  .lookup-next-member strong {
+    color: var(--app-accent-bright);
+  }
+
+  .lookup-next-member strong {
+    display: inline;
+    margin: 0;
+    font-size: 12px;
   }
 
   .lookup-live-progress {
@@ -5306,6 +5329,36 @@
 
 .monitor-delay-controls .ui-input {
   min-width: 0;
+}
+
+.next-member-countdown {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 11px;
+  border: 1px solid rgba(155, 140, 255, .22);
+  border-radius: 10px;
+  padding: 9px 11px;
+  background: rgba(155, 140, 255, .07);
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.next-member-countdown span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.next-member-countdown svg,
+.next-member-countdown strong {
+  color: var(--app-accent-bright);
+}
+
+.next-member-countdown strong {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .monitor-safety-note {
