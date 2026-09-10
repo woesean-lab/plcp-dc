@@ -2949,6 +2949,7 @@
   .orders-row:focus-within { background: rgba(255,255,255,.026); }
   .orders-row[data-status-tone="success"] { border-left-color: var(--app-success); }
   .orders-row[data-status-tone="danger"] { border-left-color: var(--app-danger); }
+  .orders-row[data-status-tone="paused"] { border-left-color: #66bfd5; }
 
   .orders-row-identity {
     display: grid;
@@ -3035,6 +3036,11 @@
   .orders-status-badge.ui-badge-destructive {
     color: #ff93a5;
     background: rgba(217, 55, 88, .22);
+  }
+
+  .orders-status-badge[data-status="paused"] {
+    color: #9bd3df;
+    background: rgba(67, 145, 164, .18);
   }
 
   .orders-status-badge[data-status*="waiting"],
@@ -3155,6 +3161,7 @@
     }
     .orders-row[data-status-tone="success"] { border-left-color: var(--app-success); }
     .orders-row[data-status-tone="danger"] { border-left-color: var(--app-danger); }
+    .orders-row[data-status-tone="paused"] { border-left-color: #66bfd5; }
     .orders-row-identity { grid-template-columns: 32px minmax(0, 1fr); gap: .55rem; }
     .orders-row-service-icon { width: 32px; height: 32px; }
     .orders-row-status { align-self: start; justify-self: end; }
@@ -4989,9 +4996,11 @@
 .monitor-order-facts .monitor-order-state[data-status*="error"],
 .monitor-order-facts .monitor-order-state[data-status*="invalid"],
 .monitor-order-facts .monitor-order-state[data-status*="terminated"],
-.monitor-order-facts .monitor-order-state[data-status*="paused"] {
+.monitor-order-facts .monitor-order-state[data-status*="invites paused"] {
   color: var(--app-danger);
 }
+
+.monitor-order-facts .monitor-order-state[data-status="paused"] { color: #9bd3df; }
 
 .monitor-order-facts strong svg {
   flex: 0 0 auto;

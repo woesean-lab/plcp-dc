@@ -385,6 +385,7 @@ export default function OrderPage() {
   const terminal = isTerminalStatus(result?.status);
   const isErrorStatus = ["ERROR", "INVALID", "TERMINATED"].includes(normalizedStatus);
   const isWaitingForBot = normalizedStatus === "WAITING" && Boolean(botInvite);
+  const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
   const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(normalizedStatus);
@@ -939,7 +940,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>

@@ -445,6 +445,7 @@ export default function PublicOrderPage() {
     : null;
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
+  const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
   const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
@@ -885,7 +886,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
                       {isCompleted ? "Your order has been completed successfully." : isErrorStatus ? "Review the error above for the reason." : "We keep this page updated automatically while your order is processed."}
                     </p>

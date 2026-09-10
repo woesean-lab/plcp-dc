@@ -340,16 +340,17 @@ function parseDelay(value?: string | number) {
 function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
+  if (["error", "invalid", "terminated", "canceled", "cancelled", "invites paused"].some((value) => normalized.includes(value))) {
     return "destructive";
   }
   return "secondary";
 }
 
-function getOrderStatusTone(status?: string): "active" | "success" | "danger" {
+function getOrderStatusTone(status?: string): "active" | "success" | "danger" | "paused" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled", "paused"].some((value) => normalized.includes(value))) {
+  if (normalized === "paused") return "paused";
+  if (["error", "invalid", "terminated", "canceled", "cancelled", "invites paused"].some((value) => normalized.includes(value))) {
     return "danger";
   }
   return "active";
@@ -641,7 +642,7 @@ export default function HomePage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
   const orderStatusOptions = useMemo(() => {
-    const knownStatuses = ["NEW", "PROCESS", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
+    const knownStatuses = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
     const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
     const statuses = Array.from(new Set([...knownStatuses, ...actualStatuses]));
     return [

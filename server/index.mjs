@@ -302,7 +302,7 @@ function cacheCommunityGuild(guildId, payload) {
   return value;
 }
 
-async function checkCommunityBotGuildAccess(config, guildId) {
+async function checkCommunityBotDirectGuildAccess(config, guildId) {
   const normalizedGuildId = String(guildId ?? "").trim();
   const direct = await requestDiscord(`guilds/${encodeURIComponent(normalizedGuildId)}?with_counts=true`, {
     headers: { Authorization: `Bot ${config.botToken}` }
@@ -311,7 +311,14 @@ async function checkCommunityBotGuildAccess(config, guildId) {
     cacheCommunityGuild(normalizedGuildId, direct.payload);
     return { accessible: true, status: direct.response.status, source: "guild", payload: direct.payload };
   }
-  if (direct.response.status === 401) {
+  return { accessible: false, status: direct.response.status, source: "guild", payload: direct.payload };
+}
+
+async function checkCommunityBotGuildAccess(config, guildId) {
+  const normalizedGuildId = String(guildId ?? "").trim();
+  const direct = await checkCommunityBotDirectGuildAccess(config, normalizedGuildId);
+  if (direct.accessible) return direct;
+  if (direct.status === 401) {
     return { accessible: false, status: 401, source: "guild", payload: direct.payload };
   }
 
@@ -319,14 +326,14 @@ async function checkCommunityBotGuildAccess(config, guildId) {
   // installation. The bot's own guild list is an independent membership check.
   let after = "0";
   let listedGuildCount = 0;
-  for (let page = 0; page < 5; page += 1) {
+  for (let page = 0; page < 25; page += 1) {
     const guilds = await requestDiscord(`users/@me/guilds?limit=200&after=${encodeURIComponent(after)}`, {
       headers: { Authorization: `Bot ${config.botToken}` }
     });
     if (!guilds.response.ok || !Array.isArray(guilds.payload)) {
       return {
         accessible: false,
-        status: guilds.response.status || direct.response.status,
+        status: guilds.response.status || direct.status,
         source: "guild-list",
         payload: guilds.payload,
         tokenVerified: false
@@ -346,7 +353,7 @@ async function checkCommunityBotGuildAccess(config, guildId) {
 
   return {
     accessible: false,
-    status: direct.response.status,
+    status: direct.status,
     source: "guild-list",
     payload: direct.payload,
     tokenVerified: true,
@@ -4227,7 +4234,8 @@ async function activateWaitingCommunityOrder(order) {
       order = latest.rows[0]?.payload ?? order;
     }
   }
-  if (String(order.status ?? "").toUpperCase() !== "WAITING") return order;
+  const activationStatus = String(order.status ?? "").toUpperCase();
+  if (!["WAITING", "RECOVERING"].includes(activationStatus)) return order;
 
   const latestConfig = await getCommunityOAuthConfig();
   const targetGuildId = String(order.serverId ?? "").trim();
@@ -4245,7 +4253,7 @@ async function activateWaitingCommunityOrder(order) {
       const refreshed = await pool.query(
         `UPDATE tracked_orders
          SET payload = $2::jsonb, updated_at = NOW()
-         WHERE uniqid = $1 AND payload->>'status' = 'WAITING'
+         WHERE uniqid = $1 AND payload->>'status' IN ('WAITING', 'RECOVERING')
          RETURNING payload`,
         [order.uniqid, JSON.stringify(order)]
       );
@@ -4261,9 +4269,41 @@ async function activateWaitingCommunityOrder(order) {
   if (!activateWaitingCommunityOrder.lastChecks) activateWaitingCommunityOrder.lastChecks = new Map();
   activateWaitingCommunityOrder.lastChecks.set(order.uniqid, Date.now());
 
-  let resolved;
+  let resolved = null;
+  const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
+  const shouldUseStoredGuildRecovery = targetConfig.configured && (
+    activationStatus === "RECOVERING"
+    || ["server_restart_resume", "inventory_recovery_retry"].includes(String(order.waitingCode ?? ""))
+    || (Number(order.added ?? 0) > 0 && ["discord_403", "discord_404", "discord_unknown"].includes(String(order.waitingCode ?? "")))
+  );
+  if (shouldUseStoredGuildRecovery) {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const access = await checkCommunityBotDirectGuildAccess(targetConfig, targetGuildId).catch(() => null);
+      if (access?.accessible) {
+        resolved = {
+          config: targetConfig,
+          invite: extractDiscordInviteCode(order.serverInvite),
+          serverInfo: {
+            guildId: targetGuildId,
+            guildName: String(access.payload?.name ?? order.serverName ?? "Discord server"),
+            approximateMemberCount: Number.isFinite(access.payload?.approximate_member_count)
+              ? access.payload.approximate_member_count
+              : Number.isFinite(access.payload?.member_count) ? access.payload.member_count : order.serverMemberCount
+          },
+          ...(isCommunityGuildInvitesRestricted(access.payload) ? {
+            invitesPaused: true,
+            waitingCode: "discord_guild_invites_limited",
+            waitingDetails: "Discord has temporarily limited new member access for this server. Check the server restriction before restarting delivery."
+          } : {})
+        };
+        break;
+      }
+      if (access?.status === 401) break;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+  }
   try {
-    resolved = await resolveConfiguredCommunityInvite(order.serverInvite);
+    resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite);
   } catch (error) {
     if (error?.statusCode === 409) {
       const waitingOrder = {
@@ -4289,7 +4329,7 @@ async function activateWaitingCommunityOrder(order) {
     const paused = await pool.query(
       `UPDATE tracked_orders
        SET payload = $2::jsonb, updated_at = NOW()
-       WHERE uniqid = $1 AND payload->>'status' = 'WAITING'
+       WHERE uniqid = $1 AND payload->>'status' IN ('WAITING', 'RECOVERING')
        RETURNING payload`,
       [order.uniqid, JSON.stringify(invitesPausedOrder)]
     );
@@ -4301,7 +4341,7 @@ async function activateWaitingCommunityOrder(order) {
     await client.query("BEGIN");
     const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [order.uniqid]);
     const current = locked.rows[0]?.payload;
-    if (!current || current.provider !== "community" || String(current.status).toUpperCase() !== "WAITING") {
+    if (!current || current.provider !== "community" || !["WAITING", "RECOVERING"].includes(String(current.status).toUpperCase())) {
       await client.query("COMMIT");
       return current ?? order;
     }
@@ -4418,7 +4458,7 @@ async function recoverInterruptedCommunityOrders() {
       if (!order?.uniqid) continue;
       const resumable = {
         ...order,
-        status: "WAITING",
+        status: "RECOVERING",
         waitingCode: "server_restart_resume",
         details: "Resuming delivery after the service restart."
       };
