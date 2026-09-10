@@ -45,12 +45,15 @@ type CommunityMemberResult = {
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
-  if (item.authorizationStatus === "inactive") return 0;
-  if (item.membershipStatus === "removed") return 1;
-  if (["failed", "blocked", "already_member"].includes(item.state.toLowerCase())) return 2;
-  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 3;
-  if (["replacing", "joining", "queued"].includes(item.state.toLowerCase())) return 4;
-  return 5;
+  const state = item.state.toLowerCase();
+  if (state === "joining") return 0;
+  if (item.authorizationStatus === "inactive") return 1;
+  if (item.membershipStatus === "removed") return 2;
+  if (["failed", "blocked", "already_member"].includes(state)) return 3;
+  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 4;
+  if (state === "replacing") return 5;
+  if (state === "queued") return 6;
+  return 7;
 }
 
 function formatDcordTiming(value: unknown) {
@@ -438,6 +441,14 @@ export default function PublicOrderPage() {
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
+  const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
+  const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
+  const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
+    ? formatCountdown(nextMemberSeconds)
+    : communityMemberJoining ? "Joining now" : "Preparing...";
+  const nextMemberActivityLabel = nextMemberSeconds !== null && nextMemberSeconds > 0
+    ? "Next member joins in"
+    : communityMemberJoining ? "Member delivery" : "Next member";
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const replaceableCommunityMemberIndices = communityMemberResults
     .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
@@ -709,10 +720,10 @@ export default function PublicOrderPage() {
         ) : null}
       </div>
 
-      {nextMemberSeconds !== null && nextMemberSeconds > 0 ? (
+      {showNextMemberActivity ? (
         <div className="next-member-countdown" role="status" aria-live="polite">
-          <span><Activity className="h-4 w-4" aria-hidden="true" /> Next member joins in</span>
-          <strong>{formatCountdown(nextMemberSeconds)}</strong>
+          <span><Activity className="h-4 w-4" aria-hidden="true" /> {nextMemberActivityLabel}</span>
+          <strong>{nextMemberActivityValue}</strong>
         </div>
       ) : null}
 

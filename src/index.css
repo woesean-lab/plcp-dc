@@ -4096,12 +4096,18 @@
   }
 
   .public-token-result-pill[data-state="waiting"],
-  .public-token-result-pill[data-state="joining"],
-  .public-token-result-pill[data-state="verifying"],
   .public-token-result-pill[data-state="queued"] {
     border-color: rgba(155, 140, 255, .2);
     color: #bab2f3;
     background: rgba(155, 140, 255, .08);
+  }
+
+  .public-token-result-pill[data-state="joining"],
+  .public-token-result-pill[data-state="verifying"] {
+    border-color: rgba(86, 205, 255, .3);
+    color: #7bdcff;
+    background: rgba(63, 184, 235, .11);
+    box-shadow: 0 0 14px rgba(63, 184, 235, .08);
   }
 
   .public-token-result-pill[data-state="skipped"] {

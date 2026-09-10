@@ -46,12 +46,15 @@ type CommunityMemberResult = {
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
-  if (item.authorizationStatus === "inactive") return 0;
-  if (item.membershipStatus === "removed") return 1;
-  if (["failed", "blocked", "already_member"].includes(item.state.toLowerCase())) return 2;
-  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 3;
-  if (["replacing", "joining", "queued"].includes(item.state.toLowerCase())) return 4;
-  return 5;
+  const state = item.state.toLowerCase();
+  if (state === "joining") return 0;
+  if (item.authorizationStatus === "inactive") return 1;
+  if (item.membershipStatus === "removed") return 2;
+  if (["failed", "blocked", "already_member"].includes(state)) return 3;
+  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 4;
+  if (state === "replacing") return 5;
+  if (state === "queued") return 6;
+  return 7;
 }
 
 function formatDcordTiming(value: unknown) {
@@ -426,6 +429,14 @@ export default function OrderPage() {
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
+  const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
+  const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
+  const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
+    ? formatCountdown(nextMemberSeconds)
+    : communityMemberJoining ? "Joining now" : "Preparing...";
+  const nextMemberActivityLabel = nextMemberSeconds !== null && nextMemberSeconds > 0
+    ? "Next member in"
+    : communityMemberJoining ? "Member delivery" : "Next member";
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
@@ -1061,10 +1072,10 @@ export default function OrderPage() {
                     {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
                   </Button>
                 ) : null}
-                {nextMemberSeconds !== null && nextMemberSeconds > 0 ? (
+                {showNextMemberActivity ? (
                   <span className="lookup-next-member" role="status" aria-live="polite">
                     <Activity className="h-4 w-4" aria-hidden="true" />
-                    Next member in <strong>{formatCountdown(nextMemberSeconds)}</strong>
+                    {nextMemberActivityLabel} <strong>{nextMemberActivityValue}</strong>
                   </span>
                 ) : null}
               </section>
