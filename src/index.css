@@ -1894,11 +1894,6 @@
     outline-offset: 2px;
   }
 
-  .community-speed-custom-option:focus-within {
-    outline: 2px solid var(--app-accent-bright);
-    outline-offset: 2px;
-  }
-
   .community-speed-custom-control {
     display: flex;
     width: 58px;
