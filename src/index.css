@@ -4923,6 +4923,52 @@
   font-size: 11px;
 }
 
+.monitor-member-check-bot-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--app-divider);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .025);
+}
+
+.monitor-member-check-bot-alert > span,
+.monitor-member-check-bot-actions {
+  display: flex;
+  align-items: center;
+}
+
+.monitor-member-check-bot-alert > span {
+  min-width: 0;
+  gap: 8px;
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.monitor-member-check-bot-alert > span svg {
+  flex: 0 0 auto;
+  color: var(--app-accent-bright);
+}
+
+.monitor-member-check-bot-actions {
+  flex: 0 0 auto;
+  gap: 7px;
+}
+
+@media (max-width: 639px) {
+  .monitor-member-check-bot-alert {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .monitor-member-check-bot-actions {
+    justify-content: flex-end;
+  }
+}
+
 .monitor-live-progress {
   padding: 14px 24px 13px;
   border-bottom: 1px solid var(--app-divider);

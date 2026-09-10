@@ -873,17 +873,19 @@ export default function PublicOrderPage() {
                       </span>
                     </div>
                     {communityCheckNeedsBot && botInvite ? (
-                      <div className="monitor-bot-alert" role="alert">
-                        <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>To check members, please add the bot to your Discord server.</strong></span>
-                        <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
-                          <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy bot link
-                        </Button>
-                        <Button asChild size="xs">
-                          <a href={botInvite} target="_blank" rel="noreferrer">
-                            <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
-                            <ExternalLink className="h-3 w-3" aria-hidden="true" />
-                          </a>
-                        </Button>
+                      <div className="monitor-member-check-bot-alert" role="alert">
+                        <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check members.</strong></span>
+                        <div className="monitor-member-check-bot-actions">
+                          <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
+                            <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy link
+                          </Button>
+                          <Button asChild size="xs">
+                            <a href={botInvite} target="_blank" rel="noreferrer">
+                              <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
+                              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                            </a>
+                          </Button>
+                        </div>
                       </div>
                     ) : null}
                     {communityMemberResults.length ? (
