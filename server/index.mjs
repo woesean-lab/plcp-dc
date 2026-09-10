@@ -6116,10 +6116,8 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const ids = [];
     for (const order of orders) {
       const uniqid = order.uniqid.trim();
-      ids.push(uniqid);
       const existing = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
       const existingPayload = existing.rows[0]?.payload;
       const isLocallyManagedOrder =
@@ -6137,13 +6135,6 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
       );
     }
 
-    const deletedOrders = ids.length
-      ? await client.query("DELETE FROM tracked_orders WHERE NOT (uniqid = ANY($1::text[])) RETURNING uniqid", [ids])
-      : await client.query("DELETE FROM tracked_orders RETURNING uniqid");
-    const deletedTokenSettingKeys = deletedOrders.rows.map((row) => getDcordOrderTokensSettingKey(row.uniqid));
-    if (deletedTokenSettingKeys.length) {
-      await client.query("DELETE FROM app_settings WHERE setting_key = ANY($1::text[])", [deletedTokenSettingKeys]);
-    }
     await client.query("COMMIT");
     res.json({ saved: orders.length });
   } catch (error) {
