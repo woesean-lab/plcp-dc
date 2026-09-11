@@ -5344,7 +5344,9 @@
 
 .monitor-delay-controls {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(140px, 210px) auto auto;
+  justify-content: start;
+  align-items: center;
   gap: 8px;
   margin-top: 14px;
 }
@@ -5413,7 +5415,15 @@
 }
 
 .monitor-delay-controls .ui-input {
+  width: 210px;
+  max-width: 100%;
   min-width: 0;
+}
+
+.monitor-delay-controls .ui-button {
+  width: auto;
+  justify-self: start;
+  white-space: nowrap;
 }
 
 .next-member-countdown {
@@ -5798,7 +5808,7 @@
   }
 
   .monitor-delay-controls {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(120px, 1fr) auto;
   }
 
   .monitor-delay-controls.has-cancel {
@@ -5806,7 +5816,7 @@
   }
 
   .monitor-delay-controls .ui-button {
-    width: 100%;
+    width: auto;
   }
 
   .monitor-restart-warning {
