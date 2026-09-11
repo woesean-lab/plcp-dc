@@ -1656,10 +1656,15 @@ async function checkCommunityOrderAuthorizations(order) {
     .filter(isDiscordGuildId);
   const stock = discordUserIds.length
     ? await pool.query(
-        `SELECT discord_user_id, encrypted_access_token, access_token_expires_at
+        `SELECT DISTINCT ON (discord_user_id)
+                discord_user_id, encrypted_access_token, access_token_expires_at
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-        [targetGuildId, discordUserIds]
+         WHERE discord_user_id = ANY($1::text[])
+         ORDER BY discord_user_id,
+                  (encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) DESC,
+                  access_token_expires_at DESC NULLS LAST,
+                  authorized_at DESC NULLS LAST`,
+        [discordUserIds]
       )
     : { rows: [] };
   const stockByUserId = new Map(stock.rows.map((row) => [String(row.discord_user_id), row]));
@@ -3730,6 +3735,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         const avatarUrl = avatarHash
           ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(discordUserId)}/${encodeURIComponent(avatarHash)}.png?size=128`
           : null;
+        const encryptedAccessToken = encryptCredential(accessToken);
         await pool.query(
           `INSERT INTO community_oauth_joins
              (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
@@ -3750,7 +3756,23 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
                WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position
                ELSE community_oauth_joins.sort_position
              END`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptCredential(accessToken), accessTokenExpiresAt, stockType, details, sortPosition]
+          [discordUserId, config.guildId, username, avatarUrl, encryptedAccessToken, accessTokenExpiresAt, stockType, details, sortPosition]
+        );
+        await pool.query(
+          `UPDATE community_oauth_joins
+           SET encrypted_access_token = $2,
+               access_token_expires_at = $3,
+               authorized_at = NOW(),
+               status = CASE
+                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN 'authorized'
+                 ELSE status
+               END,
+               details = CASE
+                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN $4
+                 ELSE details
+               END
+           WHERE discord_user_id = $1 AND guild_id <> $5`,
+          [discordUserId, encryptedAccessToken, accessTokenExpiresAt, details, config.guildId]
         );
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
