@@ -935,6 +935,12 @@ export default function OrderPage() {
               <Button type="button" variant="secondary" size="sm" onClick={() => void copyPublicMonitorLink()}>
                 <Copy className="h-4 w-4" aria-hidden="true" /> Monitor link
               </Button>
+              {canCancelCommunityOrder ? (
+                <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
+                  <X className="h-4 w-4" aria-hidden="true" />
+                  {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
+                </Button>
+              ) : null}
               <Button type="button" variant="secondary" size="icon" onClick={openPublicMonitorLink} title="Open monitor" aria-label="Open monitor">
                 <ExternalLink className="h-4 w-4" aria-hidden="true" />
               </Button>
@@ -1093,12 +1099,6 @@ export default function OrderPage() {
                     <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(0)} disabled={updatingDelay || Number(result.delay) === 0}>
                       <X className="h-4 w-4" aria-hidden="true" />
                       {Number(result.delay) === 0 ? "Delay cancelled" : "Cancel delay"}
-                    </Button>
-                  ) : null}
-                  {canCancelCommunityOrder ? (
-                    <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
-                      <X className="h-4 w-4" aria-hidden="true" />
-                      {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
                     </Button>
                   ) : null}
                 </div>
