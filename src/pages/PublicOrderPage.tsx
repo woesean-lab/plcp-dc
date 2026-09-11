@@ -954,7 +954,7 @@ export default function PublicOrderPage() {
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
                       <span className="flex items-center gap-2">
                         {isCompleted ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                          <Button className="member-check-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                             <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>

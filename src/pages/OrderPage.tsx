@@ -373,6 +373,7 @@ export default function OrderPage() {
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -768,9 +769,12 @@ export default function OrderPage() {
       setCheckingCommunityMembers(true);
       const data = await checkCommunityOrderMembers(target);
       setResult((current) => mergeOrderStatus(current, data.order));
+      setCommunityCheckNeedsBot(false);
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Members could not be checked.");
+      const message = error instanceof Error ? error.message : "Members could not be checked.";
+      if (/add the bot to your discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
     }
@@ -1175,7 +1179,7 @@ export default function OrderPage() {
                 </div>
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
-                    <Button type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
+                    <Button className="member-check-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
                       <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                       {checkingCommunityMembers ? "Checking..." : "Check members"}
                     </Button>
@@ -1189,6 +1193,23 @@ export default function OrderPage() {
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
                 </span>
               </div>
+
+              {communityCheckNeedsBot && botInvite ? (
+                <div className="monitor-member-check-bot-alert" role="alert">
+                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check members.</strong></span>
+                  <div className="monitor-member-check-bot-actions">
+                    <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInvite()}>
+                      <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy link
+                    </Button>
+                    <Button asChild size="xs">
+                      <a href={botInvite} target="_blank" rel="noreferrer">
+                        <Bot className="h-3.5 w-3.5" aria-hidden="true" /> Add bot
+                        <ExternalLink className="h-3 w-3" aria-hidden="true" />
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
 
               {communityMemberResults.length ? (
                 <div className="community-order-result-list">

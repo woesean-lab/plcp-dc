@@ -1166,6 +1166,15 @@
     letter-spacing: 0;
   }
 
+  .member-check-button {
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+    text-transform: none;
+  }
+
   .lookup-token-panel .public-token-results-list { gap: .45rem; margin-top: .75rem; }
   .lookup-token-panel .public-token-result-row { padding-block: .48rem; border-radius: 7px; }
   .lookup-token-panel .public-token-result-index { width: 27px; height: 27px; border-radius: 7px; }
