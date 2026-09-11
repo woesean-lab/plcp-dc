@@ -309,7 +309,9 @@ export default function PublicOrderPage() {
   const refreshStatusService = typeof status?.service === "string" ? status.service : undefined;
   const refreshServiceType = seed.service ?? refreshStatusService ?? status?.type;
   const isBoostRefresh = status?.provider === "dcord" || isBoostService(refreshServiceType);
-  const refreshSeconds = isBoostRefresh ? 2 : AUTO_REFRESH_SECONDS;
+  const refreshSeconds = isBoostRefresh || (status?.provider === "community" && !liveStreamConnected)
+    ? 2
+    : AUTO_REFRESH_SECONDS;
 
   useEffect(() => {
     if (!uniqid) {
