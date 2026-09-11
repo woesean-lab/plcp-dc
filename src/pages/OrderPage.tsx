@@ -1179,13 +1179,13 @@ export default function OrderPage() {
                 </div>
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
-                    <Button className="member-check-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
                       <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                       {checkingCommunityMembers ? "Checking..." : "Check members"}
                     </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
-                    <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                       <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                       {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : "Replace all"}
                     </Button>
@@ -1224,7 +1224,7 @@ export default function OrderPage() {
                       </span>
                       <span className="community-order-result-state">
                         {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
+                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                           </Button>

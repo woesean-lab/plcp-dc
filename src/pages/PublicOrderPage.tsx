@@ -954,13 +954,13 @@ export default function PublicOrderPage() {
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
                       <span className="flex items-center gap-2">
                         {isCompleted ? (
-                          <Button className="member-check-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                             <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                             {checkingCommunityMembers ? "Checking..." : "Check members"}
                           </Button>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
@@ -994,7 +994,7 @@ export default function PublicOrderPage() {
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
                               {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                                <Button type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                                <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>

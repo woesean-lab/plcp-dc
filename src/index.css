@@ -884,9 +884,11 @@
     grid-column: 1 / -1;
   }
 
-  .monitor-token-panel .community-order-result-list {
+  .monitor-token-panel .community-order-result-list,
+  .lookup-token-panel.community-order-log .community-order-result-list {
     max-height: 240px;
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   @media (max-width: 639px) {
@@ -1166,7 +1168,7 @@
     letter-spacing: 0;
   }
 
-  .member-check-button {
+  .member-log-action-button {
     font-family: inherit;
     font-size: 12px;
     font-weight: 600;
