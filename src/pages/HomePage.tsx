@@ -160,6 +160,11 @@ function getBoostConcurrency(amount: number) {
   return Math.max(1, Math.floor(amount / 2));
 }
 
+function isBoostUsedTokenIssue(item: BoostUsedToken) {
+  const status = String(item.status ?? "").trim().toLowerCase();
+  return !item.boosted && !["pending", "used"].includes(status);
+}
+
 const EMPTY_BOOST_STOCK: BoostStock = {
   oneMonth: 0,
   threeMonth: 0
@@ -585,6 +590,7 @@ export default function HomePage() {
   const [stockCategory, setStockCategory] = useState<"boosts" | "offline">("boosts");
   const [stockView, setStockView] = useState<"active" | "used">("active");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
+  const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
   const [balance, setBalance] = useState<number | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
@@ -719,16 +725,21 @@ export default function HomePage() {
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   const filteredUsedBoostTokens = useMemo(
     () => {
-      const filtered = usedTokenDurationFilter === "all"
+      const durationFiltered = usedTokenDurationFilter === "all"
         ? usedBoostTokens
         : usedBoostTokens.filter((item) => item.duration === usedTokenDurationFilter);
+      const filtered = usedTokenStatusFilter === "boosted"
+        ? durationFiltered.filter((item) => item.boosted)
+        : usedTokenStatusFilter === "issues"
+          ? durationFiltered.filter(isBoostUsedTokenIssue)
+          : durationFiltered;
 
       return [...filtered].sort((left, right) => {
         const dateDifference = getTrackedTimestamp(right.resultAt ?? right.usedAt) - getTrackedTimestamp(left.resultAt ?? left.usedAt);
         return dateDifference || right.id.localeCompare(left.id);
       });
     },
-    [usedBoostTokens, usedTokenDurationFilter]
+    [usedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter]
   );
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
@@ -2868,26 +2879,51 @@ export default function HomePage() {
               ) : (
                 <div className="stock-used-view" role="tabpanel">
                   <div className="stock-used-filterbar">
-                    <span>Duration</span>
-                    <div className="stock-duration-filter" role="group" aria-label="Filter used tokens by duration">
-                      {[
-                        { value: "all" as const, label: "All", count: usedBoostTokens.length },
-                        { value: 1 as const, label: "1 Month", count: usedBoostTokens.filter((item) => item.duration === 1).length },
-                        { value: 3 as const, label: "3 Month", count: usedBoostTokens.filter((item) => item.duration === 3).length }
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          className={usedTokenDurationFilter === option.value ? "is-active" : ""}
-                          aria-pressed={usedTokenDurationFilter === option.value}
-                          onClick={() => {
-                            setUsedTokenDurationFilter(option.value);
-                            setSelectedUsedBoostTokens({});
-                          }}
-                        >
-                          {option.label}<span>{option.count}</span>
-                        </button>
-                      ))}
+                    <div className="stock-used-filter-group">
+                      <span>Duration</span>
+                      <div className="stock-duration-filter" role="group" aria-label="Filter used tokens by duration">
+                        {[
+                          { value: "all" as const, label: "All", count: usedBoostTokens.length },
+                          { value: 1 as const, label: "1 Month", count: usedBoostTokens.filter((item) => item.duration === 1).length },
+                          { value: 3 as const, label: "3 Month", count: usedBoostTokens.filter((item) => item.duration === 3).length }
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={usedTokenDurationFilter === option.value ? "is-active" : ""}
+                            aria-pressed={usedTokenDurationFilter === option.value}
+                            onClick={() => {
+                              setUsedTokenDurationFilter(option.value);
+                              setSelectedUsedBoostTokens({});
+                            }}
+                          >
+                            {option.label}<span>{option.count}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="stock-used-filter-group">
+                      <span>Status</span>
+                      <div className="stock-duration-filter stock-status-filter" role="group" aria-label="Filter used tokens by status">
+                        {[
+                          { value: "all" as const, label: "All", count: usedBoostTokens.length },
+                          { value: "boosted" as const, label: "Boosted", count: usedBoostTokens.filter((item) => item.boosted).length },
+                          { value: "issues" as const, label: "Issues", count: usedBoostTokens.filter(isBoostUsedTokenIssue).length }
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            className={`${usedTokenStatusFilter === option.value ? "is-active" : ""} ${option.value === "issues" ? "is-issue-filter" : ""}`}
+                            aria-pressed={usedTokenStatusFilter === option.value}
+                            onClick={() => {
+                              setUsedTokenStatusFilter(option.value);
+                              setSelectedUsedBoostTokens({});
+                            }}
+                          >
+                            {option.label}<span>{option.count}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                   <div className={`stock-selection-bar stock-used-actions ${selectedUsedTokenIds.length ? "has-selection" : ""}`}>
@@ -2936,7 +2972,7 @@ export default function HomePage() {
                         ))}
                       </ol>
                     ) : (
-                      <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No {usedTokenDurationFilter === "all" ? "used" : `${usedTokenDurationFilter} month`} tokens</strong><span>Tokens moved from inventory or consumed by orders will appear here.</span></div>
+                      <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No matching used tokens</strong><span>Adjust the duration or status filters.</span></div>
                     )}
                   </div>
                 </div>
