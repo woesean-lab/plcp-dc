@@ -975,7 +975,8 @@
 
   .lookup-speed-profile-options {
     flex: 1 0 100%;
-    width: 100%;
+    width: min(760px, 100%);
+    max-width: 760px;
     margin-right: 0 !important;
   }
 
