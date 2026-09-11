@@ -4384,15 +4384,19 @@ async function activateWaitingCommunityOrder(order) {
   activateWaitingCommunityOrder.lastChecks.set(order.uniqid, Date.now());
 
   let resolved = null;
+  let storedGuildAccess = null;
+  const waitingCode = String(order.waitingCode ?? "");
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
   const shouldUseStoredGuildRecovery = targetConfig.configured && (
     activationStatus === "RECOVERING"
     || ["server_restart_resume", "inventory_recovery_retry"].includes(String(order.waitingCode ?? ""))
-    || (Number(order.added ?? 0) > 0 && ["discord_403", "discord_404", "discord_unknown"].includes(String(order.waitingCode ?? "")))
+    || ["discord_403", "discord_404", "discord_unknown", "discord_missing"].includes(waitingCode)
   );
   if (shouldUseStoredGuildRecovery) {
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const attempts = activationStatus === "RECOVERING" ? 3 : 1;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
       const access = await checkCommunityBotDirectGuildAccess(targetConfig, targetGuildId).catch(() => null);
+      storedGuildAccess = access;
       if (access?.accessible) {
         resolved = {
           config: targetConfig,
@@ -4413,8 +4417,23 @@ async function activateWaitingCommunityOrder(order) {
         break;
       }
       if (access?.status === 401) break;
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 500));
+      if (attempt < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 500));
     }
+  }
+  if (!resolved && shouldUseStoredGuildRecovery) {
+    const status = Number(storedGuildAccess?.status) || 0;
+    const waitingOrder = {
+      ...order,
+      status: "WAITING",
+      waitingCode: `discord_${status || "unknown"}`,
+      details: status === 401
+        ? "Discord rejected the configured Members bot token. Update the bot settings to continue delivery."
+        : "The Members bot is not available in the target server yet. Add it to continue delivery."
+    };
+    if (waitingOrder.status !== order.status || waitingOrder.details !== order.details || waitingOrder.waitingCode !== order.waitingCode) {
+      await saveTrackedOrderPayload(waitingOrder);
+    }
+    return waitingOrder;
   }
   try {
     resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite);
@@ -5249,9 +5268,17 @@ async function pollPublicCommunityOrderStreams() {
     for (const row of tracked.rows) {
       const listeners = publicCommunityOrderStreams.get(row.uniqid);
       if (!listeners?.size) continue;
+      let livePayload = row.payload;
+      if (["WAITING", "RECOVERING"].includes(String(livePayload?.status ?? "").toUpperCase())) {
+        try {
+          livePayload = await activateWaitingCommunityOrder(livePayload);
+        } catch (error) {
+          console.error(`Community monitor bot check failed for ${row.uniqid}:`, error instanceof Error ? error.message : error);
+        }
+      }
       const snapshot = {
-        ...sanitizePublicCommunityOrder(row.payload),
-        canManageCommunityMembers: !isCommunityOrderManagementExpired(row.payload)
+        ...sanitizePublicCommunityOrder(livePayload),
+        canManageCommunityMembers: !isCommunityOrderManagementExpired(livePayload)
       };
       const serialized = JSON.stringify(snapshot);
       for (const listener of listeners) {
