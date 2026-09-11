@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
@@ -15,6 +15,11 @@ import type { OrderProvider, OrderStatusResponse } from "../types";
 const labelClass = "app-kicker";
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
+const ORDER_SPEED_PROFILES = [
+  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
+  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
+  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
+] as const;
 
 type DcordTokenResult = {
   index: number;
@@ -544,7 +549,7 @@ export default function OrderPage() {
     }
   }
 
-  async function handleUpdateDelay(delayOverride?: number) {
+  async function handleUpdateDelay(delayOverride?: number, nextSpeedProfile: "safe" | "balanced" | "fast" | "custom" = "custom") {
     const target = (result?.uniqid ?? uniqid).trim();
     const delay = delayOverride ?? Number.parseInt(delayDraft, 10);
 
@@ -561,8 +566,8 @@ export default function OrderPage() {
     try {
       setUpdatingDelay(true);
       setDelayDraft(String(delay));
-      setResult((current) => (current ? { ...current, delay } : current));
-      const updated = await updateOrderDelay(target, delay, provider);
+      setResult((current) => (current ? { ...current, delay, ...(isCommunityProvider ? { speedProfile: nextSpeedProfile } : {}) } : current));
+      const updated = await updateOrderDelay(target, delay, provider, isCommunityProvider ? nextSpeedProfile : undefined);
       if (updated && typeof updated === "object" && !Array.isArray(updated)) {
         setResult((current) => mergeOrderStatus(current, updated as OrderStatusResponse));
       }
@@ -1045,6 +1050,27 @@ export default function OrderPage() {
                   <p className={labelClass}>Join delay</p>
                   <strong>{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
                 </div>
+                {isCommunityProvider ? (
+                  <div className="monitor-speed-profile-options lookup-speed-profile-options" aria-label="Delivery speed profile">
+                    {ORDER_SPEED_PROFILES.map((profile) => {
+                      const Icon = profile.icon;
+                      return (
+                        <button
+                          key={profile.key}
+                          type="button"
+                          className={speedProfile === profile.key ? "is-selected" : ""}
+                          aria-pressed={speedProfile === profile.key}
+                          disabled={updatingDelay}
+                          onClick={() => void handleUpdateDelay(profile.delay, profile.key)}
+                        >
+                          <Icon className="h-4 w-4" aria-hidden="true" />
+                          <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                          <em>{profile.timing}</em>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <Input
                   type="number"
                   min={1}
@@ -1053,8 +1079,8 @@ export default function OrderPage() {
                   onChange={(event) => setDelayDraft(event.target.value)}
                   placeholder="Delay"
                 />
-                <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay()} disabled={updatingDelay}>
-                  {updatingDelay ? "Updating..." : "Update"}
+                <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(undefined, "custom")} disabled={updatingDelay}>
+                  {updatingDelay ? "Updating..." : isCommunityProvider ? "Apply custom" : "Update"}
                 </Button>
                 {isCommunityProvider ? (
                   <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>

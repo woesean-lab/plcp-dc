@@ -245,14 +245,19 @@ export async function checkAvailableAmount(service: string, id: string, duration
   );
 }
 
-export async function updateOrderDelay(uniqid: string, delay: number, provider: OrderProvider = "tokenu") {
+export async function updateOrderDelay(
+  uniqid: string,
+  delay: number,
+  provider: OrderProvider = "tokenu",
+  speedProfile?: "safe" | "balanced" | "fast" | "custom"
+) {
   const prefix = provider === "community" ? "/api/community/orders" : "/api/integration/orders";
   return requestJson<unknown>(`${prefix}/${encodeURIComponent(uniqid)}/delay`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({ delay })
+    body: JSON.stringify({ delay, ...(speedProfile ? { speedProfile } : {}) })
   });
 }
 

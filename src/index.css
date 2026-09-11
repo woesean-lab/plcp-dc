@@ -973,6 +973,12 @@
     flex: 0 0 104px;
   }
 
+  .lookup-speed-profile-options {
+    flex: 1 0 100%;
+    width: 100%;
+    margin-right: 0 !important;
+  }
+
   .lookup-next-member {
     display: inline-flex;
     align-items: center;
