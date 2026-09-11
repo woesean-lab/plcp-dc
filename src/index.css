@@ -965,7 +965,7 @@
     border-left: 1px solid var(--app-divider);
   }
 
-  .lookup-delay-control > div { margin-right: auto; }
+  .lookup-delay-control > .lookup-delay-heading { margin-right: auto; }
   .lookup-delay-control strong { display: block; margin-top: .25rem; color: var(--app-text); font-size: 13px; }
   .lookup-delay-control .ui-input {
     width: 104px;
@@ -974,10 +974,30 @@
   }
 
   .lookup-speed-profile-options {
-    flex: 1 0 100%;
-    width: min(760px, 100%);
-    max-width: 760px;
-    margin-right: 0 !important;
+    width: 100%;
+    margin: 0;
+  }
+
+  .lookup-delay-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .65rem;
+  }
+
+  .lookup-delay-control.has-speed-profiles {
+    display: grid;
+    grid-template-columns: 190px minmax(540px, 760px);
+    justify-content: start;
+  }
+
+  .lookup-delay-control.has-speed-profiles .lookup-speed-profile-options {
+    grid-column: 2;
+  }
+
+  .lookup-delay-control.has-speed-profiles .lookup-delay-actions,
+  .lookup-delay-control.has-speed-profiles .lookup-next-member {
+    grid-column: 1 / -1;
   }
 
   .lookup-next-member {
@@ -1220,6 +1240,10 @@
     .lookup-metrics > div:nth-child(2n) { border-right: 0; }
     .lookup-context-row { grid-template-columns: 1fr; }
     .lookup-delay-control { min-width: 0; border-top: 1px solid var(--app-divider); border-left: 0; }
+    .lookup-delay-control.has-speed-profiles { grid-template-columns: 1fr; }
+    .lookup-delay-control.has-speed-profiles .lookup-speed-profile-options,
+    .lookup-delay-control.has-speed-profiles .lookup-delay-actions,
+    .lookup-delay-control.has-speed-profiles .lookup-next-member { grid-column: 1; }
     .lookup-technical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .lookup-technical-grid > div { border-bottom: 1px solid var(--app-divider); }
     .lookup-technical-grid > div:nth-child(2n) { border-right: 0; }
@@ -1260,7 +1284,7 @@
       flex-wrap: wrap;
       padding: .8rem .85rem;
     }
-    .lookup-delay-control > div {
+    .lookup-delay-control > .lookup-delay-heading {
       width: 100%;
       flex: 1 0 100%;
       margin-right: 0;

@@ -1045,8 +1045,8 @@ export default function OrderPage() {
             </section>
 
             {!terminal && !isInvitesPaused && !isDcordProvider ? (
-              <section className="lookup-delay-control">
-                <div>
+              <section className={`lookup-delay-control ${isCommunityProvider ? "has-speed-profiles" : ""}`}>
+                <div className="lookup-delay-heading">
                   <p className={labelClass}>Join delay</p>
                   <strong>{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
                 </div>
@@ -1071,35 +1071,37 @@ export default function OrderPage() {
                     })}
                   </div>
                 ) : null}
-                <Input
-                  type="number"
-                  min={1}
-                  max={1200}
-                  value={delayDraft}
-                  onChange={(event) => setDelayDraft(event.target.value)}
-                  placeholder="Delay"
-                />
-                <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(undefined, "custom")} disabled={updatingDelay}>
-                  {updatingDelay ? "Updating..." : isCommunityProvider ? "Apply custom" : "Update"}
-                </Button>
-                {isCommunityProvider ? (
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
-                    {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
-                    {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
+                <div className="lookup-delay-actions">
+                  <Input
+                    type="number"
+                    min={1}
+                    max={1200}
+                    value={delayDraft}
+                    onChange={(event) => setDelayDraft(event.target.value)}
+                    placeholder="Delay"
+                  />
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(undefined, "custom")} disabled={updatingDelay}>
+                    {updatingDelay ? "Updating..." : isCommunityProvider ? "Apply custom" : "Update"}
                   </Button>
-                ) : null}
-                {isCommunityProvider ? (
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(0)} disabled={updatingDelay || Number(result.delay) === 0}>
-                    <X className="h-4 w-4" aria-hidden="true" />
-                    {Number(result.delay) === 0 ? "Delay cancelled" : "Cancel delay"}
-                  </Button>
-                ) : null}
-                {canCancelCommunityOrder ? (
-                  <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
-                    <X className="h-4 w-4" aria-hidden="true" />
-                    {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
-                  </Button>
-                ) : null}
+                  {isCommunityProvider ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
+                      {isDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+                      {togglingDeliveryPause ? "Updating..." : isDeliveryPaused ? "Resume" : "Pause"}
+                    </Button>
+                  ) : null}
+                  {isCommunityProvider ? (
+                    <Button type="button" variant="secondary" size="sm" onClick={() => void handleUpdateDelay(0)} disabled={updatingDelay || Number(result.delay) === 0}>
+                      <X className="h-4 w-4" aria-hidden="true" />
+                      {Number(result.delay) === 0 ? "Delay cancelled" : "Cancel delay"}
+                    </Button>
+                  ) : null}
+                  {canCancelCommunityOrder ? (
+                    <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelCommunityModal(true)} disabled={cancellingCommunityOrder}>
+                      <X className="h-4 w-4" aria-hidden="true" />
+                      {cancellingCommunityOrder ? "Cancelling..." : "Cancel order"}
+                    </Button>
+                  ) : null}
+                </div>
                 {showNextMemberActivity ? (
                   <span className="lookup-next-member" role="status" aria-live="polite">
                     <Activity className="h-4 w-4" aria-hidden="true" />
