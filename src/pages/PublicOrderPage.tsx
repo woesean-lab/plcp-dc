@@ -452,6 +452,7 @@ export default function PublicOrderPage() {
     : null;
   const isCompleted = normalizedStatus === "COMPLETED";
   const isWaiting = normalizedStatus === "WAITING";
+  const isWaitingForBot = isWaiting && ["discord_401", "discord_403", "discord_404", "discord_missing"].includes(String(status?.waitingCode ?? ""));
   const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
   const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
@@ -858,7 +859,7 @@ export default function PublicOrderPage() {
             </div>
           ) : (
             <div className={`monitor-content ${isBoostOrder ? "is-boost-monitor" : ""}`}>
-              {isWaiting && botInvite ? (
+              {isWaitingForBot && botInvite ? (
                 <div className="monitor-bot-alert">
                   <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>To continue delivery, please add the bot to your Discord server.</strong></span>
                   <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>

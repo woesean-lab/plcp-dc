@@ -4389,7 +4389,7 @@ async function activateWaitingCommunityOrder(order) {
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
   const shouldUseStoredGuildRecovery = targetConfig.configured && (
     activationStatus === "RECOVERING"
-    || ["server_restart_resume", "inventory_recovery_retry"].includes(String(order.waitingCode ?? ""))
+    || ["server_restart_resume", "inventory_recovery_retry", "restriction_check"].includes(String(order.waitingCode ?? ""))
     || ["discord_403", "discord_404", "discord_unknown", "discord_missing"].includes(waitingCode)
   );
   if (shouldUseStoredGuildRecovery) {
@@ -4422,13 +4422,16 @@ async function activateWaitingCommunityOrder(order) {
   }
   if (!resolved && shouldUseStoredGuildRecovery) {
     const status = Number(storedGuildAccess?.status) || 0;
+    const botUnavailable = [401, 403, 404].includes(status);
     const waitingOrder = {
       ...order,
-      status: "WAITING",
+      status: botUnavailable ? "WAITING" : "RECOVERING",
       waitingCode: `discord_${status || "unknown"}`,
       details: status === 401
         ? "Discord rejected the configured Members bot token. Update the bot settings to continue delivery."
-        : "The Members bot is not available in the target server yet. Add it to continue delivery."
+        : [403, 404].includes(status)
+          ? "The Members bot is not available in the target server yet. Add it to continue delivery."
+          : "Discord is temporarily unavailable while checking this server. The check will retry automatically."
     };
     if (waitingOrder.status !== order.status || waitingOrder.details !== order.details || waitingOrder.waitingCode !== order.waitingCode) {
       await saveTrackedOrderPayload(waitingOrder);
@@ -4501,10 +4504,10 @@ async function activateWaitingCommunityOrder(order) {
           .map((item) => String(item?.discordUserId ?? ""))
           .filter(isDiscordGuildId)
       : [];
-    const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, resolved.config, resolved.config.guildId);
-    const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...previouslyDeliveredUserIds]));
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
+      const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, resolved.config, resolved.config.guildId);
+      const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...previouslyDeliveredUserIds]));
       const extra = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
          FROM community_oauth_joins
@@ -4952,10 +4955,10 @@ app.post("/api/public/orders/:uniqid/pause", pauseCommunityOrder);
 app.post("/api/public/orders/:uniqid/resume", resumeCommunityOrder);
 
 async function restartCommunityRestrictedOrder(req, res, next) {
-  const client = await pool.connect();
+  let uniqid = "";
   try {
     const isPublicRequest = req.path.startsWith("/api/public/");
-    const uniqid = String(req.params.uniqid ?? "").trim();
+    uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
 
     const cooldownKey = `${req.ip}:${uniqid}`;
@@ -4965,40 +4968,69 @@ async function restartCommunityRestrictedOrder(req, res, next) {
         message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before checking again.`
       });
     }
+    if (communityRestrictionChecks.has(uniqid)) {
+      return res.status(409).json({ message: "This server restriction is already being checked." });
+    }
+    communityRestrictionChecks.add(uniqid);
 
-    await client.query("BEGIN");
-    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") {
-      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
     if (String(order.status ?? "").trim().toUpperCase() !== "INVITES PAUSED") {
-      await client.query("ROLLBACK");
       return res.status(409).json({ message: "This order is not waiting for a Discord server restriction check." });
+    }
+
+    const latestConfig = await getCommunityOAuthConfig();
+    const targetGuildId = String(order.serverId ?? "").trim();
+    const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
+    if (!targetConfig.configured || !isDiscordGuildId(targetGuildId)) {
+      return res.status(503).json({ message: "Configure the Members bot before checking this server." });
+    }
+
+    const access = await checkCommunityBotDirectGuildAccess(targetConfig, targetGuildId).catch(() => null);
+    if (!access?.accessible) {
+      const discordStatus = Number(access?.status) || 0;
+      if (![401, 403, 404].includes(discordStatus)) {
+        const error = new Error("Discord is temporarily unavailable. The order remains invites paused; try again shortly.");
+        error.statusCode = 502;
+        throw error;
+      }
+      const waitingOrder = {
+        ...order,
+        status: "WAITING",
+        waitingCode: `discord_${discordStatus}`,
+        botInvite: createCommunityBotInvite(targetConfig, targetGuildId),
+        details: discordStatus === 401
+          ? "Discord rejected the configured Members bot token. Update the bot settings to continue delivery."
+          : "The Members bot is not available in the target server yet. Add it to continue delivery."
+      };
+      await saveTrackedOrderPayload(waitingOrder);
+      if (isPublicRequest) publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
+      return res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(waitingOrder) : waitingOrder);
+    }
+
+    if (isCommunityGuildInvitesRestricted(access.payload)) {
+      if (isPublicRequest) publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
+      return res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(order) : order);
     }
 
     const waitingOrder = {
       ...order,
       status: "WAITING",
       waitingCode: "restriction_check",
-      details: "Checking the Discord server restriction."
+      details: "The bot is available. Starting delivery to verify the server restriction."
     };
-    await client.query(
-      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
-      [uniqid, JSON.stringify(waitingOrder)]
-    );
-    await client.query("COMMIT");
-
+    await saveTrackedOrderPayload(waitingOrder);
     activateWaitingCommunityOrder.lastChecks?.delete(uniqid);
     const checkedOrder = await activateWaitingCommunityOrder(waitingOrder);
     if (isPublicRequest) publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
     res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(checkedOrder) : checkedOrder);
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
     next(error);
   } finally {
-    client.release();
+    if (uniqid) communityRestrictionChecks.delete(uniqid);
   }
 }
 
@@ -5254,6 +5286,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
 });
 
 const publicCommunityOrderStreams = new Map();
+const communityRestrictionChecks = new Set();
 let publicCommunityStreamPollRunning = false;
 
 async function pollPublicCommunityOrderStreams() {
@@ -5269,7 +5302,7 @@ async function pollPublicCommunityOrderStreams() {
       const listeners = publicCommunityOrderStreams.get(row.uniqid);
       if (!listeners?.size) continue;
       let livePayload = row.payload;
-      if (["WAITING", "RECOVERING"].includes(String(livePayload?.status ?? "").toUpperCase())) {
+      if (["WAITING", "RECOVERING"].includes(String(livePayload?.status ?? "").toUpperCase()) && !communityRestrictionChecks.has(row.uniqid)) {
         try {
           livePayload = await activateWaitingCommunityOrder(livePayload);
         } catch (error) {
