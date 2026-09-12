@@ -1005,11 +1005,21 @@ export default function HomePage() {
     const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
-      const summary = await syncCommunityAuthorizations();
-      const nextStatus = await getCommunityAdminStatus();
+      const started = await syncCommunityAuthorizations();
+      if (requestId !== communityStatusRequestRef.current) return;
+      if (started.started) notifySuccess("Members Stock refresh started.");
+
+      let nextStatus = await getCommunityAdminStatus();
+      while (requestId === communityStatusRequestRef.current && nextStatus.syncing) {
+        setCommunityStatus(nextStatus);
+        await new Promise((resolve) => window.setTimeout(resolve, 1500));
+        nextStatus = await getCommunityAdminStatus();
+      }
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
-      notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}.`);
+      const summary = nextStatus.syncProgress ?? started;
+      if (summary.error) notifyError(summary.error);
+      else notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}${summary.errors ? `, ${summary.errors} temporarily skipped` : ""}.`);
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
     } finally {

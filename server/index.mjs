@@ -1599,7 +1599,54 @@ function parseCommunityAccessTokenExpiry(record) {
   return Number.isFinite(expiresAt.getTime()) ? expiresAt : null;
 }
 
-async function syncCommunityAuthorizations(config) {
+const communityAuthorizationSyncJobs = new Map();
+
+function getCommunityAuthorizationSyncSnapshot(guildId) {
+  const job = communityAuthorizationSyncJobs.get(String(guildId ?? ""));
+  if (!job) return null;
+  return {
+    syncing: job.syncing === true,
+    total: Number(job.total ?? 0),
+    checked: Number(job.checked ?? 0),
+    inactive: Number(job.inactive ?? 0),
+    removed: Number(job.removed ?? 0),
+    errors: Number(job.errors ?? 0),
+    startedAt: job.startedAt ?? null,
+    completedAt: job.completedAt ?? null,
+    error: job.error ?? null
+  };
+}
+
+function startCommunityAuthorizationSync(config) {
+  const guildId = String(config.guildId);
+  const existing = communityAuthorizationSyncJobs.get(guildId);
+  if (existing?.syncing) return { started: false, ...getCommunityAuthorizationSyncSnapshot(guildId) };
+
+  const job = {
+    syncing: true,
+    total: 0,
+    checked: 0,
+    inactive: 0,
+    removed: 0,
+    errors: 0,
+    startedAt: new Date().toISOString(),
+    completedAt: null,
+    error: null
+  };
+  communityAuthorizationSyncJobs.set(guildId, job);
+  void syncCommunityAuthorizations(config, (progress) => Object.assign(job, progress)).then((summary) => {
+    Object.assign(job, summary, { syncing: false, completedAt: new Date().toISOString() });
+  }).catch((error) => {
+    job.syncing = false;
+    job.errors += 1;
+    job.error = error instanceof Error ? error.message : "Members Stock refresh failed.";
+    job.completedAt = new Date().toISOString();
+    console.error("Members Stock refresh failed:", job.error);
+  });
+  return { started: true, ...getCommunityAuthorizationSyncSnapshot(guildId) };
+}
+
+async function syncCommunityAuthorizations(config, onProgress = () => {}) {
   await markCommunityFailedDeliveriesInactive(pool, config.guildId);
   const result = await pool.query(
     `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at
@@ -1608,7 +1655,8 @@ async function syncCommunityAuthorizations(config) {
      ORDER BY authorized_at ASC`,
     [config.guildId]
   );
-  const summary = { checked: 0, inactive: 0, removed: 0, errors: 0 };
+  const summary = { total: result.rows.length, checked: 0, inactive: 0, removed: 0, errors: 0 };
+  onProgress(summary);
 
   const failedResults = await pool.query(
     `SELECT result->>'discordUserId' AS discord_user_id, result->>'completedAt' AS completed_at
@@ -1647,24 +1695,42 @@ async function syncCommunityAuthorizations(config) {
   }
   const deliveryFailedUserIdSet = new Set(deliveryFailedUserIds);
 
-  for (const member of result.rows) {
+  await forEachWithConcurrency(result.rows, 4, async (member) => {
     summary.checked += 1;
-    if (deliveryFailedUserIdSet.has(String(member.discord_user_id))) continue;
+    if (deliveryFailedUserIdSet.has(String(member.discord_user_id))) {
+      onProgress(summary);
+      return;
+    }
+    let shouldMarkInactive = false;
     try {
       const expiresAt = new Date(member.access_token_expires_at).getTime();
-      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) throw new Error("expired");
-      const identity = await requestDiscord("oauth2/@me", {
-        headers: { Authorization: `Bearer ${decryptCredential(member.encrypted_access_token)}` }
-      });
-      if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== member.discord_user_id) throw new Error("invalid");
-      const oauthUser = identity.payload.user;
-      const username = String(oauthUser?.username ?? `Discord user ${member.discord_user_id}`).trim().slice(0, 100);
-      const displayName = String(oauthUser?.global_name ?? "").trim().slice(0, 100) || null;
-      await pool.query(
-        "UPDATE community_oauth_joins SET username = $3, display_name = $4, details = NULL WHERE discord_user_id = $1 AND guild_id = $2",
-        [member.discord_user_id, config.guildId, username, displayName]
-      );
+      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+        shouldMarkInactive = true;
+      } else {
+        const identity = await requestDiscord("oauth2/@me", {
+          headers: { Authorization: `Bearer ${decryptCredential(member.encrypted_access_token)}` }
+        });
+        const identityUserId = String(identity.payload?.user?.id ?? "");
+        if (identity.response.status === 401) {
+          shouldMarkInactive = true;
+        } else if (!identity.response.ok) {
+          summary.errors += 1;
+        } else if (identityUserId !== member.discord_user_id) {
+          shouldMarkInactive = true;
+        } else {
+          const oauthUser = identity.payload.user;
+          const username = String(oauthUser?.username ?? `Discord user ${member.discord_user_id}`).trim().slice(0, 100);
+          const displayName = String(oauthUser?.global_name ?? "").trim().slice(0, 100) || null;
+          await pool.query(
+            "UPDATE community_oauth_joins SET username = $3, display_name = $4, details = NULL WHERE discord_user_id = $1 AND guild_id = $2",
+            [member.discord_user_id, config.guildId, username, displayName]
+          );
+        }
+      }
     } catch {
+      summary.errors += 1;
+    }
+    if (shouldMarkInactive) {
       const inactive = await pool.query(
         `UPDATE community_oauth_joins
          SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
@@ -1674,9 +1740,11 @@ async function syncCommunityAuthorizations(config) {
       summary.inactive += inactive.rowCount;
       summary.removed = summary.inactive;
     }
-  }
+    onProgress(summary);
+  });
 
   summary.removed = summary.inactive;
+  onProgress(summary);
   return summary;
 }
 
@@ -3952,6 +4020,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         alreadyMember: 0,
         failed: 0,
         syncing: false,
+        syncProgress: null,
         categories: {},
         stockCategories: [],
         recent: []
@@ -3976,11 +4045,14 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         [config.guildId]
       )
     ]);
+    const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
       bot,
       guild,
       ...summary,
+      syncing: syncProgress?.syncing === true,
+      syncProgress,
       stockCategories,
       recent: recentResult.rows.map((row) => ({
         id: row.discord_user_id,
@@ -4007,8 +4079,8 @@ app.post("/api/community/sync", requireSession, async (_req, res, next) => {
     if (!config.configured) {
       return res.status(503).json({ message: "Configure the Members bot before syncing Members Stock." });
     }
-    const result = await syncCommunityAuthorizations(config);
-    res.set("Cache-Control", "no-store").json(result);
+    const result = startCommunityAuthorizationSync(config);
+    res.status(202).set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
   }

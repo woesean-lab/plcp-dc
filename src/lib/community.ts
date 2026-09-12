@@ -33,8 +33,21 @@ export type CommunityJoinSummary = {
   alreadyMember?: number;
   failed?: number;
   syncing?: boolean;
+  syncProgress?: CommunitySyncProgress | null;
   categories?: Record<string, CommunityStockSummary>;
   stockCategories?: CommunityStockCategory[];
+};
+
+export type CommunitySyncProgress = {
+  syncing: boolean;
+  total: number;
+  checked: number;
+  inactive: number;
+  removed: number;
+  errors: number;
+  startedAt: string | null;
+  completedAt: string | null;
+  error: string | null;
 };
 
 export type CommunityStockCategory = {
@@ -124,7 +137,7 @@ export function syncCommunityAuthorizations() {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin"
-  }).then(parseResponse<{ checked: number; inactive?: number; removed: number; errors: number }>);
+  }).then(parseResponse<CommunitySyncProgress & { started: boolean }>);
 }
 
 export function removeCommunityAuthorization(discordUserId: string) {
