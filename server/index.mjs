@@ -2149,8 +2149,6 @@ async function runCommunityOrder(order, members, config) {
     Number.isFinite(Number(order.added)) ? Number(order.added) : 0,
     results.filter((result) => String(result?.state ?? "").toLowerCase() === "joined").length
   );
-  let blockedByMembershipScreening = false;
-
   async function saveCommunityProgress(payload) {
     const client = await pool.connect();
     try {
@@ -2371,9 +2369,14 @@ async function runCommunityOrder(order, members, config) {
               : "Member joined the server.";
           added += 1;
         } else {
-          state = "blocked";
-          details = "Discord membership screening is enabled on this server.";
-          blockedByMembershipScreening = true;
+          if (joined.response.status === 201 && joined.payload?.pending === true) {
+            state = "joined";
+            details = "Member joined the server and is pending Discord's server-rules screening.";
+            added += 1;
+          } else {
+            state = "blocked";
+            details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+          }
         }
       } else if (joined.response.status === 201) {
         state = "joined";
@@ -2447,28 +2450,6 @@ async function runCommunityOrder(order, members, config) {
     );
     if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
-    if (blockedByMembershipScreening) {
-      for (let remainingIndex = index + 1; remainingIndex < members.length; remainingIndex += 1) {
-        const remainingMember = members[remainingIndex];
-        const queuedIndex = results.findIndex((result) => result?.discordUserId === remainingMember.discord_user_id);
-        if (queuedIndex < 0) continue;
-        results[queuedIndex] = {
-          ...results[queuedIndex],
-          state: "queued",
-          details: "Delivery stopped before this member was used."
-        };
-      }
-      await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [order.uniqid]);
-      await saveCommunityProgress({
-        ...order,
-        added,
-        status: "ERROR",
-        details: "Discord membership screening is enabled on this server. Disable the join form before starting Members 2 delivery.",
-        communityResults: results
-      });
-      return;
-    }
-
     if (index < members.length - 1 && !await waitForNextCommunityMember(index, index + 1)) return;
   }
 
@@ -2541,8 +2522,13 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
             ? "Replacement member joined and is pending Discord's server-rules screening."
             : "Replacement member joined the server.";
       } else {
-        state = "blocked";
-        details = "Discord membership screening is enabled on this server.";
+        if (joined.response.status === 201 && joined.payload?.pending === true) {
+          state = "joined";
+          details = "Replacement member joined and is pending Discord's server-rules screening.";
+        } else {
+          state = "blocked";
+          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+        }
       }
     } else if (joined.response.status === 201) {
       state = "joined";
@@ -4330,7 +4316,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
-    const { config, serverInfo, waitingForBot, invitesPaused, waitingDetails, waitingCode, botInvite, invite } = await resolveConfiguredCommunityInvite(req.body?.id, {
+    const { config, serverInfo, waitingForBot, invitesPaused, waitingDetails, waitingCode, botInvite } = await resolveConfiguredCommunityInvite(req.body?.id, {
       allowWaitingForBot: true,
       prepareJoin: joinMethod === "join_application",
       joinMethod
@@ -4352,11 +4338,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     if (category.is_periodic === true && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
       return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
     }
-    const memberVerification = await checkCommunityMemberVerification(config, serverInfo.guildId, invite);
-    if (memberVerification.status === "open" && joinMethod === "create_invite") {
-      return res.status(409).json({ message: "This server has a Discord membership screening form enabled. Select Join Application or disable the form before using Create Invite." });
-    }
-
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
