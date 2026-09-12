@@ -2503,7 +2503,7 @@ async function processCommunityOrder(order, members, config) {
   }
 }
 
-async function processCommunityReplacement(orderId, resultIndex, member, config) {
+async function processCommunityReplacement(orderId, resultIndex, member, config, joinMethod = "create_invite") {
   let state = "failed";
   let details = "Replacement member could not be added.";
   let botPauseIssue = null;
@@ -2511,7 +2511,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
   try {
     const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
     if (isCommunityMembershipScreeningResponse(joined)) {
-      if (getCommunityOrderJoinMethod(order) === "join_application") {
+      if (normalizeCommunityJoinMethod(joinMethod, "create_invite") === "join_application") {
         const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
         state = "joined";
         details = pendingJoin.manualVerification
@@ -5260,10 +5260,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(429).json({ message: `Wait ${retrySeconds}s before trying this replacement again.` });
     }
 
-    const config = await getCommunityOAuthConfig();
-    if (!config.configured) {
-      return res.status(503).json({ message: "Configure the Members bot before replacing a member." });
-    }
+    const baseConfig = await getCommunityOAuthConfig();
 
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
@@ -5276,9 +5273,19 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This order's member support period has expired." });
     }
-    if (String(order.serverId ?? "") !== config.guildId) {
+    const targetGuildId = String(order.serverId ?? "").trim();
+    const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
+    if (!config.configured) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "The Members bot is no longer configured for this order's server." });
+      return res.status(503).json({ message: "Configure the Members bot before replacing a member." });
+    }
+    const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
+    if (!botAccess.accessible) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        message: "To replace this member, please add the bot to the order's Discord server.",
+        botInvite: createCommunityBotInvite(config, targetGuildId, getCommunityOrderJoinMethod(order))
+      });
     }
     const replacementAllowedStatuses = new Set(["PARTIAL", "COMPLETED", "ERROR"]);
     if (!replacementAllowedStatuses.has(String(order.status ?? "").toUpperCase())) {
@@ -5400,7 +5407,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       publicCommunityReplaceCooldowns.set(publicCooldownKey, Date.now() + publicCommunityReplaceCooldownMs);
     }
 
-    void processCommunityReplacement(uniqid, resultIndex, member, config).catch(async (error) => {
+    void processCommunityReplacement(uniqid, resultIndex, member, config, getCommunityOrderJoinMethod(order)).catch(async (error) => {
       console.error("Members replacement failed:", error instanceof Error ? error.message : error);
       await pool.query(
         "UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE discord_user_id = $1 AND guild_id = $2",
