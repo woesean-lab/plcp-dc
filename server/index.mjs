@@ -75,6 +75,9 @@ function extractDiscordInviteCode(value) {
   return /^[A-Za-z0-9_-]{3,}$/.test(trimmed) ? trimmed : null;
 }
 
+const discordInviteResolutionCache = new Map();
+const discordInviteResolutionCacheTtlMs = 30_000;
+
 async function resolveDiscordInvite(inviteValue) {
   const inviteCode = extractDiscordInviteCode(inviteValue);
   if (!inviteCode) {
@@ -83,11 +86,19 @@ async function resolveDiscordInvite(inviteValue) {
     throw error;
   }
 
-  const response = await fetch(
-    `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`,
-    { signal: AbortSignal.timeout(10_000) }
-  );
-  const payload = await response.json().catch(() => ({}));
+  const cached = discordInviteResolutionCache.get(inviteCode);
+  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (cached) discordInviteResolutionCache.delete(inviteCode);
+
+  const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
+  let response = await fetch(inviteUrl, { signal: AbortSignal.timeout(10_000) });
+  let payload = await response.json().catch(() => ({}));
+  if (response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    response = await fetch(inviteUrl, { signal: AbortSignal.timeout(10_000) });
+    payload = await response.json().catch(() => ({}));
+  }
 
   if (!response.ok) {
     const error = new Error(response.status === 404
@@ -104,13 +115,18 @@ async function resolveDiscordInvite(inviteValue) {
     throw error;
   }
 
-  return {
+  const resolved = {
     guildId: String(guildId),
     guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
     approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
       ? payload.approximate_member_count
       : undefined
   };
+  discordInviteResolutionCache.set(inviteCode, {
+    value: resolved,
+    expiresAt: Date.now() + discordInviteResolutionCacheTtlMs
+  });
+  return resolved;
 }
 
 const pool = new Pool({
@@ -539,11 +555,15 @@ async function markCommunityFailedDeliveriesInactive(queryable, guildId) {
              WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
              ELSE '[]'::jsonb
            END
-         ) AS member_result("discordUserId" text, state text, details text, "completedAt" text)
+         ) AS member_result("discordUserId" text, state text, details text, "completedAt" text, "authorizationStatus" text)
          WHERE payload->>'provider' = 'community'
            AND payload->>'serverId' = $1
            AND member_result."discordUserId" = stock.discord_user_id
            AND LOWER(COALESCE(member_result.state, '')) = 'failed'
+           AND (
+             LOWER(COALESCE(member_result."authorizationStatus", '')) = 'inactive'
+             OR COALESCE(member_result.details, '') ~* '(unknown user|discord code 10013)'
+           )
            AND COALESCE(member_result.details, '') !~* '(400002|access to inviting new users through invite links has been limited for this guild)'
            AND CASE
              WHEN member_result."completedAt" ~ '^\\d{4}-\\d{2}-\\d{2}T' THEN member_result."completedAt"::timestamptz
@@ -563,7 +583,6 @@ async function loadCommunityJoinSummary(config) {
          reserved_order_id = NULL
      WHERE guild_id = $1
        AND status = 'authorized'
-       AND reserved_order_id IS NULL
        AND (encrypted_access_token IS NULL OR access_token_expires_at IS NULL OR access_token_expires_at <= NOW())`,
     [config.guildId]
   );
@@ -671,15 +690,14 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        encrypted_access_token = EXCLUDED.encrypted_access_token,
        access_token_expires_at = EXCLUDED.access_token_expires_at,
        status = CASE
-         WHEN community_oauth_joins.reserved_order_id IS NOT NULL THEN community_oauth_joins.status
          WHEN EXCLUDED.status = 'failed' THEN 'failed'
          WHEN community_oauth_joins.status IN ('joined', 'already_member') THEN community_oauth_joins.status
          ELSE 'authorized'
        END,
        stock_type = EXCLUDED.stock_type,
-       details = CASE WHEN community_oauth_joins.reserved_order_id IS NOT NULL THEN community_oauth_joins.details ELSE EXCLUDED.details END,
+       details = EXCLUDED.details,
        joined_at = community_oauth_joins.joined_at,
-       reserved_order_id = community_oauth_joins.reserved_order_id,
+       reserved_order_id = NULL,
        sort_position = community_oauth_joins.sort_position`,
     [sourceGuildId, targetGuildId]
   );
@@ -785,6 +803,30 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
     [guildId]
   );
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
+}
+
+async function loadCommunityUnavailableUserIds(queryable, guildId) {
+  const deliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(queryable, guildId);
+  const activeAssignments = await queryable.query(
+    `SELECT DISTINCT member_result->>'discordUserId' AS discord_user_id
+     FROM tracked_orders
+     CROSS JOIN LATERAL jsonb_array_elements(
+       CASE
+         WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+         ELSE '[]'::jsonb
+       END
+     ) AS member_result
+     WHERE payload->>'provider' = 'community'
+       AND payload->>'serverId' = $1
+       AND UPPER(COALESCE(payload->>'status', '')) IN ('WAITING', 'RECOVERING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
+       AND LOWER(COALESCE(member_result->>'state', '')) IN ('queued', 'joining', 'replacing')
+       AND COALESCE(member_result->>'discordUserId', '') <> ''`,
+    [guildId]
+  );
+  return Array.from(new Set([
+    ...deliveredUserIds,
+    ...activeAssignments.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId)
+  ]));
 }
 
 async function isCommunityMemberStillInGuild(config, guildId, discordUserId) {
@@ -3389,18 +3431,7 @@ async function initializeDatabase() {
           AND COALESCE(item->>'details', '') !~* '(Unknown User|10013)'
       )
   `);
-  await pool.query(`
-    UPDATE community_oauth_joins AS stock
-    SET reserved_order_id = NULL
-    WHERE reserved_order_id IS NOT NULL
-      AND NOT EXISTS (
-        SELECT 1
-        FROM tracked_orders AS tracked
-        WHERE tracked.uniqid = stock.reserved_order_id
-          AND tracked.payload->>'provider' = 'community'
-          AND UPPER(tracked.payload->>'status') IN ('WAITING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
-      )
-  `);
+  await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
   await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
   await recoverBlockedDcordJobOrders();
   await recoverPendingDcordOrders();
@@ -3921,7 +3952,7 @@ app.delete("/api/community/members/:discordUserId", requireSession, async (req, 
     }
     await client.query("BEGIN");
     const member = await client.query(
-      `SELECT username, reserved_order_id
+      `SELECT username
        FROM community_oauth_joins
        WHERE discord_user_id = $1 AND guild_id = $2
        FOR UPDATE`,
@@ -3930,10 +3961,6 @@ app.delete("/api/community/members/:discordUserId", requireSession, async (req, 
     if (!member.rowCount) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "This user is no longer in Members Stock." });
-    }
-    if (member.rows[0].reserved_order_id) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: "This user is assigned to an active order and cannot be disconnected yet." });
     }
     await client.query(
       "DELETE FROM community_oauth_joins WHERE discord_user_id = $1 AND guild_id = $2",
@@ -3960,11 +3987,11 @@ app.post("/api/community/members/bulk-delete", requireSession, async (req, res, 
 
     const removed = await pool.query(
       `DELETE FROM community_oauth_joins
-       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND reserved_order_id IS NULL
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])
        RETURNING discord_user_id`,
       [config.guildId, ids]
     );
-    res.json({ removed: removed.rowCount, skippedReserved: Math.max(0, ids.length - removed.rowCount) });
+    res.json({ removed: removed.rowCount, skippedReserved: 0 });
   } catch (error) {
     next(error);
   }
@@ -4067,7 +4094,7 @@ function createCommunityBotGuildAccessError(status, context = {}) {
   return error;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false } = {}) {
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, prepareJoin = true } = {}) {
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
     const error = new Error("Configure the Members bot before creating an order.");
@@ -4174,14 +4201,16 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       botInvite: createCommunityBotInvite(config, serverInfo.guildId)
     };
   }
-  await ensureCommunityApplyToJoin(config, serverInfo.guildId);
-  await loadCommunityGuild(config);
+  if (prepareJoin) {
+    await ensureCommunityApplyToJoin(config, serverInfo.guildId);
+    await loadCommunityGuild(config);
+  }
   return { config, invite, serverInfo };
 }
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true });
+    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, { allowWaitingForBot: true, prepareJoin: false });
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
     const requestedCategoryId = req.query?.categoryId ?? getCommunityStockTypeFromService(service);
@@ -4193,8 +4222,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
       return res.status(400).json({ message: "Choose a valid Members 2 category." });
     }
-    await markCommunityFailedDeliveriesInactive(pool, config.guildId);
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(pool, serverInfo.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(pool, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
@@ -4245,12 +4273,11 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
-    await markCommunityFailedDeliveriesInactive(client, config.guildId);
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, serverInfo.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId);
     const selected = await client.query(
        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW() AND reserved_order_id IS NULL
+       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
          AND NOT (discord_user_id = ANY($4::text[]))
        ORDER BY sort_position ASC, authorized_at ASC
        LIMIT $3
@@ -4271,10 +4298,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         : "";
       return res.status(409).json({ message: `Only ${selected.rowCount} ${stockType} members are currently available.${usedNotice}` });
     }
-    await client.query(
-      "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
-      [uniqid, config.guildId, selected.rows.map((row) => row.discord_user_id)]
-    );
     const createdAt = new Date();
     const order = {
       uniqid,
@@ -4510,14 +4533,18 @@ async function activateWaitingCommunityOrder(order) {
     const remainingAmount = existingResults.length
       ? pendingResultCount
       : Math.max(0, Number(current.amount) - Number(current.added ?? 0));
+    const pendingUserIds = existingResults
+      .filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase()))
+      .map((item) => String(item?.discordUserId ?? ""))
+      .filter(isDiscordGuildId);
 
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
-        WHERE guild_id = $1 AND reserved_order_id = $2 AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
        ORDER BY sort_position ASC, authorized_at ASC
        FOR UPDATE`,
-      [resolved.config.guildId, current.uniqid, getCommunityOrderStockType(current)]
+      [resolved.config.guildId, pendingUserIds, getCommunityOrderStockType(current)]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -4528,25 +4555,19 @@ async function activateWaitingCommunityOrder(order) {
       : [];
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
-      const previouslyDeliveredUserIds = await loadCommunityDeliveredUsersStillPresent(client, resolved.config, resolved.config.guildId);
+      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
       const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...previouslyDeliveredUserIds]));
       const extra = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND stock_type = $2 AND reserved_order_id IS NULL AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+         WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
            AND NOT (discord_user_id = ANY($4::text[]))
          ORDER BY sort_position ASC, authorized_at ASC
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
         [resolved.config.guildId, getCommunityOrderStockType(current), missing, excludedUserIds]
       );
-      if (extra.rowCount) {
-        await client.query(
-          "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE guild_id = $2 AND discord_user_id = ANY($3::text[])",
-          [current.uniqid, resolved.config.guildId, extra.rows.map((row) => row.discord_user_id)]
-        );
-        members = [...members, ...extra.rows];
-      }
+      if (extra.rowCount) members = [...members, ...extra.rows];
     }
 
     const existingByUserId = new Map(existingResults.map((item) => [String(item?.discordUserId ?? ""), item]));
@@ -5224,7 +5245,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       failedResult.previousUsername,
       failedResult.username
     ].map((value) => String(value ?? "").trim()).filter(Boolean)));
-    const previouslyDeliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(client, config.guildId);
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, config.guildId);
     const usedUserIds = Array.from(new Set([
       ...replacementHistoryUserIds,
       ...previouslyDeliveredUserIds,
@@ -5246,10 +5267,9 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        FROM community_oauth_joins
        WHERE guild_id = $1
          AND stock_type = $4
-          AND status = 'authorized'
+         AND status = 'authorized'
          AND encrypted_access_token IS NOT NULL
          AND access_token_expires_at > NOW()
-         AND reserved_order_id IS NULL
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
        ORDER BY sort_position ASC, authorized_at ASC
@@ -5263,10 +5283,6 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
 
     const member = replacement.rows[0];
-    await client.query(
-      "UPDATE community_oauth_joins SET reserved_order_id = $1 WHERE discord_user_id = $2 AND guild_id = $3",
-      [uniqid, member.discord_user_id, config.guildId]
-    );
     results[resultIndex] = {
       discordUserId: member.discord_user_id,
       username: member.username,

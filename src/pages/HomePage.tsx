@@ -1253,9 +1253,9 @@ export default function HomePage() {
       if (selectedIsCommunity && data.maximum > 0) {
         setForm((current) => ({ ...current, amount: Math.min(current.amount, data.maximum) }));
       }
-    } catch {
+    } catch (error) {
       if (requestId !== availabilityRequestRef.current) return;
-      setAvailability("Availability could not be loaded. Try the invite again.");
+      setAvailability(error instanceof Error ? error.message : "Availability could not be loaded. Try the invite again.");
       setAvailabilityMaximum(null);
     } finally {
       if (requestId === availabilityRequestRef.current) setCheckingAvailability(false);
