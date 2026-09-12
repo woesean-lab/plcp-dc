@@ -674,14 +674,15 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
   await copyCommunityStockCategories(queryable, sourceGuildId, targetGuildId);
   await queryable.query(
     `INSERT INTO community_oauth_joins
-       (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-     SELECT discord_user_id, $2, username, avatar_url, NULL, encrypted_access_token, access_token_expires_at,
+       (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+     SELECT discord_user_id, $2, username, display_name, avatar_url, NULL, encrypted_access_token, access_token_expires_at,
             CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
             stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
      WHERE guild_id = $1
      ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
        username = EXCLUDED.username,
+       display_name = EXCLUDED.display_name,
        avatar_url = EXCLUDED.avatar_url,
        encrypted_refresh_token = NULL,
        encrypted_access_token = EXCLUDED.encrypted_access_token,
@@ -1656,7 +1657,13 @@ async function syncCommunityAuthorizations(config) {
         headers: { Authorization: `Bearer ${decryptCredential(member.encrypted_access_token)}` }
       });
       if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== member.discord_user_id) throw new Error("invalid");
-      await pool.query("UPDATE community_oauth_joins SET details = NULL WHERE discord_user_id = $1 AND guild_id = $2", [member.discord_user_id, config.guildId]);
+      const oauthUser = identity.payload.user;
+      const username = String(oauthUser?.username ?? `Discord user ${member.discord_user_id}`).trim().slice(0, 100);
+      const displayName = String(oauthUser?.global_name ?? "").trim().slice(0, 100) || null;
+      await pool.query(
+        "UPDATE community_oauth_joins SET username = $3, display_name = $4, details = NULL WHERE discord_user_id = $1 AND guild_id = $2",
+        [member.discord_user_id, config.guildId, username, displayName]
+      );
     } catch {
       const inactive = await pool.query(
         `UPDATE community_oauth_joins
@@ -3400,6 +3407,7 @@ async function initializeDatabase() {
       discord_user_id TEXT NOT NULL,
       guild_id TEXT NOT NULL,
       username TEXT NOT NULL,
+      display_name TEXT,
       avatar_url TEXT,
       encrypted_refresh_token TEXT,
       encrypted_access_token TEXT,
@@ -3413,6 +3421,7 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS display_name TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_access_token TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ");
   await pool.query("UPDATE community_oauth_joins SET encrypted_refresh_token = NULL WHERE encrypted_refresh_token IS NOT NULL");
@@ -3822,7 +3831,8 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         const duplicateDiscordUser = seenDiscordUserIds.has(discordUserId);
         seenDiscordUserIds.add(discordUserId);
 
-        const username = String(oauthUser?.global_name ?? oauthUser?.username ?? `Discord user ${discordUserId}`).slice(0, 100);
+        const username = String(oauthUser?.username ?? `Discord user ${discordUserId}`).trim().slice(0, 100);
+        const displayName = String(oauthUser?.global_name ?? "").trim().slice(0, 100) || null;
         const avatarHash = String(oauthUser?.avatar ?? "").trim();
         const avatarUrl = avatarHash
           ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(discordUserId)}/${encodeURIComponent(avatarHash)}.png?size=128`
@@ -3830,10 +3840,11 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         const encryptedAccessToken = encryptCredential(accessToken);
         await pool.query(
           `INSERT INTO community_oauth_joins
-             (discord_user_id, guild_id, username, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-           VALUES ($1, $2, $3, $4, NULL, $5, $6, 'authorized', $7, $8, NOW(), NULL, NULL, $9)
+             (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+           VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, 'authorized', $8, $9, NOW(), NULL, NULL, $10)
            ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
              username = EXCLUDED.username,
+             display_name = EXCLUDED.display_name,
              avatar_url = EXCLUDED.avatar_url,
              encrypted_refresh_token = NULL,
              encrypted_access_token = EXCLUDED.encrypted_access_token,
@@ -3848,23 +3859,25 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
                WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position
                ELSE community_oauth_joins.sort_position
              END`,
-          [discordUserId, config.guildId, username, avatarUrl, encryptedAccessToken, accessTokenExpiresAt, stockType, details, sortPosition]
+          [discordUserId, config.guildId, username, displayName, avatarUrl, encryptedAccessToken, accessTokenExpiresAt, stockType, details, sortPosition]
         );
         await pool.query(
           `UPDATE community_oauth_joins
-           SET encrypted_access_token = $2,
-               access_token_expires_at = $3,
+           SET username = $2,
+               display_name = $3,
+               encrypted_access_token = $4,
+               access_token_expires_at = $5,
                authorized_at = NOW(),
                status = CASE
                  WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN 'authorized'
                  ELSE status
                END,
                details = CASE
-                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN $4
+                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN $6
                  ELSE details
                END
-           WHERE discord_user_id = $1 AND guild_id <> $5`,
-          [discordUserId, encryptedAccessToken, accessTokenExpiresAt, details, config.guildId]
+           WHERE discord_user_id = $1 AND guild_id <> $7`,
+          [discordUserId, username, displayName, encryptedAccessToken, accessTokenExpiresAt, details, config.guildId]
         );
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
@@ -3953,7 +3966,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityJoinSummary(config),
       loadCommunityStockCategories(config),
       pool.query(
-        `SELECT discord_user_id, username, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position
+        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position
          FROM community_oauth_joins
          WHERE guild_id = $1
          ORDER BY stock_type ASC,
@@ -3972,6 +3985,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       recent: recentResult.rows.map((row) => ({
         id: row.discord_user_id,
         username: row.username,
+        displayName: row.display_name,
         avatarUrl: row.avatar_url,
         status: row.status,
         stockType: normalizeCommunityStockType(row.stock_type),

@@ -60,6 +60,7 @@ export type CommunityStockCategoryInput = {
 export type CommunityJoinRecord = {
   id: string;
   username: string;
+  displayName: string | null;
   avatarUrl: string | null;
   status: "authorized" | "joined" | "already_member" | "failed";
   details: string | null;

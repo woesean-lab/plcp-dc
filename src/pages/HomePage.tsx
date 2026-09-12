@@ -2051,8 +2051,10 @@ export default function HomePage() {
                   {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
                 </span>
                 <span className="min-w-0">
-                  <strong>{record.username}</strong>
-                  <small>{record.details || new Date(record.authorizedAt).toLocaleString()}</small>
+                  <strong>{record.displayName || record.username}</strong>
+                  <small>{record.displayName
+                    ? `@${record.username} · ${record.details || new Date(record.authorizedAt).toLocaleString()}`
+                    : record.details || new Date(record.authorizedAt).toLocaleString()}</small>
                 </span>
                 <Badge variant={badge.variant}>{badge.label}</Badge>
                 <Button
