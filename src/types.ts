@@ -4,6 +4,7 @@ export type BoostServiceType = "DCORD-BOOSTS";
 export type ServiceType = MemberServiceType | CommunityServiceType | BoostServiceType;
 export type OrderProvider = "tokenu" | "community" | "dcord";
 export type BoostDuration = 1 | 3;
+export type CommunityJoinMethod = "create_invite" | "join_application";
 
 export type OrderStatus =
   | "NEW"
@@ -27,6 +28,7 @@ export interface CreateOrderPayload {
   categoryId?: string;
   durationMonths?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  joinMethod?: CommunityJoinMethod;
 }
 
 export interface CreateOrderResponse {
@@ -37,6 +39,7 @@ export interface CreateOrderResponse {
   categoryName?: string;
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
+  joinMethod?: CommunityJoinMethod;
   createdAt?: string;
   expiredAt?: string | null;
 }
@@ -72,6 +75,7 @@ export interface OrderStatusResponse {
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
   liveBoostStock?: {
@@ -93,6 +97,7 @@ export interface TrackedOrder {
   added?: number;
   delay?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
   statusDelay?: number;

@@ -94,7 +94,7 @@ import {
   saveDcordProxies,
   saveIntegrationApiKey
 } from "../lib/integration";
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
   service: "OAUTH-ONLINE" as ServiceType,
@@ -108,7 +108,8 @@ const EMPTY_FORM = {
   communityCategoryId: "offline",
   communityDurationMonths: 1,
   communityCustomDelay: 1,
-  communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom"
+  communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
+  communityJoinMethod: "create_invite" as CommunityJoinMethod
 };
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -948,7 +949,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -1247,7 +1248,13 @@ export default function HomePage() {
   async function refreshAvailability(requestId: number) {
     try {
       const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
-      const data = await checkAvailableAmount(form.service, serverId, form.duration, selectedIsCommunity ? form.communityCategoryId : undefined);
+      const data = await checkAvailableAmount(
+        form.service,
+        serverId,
+        form.duration,
+        selectedIsCommunity ? form.communityCategoryId : undefined,
+        selectedIsCommunity ? form.communityJoinMethod : undefined
+      );
       if (requestId !== availabilityRequestRef.current) return;
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
       setAvailabilityMaximum(data.maximum);
@@ -1724,6 +1731,7 @@ export default function HomePage() {
       added: 0,
       delay: payloadIsBoost ? undefined : payload.delay,
       speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
+      joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
       billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
@@ -1770,7 +1778,8 @@ export default function HomePage() {
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
       durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined,
-      speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined
+      speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
+      joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -2441,50 +2450,83 @@ export default function HomePage() {
                       </div>
                       <div className="boost-order-panel">
                         {selectedIsCommunity ? (
-                          <div className="community-speed-profile-field">
-                            <div className="community-speed-profile-copy">
-                              <span className="boost-order-label">Delivery speed</span>
-                              <small>Select a profile or set an exact delay.</small>
+                          <>
+                            <div className="community-join-method-field">
+                              <div className="community-speed-profile-copy">
+                                <span className="boost-order-label">Join method</span>
+                                <small>Choose the bot setup used for this order.</small>
+                              </div>
+                              <div className="community-join-method-options" role="radiogroup" aria-label="Join method">
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={form.communityJoinMethod === "create_invite"}
+                                  className={form.communityJoinMethod === "create_invite" ? "is-selected" : ""}
+                                  onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "create_invite" }))}
+                                >
+                                  <Bot className="h-4 w-4" aria-hidden="true" />
+                                  <span><strong>Create Invite</strong><small>Bot Invite · permissions 3</small></span>
+                                  {form.communityJoinMethod === "create_invite" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                                </button>
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={form.communityJoinMethod === "join_application"}
+                                  className={form.communityJoinMethod === "join_application" ? "is-selected" : ""}
+                                  onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "join_application" }))}
+                                >
+                                  <ListChecks className="h-4 w-4" aria-hidden="true" />
+                                  <span><strong>Join Application</strong><small>Apply to Join · permissions 35</small></span>
+                                  {form.communityJoinMethod === "join_application" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                                </button>
+                              </div>
                             </div>
-                            <div className="community-speed-profile-options" aria-label="Delivery speed profile">
-                              {COMMUNITY_SPEED_PROFILES.map((profile) => {
-                                const Icon = profile.icon;
-                                const selected = form.communitySpeedProfile === profile.key;
-                                return (
-                                  <button
-                                    key={profile.key}
-                                    type="button"
-                                    className={selected ? "is-selected" : ""}
-                                    aria-pressed={selected}
-                                    onClick={() => setForm((current) => ({ ...current, delay: profile.delay, communitySpeedProfile: profile.key }))}
-                                  >
-                                    <Icon className="h-4 w-4" aria-hidden="true" />
-                                    <span className="community-speed-option-copy"><strong>{profile.label}</strong><small>{profile.description}</small></span>
-                                    <em>{profile.timing}</em>
-                                  </button>
-                                );
-                              })}
-                              <label className={`community-speed-custom-option ${form.communitySpeedProfile === "custom" ? "is-selected" : ""}`}>
-                                <Settings2 className="h-4 w-4" aria-hidden="true" />
-                                <span className="community-speed-option-copy"><strong>Custom</strong><small>Exact delay</small></span>
-                                <span className="community-speed-custom-control">
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={1200}
-                                    value={form.communityCustomDelay}
-                                    aria-label="Custom delay in seconds"
-                                    onFocus={() => setForm((current) => ({ ...current, delay: current.communityCustomDelay, communitySpeedProfile: "custom" }))}
-                                    onChange={(event) => {
-                                      const delay = Number(event.target.value) || 1;
-                                      setForm((current) => ({ ...current, delay, communityCustomDelay: delay, communitySpeedProfile: "custom" }));
-                                    }}
-                                  />
-                                  <em>s</em>
-                                </span>
-                              </label>
+
+                            <div className="community-speed-profile-field">
+                              <div className="community-speed-profile-copy">
+                                <span className="boost-order-label">Delivery speed</span>
+                                <small>Select a profile or set an exact delay.</small>
+                              </div>
+                              <div className="community-speed-profile-options" aria-label="Delivery speed profile">
+                                {COMMUNITY_SPEED_PROFILES.map((profile) => {
+                                  const Icon = profile.icon;
+                                  const selected = form.communitySpeedProfile === profile.key;
+                                  return (
+                                    <button
+                                      key={profile.key}
+                                      type="button"
+                                      className={selected ? "is-selected" : ""}
+                                      aria-pressed={selected}
+                                      onClick={() => setForm((current) => ({ ...current, delay: profile.delay, communitySpeedProfile: profile.key }))}
+                                    >
+                                      <Icon className="h-4 w-4" aria-hidden="true" />
+                                      <span className="community-speed-option-copy"><strong>{profile.label}</strong><small>{profile.description}</small></span>
+                                      <em>{profile.timing}</em>
+                                    </button>
+                                  );
+                                })}
+                                <label className={`community-speed-custom-option ${form.communitySpeedProfile === "custom" ? "is-selected" : ""}`}>
+                                  <Settings2 className="h-4 w-4" aria-hidden="true" />
+                                  <span className="community-speed-option-copy"><strong>Custom</strong><small>Exact delay</small></span>
+                                  <span className="community-speed-custom-control">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={1200}
+                                      value={form.communityCustomDelay}
+                                      aria-label="Custom delay in seconds"
+                                      onFocus={() => setForm((current) => ({ ...current, delay: current.communityCustomDelay, communitySpeedProfile: "custom" }))}
+                                      onChange={(event) => {
+                                        const delay = Number(event.target.value) || 1;
+                                        setForm((current) => ({ ...current, delay, communityCustomDelay: delay, communitySpeedProfile: "custom" }));
+                                      }}
+                                    />
+                                    <em>s</em>
+                                  </span>
+                                </label>
+                              </div>
                             </div>
-                          </div>
+                          </>
                         ) : null}
                         <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
@@ -3344,6 +3386,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "join_application" ? "Join Application" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {confirmationCommunityCategory?.isPeriodic && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>

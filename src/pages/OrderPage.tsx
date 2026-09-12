@@ -383,6 +383,11 @@ export default function OrderPage() {
   const isCommunityProvider = provider === "community";
 
   const botInvite = useMemo(() => extractBotInvite(result), [result]);
+  const communityJoinMethod = result?.joinMethod === "create_invite"
+    ? "create_invite"
+    : result?.joinMethod === "join_application" || result?.experimentalJoin === true
+      ? "join_application"
+      : "create_invite";
   const normalizedStatus = String(result?.status ?? "").trim().toUpperCase();
   const nextMemberTimestamp = typeof result?.nextMemberAt === "string" ? Date.parse(result.nextMemberAt) : Number.NaN;
   const nextMemberSeconds = normalizedStatus === "PROCESS" && Number.isFinite(nextMemberTimestamp)
@@ -851,12 +856,28 @@ export default function OrderPage() {
       ? "Balanced (variable 30–300 second delay)"
       : `${formatTemplateDelay(result?.delay)} seconds (fully customizable)`;
     const message = isCommunityProvider
-      ? [
+      ? communityJoinMethod === "join_application"
+        ? [
           "Please add the Members bot to your Discord server so we can begin delivery.",
           "",
           "🔑 Required bot permissions: Manage Server, Kick Members and Create Invite.",
           "",
-          "After completion, remove the bot to revoke its server access and switch back to Invite Only (Server Settings → Access → Invite Only).",
+          "Apply to Join will be configured for this order. After completion, remove the bot to revoke its server access and switch back to Invite Only (Server Settings → Access → Invite Only).",
+          "",
+          "🤖 Add Bot:",
+          botInvite,
+          "",
+          "📊 Order Monitor:",
+          getPublicMonitorLink(target),
+          "",
+          `⚙️ Delivery Speed: ${deliveryTiming}`
+        ].join("\n")
+        : [
+          "Please add the Members bot to your Discord server so we can begin delivery.",
+          "",
+          "🔑 Required bot permissions: Create Invite and Kick Members.",
+          "",
+          "Apply to Join is not configured or used for this order. You can remove the bot after delivery is complete.",
           "",
           "🤖 Add Bot:",
           botInvite,
