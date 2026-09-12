@@ -2466,7 +2466,6 @@ export default function HomePage() {
                                 >
                                   <Bot className="h-4 w-4" aria-hidden="true" />
                                   <span><strong>Create Invite</strong><small>Bot Invite · permissions 3</small></span>
-                                  {form.communityJoinMethod === "create_invite" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
                                 <button
                                   type="button"
@@ -2477,7 +2476,6 @@ export default function HomePage() {
                                 >
                                   <ListChecks className="h-4 w-4" aria-hidden="true" />
                                   <span><strong>Join Application</strong><small>Apply to Join · permissions 35</small></span>
-                                  {form.communityJoinMethod === "join_application" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
                               </div>
                             </div>

@@ -1875,14 +1875,14 @@
     min-width: 0;
     align-items: center;
     gap: 1rem;
-    margin-bottom: 1rem;
-    padding-bottom: 1rem;
+    margin-bottom: .8rem;
+    padding-bottom: .8rem;
     border-bottom: 1px solid var(--app-divider);
   }
 
   .community-join-method-options {
     display: grid;
-    flex: 1;
+    flex: 0 1 500px;
     min-width: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 6px;
@@ -1891,13 +1891,13 @@
   .community-join-method-options button {
     display: grid;
     min-width: 0;
-    min-height: 48px;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    min-height: 40px;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: .65rem;
     border: 1px solid var(--app-border);
     border-radius: 10px;
-    padding: .5rem .75rem;
+    padding: .38rem .62rem;
     color: var(--app-muted);
     background: rgba(4, 5, 11, .3);
     text-align: left;
@@ -1912,10 +1912,9 @@
   }
 
   .community-join-method-options button.is-selected {
-    border-color: var(--app-accent-border);
-    color: var(--app-accent-bright);
-    background: var(--app-accent-soft);
-    box-shadow: inset 0 0 0 1px rgba(155, 140, 255, .08);
+    border-color: rgba(155, 140, 255, .38);
+    color: var(--app-text-secondary);
+    background: rgba(155, 140, 255, .07);
   }
 
   .community-join-method-options button > span {
@@ -1932,13 +1931,13 @@
   }
 
   .community-join-method-options strong {
-    font-size: 11px;
+    font-size: 10px;
     line-height: 1.2;
   }
 
   .community-join-method-options small {
     color: var(--app-subtle);
-    font-size: 8px;
+    font-size: 7.5px;
     line-height: 1.2;
   }
 
@@ -7538,6 +7537,11 @@
   .community-join-method-options,
   .community-speed-profile-options {
     grid-template-columns: 1fr;
+  }
+
+  .community-join-method-options {
+    width: 100%;
+    flex-basis: auto;
   }
 }
 
