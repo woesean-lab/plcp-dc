@@ -976,6 +976,35 @@ export default function HomePage() {
     setSelectedCommunityMemberIds([]);
   }, [communityStockType]);
 
+  useEffect(() => {
+    if (!communityStatus?.syncing) return;
+    let cancelled = false;
+    let pollHandle: number | null = null;
+
+    const pollCommunitySync = async () => {
+      try {
+        const nextStatus = await getCommunityAdminStatus();
+        if (cancelled) return;
+        setCommunityStatus(nextStatus);
+        if (nextStatus.syncing) {
+          pollHandle = window.setTimeout(() => void pollCommunitySync(), 1500);
+          return;
+        }
+        const summary = nextStatus.syncProgress;
+        if (summary?.error) notifyError(summary.error);
+        else if (summary) notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}${summary.errors ? `, ${summary.errors} temporarily skipped` : ""}.`);
+      } catch {
+        if (!cancelled) pollHandle = window.setTimeout(() => void pollCommunitySync(), 3000);
+      }
+    };
+
+    pollHandle = window.setTimeout(() => void pollCommunitySync(), 1500);
+    return () => {
+      cancelled = true;
+      if (pollHandle !== null) window.clearTimeout(pollHandle);
+    };
+  }, [communityStatus?.syncing]);
+
   async function refreshBalance() {
     try {
       setLoadingBalance(true);
@@ -1008,18 +1037,9 @@ export default function HomePage() {
       const started = await syncCommunityAuthorizations();
       if (requestId !== communityStatusRequestRef.current) return;
       if (started.started) notifySuccess("Members Stock refresh started.");
-
-      let nextStatus = await getCommunityAdminStatus();
-      while (requestId === communityStatusRequestRef.current && nextStatus.syncing) {
-        setCommunityStatus(nextStatus);
-        await new Promise((resolve) => window.setTimeout(resolve, 1500));
-        nextStatus = await getCommunityAdminStatus();
-      }
+      const nextStatus = await getCommunityAdminStatus();
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
-      const summary = nextStatus.syncProgress ?? started;
-      if (summary.error) notifyError(summary.error);
-      else notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}${summary.errors ? `, ${summary.errors} temporarily skipped` : ""}.`);
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
     } finally {
@@ -2040,7 +2060,12 @@ export default function HomePage() {
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
             <Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>
-            <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}><RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus ? "animate-spin" : ""}`} /> Refresh</Button>
+            <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || communityStatus?.syncing || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}>
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus || communityStatus?.syncing ? "animate-spin" : ""}`} />
+              {communityStatus?.syncing && communityStatus.syncProgress
+                ? `Refreshing ${communityStatus.syncProgress.checked}/${communityStatus.syncProgress.total}`
+                : "Refresh"}
+            </Button>
           </div>
         </div>
 
