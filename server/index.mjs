@@ -23,7 +23,7 @@ const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
 const dcordUserAgent = process.env.DCORD_USER_AGENT ?? "plcp-dc/0.1 (+https://capheaven.dcord.co API client)";
-const defaultDcordBoostConcurrency = 7;
+const defaultDcordBoostConcurrency = 4;
 const dcordRequestTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_REQUEST_TIMEOUT_MS ?? "30000", 10) || 30_000, 10_000), 120_000);
 const dcordProxyCheckUrl = process.env.DCORD_PROXY_CHECK_URL ?? "https://discord.com/api/v10/gateway";
 const dcordProxyCheckTimeoutMs = Math.min(Math.max(Number.parseInt(process.env.DCORD_PROXY_CHECK_TIMEOUT_MS ?? "10000", 10) || 10_000, 3_000), 30_000);
@@ -1274,7 +1274,7 @@ async function reserveDcordProxies(count) {
 }
 
 function normalizeDcordBoostConcurrency(value) {
-  return Math.min(Math.max(Number.parseInt(value, 10) || defaultDcordBoostConcurrency, 1), 1_000);
+  return Math.min(Math.max(Number.parseInt(value, 10) || defaultDcordBoostConcurrency, 1), 4);
 }
 
 async function loadUsedBoostTokenHistory() {
@@ -6004,7 +6004,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
     const useProxy = true;
-    const concurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
+    const requestedConcurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
     const allowMembershipScreening = req.body?.allowMembershipScreening === true;
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
@@ -6020,6 +6020,8 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const stock = await loadBoostTokenStock();
     const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
     const requiredTokens = amount / 2;
+    const recommendedConcurrency = Math.min(4, Math.max(1, Math.ceil(requiredTokens / 2)));
+    const concurrency = Math.min(requestedConcurrency, recommendedConcurrency);
     if (stock[stockKey].length < requiredTokens) {
       return res.status(409).json({ message: `Only ${stock[stockKey].length * 2} ${duration} month boosts are in stock.` });
     }

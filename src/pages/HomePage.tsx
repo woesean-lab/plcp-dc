@@ -104,7 +104,7 @@ const EMPTY_FORM = {
   billingCycle: 1,
   duration: 1 as 1 | 3,
   useProxy: true,
-  concurrency: 7,
+  concurrency: 1,
   communityCategoryId: "offline",
   communityDurationMonths: 1,
   communityCustomDelay: 1,
@@ -157,7 +157,8 @@ function getCommunityCategoryAppearance(colorKey: CommunityCategoryColorKey): CS
 }
 
 function getBoostConcurrency(amount: number) {
-  return Math.max(1, Math.floor(amount / 2));
+  const tokenCount = Math.max(1, Math.ceil(amount / 2));
+  return Math.min(4, Math.max(1, Math.ceil(tokenCount / 2)));
 }
 
 function isBoostUsedTokenIssue(item: BoostUsedToken) {
