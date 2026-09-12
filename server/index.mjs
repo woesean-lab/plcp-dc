@@ -559,7 +559,7 @@ async function markCommunityFailedDeliveriesInactive(queryable, guildId) {
            AND LOWER(COALESCE(member_result.state, '')) = 'failed'
            AND (
              LOWER(COALESCE(member_result."authorizationStatus", '')) = 'inactive'
-             OR COALESCE(member_result.details, '') ~* '(unknown user|discord code 10013)'
+             OR COALESCE(member_result.details, '') ~* '(unknown user|discord code 10013|discord code 50178|user account must first be verified)'
            )
            AND COALESCE(member_result.details, '') !~* '(400002|access to inviting new users through invite links has been limited for this guild)'
            AND CASE
@@ -1618,6 +1618,10 @@ async function syncCommunityAuthorizations(config) {
      WHERE payload->>'provider' = 'community'
        AND payload->>'serverId' = $1
        AND LOWER(COALESCE(result->>'state', '')) = 'failed'
+       AND (
+         LOWER(COALESCE(result->>'authorizationStatus', '')) = 'inactive'
+         OR COALESCE(result->>'details', '') ~* '(unknown user|discord code 10013|discord code 50178|user account must first be verified)'
+       )
        AND COALESCE(result->>'details', '') !~* '(400002|access to inviting new users through invite links has been limited for this guild)'`,
     [config.guildId]
   );
@@ -2030,11 +2034,13 @@ function isCommunityMembershipScreeningResponse(result) {
     || /pending|screening|verification|member verification|membership|apply.to.join/i.test(message);
 }
 
-function isDiscordUnknownUser(value) {
+function isDiscordMemberAuthorizationInactive(value) {
   const payload = value?.payload && typeof value.payload === "object" ? value.payload : value;
   const code = Number(payload?.code ?? value?.code);
   const message = String(payload?.message ?? value?.message ?? value?.details ?? value?.discordError ?? "");
-  return code === 10013 || /unknown user/i.test(message);
+  return code === 10013
+    || code === 50178
+    || /unknown user|user account must first be verified/i.test(message);
 }
 
 function isDiscordGuildInviteLimited(value) {
@@ -2377,7 +2383,7 @@ async function runCommunityOrder(order, members, config) {
         state = "already_member";
         details = "User was already in the server.";
       } else {
-        memberAuthorizationInvalid = isDiscordUnknownUser(joined);
+        memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
         if (isDiscordGuildInviteLimited(joined)) {
           botPauseIssue = {
             status: "INVITES PAUSED",
@@ -2402,7 +2408,7 @@ async function runCommunityOrder(order, members, config) {
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
-      memberAuthorizationInvalid = isDiscordUnknownUser(error);
+      memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(error);
     }
 
     if (botPauseIssue) {
@@ -2427,7 +2433,7 @@ async function runCommunityOrder(order, members, config) {
       completedAt: new Date().toISOString(),
       ...(memberShouldBeInactive ? {
         authorizationStatus: "inactive",
-        authorizationDetails: "Discord reported Unknown User, so this member was disabled in Members Stock.",
+        authorizationDetails: "Discord reported that this member account cannot authorize delivery, so it was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
     };
@@ -2545,7 +2551,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       state = "already_member";
       details = "Replacement user was already in the server.";
     } else {
-      memberAuthorizationInvalid = isDiscordUnknownUser(joined);
+      memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
       if (isDiscordGuildInviteLimited(joined)) {
         botPauseIssue = {
           status: "INVITES PAUSED",
@@ -2570,7 +2576,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
-    memberAuthorizationInvalid = isDiscordUnknownUser(error);
+    memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(error);
   }
 
   if (!botPauseIssue) {
@@ -2639,7 +2645,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       completedAt: new Date().toISOString(),
       ...(state === "failed" && memberAuthorizationInvalid ? {
         authorizationStatus: "inactive",
-        authorizationDetails: "Discord reported Unknown User, so this replacement was disabled in Members Stock.",
+        authorizationDetails: "Discord reported that this replacement account cannot authorize delivery, so it was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
     };
