@@ -4132,7 +4132,7 @@ function createCommunityBotInvite(config, guildId, joinMethod = "join_applicatio
   const query = new URLSearchParams({
     client_id: config.clientId,
     scope: "bot",
-    permissions: normalizedJoinMethod === "join_application" ? "35" : "3",
+    permissions: normalizedJoinMethod === "join_application" ? "35" : "1",
     guild_id: guildId,
     disable_guild_select: "true"
   });

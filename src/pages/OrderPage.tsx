@@ -875,7 +875,7 @@ export default function OrderPage() {
         : [
           "Please add the Members bot to your Discord server so we can begin delivery.",
           "",
-          "🔑 Required bot permissions: Create Invite and Kick Members.",
+          "🔑 Required bot permission: Create Invite.",
           "",
           "Apply to Join is not configured or used for this order. You can remove the bot after delivery is complete.",
           "",

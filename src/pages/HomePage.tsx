@@ -2465,7 +2465,7 @@ export default function HomePage() {
                                   onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "create_invite" }))}
                                 >
                                   <Bot className="h-4 w-4" aria-hidden="true" />
-                                  <span><strong>Create Invite</strong><small>Bot Invite · permissions 3</small></span>
+                                  <span><strong>Create Invite</strong><small>Bot Invite · Create Invite only</small></span>
                                   {form.communityJoinMethod === "create_invite" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
                                 <button
