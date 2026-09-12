@@ -1929,6 +1929,60 @@ async function approveCommunityJoinRequest(config, discordUserId) {
   return approval;
 }
 
+const communityBypassesVerificationFlag = 1 << 2;
+
+async function approveCommunityPendingMemberVerification(config, discordUserId, currentMember) {
+  const currentFlags = Number(currentMember?.flags);
+  const normalizedFlags = Number.isSafeInteger(currentFlags) && currentFlags >= 0 ? currentFlags : 0;
+  const approvedFlags = normalizedFlags | communityBypassesVerificationFlag;
+  let approval = await requestDiscord(
+    `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bot ${config.botToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ flags: approvedFlags })
+    }
+  );
+  if (approval.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(approval.payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    approval = await requestDiscord(
+      `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
+      {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bot ${config.botToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ flags: approvedFlags })
+      }
+    );
+  }
+  if (!approval.response.ok) {
+    const status = Number(approval.response.status);
+    const message = String(approval.payload?.message ?? "").trim();
+    const error = new Error(
+      status === 403
+        ? "The Members bot needs Manage Server or Manage Roles permission to approve Discord member verification."
+        : message || `Discord could not approve member verification (${status}).`
+    );
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  const returnedFlags = Number(approval.payload?.flags);
+  if (Number.isSafeInteger(returnedFlags) && (returnedFlags & communityBypassesVerificationFlag) === 0) {
+    const error = new Error("Discord updated the member but did not apply the verification approval flag.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  return { joined: true, autoApproved: true, pendingScreening: false, manualVerification: true };
+}
+
 async function resolveCommunityPendingJoin(config, discordUserId) {
   let member = await requestDiscord(
     `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`,
@@ -1944,10 +1998,14 @@ async function resolveCommunityPendingJoin(config, discordUserId) {
   }
 
   if (member.response.ok) {
+    if (member.payload?.pending === true) {
+      return approveCommunityPendingMemberVerification(config, discordUserId, member.payload);
+    }
     return {
       joined: true,
       autoApproved: false,
-      pendingScreening: member.payload?.pending === true
+      pendingScreening: false,
+      manualVerification: false
     };
   }
 
@@ -1964,7 +2022,7 @@ async function resolveCommunityPendingJoin(config, discordUserId) {
   }
 
   await approveCommunityJoinRequest(config, discordUserId);
-  return { joined: true, autoApproved: true, pendingScreening: false };
+  return { joined: true, autoApproved: true, pendingScreening: false, manualVerification: false };
 }
 
 function isCommunityMembershipScreeningResponse(result) {
@@ -2291,7 +2349,9 @@ async function runCommunityOrder(order, members, config) {
         if (experimentalCommunityJoinEnabled) {
           const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
           state = "joined";
-          details = pendingJoin.autoApproved
+          details = pendingJoin.manualVerification
+            ? "Member joined and the Members bot approved Discord member verification automatically."
+            : pendingJoin.autoApproved
             ? "Member applied and the Members bot approved the join request automatically."
             : pendingJoin.pendingScreening
               ? "Member joined the server and is pending Discord's server-rules screening."
@@ -2460,7 +2520,9 @@ async function processCommunityReplacement(orderId, resultIndex, member, config)
       if (experimentalCommunityJoinEnabled) {
         const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
         state = "joined";
-        details = pendingJoin.autoApproved
+        details = pendingJoin.manualVerification
+          ? "Replacement member joined and the Members bot approved Discord member verification automatically."
+          : pendingJoin.autoApproved
           ? "Replacement member applied and the Members bot approved the join request automatically."
           : pendingJoin.pendingScreening
             ? "Replacement member joined and is pending Discord's server-rules screening."
