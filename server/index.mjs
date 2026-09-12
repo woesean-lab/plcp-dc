@@ -4429,6 +4429,7 @@ async function activateWaitingCommunityOrder(order) {
   activateWaitingCommunityOrder.lastChecks.set(order.uniqid, Date.now());
 
   let resolved = null;
+  let resolvedFromStoredGuildAccess = false;
   let storedGuildAccess = null;
   const waitingCode = String(order.waitingCode ?? "");
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
@@ -4443,6 +4444,7 @@ async function activateWaitingCommunityOrder(order) {
       const access = await checkCommunityBotDirectGuildAccess(targetConfig, targetGuildId).catch(() => null);
       storedGuildAccess = access;
       if (access?.accessible) {
+        resolvedFromStoredGuildAccess = true;
         resolved = {
           config: targetConfig,
           invite: extractDiscordInviteCode(order.serverInvite),
@@ -4498,6 +4500,21 @@ async function activateWaitingCommunityOrder(order) {
       return waitingOrder;
     }
     throw error;
+  }
+
+  if (resolvedFromStoredGuildAccess && !resolved.invitesPaused) {
+    try {
+      await ensureCommunityApplyToJoin(resolved.config, resolved.serverInfo.guildId);
+    } catch (error) {
+      const waitingOrder = {
+        ...order,
+        status: "WAITING",
+        waitingCode: "apply_to_join_setup",
+        details: error instanceof Error ? error.message : "Discord Apply to Join could not be enabled yet."
+      };
+      await saveTrackedOrderPayload(waitingOrder);
+      return waitingOrder;
+    }
   }
 
   if (resolved.invitesPaused) {
