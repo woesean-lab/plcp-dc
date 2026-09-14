@@ -4437,7 +4437,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
          AND NOT (discord_user_id = ANY($4::text[]))
-       ORDER BY sort_position ASC, authorized_at ASC
+       ORDER BY random()
        LIMIT $3
        FOR UPDATE SKIP LOCKED`,
       [config.guildId, stockType, amount, previouslyDeliveredUserIds]
@@ -4723,7 +4723,7 @@ async function activateWaitingCommunityOrder(order) {
       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
        FROM community_oauth_joins
         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-       ORDER BY sort_position ASC, authorized_at ASC
+       ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
       [resolved.config.guildId, pendingUserIds, getCommunityOrderStockType(current)]
     )).rows;
@@ -4737,13 +4737,13 @@ async function activateWaitingCommunityOrder(order) {
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
       const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
-      const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...previouslyDeliveredUserIds]));
+      const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...pendingUserIds, ...previouslyDeliveredUserIds]));
       const extra = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
            AND NOT (discord_user_id = ANY($4::text[]))
-         ORDER BY sort_position ASC, authorized_at ASC
+         ORDER BY random()
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
         [resolved.config.guildId, getCommunityOrderStockType(current), missing, excludedUserIds]
@@ -5460,7 +5460,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
          AND access_token_expires_at > NOW()
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
-       ORDER BY sort_position ASC, authorized_at ASC
+       ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
       [config.guildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order)]
