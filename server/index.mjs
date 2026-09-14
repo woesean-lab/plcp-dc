@@ -1609,6 +1609,7 @@ function getCommunityAuthorizationSyncSnapshot(guildId) {
     total: Number(job.total ?? 0),
     checked: Number(job.checked ?? 0),
     inactive: Number(job.inactive ?? 0),
+    reactivated: Number(job.reactivated ?? 0),
     removed: Number(job.removed ?? 0),
     errors: Number(job.errors ?? 0),
     startedAt: job.startedAt ?? null,
@@ -1627,6 +1628,7 @@ function startCommunityAuthorizationSync(config) {
     total: 0,
     checked: 0,
     inactive: 0,
+    reactivated: 0,
     removed: 0,
     errors: 0,
     startedAt: new Date().toISOString(),
@@ -1649,13 +1651,13 @@ function startCommunityAuthorizationSync(config) {
 async function syncCommunityAuthorizations(config, onProgress = () => {}) {
   await markCommunityFailedDeliveriesInactive(pool, config.guildId);
   const result = await pool.query(
-    `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at
+    `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at, status, details
      FROM community_oauth_joins
-     WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL AND status <> 'failed'
+     WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL
      ORDER BY authorized_at ASC`,
     [config.guildId]
   );
-  const summary = { total: result.rows.length, checked: 0, inactive: 0, removed: 0, errors: 0 };
+  const summary = { total: result.rows.length, checked: 0, inactive: 0, reactivated: 0, removed: 0, errors: 0 };
   onProgress(summary);
 
   const failedResults = await pool.query(
@@ -1693,14 +1695,8 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
     );
     summary.inactive += disabled.rowCount;
   }
-  const deliveryFailedUserIdSet = new Set(deliveryFailedUserIds);
-
   await forEachWithConcurrency(result.rows, 4, async (member) => {
     summary.checked += 1;
-    if (deliveryFailedUserIdSet.has(String(member.discord_user_id))) {
-      onProgress(summary);
-      return;
-    }
     let shouldMarkInactive = false;
     try {
       const expiresAt = new Date(member.access_token_expires_at).getTime();
@@ -1721,10 +1717,18 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
           const oauthUser = identity.payload.user;
           const username = String(oauthUser?.username ?? `Discord user ${member.discord_user_id}`).trim().slice(0, 100);
           const displayName = String(oauthUser?.global_name ?? "").trim().slice(0, 100) || null;
+          const canReactivate = String(member.status).toLowerCase() === "failed"
+            && /^OAuth access token/i.test(String(member.details ?? ""));
           await pool.query(
-            "UPDATE community_oauth_joins SET username = $3, display_name = $4, details = NULL WHERE discord_user_id = $1 AND guild_id = $2",
-            [member.discord_user_id, config.guildId, username, displayName]
+            `UPDATE community_oauth_joins
+             SET username = $3,
+                 display_name = $4,
+                 status = CASE WHEN $5 THEN 'authorized' ELSE status END,
+                 details = CASE WHEN $5 OR status <> 'failed' THEN NULL ELSE details END
+             WHERE discord_user_id = $1 AND guild_id = $2`,
+            [member.discord_user_id, config.guildId, username, displayName, canReactivate]
           );
+          if (canReactivate) summary.reactivated += 1;
         }
       }
     } catch {
@@ -1737,7 +1741,7 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
          WHERE discord_user_id = $1 AND guild_id = $2`,
         [member.discord_user_id, config.guildId]
       );
-      summary.inactive += inactive.rowCount;
+      if (String(member.status).toLowerCase() !== "failed") summary.inactive += inactive.rowCount;
       summary.removed = summary.inactive;
     }
     onProgress(summary);

@@ -627,6 +627,7 @@ export default function HomePage() {
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
+  const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -992,7 +993,7 @@ export default function HomePage() {
         }
         const summary = nextStatus.syncProgress;
         if (summary?.error) notifyError(summary.error);
-        else if (summary) notifySuccess(`${summary.checked} members checked${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}${summary.errors ? `, ${summary.errors} temporarily skipped` : ""}.`);
+        else if (summary) notifySuccess(`${summary.checked} members checked${summary.reactivated ? `, ${summary.reactivated} reactivated` : ""}${summary.inactive ? `, ${summary.inactive} marked inactive` : ""}${summary.errors ? `, ${summary.errors} temporarily skipped` : ""}.`);
       } catch {
         if (!cancelled) pollHandle = window.setTimeout(() => void pollCommunitySync(), 3000);
       }
@@ -1225,6 +1226,7 @@ export default function HomePage() {
           expires_in: value.expires_in ?? value.expiresIn
         };
       });
+      setCommunityImportProgress({ processed: 0, total: sanitizedRecords.length });
       const result = { total: sanitizedRecords.length, imported: 0, failed: 0, skipped: 0, errors: [] as Array<{ record: string; message: string }>, categoryName: "" };
       const importBatchSize = 100;
       for (let start = 0; start < sanitizedRecords.length; start += importBatchSize) {
@@ -1235,6 +1237,7 @@ export default function HomePage() {
         result.skipped += batchResult.skipped;
         result.errors.push(...batchResult.errors.slice(0, Math.max(0, 25 - result.errors.length)));
         result.categoryName = batchResult.categoryName ?? result.categoryName;
+        setCommunityImportProgress({ processed: Math.min(start + batch.length, sanitizedRecords.length), total: sanitizedRecords.length });
       }
       await refreshCommunityStatus();
       setCommunityImportFile(null);
@@ -1246,6 +1249,7 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "OAuth stock could not be imported.");
     } finally {
       setImportingCommunityStock(false);
+      setCommunityImportProgress(null);
     }
   }
 
@@ -2034,7 +2038,9 @@ export default function HomePage() {
           </Button>
           <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            {importingCommunityStock ? "Validating & importing..." : "Import stock"}
+            {importingCommunityStock && communityImportProgress
+              ? `Importing ${communityImportProgress.processed}/${communityImportProgress.total}`
+              : importingCommunityStock ? "Validating & importing..." : "Import stock"}
           </Button>
           <Button type="button" variant="secondary" disabled={!communityStockConfigured || !communityVisibleRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}

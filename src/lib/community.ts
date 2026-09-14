@@ -43,6 +43,7 @@ export type CommunitySyncProgress = {
   total: number;
   checked: number;
   inactive: number;
+  reactivated: number;
   removed: number;
   errors: number;
   startedAt: string | null;
