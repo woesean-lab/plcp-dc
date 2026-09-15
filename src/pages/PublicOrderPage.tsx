@@ -8,7 +8,7 @@ import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceCommunityMember, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceCommunityMember, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -239,7 +239,7 @@ export default function PublicOrderPage() {
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
-  const [communityReplaceQueue, setCommunityReplaceQueue] = useState<number[]>([]);
+  const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
@@ -664,30 +664,19 @@ export default function PublicOrderPage() {
     }
   }
 
-  function handleReplaceAllCommunityMembers() {
+  async function handleReplaceAllCommunityMembers() {
     if (!uniqid || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
-    setCommunityReplaceQueue(replaceableCommunityMemberIndices);
-    toast.success(`${replaceableCommunityMemberIndices.length} member replacement${replaceableCommunityMemberIndices.length === 1 ? "" : "s"} queued.`);
+    try {
+      setReplacingAllCommunityMembers(true);
+      const data = await replaceAllCommunityMembers(uniqid);
+      setStatus((current) => mergeOrderStatus(current, data));
+      toast.success(`${replaceableCommunityMemberIndices.length} replacements started with the order delay.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Bulk replacement could not be started.");
+    } finally {
+      setReplacingAllCommunityMembers(false);
+    }
   }
-
-  useEffect(() => {
-    const nextIndex = communityReplaceQueue[0];
-    if (nextIndex === undefined || !uniqid || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning) return;
-
-    void (async () => {
-      try {
-        setReplacingCommunityMemberIndex(nextIndex);
-        const data = await replaceCommunityMember(uniqid, nextIndex);
-        setStatus((current) => mergeOrderStatus(current, data));
-        setCommunityReplaceQueue((current) => current.slice(1));
-      } catch (err) {
-        setCommunityReplaceQueue([]);
-        toast.error(err instanceof Error ? err.message : "Bulk replacement stopped.");
-      } finally {
-        setReplacingCommunityMemberIndex(null);
-      }
-    })();
-  }, [communityReplaceQueue, communityReplacementRunning, communityReplacementStatusAllowed, replacingCommunityMemberIndex, uniqid]);
 
   const delayUpdatePanel = !isBoostOrder && !isTerminalStatus ? (
     <div className="monitor-control-panel">
@@ -960,9 +949,9 @@ export default function PublicOrderPage() {
                           </Button>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={handleReplaceAllCommunityMembers} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
-                            <RefreshCw className={`h-3.5 w-3.5 ${communityReplaceQueue.length > 0 || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
-                            {communityReplaceQueue.length > 0 || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
+                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                            <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
+                            {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
@@ -994,7 +983,7 @@ export default function PublicOrderPage() {
                             <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
                             <span className="community-order-result-state">
                               {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                                <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || communityReplaceQueue.length > 0} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                                <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                                   <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
                                   {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
                                 </Button>

@@ -209,6 +209,13 @@ export function replaceCommunityMember(uniqid: string, resultIndex: number) {
   );
 }
 
+export function replaceAllCommunityMembers(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/replace-all`,
+    { method: "POST" }
+  );
+}
+
 export type CommunityMemberCheckResult = {
   order: OrderStatusResponse;
   summary: { checked: number; active: number; inactive: number; unknown: number; checkedAt: string };

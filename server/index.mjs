@@ -2426,7 +2426,7 @@ async function runCommunityOrder(order, members, config) {
       resultIndex = results.length;
       results.push({ discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "queued", details: "Waiting for delivery." });
     }
-    results[resultIndex] = { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
+    results[resultIndex] = { ...results[resultIndex], discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
     if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
     let state = "failed";
@@ -2507,6 +2507,7 @@ async function runCommunityOrder(order, members, config) {
     const memberFailed = state === "failed";
     const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
     results[resultIndex] = {
+      ...results[resultIndex],
       discordUserId: member.discord_user_id,
       username: member.username,
       avatarUrl: member.avatar_url ?? null,
@@ -5326,6 +5327,164 @@ app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res
     );
     await client.query("COMMIT");
     res.set("Cache-Control", "no-store").json(updatedOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
+    }
+    const isAdminRequest = await hasActiveSession(req);
+    const publicCooldownKey = `${req.ip}:${uniqid}:all`;
+    const publicCooldownUntil = publicCommunityReplaceCooldowns.get(publicCooldownKey) ?? 0;
+    if (!isAdminRequest && publicCooldownUntil > Date.now()) {
+      const retrySeconds = Math.max(1, Math.ceil((publicCooldownUntil - Date.now()) / 1000));
+      return res.status(429).json({ message: `Wait ${retrySeconds}s before trying this replacement again.` });
+    }
+
+    const baseConfig = await getCommunityOAuthConfig();
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (!isAdminRequest && isCommunityOrderManagementExpired(order)) {
+      await client.query("ROLLBACK");
+      return res.status(410).json({ message: "This order's member support period has expired." });
+    }
+
+    const targetGuildId = String(order.serverId ?? "").trim();
+    const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
+    if (!config.configured) {
+      await client.query("ROLLBACK");
+      return res.status(503).json({ message: "Configure the Members bot before replacing members." });
+    }
+    const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
+    if (!botAccess.accessible) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({
+        message: "To replace these members, please add the bot to the order's Discord server.",
+        botInvite: createCommunityBotInvite(config, targetGuildId, getCommunityOrderJoinMethod(order))
+      });
+    }
+    if (!["PARTIAL", "COMPLETED", "ERROR"].includes(String(order.status ?? "").toUpperCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Wait for the current delivery to finish before replacing members." });
+    }
+
+    const results = order.communityResults.map((item) => ({ ...item }));
+    const replaceableIndices = results.flatMap((item, index) => {
+      const state = String(item?.state ?? "").toLowerCase();
+      const inactive = String(item?.authorizationStatus ?? "").toLowerCase() === "inactive";
+      return ["failed", "already_member"].includes(state) || inactive ? [index] : [];
+    });
+    if (!replaceableIndices.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This order has no replaceable members." });
+    }
+
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, targetGuildId);
+    const usedUserIds = Array.from(new Set([
+      ...previouslyDeliveredUserIds,
+      ...results.flatMap((item) => [
+        String(item?.discordUserId ?? "").trim(),
+        ...(Array.isArray(item?.replacementHistoryUserIds) ? item.replacementHistoryUserIds.map((value) => String(value ?? "").trim()) : [])
+      ]).filter(isDiscordGuildId)
+    ]));
+    const usedUsernames = Array.from(new Set(results.flatMap((item) => [
+      String(item?.username ?? "").trim(),
+      String(item?.previousUsername ?? "").trim(),
+      ...(Array.isArray(item?.replacementHistoryUsernames) ? item.replacementHistoryUsernames.map((value) => String(value ?? "").trim()) : [])
+    ]).filter(Boolean)));
+    const replacements = await client.query(
+      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+       FROM community_oauth_joins
+       WHERE guild_id = $1
+         AND stock_type = $4
+         AND status = 'authorized'
+         AND encrypted_access_token IS NOT NULL
+         AND access_token_expires_at > NOW()
+         AND NOT (discord_user_id = ANY($2::text[]))
+         AND NOT (username = ANY($3::text[]))
+       ORDER BY random()
+       LIMIT $5
+       FOR UPDATE SKIP LOCKED`,
+      [targetGuildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order), replaceableIndices.length]
+    );
+    if (replacements.rowCount < replaceableIndices.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: `Only ${replacements.rowCount} replacement members are currently available for ${replaceableIndices.length} failed results.` });
+    }
+
+    const failedUserIds = replaceableIndices
+      .map((index) => String(results[index]?.discordUserId ?? ""))
+      .filter(isDiscordGuildId);
+    if (failedUserIds.length) {
+      await client.query(
+        "UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
+        [targetGuildId, failedUserIds]
+      );
+    }
+
+    replacements.rows.forEach((member, replacementIndex) => {
+      const resultIndex = replaceableIndices[replacementIndex];
+      const previous = results[resultIndex];
+      const previousUserId = String(previous?.discordUserId ?? "").trim();
+      results[resultIndex] = {
+        discordUserId: member.discord_user_id,
+        username: member.username,
+        avatarUrl: member.avatar_url ?? null,
+        state: "queued",
+        details: "Waiting for replacement delivery.",
+        replacementAttempt: (Number(previous?.replacementAttempt) || 0) + 1,
+        previousUsername: previous?.username,
+        replacementHistoryUserIds: Array.from(new Set([
+          ...(Array.isArray(previous?.replacementHistoryUserIds) ? previous.replacementHistoryUserIds : []),
+          ...(isDiscordGuildId(previousUserId) ? [previousUserId] : [])
+        ])),
+        replacementHistoryUsernames: Array.from(new Set([
+          ...(Array.isArray(previous?.replacementHistoryUsernames) ? previous.replacementHistoryUsernames : []),
+          previous?.previousUsername,
+          previous?.username
+        ].map((value) => String(value ?? "").trim()).filter(Boolean)))
+      };
+    });
+
+    const activeOrder = {
+      ...order,
+      status: "PROCESS",
+      waitingCode: null,
+      activeDelay: null,
+      nextMemberAt: null,
+      details: `${Number(order.added ?? 0)}/${order.amount} members delivered. Replacements are in progress.`,
+      communityResults: results
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(activeOrder)]
+    );
+    await client.query("COMMIT");
+    if (!isAdminRequest) publicCommunityReplaceCooldowns.set(publicCooldownKey, Date.now() + publicCommunityReplaceCooldownMs);
+
+    void processCommunityOrder(activeOrder, replacements.rows, config).catch(async (error) => {
+      console.error("Members bulk replacement failed:", error instanceof Error ? error.message : error);
+      await saveTrackedOrderPayload({
+        ...activeOrder,
+        status: "ERROR",
+        details: error instanceof Error ? error.message : "Members bulk replacement failed."
+      }).catch(() => {});
+    });
+    res.set("Cache-Control", "no-store").json(isAdminRequest ? activeOrder : sanitizePublicCommunityOrder(activeOrder));
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
