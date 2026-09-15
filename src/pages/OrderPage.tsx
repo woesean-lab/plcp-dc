@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceCommunityMember, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -370,7 +370,6 @@ export default function OrderPage() {
   const [extendingCommunityOrder, setExtendingCommunityOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
-  const [replacingCommunityMemberIndex, setReplacingCommunityMemberIndex] = useState<number | null>(null);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
@@ -745,28 +744,6 @@ export default function OrderPage() {
     })();
   }, [dcordReplaceQueue, normalizedStatus, replacingTokenIndex, result?.uniqid, uniqid]);
 
-  async function handleReplaceCommunityMember(resultIndex: number) {
-    const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null) return;
-
-    try {
-      setReplacingCommunityMemberIndex(resultIndex);
-      const data = await replaceCommunityMember(target, resultIndex);
-      setResult((current) => mergeOrderStatus(current, data));
-      toast.success("Replacement member started.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Member could not be replaced.");
-      try {
-        const data = await getOrderStatus(target, provider);
-        setResult((current) => mergeOrderStatus(current, data));
-      } catch {
-        // Keep the current order visible; live refresh will retry later.
-      }
-    } finally {
-      setReplacingCommunityMemberIndex(null);
-    }
-  }
-
   async function handleCheckCommunityMembers() {
     const target = String(result?.uniqid ?? uniqid).trim();
     if (!target || checkingCommunityMembers) return;
@@ -787,12 +764,12 @@ export default function OrderPage() {
 
   async function handleReplaceAllCommunityMembers() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
+    if (!target || !communityReplacementStatusAllowed || communityReplacementRunning || !replaceableCommunityMemberIndices.length) return;
     try {
       setReplacingAllCommunityMembers(true);
       const data = await replaceAllCommunityMembers(target);
       setResult((current) => mergeOrderStatus(current, data));
-      toast.success(`${replaceableCommunityMemberIndices.length} replacements started with the order delay.`);
+      toast.success("Available replacement members started with the order delay.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Bulk replacement could not be started.");
     } finally {
@@ -1194,7 +1171,7 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
-                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || replacingAllCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
                       <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                       {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : "Replace all"}
                     </Button>
@@ -1232,12 +1209,6 @@ export default function OrderPage() {
                         <small>{item.details}</small>
                       </span>
                       <span className="community-order-result-state">
-                        {["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive" ? (
-                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceCommunityMember(item.index)} disabled={!communityReplacementStatusAllowed || replacingCommunityMemberIndex !== null || communityReplacementRunning || replacingAllCommunityMembers}>
-                            <RefreshCw className={`h-3.5 w-3.5 ${replacingCommunityMemberIndex === item.index ? "animate-spin" : ""}`} aria-hidden="true" />
-                            {replacingCommunityMemberIndex === item.index ? "Replacing..." : "Replace"}
-                          </Button>
-                        ) : null}
                         {item.authorizationStatus ? (
                           <span className="public-token-result-pill" data-state={item.authorizationStatus} title={item.authorizationDetails}>
                             OAuth {item.authorizationStatus}

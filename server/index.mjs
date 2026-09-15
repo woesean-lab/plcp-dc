@@ -5421,12 +5421,13 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
        FOR UPDATE SKIP LOCKED`,
       [targetGuildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order), replaceableIndices.length]
     );
-    if (replacements.rowCount < replaceableIndices.length) {
+    if (!replacements.rowCount) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: `Only ${replacements.rowCount} replacement members are currently available for ${replaceableIndices.length} failed results.` });
+      return res.status(409).json({ message: "No connected replacement member is currently available." });
     }
 
-    const failedUserIds = replaceableIndices
+    const queuedReplacementIndices = replaceableIndices.slice(0, replacements.rowCount);
+    const failedUserIds = queuedReplacementIndices
       .map((index) => String(results[index]?.discordUserId ?? ""))
       .filter(isDiscordGuildId);
     if (failedUserIds.length) {
@@ -5466,7 +5467,12 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       waitingCode: null,
       activeDelay: null,
       nextMemberAt: null,
-      details: `${Number(order.added ?? 0)}/${order.amount} members delivered. Replacements are in progress.`,
+      details: `${Number(order.added ?? 0)}/${order.amount} members delivered. ${replacements.rowCount}/${replaceableIndices.length} available replacements are in progress.`,
+      replacementBatch: {
+        requested: replaceableIndices.length,
+        queued: replacements.rowCount,
+        startedAt: new Date().toISOString()
+      },
       communityResults: results
     };
     await client.query(
