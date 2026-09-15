@@ -1224,6 +1224,7 @@ export default function HomePage() {
         return {
           user_id: value.user_id ?? value.userId,
           access_token: value.access_token ?? value.accessToken,
+          refresh_token: value.refresh_token ?? value.refreshToken,
           authed_timestamp: value.authed_timestamp ?? value.authedTimestamp,
           expires_in: value.expires_in ?? value.expiresIn
         };

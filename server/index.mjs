@@ -580,7 +580,11 @@ async function loadCommunityJoinSummary(config) {
          reserved_order_id = NULL
      WHERE guild_id = $1
        AND status = 'authorized'
-       AND (encrypted_access_token IS NULL OR access_token_expires_at IS NULL OR access_token_expires_at <= NOW())`,
+       AND (
+         encrypted_access_token IS NULL
+         OR access_token_expires_at IS NULL
+         OR (access_token_expires_at <= NOW() AND encrypted_refresh_token IS NULL)
+       )`,
     [config.guildId]
   );
   const result = await pool.query(
@@ -675,7 +679,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
   await queryable.query(
     `INSERT INTO community_oauth_joins
        (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-     SELECT discord_user_id, $2, username, display_name, avatar_url, NULL, encrypted_access_token, access_token_expires_at,
+     SELECT discord_user_id, $2, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at,
             CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
             stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
@@ -684,7 +688,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        username = EXCLUDED.username,
        display_name = EXCLUDED.display_name,
        avatar_url = EXCLUDED.avatar_url,
-       encrypted_refresh_token = NULL,
+       encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, community_oauth_joins.encrypted_refresh_token),
        encrypted_access_token = EXCLUDED.encrypted_access_token,
        access_token_expires_at = EXCLUDED.access_token_expires_at,
        status = CASE
@@ -904,6 +908,116 @@ function decryptCredential(value) {
     decipher.update(Buffer.from(encryptedValue, "base64url")),
     decipher.final()
   ]).toString("utf8");
+}
+
+const communityOAuthRefreshJobs = new Map();
+const communityOAuthRefreshEarlyMs = 48 * 60 * 60 * 1000;
+const communityOAuthRefreshIntervalMs = 24 * 60 * 60 * 1000;
+
+async function exchangeCommunityOAuthRefreshToken(config, refreshToken) {
+  const requestRefresh = async () => {
+    const response = await fetch(`${discordApiBase}/oauth2/token`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: config.clientId,
+        client_secret: config.clientSecret,
+        grant_type: "refresh_token",
+        refresh_token: refreshToken
+      }),
+      signal: AbortSignal.timeout(15_000)
+    });
+    return { response, payload: await response.json().catch(() => ({})) };
+  };
+  let { response, payload } = await requestRefresh();
+  if (response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 5);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    ({ response, payload } = await requestRefresh());
+  }
+  if (!response.ok) {
+    const message = String(payload?.error_description ?? payload?.message ?? payload?.error ?? "Discord rejected the OAuth refresh request.").trim();
+    const error = new Error(`OAuth refresh failed (HTTP ${response.status}): ${message}`);
+    error.oauthRefreshInvalid = response.status === 400 && String(payload?.error ?? "").toLowerCase() === "invalid_grant";
+    error.oauthRefreshTransient = response.status === 429 || response.status >= 500;
+    throw error;
+  }
+  const accessToken = String(payload?.access_token ?? "").trim();
+  const nextRefreshToken = String(payload?.refresh_token ?? refreshToken).trim();
+  const expiresIn = Number(payload?.expires_in);
+  if (accessToken.length < 20 || nextRefreshToken.length < 20 || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    const error = new Error("Discord returned an incomplete OAuth refresh response.");
+    error.oauthRefreshTransient = true;
+    throw error;
+  }
+  return {
+    accessToken,
+    refreshToken: nextRefreshToken,
+    expiresAt: new Date(Date.now() + expiresIn * 1000),
+    expiresIn
+  };
+}
+
+async function refreshStoredCommunityOAuthCredential(config, member, { force = false } = {}) {
+  const discordUserId = String(member?.discord_user_id ?? "").trim();
+  if (!isDiscordGuildId(discordUserId)) throw new Error("A valid Discord user is required for OAuth refresh.");
+  const currentExpiry = new Date(member?.access_token_expires_at).getTime();
+  if (!force && member?.encrypted_access_token && Number.isFinite(currentExpiry) && currentExpiry > Date.now() + communityOAuthRefreshEarlyMs) {
+    return {
+      accessToken: decryptCredential(member.encrypted_access_token),
+      expiresAt: new Date(currentExpiry),
+      refreshed: false
+    };
+  }
+
+  const existingJob = communityOAuthRefreshJobs.get(discordUserId);
+  if (existingJob) return existingJob;
+  const job = (async () => {
+    const current = await pool.query(
+      `SELECT discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
+       FROM community_oauth_joins
+       WHERE discord_user_id = $1 AND encrypted_refresh_token IS NOT NULL
+       ORDER BY access_token_expires_at DESC NULLS LAST
+       LIMIT 1`,
+      [discordUserId]
+    );
+    const credential = current.rows[0] ?? member;
+    const expiresAt = new Date(credential?.access_token_expires_at).getTime();
+    if (!force && credential?.encrypted_access_token && Number.isFinite(expiresAt) && expiresAt > Date.now() + communityOAuthRefreshEarlyMs) {
+      return { accessToken: decryptCredential(credential.encrypted_access_token), expiresAt: new Date(expiresAt), refreshed: false };
+    }
+    if (!credential?.encrypted_refresh_token) {
+      const error = new Error("OAuth refresh token is missing. Re-authorize this account before importing it again.");
+      error.oauthAccessInvalid = true;
+      throw error;
+    }
+
+    const refreshed = await exchangeCommunityOAuthRefreshToken(config, decryptCredential(credential.encrypted_refresh_token));
+    const identity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${refreshed.accessToken}` } });
+    const scopes = Array.isArray(identity.payload?.scopes) ? identity.payload.scopes.map(String) : [];
+    if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId || !scopes.includes("guilds.join")) {
+      const error = new Error("The refreshed OAuth authorization is invalid or no longer includes guilds.join.");
+      error.oauthAccessInvalid = true;
+      throw error;
+    }
+
+    const encryptedAccessToken = encryptCredential(refreshed.accessToken);
+    const encryptedRefreshToken = encryptCredential(refreshed.refreshToken);
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET encrypted_access_token = $2,
+           encrypted_refresh_token = $3,
+           access_token_expires_at = $4,
+           authorized_at = NOW(),
+           status = CASE WHEN status = 'failed' AND COALESCE(details, '') ~* 'OAuth' THEN 'authorized' ELSE status END,
+           details = CASE WHEN status = 'failed' AND COALESCE(details, '') ~* 'OAuth' THEN NULL ELSE details END
+       WHERE discord_user_id = $1`,
+      [discordUserId, encryptedAccessToken, encryptedRefreshToken, refreshed.expiresAt]
+    );
+    return { ...refreshed, refreshed: true };
+  })().finally(() => communityOAuthRefreshJobs.delete(discordUserId));
+  communityOAuthRefreshJobs.set(discordUserId, job);
+  return job;
 }
 
 async function loadTokenuApiKey() {
@@ -1651,7 +1765,7 @@ function startCommunityAuthorizationSync(config) {
 async function syncCommunityAuthorizations(config, onProgress = () => {}) {
   await markCommunityFailedDeliveriesInactive(pool, config.guildId);
   const result = await pool.query(
-    `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at, status, details
+    `SELECT discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, authorized_at, status, details
      FROM community_oauth_joins
      WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL
      ORDER BY authorized_at ASC`,
@@ -1700,12 +1814,22 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
     let shouldMarkInactive = false;
     try {
       const expiresAt = new Date(member.access_token_expires_at).getTime();
-      if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+      let accessToken = null;
+      if (member.encrypted_refresh_token && (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
+        accessToken = (await refreshStoredCommunityOAuthCredential(config, member, { force: true })).accessToken;
+      } else if (member.encrypted_access_token && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+        accessToken = decryptCredential(member.encrypted_access_token);
+      }
+      if (!accessToken) {
         shouldMarkInactive = true;
       } else {
-        const identity = await requestDiscord("oauth2/@me", {
-          headers: { Authorization: `Bearer ${decryptCredential(member.encrypted_access_token)}` }
+        let identity = await requestDiscord("oauth2/@me", {
+          headers: { Authorization: `Bearer ${accessToken}` }
         });
+        if (identity.response.status === 401 && member.encrypted_refresh_token) {
+          accessToken = (await refreshStoredCommunityOAuthCredential(config, member, { force: true })).accessToken;
+          identity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } });
+        }
         const identityUserId = String(identity.payload?.user?.id ?? "");
         if (identity.response.status === 401) {
           shouldMarkInactive = true;
@@ -1731,13 +1855,14 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
           if (canReactivate) summary.reactivated += 1;
         }
       }
-    } catch {
-      summary.errors += 1;
+    } catch (error) {
+      if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) shouldMarkInactive = true;
+      else summary.errors += 1;
     }
     if (shouldMarkInactive) {
       const inactive = await pool.query(
         `UPDATE community_oauth_joins
-         SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
+         SET status = 'failed', details = 'OAuth authorization expired or became invalid and could not be refreshed.', reserved_order_id = NULL
          WHERE discord_user_id = $1 AND guild_id = $2`,
         [member.discord_user_id, config.guildId]
       );
@@ -1749,6 +1874,42 @@ async function syncCommunityAuthorizations(config, onProgress = () => {}) {
 
   summary.removed = summary.inactive;
   onProgress(summary);
+  return summary;
+}
+
+async function refreshCommunityOAuthTokensDue(config, limit = 5_000) {
+  if (!config?.configured) return { checked: 0, refreshed: 0, inactive: 0, errors: 0 };
+  const due = await pool.query(
+    `SELECT DISTINCT ON (discord_user_id)
+            discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
+     FROM community_oauth_joins
+     WHERE encrypted_refresh_token IS NOT NULL
+       AND (access_token_expires_at IS NULL OR access_token_expires_at <= NOW() + ($1 * INTERVAL '1 millisecond'))
+     ORDER BY discord_user_id, access_token_expires_at DESC NULLS LAST
+     LIMIT $2`,
+    [communityOAuthRefreshEarlyMs, Math.min(Math.max(Number(limit) || 5_000, 1), 5_000)]
+  );
+  const summary = { checked: due.rows.length, refreshed: 0, inactive: 0, errors: 0 };
+  await forEachWithConcurrency(due.rows, 2, async (member) => {
+    try {
+      const refreshed = await refreshStoredCommunityOAuthCredential(config, member);
+      if (refreshed.refreshed) summary.refreshed += 1;
+    } catch (error) {
+      if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
+        const inactive = await pool.query(
+          `UPDATE community_oauth_joins
+           SET status = 'failed',
+               details = 'OAuth refresh token is invalid. Re-authorize this account.',
+               reserved_order_id = NULL
+           WHERE discord_user_id = $1`,
+          [member.discord_user_id]
+        );
+        summary.inactive += inactive.rowCount;
+      } else {
+        summary.errors += 1;
+      }
+    }
+  });
   return summary;
 }
 
@@ -2178,10 +2339,13 @@ async function recoverCommunityGuildRestrictionOrder(order) {
   return recoveredOrder;
 }
 
-function loadCommunityAccessToken(member) {
+async function loadCommunityAccessToken(member, config) {
   const expiresAt = new Date(member?.access_token_expires_at).getTime();
+  if (member?.encrypted_refresh_token && (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
+    return (await refreshStoredCommunityOAuthCredential(config, member)).accessToken;
+  }
   if (!member?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-    const error = new Error("OAuth access token expired. Re-import a current S2Tools export; automatic refresh is disabled.");
+    const error = new Error("OAuth access token expired and no refresh token is available. Re-authorize this account.");
     error.oauthAccessInvalid = true;
     throw error;
   }
@@ -2434,7 +2598,7 @@ async function runCommunityOrder(order, members, config) {
     let botPauseIssue = null;
     let memberAuthorizationInvalid = false;
     try {
-      const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
+      const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
       if (isCommunityMembershipScreeningResponse(joined)) {
         if (getCommunityOrderJoinMethod(order) === "join_application") {
           const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
@@ -2589,7 +2753,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
   let botPauseIssue = null;
   let memberAuthorizationInvalid = false;
   try {
-    const joined = await addCommunityGuildMember(config, member.discord_user_id, loadCommunityAccessToken(member));
+    const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
     if (isCommunityMembershipScreeningResponse(joined)) {
       if (normalizeCommunityJoinMethod(joinMethod, "create_invite") === "join_application") {
         const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
@@ -3497,7 +3661,6 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS display_name TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_access_token TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ");
-  await pool.query("UPDATE community_oauth_joins SET encrypted_refresh_token = NULL WHERE encrypted_refresh_token IS NOT NULL");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS sort_position BIGINT");
@@ -3862,16 +4025,13 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
 
     await forEachWithConcurrency(records, 4, async (record, index) => {
       const sourceUserId = String(record?.user_id ?? record?.userId ?? "").trim();
-      const accessToken = String(record?.access_token ?? record?.accessToken ?? "").trim();
-      const accessTokenExpiresAt = parseCommunityAccessTokenExpiry(record);
+      let accessToken = String(record?.access_token ?? record?.accessToken ?? "").trim();
+      let refreshToken = String(record?.refresh_token ?? record?.refreshToken ?? "").trim();
+      let accessTokenExpiresAt = parseCommunityAccessTokenExpiry(record);
       const recordLabel = isDiscordGuildId(sourceUserId) ? sourceUserId : `row ${index + 1}`;
 
-      if (!isDiscordGuildId(sourceUserId) || accessToken.length < 20 || accessToken.length > 4096 || !accessTokenExpiresAt) {
+      if (!isDiscordGuildId(sourceUserId) || accessToken.length < 20 || accessToken.length > 4096 || refreshToken.length > 4096 || !accessTokenExpiresAt) {
         recordFailure(recordLabel, "A valid user_id, access_token, authed_timestamp and expires_in are required.");
-        return;
-      }
-      if (accessTokenExpiresAt.getTime() <= Date.now()) {
-        recordFailure(recordLabel, "The OAuth access token has expired. Export the stock again before importing it.");
         return;
       }
       if (seenSourceUserIds.has(sourceUserId)) {
@@ -3883,12 +4043,26 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       nextSortPosition += 1024;
 
       try {
+        const refreshImportedCredential = async () => {
+          if (refreshToken.length < 20) throw new Error("The OAuth access token is expired or invalid and this record has no usable refresh_token.");
+          const refreshed = await exchangeCommunityOAuthRefreshToken(config, refreshToken);
+          accessToken = refreshed.accessToken;
+          refreshToken = refreshed.refreshToken;
+          accessTokenExpiresAt = refreshed.expiresAt;
+        };
+        if (accessTokenExpiresAt.getTime() <= Date.now()) await refreshImportedCredential();
         let oauthIdentity = await requestDiscord("oauth2/@me", {
           headers: { Authorization: `Bearer ${accessToken}` }
         });
         if (oauthIdentity.response.status === 429) {
           const retrySeconds = Math.min(Math.max(Number(oauthIdentity.payload?.retry_after) || 1, 1), 5);
           await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          oauthIdentity = await requestDiscord("oauth2/@me", {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+        }
+        if ([401, 403].includes(oauthIdentity.response.status) && refreshToken.length >= 20) {
+          await refreshImportedCredential();
           oauthIdentity = await requestDiscord("oauth2/@me", {
             headers: { Authorization: `Bearer ${accessToken}` }
           });
@@ -3902,7 +4076,9 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         if (applicationId && applicationId !== config.clientId) throw new Error("The OAuth record belongs to a different Discord application.");
         if (!scopes.includes("guilds.join")) throw new Error("The OAuth record does not include the guilds.join permission.");
         const oauthUser = oauthIdentity.payload.user;
-        const details = `Imported with a non-refreshing OAuth access token valid until ${accessTokenExpiresAt.toISOString()}.`;
+        const details = refreshToken.length >= 20
+          ? `OAuth authorization is managed automatically and is valid until ${accessTokenExpiresAt.toISOString()}.`
+          : `Imported without a refresh token; access is valid until ${accessTokenExpiresAt.toISOString()}.`;
         const discordUserId = sourceUserId;
         const duplicateDiscordUser = seenDiscordUserIds.has(discordUserId);
         seenDiscordUserIds.add(discordUserId);
@@ -3914,15 +4090,16 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
           ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(discordUserId)}/${encodeURIComponent(avatarHash)}.png?size=128`
           : null;
         const encryptedAccessToken = encryptCredential(accessToken);
+        const encryptedRefreshToken = refreshToken.length >= 20 ? encryptCredential(refreshToken) : null;
         await pool.query(
           `INSERT INTO community_oauth_joins
              (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-           VALUES ($1, $2, $3, $4, $5, NULL, $6, $7, 'authorized', $8, $9, NOW(), NULL, NULL, $10)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'authorized', $9, $10, NOW(), NULL, NULL, $11)
            ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
              username = EXCLUDED.username,
              display_name = EXCLUDED.display_name,
              avatar_url = EXCLUDED.avatar_url,
-             encrypted_refresh_token = NULL,
+             encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, community_oauth_joins.encrypted_refresh_token),
              encrypted_access_token = EXCLUDED.encrypted_access_token,
              access_token_expires_at = EXCLUDED.access_token_expires_at,
              status = 'authorized',
@@ -3935,25 +4112,26 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
                WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position
                ELSE community_oauth_joins.sort_position
              END`,
-          [discordUserId, config.guildId, username, displayName, avatarUrl, encryptedAccessToken, accessTokenExpiresAt, stockType, details, sortPosition]
+          [discordUserId, config.guildId, username, displayName, avatarUrl, encryptedRefreshToken, encryptedAccessToken, accessTokenExpiresAt, stockType, details, sortPosition]
         );
         await pool.query(
           `UPDATE community_oauth_joins
            SET username = $2,
                display_name = $3,
                encrypted_access_token = $4,
-               access_token_expires_at = $5,
+               encrypted_refresh_token = COALESCE($5, encrypted_refresh_token),
+               access_token_expires_at = $6,
                authorized_at = NOW(),
                status = CASE
                  WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN 'authorized'
                  ELSE status
                END,
                details = CASE
-                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN $6
+                 WHEN status = 'failed' AND details ILIKE 'OAuth access token%' THEN $7
                  ELSE details
                END
-           WHERE discord_user_id = $1 AND guild_id <> $7`,
-          [discordUserId, username, displayName, encryptedAccessToken, accessTokenExpiresAt, details, config.guildId]
+           WHERE discord_user_id = $1 AND guild_id <> $8`,
+          [discordUserId, username, displayName, encryptedAccessToken, encryptedRefreshToken, accessTokenExpiresAt, details, config.guildId]
         );
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
@@ -3986,7 +4164,7 @@ app.get("/api/community/export-oauth-stock", requireSession, async (req, res, ne
     }
 
     const result = await pool.query(
-      `SELECT discord_user_id, encrypted_access_token, access_token_expires_at, authorized_at
+      `SELECT discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, authorized_at
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND encrypted_access_token IS NOT NULL
        ORDER BY CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC, sort_position ASC, authorized_at ASC`,
@@ -3998,6 +4176,7 @@ app.get("/api/community/export-oauth-stock", requireSession, async (req, res, ne
       return {
         user_id: row.discord_user_id,
         access_token: decryptCredential(row.encrypted_access_token),
+        ...(row.encrypted_refresh_token ? { refresh_token: decryptCredential(row.encrypted_refresh_token) } : {}),
         authed_timestamp: authorizedAtSeconds,
         expires_in: Math.max(0, expiresAtSeconds - authorizedAtSeconds)
       };
@@ -4434,7 +4613,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     await client.query("BEGIN");
     const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId);
     const selected = await client.query(
-       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
          AND NOT (discord_user_id = ANY($4::text[]))
@@ -4721,7 +4900,7 @@ async function activateWaitingCommunityOrder(order) {
       .filter(isDiscordGuildId);
 
     let members = (await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
        FROM community_oauth_joins
         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
        ORDER BY array_position($2::text[], discord_user_id)
@@ -4740,7 +4919,7 @@ async function activateWaitingCommunityOrder(order) {
       const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
       const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...pendingUserIds, ...previouslyDeliveredUserIds]));
       const extra = await client.query(
-        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
            AND NOT (discord_user_id = ANY($4::text[]))
@@ -5407,7 +5586,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       ...(Array.isArray(item?.replacementHistoryUsernames) ? item.replacementHistoryUsernames.map((value) => String(value ?? "").trim()) : [])
     ]).filter(Boolean)));
     const replacements = await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
        FROM community_oauth_joins
        WHERE guild_id = $1
          AND stock_type = $4
@@ -5616,7 +5795,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       ]).filter(Boolean)
     ]));
     const replacement = await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, access_token_expires_at
+      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
        FROM community_oauth_joins
        WHERE guild_id = $1
          AND stock_type = $4
@@ -6930,3 +7109,16 @@ const communityRecoveryTimer = setInterval(() => {
   });
 }, 10_000);
 communityRecoveryTimer.unref();
+
+const refreshCommunityOAuthTokens = async () => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (config.configured) await refreshCommunityOAuthTokensDue(config);
+  } catch (error) {
+    console.error("Members OAuth refresh scan failed:", error instanceof Error ? error.message : error);
+  }
+};
+const communityOAuthRefreshTimer = setInterval(() => void refreshCommunityOAuthTokens(), communityOAuthRefreshIntervalMs);
+communityOAuthRefreshTimer.unref();
+const communityOAuthInitialRefreshTimer = setTimeout(() => void refreshCommunityOAuthTokens(), 10_000);
+communityOAuthInitialRefreshTimer.unref();

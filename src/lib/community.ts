@@ -120,6 +120,7 @@ export type CommunityOAuthImportResult = {
 export type CommunityOAuthExportRecord = {
   user_id: string;
   access_token: string;
+  refresh_token?: string;
   authed_timestamp: number;
   expires_in: number;
 };
