@@ -3846,7 +3846,12 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       return res.status(400).json({ message: "Each import batch must contain between 1 and 250 OAuth records." });
     }
 
-    const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [] };
+    const result = { total: records.length, imported: 0, failed: 0, skipped: 0, errors: [], errorCounts: {} };
+    const recordFailure = (record, message) => {
+      result.failed += 1;
+      result.errorCounts[message] = (result.errorCounts[message] ?? 0) + 1;
+      if (result.errors.length < 25) result.errors.push({ record, message });
+    };
     const seenSourceUserIds = new Set();
     const seenDiscordUserIds = new Set();
     const positionResult = await pool.query(
@@ -3862,13 +3867,11 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
       const recordLabel = isDiscordGuildId(sourceUserId) ? sourceUserId : `row ${index + 1}`;
 
       if (!isDiscordGuildId(sourceUserId) || accessToken.length < 20 || accessToken.length > 4096 || !accessTokenExpiresAt) {
-        result.failed += 1;
-        if (result.errors.length < 25) result.errors.push({ record: recordLabel, message: "A valid user_id, access_token, authed_timestamp and expires_in are required." });
+        recordFailure(recordLabel, "A valid user_id, access_token, authed_timestamp and expires_in are required.");
         return;
       }
       if (accessTokenExpiresAt.getTime() <= Date.now()) {
-        result.failed += 1;
-        if (result.errors.length < 25) result.errors.push({ record: recordLabel, message: "The OAuth access token has expired. Export the stock again before importing it." });
+        recordFailure(recordLabel, "The OAuth access token has expired. Export the stock again before importing it.");
         return;
       }
       if (seenSourceUserIds.has(sourceUserId)) {
@@ -3955,10 +3958,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
         if (duplicateDiscordUser) result.skipped += 1;
         else result.imported += 1;
       } catch (error) {
-        result.failed += 1;
-        if (result.errors.length < 25) {
-          result.errors.push({ record: recordLabel, message: error instanceof Error ? error.message : "OAuth record could not be imported." });
-        }
+        recordFailure(recordLabel, error instanceof Error ? error.message : "OAuth record could not be imported.");
       }
     });
 

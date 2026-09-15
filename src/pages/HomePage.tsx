@@ -628,6 +628,7 @@ export default function HomePage() {
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
+  const [communityImportErrorCounts, setCommunityImportErrorCounts] = useState<Record<string, number>>({});
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -1209,6 +1210,7 @@ export default function HomePage() {
     if (!communityImportFile) return;
     try {
       setImportingCommunityStock(true);
+      setCommunityImportErrorCounts({});
       if (communityImportFile.size > 10 * 1024 * 1024) throw new Error("OAuth stock JSON must be smaller than 10 MB.");
       const parsed = JSON.parse(await communityImportFile.text()) as unknown;
       const records = Array.isArray(parsed)
@@ -1227,7 +1229,7 @@ export default function HomePage() {
         };
       });
       setCommunityImportProgress({ processed: 0, total: sanitizedRecords.length });
-      const result = { total: sanitizedRecords.length, imported: 0, failed: 0, skipped: 0, errors: [] as Array<{ record: string; message: string }>, categoryName: "" };
+      const result = { total: sanitizedRecords.length, imported: 0, failed: 0, skipped: 0, errors: [] as Array<{ record: string; message: string }>, errorCounts: {} as Record<string, number>, categoryName: "" };
       const importBatchSize = 100;
       for (let start = 0; start < sanitizedRecords.length; start += importBatchSize) {
         const batch = sanitizedRecords.slice(start, start + importBatchSize);
@@ -1236,6 +1238,9 @@ export default function HomePage() {
         result.failed += batchResult.failed;
         result.skipped += batchResult.skipped;
         result.errors.push(...batchResult.errors.slice(0, Math.max(0, 25 - result.errors.length)));
+        for (const [message, count] of Object.entries(batchResult.errorCounts ?? {})) {
+          result.errorCounts[message] = (result.errorCounts[message] ?? 0) + count;
+        }
         result.categoryName = batchResult.categoryName ?? result.categoryName;
         setCommunityImportProgress({ processed: Math.min(start + batch.length, sanitizedRecords.length), total: sanitizedRecords.length });
       }
@@ -1243,7 +1248,11 @@ export default function HomePage() {
       setCommunityImportFile(null);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
       const summary = `${result.imported} imported to ${result.categoryName ?? communityVisibleCategory?.name ?? "category"}, ${result.skipped} skipped, ${result.failed} failed.`;
-      if (result.failed) notifyError(summary);
+      if (result.failed) {
+        setCommunityImportErrorCounts(result.errorCounts);
+        const leadingReason = Object.entries(result.errorCounts).sort((left, right) => right[1] - left[1])[0];
+        notifyError(leadingReason ? `${summary} ${leadingReason[1]}: ${leadingReason[0]}` : summary);
+      }
       else notifySuccess(summary);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "OAuth stock could not be imported.");
@@ -2047,6 +2056,15 @@ export default function HomePage() {
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
         </div>
+        {Object.keys(communityImportErrorCounts).length ? (
+          <div className="community-admin-note" role="alert">
+            <strong>Import failures:</strong>{" "}
+            {Object.entries(communityImportErrorCounts)
+              .sort((left, right) => right[1] - left[1])
+              .map(([message, count]) => `${count} × ${message}`)
+              .join(" · ")}
+          </div>
+        ) : null}
       </form>
 
       <div className="community-member-toolbar">

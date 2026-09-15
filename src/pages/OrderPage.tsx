@@ -1173,7 +1173,7 @@ export default function OrderPage() {
                   {replaceableCommunityMemberIndices.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
                       <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
-                      {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : "Replace all"}
+                      {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                     </Button>
                   ) : null}
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>

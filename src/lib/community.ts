@@ -112,6 +112,7 @@ export type CommunityOAuthImportResult = {
   failed: number;
   skipped: number;
   errors: Array<{ record: string; message: string }>;
+  errorCounts?: Record<string, number>;
   categoryId?: string;
   categoryName?: string;
 };
