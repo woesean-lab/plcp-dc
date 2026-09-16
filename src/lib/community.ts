@@ -131,12 +131,13 @@ async function parseResponse<T>(response: Response) {
   return payload;
 }
 
-export function getCommunityAdminStatus() {
-  return fetch("/api/community/status", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+export function getCommunityAdminStatus(categoryId?: string) {
+  const params = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : "";
+  return fetch(`/api/community/status${params}`, { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
 }
 
-export function syncCommunityAuthorizations() {
-  return fetch("/api/community/sync", {
+export function syncCommunityAuthorizations(categoryId: string) {
+  return fetch(`/api/community/sync?categoryId=${encodeURIComponent(categoryId)}`, {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin"

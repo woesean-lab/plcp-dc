@@ -985,7 +985,7 @@ export default function HomePage() {
 
     const pollCommunitySync = async () => {
       try {
-        const nextStatus = await getCommunityAdminStatus();
+        const nextStatus = await getCommunityAdminStatus(communityStockType);
         if (cancelled) return;
         setCommunityStatus(nextStatus);
         if (nextStatus.syncing) {
@@ -1005,7 +1005,7 @@ export default function HomePage() {
       cancelled = true;
       if (pollHandle !== null) window.clearTimeout(pollHandle);
     };
-  }, [communityStatus?.syncing]);
+  }, [communityStatus?.syncing, communityStockType]);
 
   async function refreshBalance() {
     try {
@@ -1023,7 +1023,7 @@ export default function HomePage() {
     const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
-      const nextStatus = await getCommunityAdminStatus();
+      const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId === communityStatusRequestRef.current) setCommunityStatus(nextStatus);
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
@@ -1036,10 +1036,10 @@ export default function HomePage() {
     const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
-      const started = await syncCommunityAuthorizations();
+      const started = await syncCommunityAuthorizations(communityStockType);
       if (requestId !== communityStatusRequestRef.current) return;
-      if (started.started) notifySuccess("Members Stock refresh started.");
-      const nextStatus = await getCommunityAdminStatus();
+      if (started.started) notifySuccess(`${communityVisibleCategory?.name ?? "Selected category"} refresh started.`);
+      const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
     } catch (error) {

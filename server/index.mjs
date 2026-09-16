@@ -1715,8 +1715,11 @@ function parseCommunityAccessTokenExpiry(record) {
 
 const communityAuthorizationSyncJobs = new Map();
 
-function getCommunityAuthorizationSyncSnapshot(guildId) {
-  const job = communityAuthorizationSyncJobs.get(String(guildId ?? ""));
+function getCommunityAuthorizationSyncSnapshot(guildId, stockType = null) {
+  const jobs = stockType
+    ? [communityAuthorizationSyncJobs.get(`${String(guildId ?? "")}:${stockType}`)]
+    : [...communityAuthorizationSyncJobs.values()];
+  const job = jobs.find(Boolean);
   if (!job) return null;
   return {
     syncing: job.syncing === true,
@@ -1732,10 +1735,11 @@ function getCommunityAuthorizationSyncSnapshot(guildId) {
   };
 }
 
-function startCommunityAuthorizationSync(config) {
+function startCommunityAuthorizationSync(config, stockType) {
   const guildId = String(config.guildId);
-  const existing = communityAuthorizationSyncJobs.get(guildId);
-  if (existing?.syncing) return { started: false, ...getCommunityAuthorizationSyncSnapshot(guildId) };
+  const jobKey = `${guildId}:${stockType}`;
+  const existing = communityAuthorizationSyncJobs.get(jobKey);
+  if (existing?.syncing) return { started: false, ...getCommunityAuthorizationSyncSnapshot(guildId, stockType) };
 
   const job = {
     syncing: true,
@@ -1749,8 +1753,8 @@ function startCommunityAuthorizationSync(config) {
     completedAt: null,
     error: null
   };
-  communityAuthorizationSyncJobs.set(guildId, job);
-  void syncCommunityAuthorizations(config, (progress) => Object.assign(job, progress)).then((summary) => {
+  communityAuthorizationSyncJobs.set(jobKey, job);
+  void syncCommunityAuthorizations(config, stockType, (progress) => Object.assign(job, progress)).then((summary) => {
     Object.assign(job, summary, { syncing: false, completedAt: new Date().toISOString() });
   }).catch((error) => {
     job.syncing = false;
@@ -1759,17 +1763,16 @@ function startCommunityAuthorizationSync(config) {
     job.completedAt = new Date().toISOString();
     console.error("Members Stock refresh failed:", job.error);
   });
-  return { started: true, ...getCommunityAuthorizationSyncSnapshot(guildId) };
+  return { started: true, ...getCommunityAuthorizationSyncSnapshot(guildId, stockType) };
 }
 
-async function syncCommunityAuthorizations(config, onProgress = () => {}) {
-  await markCommunityFailedDeliveriesInactive(pool, config.guildId);
+async function syncCommunityAuthorizations(config, stockType, onProgress = () => {}) {
   const result = await pool.query(
     `SELECT discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, authorized_at, status, details
      FROM community_oauth_joins
-     WHERE guild_id = $1 AND encrypted_access_token IS NOT NULL
+     WHERE guild_id = $1 AND stock_type = $2 AND encrypted_access_token IS NOT NULL
      ORDER BY authorized_at ASC`,
-    [config.guildId]
+    [config.guildId, stockType]
   );
   const summary = { total: result.rows.length, checked: 0, inactive: 0, reactivated: 0, removed: 0, errors: 0 };
   onProgress(summary);
@@ -4229,7 +4232,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         [config.guildId]
       )
     ]);
-    const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId);
+    const requestedCategoryId = parseCommunityCategoryId(_req.query?.categoryId);
+    const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, requestedCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
       bot,
@@ -4263,7 +4267,15 @@ app.post("/api/community/sync", requireSession, async (_req, res, next) => {
     if (!config.configured) {
       return res.status(503).json({ message: "Configure the Members bot before syncing Members Stock." });
     }
-    const result = startCommunityAuthorizationSync(config);
+    const stockType = normalizeCommunityStockType(_req.query?.categoryId);
+    const category = await pool.query(
+      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [config.guildId, stockType]
+    );
+    if (!category.rowCount || String(_req.query?.categoryId ?? "").trim().toLowerCase() !== stockType) {
+      return res.status(400).json({ message: "Choose a valid Members Stock category before refreshing." });
+    }
+    const result = startCommunityAuthorizationSync(config, stockType);
     res.status(202).set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
