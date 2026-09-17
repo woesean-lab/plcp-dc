@@ -48,8 +48,6 @@ type CommunityMemberResult = {
   authorizationCheckedAt?: string;
   membershipStatus?: string;
   membershipDetails?: string;
-  presenceStatus?: string;
-  presenceDetails?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -87,8 +85,6 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined,
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
-      presenceStatus: typeof row.presenceStatus === "string" ? row.presenceStatus : undefined,
-      presenceDetails: typeof row.presenceDetails === "string" ? row.presenceDetails : undefined
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -1221,11 +1217,6 @@ export default function OrderPage() {
                         {item.membershipStatus === "removed" ? (
                           <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
                             Removed from server
-                          </span>
-                        ) : null}
-                        {item.presenceStatus ? (
-                          <span className="public-token-result-pill" data-state={item.presenceStatus} title={item.presenceDetails}>
-                            {item.presenceStatus === "dnd" ? "Do not disturb" : item.presenceStatus}
                           </span>
                         ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

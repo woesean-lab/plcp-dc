@@ -35,9 +35,6 @@ const dcordMaxRetryAttempts = Math.min(Math.max(Number.parseInt(process.env.DCOR
 const communityWorkerInstanceId = `${process.pid}-${crypto.randomBytes(8).toString("hex")}`;
 const communityWorkerLeaseSeconds = 60;
 const discordApiBase = "https://discord.com/api/v10";
-const communityGatewayIntents = 1 | 2 | 256; // GUILDS, GUILD_MEMBERS, GUILD_PRESENCES
-const communityDiscordPresenceCache = new Map();
-let communityDiscordGateway = null;
 const publicDelayCooldownMs = 60 * 1000;
 const publicDelayCooldowns = new Map();
 const publicRestartCooldownMs = 60 * 1000;
@@ -210,123 +207,6 @@ async function requestDiscord(pathname, init = {}) {
   });
   const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
   return { response, payload };
-}
-
-function setCommunityDiscordPresence(guildId, userId, status, updatedAt = Date.now()) {
-  if (!isDiscordGuildId(String(guildId)) || !isDiscordGuildId(String(userId))) return;
-  const normalizedStatus = ["online", "idle", "dnd", "offline"].includes(String(status).toLowerCase())
-    ? String(status).toLowerCase()
-    : "offline";
-  communityDiscordPresenceCache.set(`${guildId}:${userId}`, { status: normalizedStatus, updatedAt });
-}
-
-function applyCommunityGatewayPresences(guildId, payload) {
-  const presences = Array.isArray(payload?.presences) ? payload.presences : [];
-  const members = Array.isArray(payload?.members) ? payload.members : [];
-  const presentUserIds = new Set();
-  for (const presence of presences) {
-    const userId = String(presence?.user?.id ?? presence?.user_id ?? "");
-    if (!isDiscordGuildId(userId)) continue;
-    presentUserIds.add(userId);
-    setCommunityDiscordPresence(guildId, userId, presence?.status);
-  }
-  for (const member of members) {
-    const userId = String(member?.user?.id ?? "");
-    if (isDiscordGuildId(userId) && !presentUserIds.has(userId)) setCommunityDiscordPresence(guildId, userId, "offline");
-  }
-}
-
-async function ensureCommunityDiscordGateway(config) {
-  if (communityDiscordGateway?.ready && communityDiscordGateway.token === config.botToken) return communityDiscordGateway;
-  if (communityDiscordGateway?.connecting && communityDiscordGateway.token === config.botToken) return communityDiscordGateway.readyPromise;
-
-  communityDiscordGateway?.socket?.close();
-  const gateway = { token: config.botToken, socket: null, ready: false, connecting: true, sequence: null, heartbeat: null, readyPromise: null };
-  communityDiscordGateway = gateway;
-  gateway.readyPromise = (async () => {
-    const gatewayResponse = await requestDiscord("gateway/bot", { headers: { Authorization: `Bot ${config.botToken}` } });
-    if (!gatewayResponse.response.ok || !gatewayResponse.payload?.url) {
-      throw new Error("Discord Gateway could not be reached for member presence checks.");
-    }
-    const socket = new WebSocket(`${String(gatewayResponse.payload.url).replace(/\/$/, "")}/?v=10&encoding=json`);
-    gateway.socket = socket;
-    await new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => reject(new Error("Discord Gateway did not connect in time.")), 10_000);
-      const fail = (error) => {
-        clearTimeout(timeout);
-        reject(error instanceof Error ? error : new Error("Discord Gateway connection failed."));
-      };
-      socket.addEventListener("error", fail, { once: true });
-      socket.addEventListener("close", (event) => {
-        if (!gateway.ready) {
-          fail(new Error(event?.code === 4014
-            ? "Enable Server Members Intent and Presence Intent for the Members bot in Discord Developer Portal."
-            : "Discord Gateway closed before presence checks became available."));
-        }
-      }, { once: true });
-      socket.addEventListener("message", (event) => {
-        let packet;
-        try { packet = JSON.parse(String(event.data)); } catch { return; }
-        if (Number.isInteger(packet?.s)) gateway.sequence = packet.s;
-        if (packet?.op === 10) {
-          const interval = Number(packet?.d?.heartbeat_interval) || 45_000;
-          gateway.heartbeat = setInterval(() => {
-            if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: gateway.sequence }));
-          }, interval);
-          socket.send(JSON.stringify({
-            op: 2,
-            d: {
-              token: config.botToken,
-              intents: communityGatewayIntents,
-              properties: { os: "linux", browser: "pulcip-members", device: "pulcip-members" }
-            }
-          }));
-          return;
-        }
-        if (packet?.op === 0 && packet?.t === "READY") {
-          gateway.ready = true;
-          gateway.connecting = false;
-          clearTimeout(timeout);
-          resolve(gateway);
-          return;
-        }
-        if (packet?.op === 0 && packet?.t === "PRESENCE_UPDATE") {
-          setCommunityDiscordPresence(packet?.d?.guild_id, packet?.d?.user?.id, packet?.d?.status);
-          return;
-        }
-        if (packet?.op === 0 && ["GUILD_CREATE", "GUILD_MEMBERS_CHUNK"].includes(packet?.t)) {
-          applyCommunityGatewayPresences(packet?.d?.id ?? packet?.d?.guild_id, packet?.d);
-        }
-      });
-    });
-    socket.addEventListener("close", () => {
-      if (gateway.heartbeat) clearInterval(gateway.heartbeat);
-      gateway.ready = false;
-      gateway.connecting = false;
-    });
-    return gateway;
-  })().catch((error) => {
-    gateway.connecting = false;
-    gateway.ready = false;
-    throw error;
-  });
-  return gateway.readyPromise;
-}
-
-async function loadCommunityGuildPresences(config, guildId, userIds) {
-  const gateway = await ensureCommunityDiscordGateway(config);
-  const result = new Map();
-  for (let start = 0; start < userIds.length; start += 100) {
-    const batch = userIds.slice(start, start + 100);
-    if (gateway.socket?.readyState !== WebSocket.OPEN) throw new Error("Discord Gateway is not connected for presence checks.");
-    gateway.socket.send(JSON.stringify({ op: 8, d: { guild_id: guildId, user_ids: batch, presences: true, nonce: crypto.randomUUID() } }));
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    for (const userId of batch) {
-      const presence = communityDiscordPresenceCache.get(`${guildId}:${userId}`);
-      if (presence) result.set(userId, presence);
-    }
-  }
-  return result;
 }
 
 async function forEachWithConcurrency(values, concurrency, task) {
@@ -2075,15 +1955,6 @@ async function checkCommunityOrderAuthorizations(order) {
     : { rows: [] };
   const stockByUserId = new Map(stock.rows.map((row) => [String(row.discord_user_id), row]));
   const checks = new Map();
-  let presences = new Map();
-  let presenceUnavailableDetails = null;
-  try {
-    presences = await loadCommunityGuildPresences(orderConfig, targetGuildId, discordUserIds);
-  } catch (error) {
-    presenceUnavailableDetails = error instanceof Error
-      ? error.message
-      : "Discord presence could not be checked right now.";
-  }
 
   for (let start = 0; start < discordUserIds.length; start += 10) {
     const batch = discordUserIds.slice(start, start + 10);
@@ -2141,18 +2012,11 @@ async function checkCommunityOrderAuthorizations(order) {
             expiresAt: Date.now() + 60_000
           });
         }
-        const presence = presences.get(discordUserId);
         return [discordUserId, {
           status: "active",
           details: "OAuth authorization is active.",
           membershipStatus: guildMember.response.ok ? "present" : "unknown",
-          membershipDetails: guildMember.response.ok ? "This member is in the Discord server." : "Server membership could not be verified right now.",
-          presenceStatus: guildMember.response.ok ? (presence?.status ?? "unknown") : undefined,
-          presenceDetails: guildMember.response.ok
-            ? presence
-              ? `Discord presence updated ${new Date(presence.updatedAt).toLocaleString("en-US")}. Offline can also mean Invisible.`
-              : presenceUnavailableDetails ?? "Discord did not return a presence for this member."
-            : undefined
+          membershipDetails: guildMember.response.ok ? "This member is in the Discord server." : "Server membership could not be verified right now."
         }];
       } catch {
         return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now." }];
@@ -2180,8 +2044,6 @@ async function checkCommunityOrderAuthorizations(order) {
       authorizationDetails: check.details,
       membershipStatus: check.membershipStatus,
       membershipDetails: check.membershipDetails,
-      presenceStatus: check.presenceStatus,
-      presenceDetails: check.presenceDetails,
       authorizationCheckedAt: checkedAt
     } : item;
   });
