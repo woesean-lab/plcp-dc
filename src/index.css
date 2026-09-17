@@ -4222,7 +4222,8 @@
 
   .public-token-result-pill[data-state="joined"],
   .public-token-result-pill[data-state="boosted"],
-  .public-token-result-pill[data-state="active"] {
+  .public-token-result-pill[data-state="active"],
+  .public-token-result-pill[data-state="online"] {
     border-color: rgba(105, 221, 178, .18);
     color: #8be0bf;
     background: rgba(105, 221, 178, .085);
@@ -4259,6 +4260,18 @@
     border-color: rgba(244, 190, 78, .28);
     color: #f4c95e;
     background: rgba(244, 190, 78, .09);
+  }
+
+  .public-token-result-pill[data-state="idle"] {
+    border-color: rgba(244, 190, 78, .28);
+    color: #f4c95e;
+    background: rgba(244, 190, 78, .09);
+  }
+
+  .public-token-result-pill[data-state="offline"] {
+    border-color: var(--app-border);
+    color: var(--app-muted);
+    background: rgba(255,255,255,.035);
   }
 
   .public-token-result-pill[data-state="blocked"],
