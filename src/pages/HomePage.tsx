@@ -2437,7 +2437,7 @@ export default function HomePage() {
                           const available = communityAvailability[category.id] ?? ready;
                           return (
                             <div key={category.id} className={`community-category-choice ${selected && form.communityMultiCategory ? "is-expanded" : ""}`} style={getCommunityCategoryAppearance(category.colorKey)}>
-                            <label className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY">
+                            <label className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY" style={getCommunityCategoryAppearance(category.colorKey)}>
                               <input
                                 className="sr-only"
                                 type={form.communityMultiCategory ? "checkbox" : "radio"}
