@@ -3583,7 +3583,7 @@ export default function HomePage() {
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
               <Button type="button" variant="secondary" disabled={creating} onClick={() => void copyBoostBypassInviteMessage()}>
-                <Copy className="h-4 w-4" aria-hidden="true" /> Copy message
+                <Copy className="h-4 w-4" aria-hidden="true" /> Copy
               </Button>
               <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderDespiteScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
