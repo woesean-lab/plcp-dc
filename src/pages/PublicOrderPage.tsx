@@ -423,7 +423,7 @@ export default function PublicOrderPage() {
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
   const isCommunityOrder = status?.provider === "community";
-  const showEldoradoPromotion = status?.isEldoradoSale !== false;
+  const showEldoradoPromotion = Boolean(status) && status?.isEldoradoSale !== false;
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
   const serviceName = isCommunityOrder && typeof status?.categoryName === "string"
     ? status.categoryName
