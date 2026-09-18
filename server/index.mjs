@@ -3676,14 +3676,54 @@ async function initializeDatabase() {
   `);
   await pool.query("ALTER TABLE community_oauth_joins ALTER COLUMN sort_position SET DEFAULT 1024");
   await pool.query("ALTER TABLE community_oauth_joins ALTER COLUMN sort_position SET NOT NULL");
+  // Older installations can contain a user-created "Offline"/"Online"
+  // category with a generated ID while their stock still uses the legacy ID.
+  // Reuse that category instead of attempting to insert a second name and
+  // failing the unique (guild_id, lower(name)) index during startup.
+  await pool.query(`
+    UPDATE community_oauth_joins AS stock
+    SET stock_type = category.id
+    FROM community_stock_categories AS category
+    WHERE category.guild_id = stock.guild_id
+      AND LOWER(category.name) = 'offline'
+      AND stock.stock_type = 'offline'
+      AND NOT EXISTS (
+        SELECT 1 FROM community_stock_categories AS legacy
+        WHERE legacy.guild_id = stock.guild_id AND legacy.id = 'offline'
+      )
+  `);
+  await pool.query(`
+    UPDATE community_oauth_joins AS stock
+    SET stock_type = category.id
+    FROM community_stock_categories AS category
+    WHERE category.guild_id = stock.guild_id
+      AND LOWER(category.name) = 'online'
+      AND stock.stock_type = 'online'
+      AND NOT EXISTS (
+        SELECT 1 FROM community_stock_categories AS legacy
+        WHERE legacy.guild_id = stock.guild_id AND legacy.id = 'online'
+      )
+  `);
   await pool.query(`
     INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-    SELECT DISTINCT guild_id, 'offline', 'Offline', FALSE, 'Users', 'emerald' FROM community_oauth_joins
+    SELECT DISTINCT stock.guild_id, 'offline', 'Offline', FALSE, 'Users', 'emerald'
+    FROM community_oauth_joins AS stock
+    WHERE stock.stock_type = 'offline'
+      AND NOT EXISTS (
+        SELECT 1 FROM community_stock_categories AS category
+        WHERE category.guild_id = stock.guild_id AND category.id = 'offline'
+      )
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query(`
     INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-    SELECT DISTINCT guild_id, 'online', 'Online', FALSE, 'Timer', 'violet' FROM community_oauth_joins
+    SELECT DISTINCT stock.guild_id, 'online', 'Online', FALSE, 'Timer', 'violet'
+    FROM community_oauth_joins AS stock
+    WHERE stock.stock_type = 'online'
+      AND NOT EXISTS (
+        SELECT 1 FROM community_stock_categories AS category
+        WHERE category.guild_id = stock.guild_id AND category.id = 'online'
+      )
     ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
