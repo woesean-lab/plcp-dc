@@ -455,7 +455,7 @@ export default function OrderPage() {
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
+    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed")
     .map((item) => item.index);
   const summary = isDcordProvider
     ? [

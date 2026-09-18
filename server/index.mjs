@@ -1983,9 +1983,36 @@ async function checkCommunityOrderAuthorizations(order) {
     const batch = discordUserIds.slice(start, start + 10);
     const results = await Promise.all(batch.map(async (discordUserId) => {
       const record = stockByUserId.get(discordUserId);
+      let membershipStatus = "unknown";
+      let membershipDetails = "Server membership could not be verified right now.";
+      try {
+        let guildMember = await requestDiscord(
+          `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
+          { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
+        );
+        if (guildMember.response.status === 429) {
+          const retrySeconds = Math.min(Math.max(Number(guildMember.payload?.retry_after) || 1, 1), 5);
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          guildMember = await requestDiscord(
+            `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
+            { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
+          );
+        }
+        if (guildMember.response.status === 404 || Number(guildMember.payload?.code) === 10007) {
+          membershipStatus = "removed";
+          membershipDetails = "This member is no longer in the Discord server.";
+          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 5 * 60_000 });
+        } else if (guildMember.response.ok) {
+          membershipStatus = "present";
+          membershipDetails = "This member is in the Discord server.";
+          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, { present: true, expiresAt: Date.now() + 60_000 });
+        }
+      } catch {
+        // Keep membership unknown; an unknown result must not grant replacement.
+      }
       const expiresAt = new Date(record?.access_token_expires_at).getTime();
       if (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired." }];
+        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired.", membershipStatus, membershipDetails }];
       }
       try {
         let identity = await requestDiscord("oauth2/@me", {
@@ -2000,49 +2027,18 @@ async function checkCommunityOrderAuthorizations(order) {
         }
         if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId) {
           if ([401, 403].includes(identity.response.status) || identity.response.ok) {
-            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid." }];
+            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails }];
           }
-          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).` }];
-        }
-
-        let guildMember = await requestDiscord(
-          `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
-          { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
-        );
-        if (guildMember.response.status === 429) {
-          const retrySeconds = Math.min(Math.max(Number(guildMember.payload?.retry_after) || 1, 1), 5);
-          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-          guildMember = await requestDiscord(
-            `guilds/${encodeURIComponent(targetGuildId)}/members/${encodeURIComponent(discordUserId)}`,
-            { headers: { Authorization: `Bot ${orderConfig.botToken}` } }
-          );
-        }
-        if (guildMember.response.status === 404 || Number(guildMember.payload?.code) === 10007) {
-          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, {
-            present: false,
-            expiresAt: Date.now() + 5 * 60_000
-          });
-          return [discordUserId, {
-            status: "active",
-            details: "OAuth authorization is active.",
-            membershipStatus: "removed",
-            membershipDetails: "This member is no longer in the Discord server."
-          }];
-        }
-        if (guildMember.response.ok) {
-          communityMemberPresenceCache.set(`${targetGuildId}:${discordUserId}`, {
-            present: true,
-            expiresAt: Date.now() + 60_000
-          });
+          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails }];
         }
         return [discordUserId, {
           status: "active",
           details: "OAuth authorization is active.",
-          membershipStatus: guildMember.response.ok ? "present" : "unknown",
-          membershipDetails: guildMember.response.ok ? "This member is in the Discord server." : "Server membership could not be verified right now."
+          membershipStatus,
+          membershipDetails
         }];
       } catch {
-        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now." }];
+        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails }];
       }
     }));
     results.forEach(([discordUserId, result]) => checks.set(discordUserId, result));
@@ -2054,7 +2050,7 @@ async function checkCommunityOrderAuthorizations(order) {
       `UPDATE community_oauth_joins
        SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-      [targetGuildId, inactiveUserIds]
+       [config.guildId, inactiveUserIds]
     );
   }
 
@@ -5358,8 +5354,10 @@ function sanitizePublicCommunityOrder(order) {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };
       const state = String(item.state ?? "").toLowerCase();
-      sanitized.details = item.authorizationStatus === "inactive"
-        ? "This member is inactive and can be replaced."
+      sanitized.details = item.membershipStatus === "removed"
+        ? "This member is no longer in the server and can be replaced."
+        : item.authorizationStatus === "inactive"
+          ? "This member is still in the server, but its OAuth authorization is inactive."
         : state === "joined"
           ? "Member delivered successfully."
           : state === "already_member"
@@ -5853,8 +5851,8 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const results = order.communityResults.map((item) => ({ ...item }));
     const replaceableIndices = results.flatMap((item, index) => {
       const state = String(item?.state ?? "").toLowerCase();
-      const inactive = String(item?.authorizationStatus ?? "").toLowerCase() === "inactive";
-      return (["failed", "already_member"].includes(state) || inactive) && !isCommunityResultManagementExpired(order, item) ? [index] : [];
+      const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed";
+      return (["failed", "blocked", "already_member"].includes(state) || removed) && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
       await client.query("ROLLBACK");
@@ -6040,11 +6038,11 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This category's member support period has expired." });
     }
-    const replaceableStates = new Set(["failed", "already_member"]);
-    const hasInactiveAuthorization = String(failedResult?.authorizationStatus ?? "").toLowerCase() === "inactive";
-    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !hasInactiveAuthorization)) {
+    const replaceableStates = new Set(["failed", "blocked", "already_member"]);
+    const memberWasRemoved = String(failedResult?.membershipStatus ?? "").toLowerCase() === "removed";
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Only failed, already-member or OAuth-inactive results can be replaced." });
+      return res.status(409).json({ message: "Only failed, already-member or removed members can be replaced." });
     }
 
     let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;
@@ -6065,7 +6063,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "The failed user could not be linked to Members Stock." });
     }
 
-    const failedState = hasInactiveAuthorization;
+    const failedState = String(failedResult?.authorizationStatus ?? "").toLowerCase() === "inactive";
     await client.query(
       `UPDATE community_oauth_joins
        SET reserved_order_id = NULL,

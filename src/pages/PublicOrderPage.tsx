@@ -485,7 +485,7 @@ export default function PublicOrderPage() {
     : communityMemberJoining ? "Member delivery" : "Next member";
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "already_member"].includes(item.state.toLowerCase()) || item.authorizationStatus === "inactive")
+    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed")
     .map((item) => item.index);
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
@@ -1011,7 +1011,7 @@ export default function PublicOrderPage() {
                         ))}
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
-                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} inactive member{inactiveCommunityMemberCount === 1 ? "" : "s"} found. You can replace them with available members.</p> : null}
+                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive. Members still present in the server are not replaceable.</p> : null}
                     {supportExpired ? <p className="public-token-results-empty">This order has expired. Member checks and replacements are no longer available.</p> : null}
                   </div>
                 ) : null}
