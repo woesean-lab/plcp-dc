@@ -232,14 +232,8 @@ export default function PublicOrderPage() {
   const [searchParams] = useSearchParams();
   const [status, setStatus] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [preloaderDelayComplete, setPreloaderDelayComplete] = useState(false);
   const [autoRefreshing, setAutoRefreshing] = useState(false);
   const [liveStreamConnected, setLiveStreamConnected] = useState(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setPreloaderDelayComplete(true), 1_000);
-    return () => window.clearTimeout(timer);
-  }, []);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
@@ -755,7 +749,7 @@ export default function PublicOrderPage() {
     </div>
   ) : null;
 
-  if (isInitialLoading || !preloaderDelayComplete) {
+  if (isInitialLoading) {
     return (
       <section className="session-loading-screen app-shell" role="status" aria-live="polite" aria-label="Loading order monitor">
         <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
