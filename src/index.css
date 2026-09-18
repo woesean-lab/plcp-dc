@@ -7247,51 +7247,27 @@
 .community-member-transfer-picker {
   position: relative;
   z-index: 3;
+  width: 142px;
 }
 
-.community-member-transfer-trigger {
-  min-width: 142px;
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger {
+  min-height: 30px;
+  padding: 0 8px;
+  border-radius: 7px;
+  gap: 6px;
+  font-size: 12px;
   justify-content: space-between;
 }
 
-.community-member-transfer-trigger svg {
-  transition: transform .16s ease;
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger svg {
+  width: 14px;
+  height: 14px;
 }
 
-.community-member-transfer-trigger svg.is-open {
-  transform: rotate(180deg);
-}
-
-.community-member-transfer-menu {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu {
   right: 0;
-  display: grid;
-  min-width: 100%;
-  overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--app-accent) 46%, var(--app-border));
-  border-radius: 8px;
-  padding: 4px;
-  background: color-mix(in srgb, var(--app-panel) 92%, #070812);
-  box-shadow: 0 14px 30px rgba(0, 0, 0, .38);
-}
-
-.community-member-transfer-menu button {
-  min-height: 29px;
-  border-radius: 5px;
-  padding: 0 8px;
-  color: var(--app-text-secondary);
-  font-size: 11px;
-  font-weight: 650;
-  text-align: left;
-  transition: background .14s ease, color .14s ease;
-}
-
-.community-member-transfer-menu button:hover,
-.community-member-transfer-menu button.is-selected {
-  background: color-mix(in srgb, var(--app-accent) 17%, transparent);
-  color: var(--app-text);
+  left: auto;
+  min-width: 190px;
 }
 
 .community-member-checkbox,

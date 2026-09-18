@@ -229,24 +229,29 @@ function FilterDropdown({
   value,
   options,
   onChange,
-  showLabel = true
+  showLabel = true,
+  className = "",
+  disabled = false
 }: {
   label: string;
   value: string;
   options: FilterOption[];
   onChange: (value: string) => void;
   showLabel?: boolean;
+  className?: string;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value) ?? options[0];
 
   return (
-    <div className="filter-dropdown">
+    <div className={`filter-dropdown ${className}`.trim()}>
       {showLabel ? <span className={fieldLabelClass}>{label}</span> : null}
       <button
         type="button"
         className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
         aria-label={label}
+        disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         onBlur={(event) => {
           if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
@@ -641,7 +646,6 @@ export default function HomePage() {
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
   const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | null>(null);
   const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
-  const [communityTransferMenuOpen, setCommunityTransferMenuOpen] = useState(false);
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
@@ -986,7 +990,6 @@ export default function HomePage() {
     if (!targets.some((category) => category.id === communityTransferCategoryId)) {
       setCommunityTransferCategoryId(targets[0]?.id ?? "");
     }
-    if (!targets.length) setCommunityTransferMenuOpen(false);
   }, [communityStatus?.stockCategories, communityStockType, communityTransferCategoryId]);
 
   useEffect(() => {
@@ -2119,21 +2122,7 @@ export default function HomePage() {
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
-            <div className="community-member-transfer-picker">
-              <Button type="button" variant="secondary" size="sm" className="community-member-transfer-trigger" aria-haspopup="listbox" aria-expanded={communityTransferMenuOpen} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} onClick={() => setCommunityTransferMenuOpen((current) => !current)}>
-                <span>To: {communityCategories.find((category) => category.id === communityTransferCategoryId)?.name ?? "Choose category"}</span>
-                <ChevronDown className={`h-3.5 w-3.5 ${communityTransferMenuOpen ? "is-open" : ""}`} />
-              </Button>
-              {communityTransferMenuOpen ? (
-                <div className="community-member-transfer-menu" role="listbox" aria-label="Transfer destination">
-                  {communityCategories.filter((category) => category.id !== communityStockType).map((category) => (
-                    <button key={category.id} type="button" role="option" aria-selected={communityTransferCategoryId === category.id} className={communityTransferCategoryId === category.id ? "is-selected" : ""} onClick={() => { setCommunityTransferCategoryId(category.id); setCommunityTransferMenuOpen(false); }}>
-                      {category.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
+            <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
             <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
               {communityBulkAction === "transfer" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
               {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
