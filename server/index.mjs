@@ -74,6 +74,7 @@ function extractDiscordInviteCode(value) {
 
 const discordInviteResolutionCache = new Map();
 const discordInviteResolutionCacheTtlMs = 30_000;
+const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
 async function resolveDiscordInvite(inviteValue) {
   const inviteCode = extractDiscordInviteCode(inviteValue);
@@ -117,7 +118,9 @@ async function resolveDiscordInvite(inviteValue) {
     guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
     approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
       ? payload.approximate_member_count
-      : undefined
+      : undefined,
+    bypassesJoinApplication: Number.isInteger(payload?.flags)
+      && (payload.flags & DISCORD_INVITE_FLAG_APPLICATION_BYPASS) !== 0
   };
   discordInviteResolutionCache.set(inviteCode, {
     value: resolved,
@@ -519,6 +522,10 @@ async function ensureCommunityApplyToJoin(config, guildId) {
 }
 
 async function checkDcordBoostMembershipScreening(invite, serverInfo) {
+  if (serverInfo?.bypassesJoinApplication === true) {
+    return { status: "closed", enabled: false, bypassedByInvite: true };
+  }
+
   const config = await getCommunityOAuthConfig();
   if (!config.botToken || !isDiscordGuildId(String(serverInfo?.guildId ?? ""))) {
     return { status: "unknown", enabled: false };
