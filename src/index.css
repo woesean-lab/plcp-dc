@@ -7244,6 +7244,13 @@
 
 .community-member-priority-actions { gap: 5px; }
 
+.community-member-transfer-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
 .community-member-transfer-picker {
   position: relative;
   z-index: 3;
@@ -7268,6 +7275,18 @@
   right: 0;
   left: auto;
   min-width: 190px;
+}
+
+@media (max-width: 960px) {
+  .community-member-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .community-member-priority-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
 }
 
 .community-member-checkbox,

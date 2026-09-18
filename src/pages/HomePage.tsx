@@ -2122,11 +2122,13 @@ export default function HomePage() {
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
-            <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
-            <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
-              {communityBulkAction === "transfer" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
-              {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
-            </Button>
+            <div className="community-member-transfer-actions">
+              <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
+              <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
+                {communityBulkAction === "transfer" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+                {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
+              </Button>
+            </div>
             <Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>
             <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || communityStatus?.syncing || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}>
               <RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus || communityStatus?.syncing ? "animate-spin" : ""}`} />
