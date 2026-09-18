@@ -4362,6 +4362,77 @@ app.post("/api/community/members/bulk-delete", requireSession, async (req, res, 
   }
 });
 
+app.post("/api/community/members/transfer", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing Members Stock." });
+    const sourceCategoryId = parseCommunityCategoryId(req.body?.sourceCategoryId);
+    const targetCategoryId = parseCommunityCategoryId(req.body?.targetCategoryId);
+    const ids = Array.from(new Set((Array.isArray(req.body?.ids) ? req.body.ids : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(isDiscordGuildId)));
+    if (!sourceCategoryId || !targetCategoryId || sourceCategoryId === targetCategoryId || !ids.length || ids.length > 5_000) {
+      return res.status(400).json({ message: "Choose members and a different destination category." });
+    }
+
+    await client.query("BEGIN");
+    const categories = await client.query(
+      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = ANY($2::text[]) FOR UPDATE",
+      [config.guildId, [sourceCategoryId, targetCategoryId]]
+    );
+    if (categories.rowCount !== 2) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "The source or destination category no longer exists." });
+    }
+
+    const selected = await client.query(
+      `SELECT discord_user_id, reserved_order_id
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND stock_type = $2 AND discord_user_id = ANY($3::text[])
+       FOR UPDATE`,
+      [config.guildId, sourceCategoryId, ids]
+    );
+    const movableIds = selected.rows
+      .filter((row) => !row.reserved_order_id)
+      .map((row) => String(row.discord_user_id));
+    const skippedReserved = selected.rowCount - movableIds.length;
+    if (!movableIds.length) {
+      await client.query("COMMIT");
+      return res.json({ moved: 0, skippedReserved });
+    }
+
+    const lastPosition = await client.query(
+      `SELECT sort_position
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND stock_type = $2
+       ORDER BY sort_position DESC
+       LIMIT 1
+       FOR UPDATE`,
+      [config.guildId, targetCategoryId]
+    );
+    const basePosition = Number(lastPosition.rows[0]?.sort_position ?? 0);
+    const moved = await client.query(
+      `UPDATE community_oauth_joins AS stock
+       SET stock_type = $3, sort_position = $4 + ordered.position * 1024
+       FROM unnest($5::text[]) WITH ORDINALITY AS ordered(discord_user_id, position)
+       WHERE stock.guild_id = $1
+         AND stock.stock_type = $2
+         AND stock.reserved_order_id IS NULL
+         AND stock.discord_user_id = ordered.discord_user_id
+       RETURNING stock.discord_user_id`,
+      [config.guildId, sourceCategoryId, targetCategoryId, basePosition, movableIds]
+    );
+    await client.query("COMMIT");
+    res.json({ moved: moved.rowCount, skippedReserved });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/api/community/members/reorder", requireSession, async (req, res, next) => {
   const client = await pool.connect();
   try {

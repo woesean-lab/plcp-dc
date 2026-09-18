@@ -172,6 +172,16 @@ export function reorderCommunityAuthorizations(ids: string[], categoryId: Commun
   }).then(parseResponse<{ moved: number; direction: string }>);
 }
 
+export function transferCommunityAuthorizations(ids: string[], sourceCategoryId: CommunityStockType, targetCategoryId: CommunityStockType) {
+  return fetch("/api/community/members/transfer", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids, sourceCategoryId, targetCategoryId })
+  }).then(parseResponse<{ moved: number; skippedReserved: number }>);
+}
+
 export function getCommunityConfig() {
   return fetch("/api/community/config", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityConfig>);
 }

@@ -63,6 +63,7 @@ import {
   reorderCommunityAuthorizations,
   saveCommunityConfig,
   syncCommunityAuthorizations,
+  transferCommunityAuthorizations,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
   type CommunityCategoryColorKey,
@@ -638,7 +639,8 @@ export default function HomePage() {
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
-  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | null>(null);
+  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | null>(null);
+  const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
@@ -979,6 +981,13 @@ export default function HomePage() {
   }, [communityStockType]);
 
   useEffect(() => {
+    const targets = (communityStatus?.stockCategories ?? []).filter((category) => category.id !== communityStockType);
+    if (!targets.some((category) => category.id === communityTransferCategoryId)) {
+      setCommunityTransferCategoryId(targets[0]?.id ?? "");
+    }
+  }, [communityStatus?.stockCategories, communityStockType, communityTransferCategoryId]);
+
+  useEffect(() => {
     if (!communityStatus?.syncing) return;
     let cancelled = false;
     let pollHandle: number | null = null;
@@ -1093,6 +1102,22 @@ export default function HomePage() {
       notifySuccess(`${result.removed} member${result.removed === 1 ? "" : "s"} removed${result.skippedReserved ? `; ${result.skippedReserved} reserved member${result.skippedReserved === 1 ? " was" : "s were"} kept` : ""}.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Selected members could not be removed.");
+    } finally {
+      setCommunityBulkAction(null);
+    }
+  }
+
+  async function transferSelectedCommunityMembers() {
+    if (!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction) return;
+    const target = communityCategories.find((category) => category.id === communityTransferCategoryId);
+    try {
+      setCommunityBulkAction("transfer");
+      const result = await transferCommunityAuthorizations(selectedCommunityMemberIds, communityStockType, communityTransferCategoryId);
+      await refreshCommunityStatus();
+      setSelectedCommunityMemberIds([]);
+      notifySuccess(`${result.moved} member${result.moved === 1 ? "" : "s"} moved to ${target?.name ?? "the selected category"}${result.skippedReserved ? `; ${result.skippedReserved} reserved member${result.skippedReserved === 1 ? " was" : "s were"} kept` : ""}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected members could not be transferred.");
     } finally {
       setCommunityBulkAction(null);
     }
@@ -2092,6 +2117,13 @@ export default function HomePage() {
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
+            <select className="community-member-transfer-select" aria-label="Transfer selected members to category" value={communityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} onChange={(event) => setCommunityTransferCategoryId(event.target.value)}>
+              {communityCategories.filter((category) => category.id !== communityStockType).map((category) => <option key={category.id} value={category.id}>To: {category.name}</option>)}
+            </select>
+            <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
+              {communityBulkAction === "transfer" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
+              {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
+            </Button>
             <Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>
             <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || communityStatus?.syncing || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}>
               <RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus || communityStatus?.syncing ? "animate-spin" : ""}`} />

@@ -7244,6 +7244,17 @@
 
 .community-member-priority-actions { gap: 5px; }
 
+.community-member-transfer-select {
+  min-width: 132px;
+  height: 30px;
+  border: 1px solid var(--app-border);
+  border-radius: 7px;
+  padding: 0 8px;
+  background: var(--app-input-bg);
+  color: var(--app-text);
+  font-size: 12px;
+}
+
 .community-member-checkbox,
 .community-member-select-all input {
   width: 15px;
