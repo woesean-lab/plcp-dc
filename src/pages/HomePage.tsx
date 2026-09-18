@@ -2552,7 +2552,7 @@ export default function HomePage() {
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
                             <span><Star className="h-4 w-4" aria-hidden="true" /></span>
                             <strong>Eldorado sale?</strong>
-                            <small>Hide Eldorado promotion from the customer monitor.</small>
+                            <small>Show Eldorado promotion on the customer monitor.</small>
                           </label>
                         </div>
                       </div>
@@ -2721,7 +2721,7 @@ export default function HomePage() {
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
                             <span><Star className="h-4 w-4" aria-hidden="true" /></span>
                             <strong>Eldorado sale?</strong>
-                            <small>Hide Eldorado promotion from the customer monitor.</small>
+                            <small>Show Eldorado promotion on the customer monitor.</small>
                           </label>
                         </div>
                       </div>

@@ -6127,8 +6127,8 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
     const restartCooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
     const restartCooldownSeconds = Math.max(0, Math.ceil((restartCooldownUntil - Date.now()) / 1000));
     const responsePayload = typeof payload === "object" && payload && !Array.isArray(payload)
-      ? { ...payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds }
-      : { data: payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds };
+      ? { ...payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds, isEldoradoSale: trackedPayload?.isEldoradoSale !== false }
+      : { data: payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds, isEldoradoSale: trackedPayload?.isEldoradoSale !== false };
     res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);
