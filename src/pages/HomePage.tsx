@@ -107,6 +107,7 @@ const EMPTY_FORM = {
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",
+  communityMultiCategory: false,
   communityCategoryAmounts: { offline: 100 } as Record<string, number>,
   communityDurationMonths: 1,
   communityCustomDelay: 1,
@@ -723,10 +724,12 @@ export default function HomePage() {
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
   const communityCategories = communityStatus?.stockCategories ?? [];
-  const selectedCommunityAllocations = communityCategories.flatMap((category) => {
-    const amount = Number(form.communityCategoryAmounts[category.id] ?? 0);
-    return amount > 0 ? [{ category, amount }] : [];
-  });
+  const selectedCommunityAllocations = form.communityMultiCategory
+    ? communityCategories.flatMap((category) => {
+        const amount = Number(form.communityCategoryAmounts[category.id] ?? 0);
+        return amount > 0 ? [{ category, amount }] : [];
+      })
+    : communityCategories.flatMap((category) => category.id === form.communityCategoryId ? [{ category, amount: form.amount }] : []);
   const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
@@ -970,7 +973,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryAmounts, form.communityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, form.communityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -988,6 +991,12 @@ export default function HomePage() {
     const categories = communityStatus?.stockCategories ?? [];
     if (!categories.length) return;
     if (!categories.some((category) => category.id === communityStockType)) setCommunityStockType(categories[0].id);
+    if (!form.communityMultiCategory) {
+      if (!categories.some((category) => category.id === form.communityCategoryId)) {
+        setForm((current) => ({ ...current, communityCategoryId: categories[0].id }));
+      }
+      return;
+    }
     const validAllocations = Object.entries(form.communityCategoryAmounts).filter(([categoryId, amount]) =>
       Number(amount) > 0 && categories.some((category) => category.id === categoryId)
     );
@@ -1006,7 +1015,7 @@ export default function HomePage() {
         amount: validAllocations.reduce((total, [, amount]) => total + Number(amount), 0)
       }));
     }
-  }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryAmounts]);
+  }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts]);
 
   useEffect(() => {
     setSelectedCommunityMemberIds([]);
@@ -1358,9 +1367,9 @@ export default function HomePage() {
     try {
       const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
       if (selectedIsCommunity) {
-        const allocations = communityCategories.flatMap((category) =>
-          Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : []
-        );
+        const allocations = form.communityMultiCategory
+          ? communityCategories.flatMap((category) => Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : [])
+          : communityCategories.filter((category) => category.id === form.communityCategoryId);
         if (!allocations.length) throw new Error("Choose at least one stock category.");
         const availabilityEntries = await Promise.all(allocations.map(async (category) => {
           const data = await checkAvailableAmount(
@@ -1909,7 +1918,7 @@ export default function HomePage() {
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
-      categoryAllocations: selectedIsCommunity ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
+      categoryAllocations: selectedIsCommunity && form.communityMultiCategory ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
@@ -2301,6 +2310,7 @@ export default function HomePage() {
                                       ? "COMMUNITY-OFFLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
                                   communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
+                                  communityMultiCategory: option.value === "community" ? false : current.communityMultiCategory,
                                   communityCategoryAmounts: option.value === "community" && communityCategories[0]
                                     ? { [communityCategories[0].id]: Math.max(1, Math.min(100, communityCategories[0].summary.ready || 1)) }
                                     : current.communityCategoryAmounts,
@@ -2393,20 +2403,43 @@ export default function HomePage() {
                           <span className={fieldLabelClass}>Stock category</span>
                           <p className="service-selector-copy">Choose which category and its private stock will be used for this order.</p>
                         </div>
-                        <span className="service-selector-count">{communityCategories.length} categories</span>
+                        <div className="community-category-heading-actions">
+                          <span className="service-selector-count">{communityCategories.length} categories</span>
+                          <button
+                            type="button"
+                            className={form.communityMultiCategory ? "is-selected" : ""}
+                            aria-pressed={form.communityMultiCategory}
+                            onClick={() => setForm((current) => {
+                              if (current.communityMultiCategory) {
+                                const firstSelectedId = Object.keys(current.communityCategoryAmounts).find((categoryId) => Number(current.communityCategoryAmounts[categoryId]) > 0)
+                                  ?? current.communityCategoryId;
+                                const amount = Math.max(1, Number(current.communityCategoryAmounts[firstSelectedId]) || current.amount);
+                                return { ...current, communityMultiCategory: false, communityCategoryId: firstSelectedId, amount };
+                              }
+                              return {
+                                ...current,
+                                communityMultiCategory: true,
+                                communityCategoryAmounts: { [current.communityCategoryId]: current.amount }
+                              };
+                            })}
+                          >
+                            {form.communityMultiCategory ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
+                            Multiple categories
+                          </button>
+                        </div>
                       </div>
                       <div className="service-grid community-mode-grid">
                         {communityCategories.map((category) => {
                           const Icon = getCommunityCategoryIcon(category.iconName);
-                          const categoryAmount = Number(form.communityCategoryAmounts[category.id] ?? 0);
-                          const selected = categoryAmount > 0;
+                          const categoryAmount = form.communityMultiCategory ? Number(form.communityCategoryAmounts[category.id] ?? 0) : form.amount;
+                          const selected = form.communityMultiCategory ? categoryAmount > 0 : form.communityCategoryId === category.id;
                           const ready = category.summary.ready;
                           const available = communityAvailability[category.id] ?? ready;
                           return (
                             <label key={category.id} className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY" style={getCommunityCategoryAppearance(category.colorKey)}>
                               <input
                                 className="sr-only"
-                                type="checkbox"
+                                type={form.communityMultiCategory ? "checkbox" : "radio"}
                                 name="communityService"
                                 value={category.id}
                                 checked={selected}
@@ -2415,6 +2448,14 @@ export default function HomePage() {
                                   setAvailability("");
                                   setAvailabilityMaximum(null);
                                   setForm((current) => {
+                                    if (!current.communityMultiCategory) {
+                                      return {
+                                        ...current,
+                                        service: "COMMUNITY-OFFLINE",
+                                        communityCategoryId: category.id,
+                                        amount: Math.max(1, Math.min(current.amount, available || 1))
+                                      };
+                                    }
                                     const nextAmounts = { ...current.communityCategoryAmounts };
                                     if (Number(nextAmounts[category.id] ?? 0) > 0) delete nextAmounts[category.id];
                                     else nextAmounts[category.id] = Math.max(1, Math.min(50, available || 1));
@@ -2435,7 +2476,7 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
-                              {selected ? (
+                              {selected && form.communityMultiCategory ? (
                                 <span className="community-category-amount">
                                   <small>Order amount</small>
                                   <input
@@ -2726,11 +2767,12 @@ export default function HomePage() {
                               min={1}
                               max={selectedIsCommunity ? Math.max(1, selectedCommunityOrderLimit) : undefined}
                               value={form.amount}
-                              readOnly={selectedIsCommunity}
+                              readOnly={selectedIsCommunity && form.communityMultiCategory}
                               onChange={(event) => {
-                                if (selectedIsCommunity) return;
+                                if (selectedIsCommunity && form.communityMultiCategory) return;
                                 const requested = Math.max(1, Number(event.target.value) || 1);
-                                setForm((current) => ({ ...current, amount: requested }));
+                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityOrderLimit)) : requested;
+                                setForm((current) => ({ ...current, amount }));
                               }}
                             />
                           </div>
@@ -3571,7 +3613,9 @@ export default function HomePage() {
                 <span className="order-confirm-primary-copy">
                   <small>Service</small>
                   <strong>{isCommunityService(orderConfirmationPayload.service)
-                    ? orderConfirmationPayload.categoryAllocations?.map((allocation) => `${communityCategories.find((category) => category.id === allocation.categoryId)?.name ?? allocation.categoryId} × ${allocation.amount}`).join(" + ") ?? "Members 2"
+                    ? orderConfirmationPayload.categoryAllocations?.map((allocation) => `${communityCategories.find((category) => category.id === allocation.categoryId)?.name ?? allocation.categoryId} × ${allocation.amount}`).join(" + ")
+                      ?? communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.name
+                      ?? "Members 2"
                     : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)}</strong>
                 </span>
                 <span className="order-confirm-amount"><small>Amount</small><strong>{orderConfirmationPayload.amount}</strong></span>
@@ -3587,7 +3631,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "join_application" ? "Join Application" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
-                  {isCommunityService(orderConfirmationPayload.service) && orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>
               ) : null}
             </div>
