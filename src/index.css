@@ -1938,9 +1938,9 @@
   }
 
   .community-category-drawer input:focus {
-    border-color: #3b3c50;
+    border-color: var(--app-accent);
     background: #070810 !important;
-    box-shadow: none;
+    box-shadow: 0 0 0 4px var(--app-accent-soft);
   }
 
   .community-category-drawer input::-webkit-inner-spin-button,
