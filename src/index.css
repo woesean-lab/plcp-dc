@@ -7266,6 +7266,13 @@
   justify-content: space-between;
 }
 
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger svg {
   width: 14px;
   height: 14px;
@@ -7286,6 +7293,25 @@
   .community-member-priority-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 639px) {
+  .community-member-transfer-actions {
+    width: 100%;
+  }
+
+  .community-member-transfer-picker {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
+  }
+
+  .community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu {
+    right: auto;
+    left: 0;
+    width: max-content;
+    min-width: min(190px, calc(100vw - 34px));
   }
 }
 
