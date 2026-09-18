@@ -219,6 +219,7 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
 };
 
 const BOOST_MEMBERSHIP_SCREENING_MESSAGE = "Membership screening is enabled on this server. Disable the join form before boosting.";
+const BOOST_BYPASS_INVITE_MESSAGE = "Create a new invite with Bypass Join Application enabled and send us that new invite link.";
 
 type FilterOption = {
   value: string;
@@ -1907,6 +1908,15 @@ export default function HomePage() {
     }
   }
 
+  async function copyBoostBypassInviteMessage() {
+    try {
+      await navigator.clipboard.writeText(BOOST_BYPASS_INVITE_MESSAGE);
+      notifySuccess("Message copied.");
+    } catch {
+      notifyError("Message could not be copied.");
+    }
+  }
+
   function trackOrderManually() {
     const uniqid = orderIdToTrack.trim();
     if (!uniqid) {
@@ -3572,6 +3582,9 @@ export default function HomePage() {
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
+              <Button type="button" variant="secondary" disabled={creating} onClick={() => void copyBoostBypassInviteMessage()}>
+                <Copy className="h-4 w-4" aria-hidden="true" /> Copy message
+              </Button>
               <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderDespiteScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
                 {creating ? "Creating..." : "Continue anyway"}
