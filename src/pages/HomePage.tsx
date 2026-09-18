@@ -2476,25 +2476,6 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
-                              {selected && form.communityMultiCategory ? (
-                                <span className="community-category-amount">
-                                  <small>Order amount</small>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    max={Math.max(1, available)}
-                                    value={categoryAmount}
-                                    onClick={(event) => event.stopPropagation()}
-                                    onChange={(event) => {
-                                      const amount = Math.max(1, Math.min(Number(event.target.value) || 1, Math.max(1, available)));
-                                      setForm((current) => {
-                                        const nextAmounts = { ...current.communityCategoryAmounts, [category.id]: amount };
-                                        return { ...current, communityCategoryAmounts: nextAmounts, amount: Object.values(nextAmounts).reduce((sum, value) => sum + (Number(value) || 0), 0) };
-                                      });
-                                    }}
-                                  />
-                                </span>
-                              ) : null}
                               <span className="community-service-option-footer">
                                 <span className="service-option-code service-option-code-badge"><span>{ready} MEMBERS</span></span>
                                 <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>
@@ -2504,6 +2485,47 @@ export default function HomePage() {
                         })}
                         {!communityCategories.length ? <p className="service-selector-copy">Create a Members Stock category before placing an order.</p> : null}
                       </div>
+                      {form.communityMultiCategory && selectedCommunityAllocations.length ? (
+                        <div className="community-category-allocation-panel">
+                          <div className="community-category-allocation-heading">
+                            <div>
+                              <strong>Category amounts</strong>
+                              <small>Set how many members should be delivered from each selected category.</small>
+                            </div>
+                            <span>{selectedCommunityAmount} total</span>
+                          </div>
+                          <div className="community-category-allocation-list">
+                            {selectedCommunityAllocations.map(({ category, amount }) => {
+                              const available = communityAvailability[category.id] ?? category.summary.ready;
+                              const Icon = getCommunityCategoryIcon(category.iconName);
+                              return (
+                                <label key={category.id} className="community-category-allocation-row" style={getCommunityCategoryAppearance(category.colorKey)}>
+                                  <span className="community-category-allocation-name">
+                                    <i><Icon className="h-4 w-4" /></i>
+                                    <span><strong>{category.name}</strong><small>{available} available</small></span>
+                                  </span>
+                                  <span className="community-category-allocation-input">
+                                    <small>Members</small>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={Math.max(1, available)}
+                                      value={amount}
+                                      onChange={(event) => {
+                                        const nextAmount = Math.max(1, Math.min(Number(event.target.value) || 1, Math.max(1, available)));
+                                        setForm((current) => {
+                                          const nextAmounts = { ...current.communityCategoryAmounts, [category.id]: nextAmount };
+                                          return { ...current, communityCategoryAmounts: nextAmounts, amount: Object.values(nextAmounts).reduce((sum, value) => sum + (Number(value) || 0), 0) };
+                                        });
+                                      }}
+                                    />
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ) : null}
                     </fieldset>
                   ) : null}
 
