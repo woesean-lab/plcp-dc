@@ -300,6 +300,7 @@ export default function PublicOrderPage() {
       service: searchParams.get("service") ?? undefined,
       serverName: searchParams.get("serverName") ?? undefined,
       amount: parseNumber(searchParams.get("amount")),
+      isEldoradoSale: searchParams.get("eldorado") === "1" ? true : searchParams.get("eldorado") === "0" ? false : undefined,
       delay: parseNumber(searchParams.get("delay")),
       createdAt: searchParams.get("createdAt") ?? undefined
     }),
@@ -423,7 +424,9 @@ export default function PublicOrderPage() {
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
   const isCommunityOrder = status?.provider === "community";
-  const showEldoradoPromotion = Boolean(status) && status?.isEldoradoSale !== false;
+  const showEldoradoPromotion = status
+    ? status.isEldoradoSale !== false
+    : seed.isEldoradoSale === true;
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
   const serviceName = isCommunityOrder && typeof status?.categoryName === "string"
     ? status.categoryName

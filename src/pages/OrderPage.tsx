@@ -806,7 +806,9 @@ export default function OrderPage() {
   }
 
   function getPublicMonitorLink(target: string) {
-    return `${window.location.origin}/monitor/${encodeURIComponent(target)}`;
+    const url = new URL(`/monitor/${encodeURIComponent(target)}`, window.location.origin);
+    url.searchParams.set("eldorado", result?.isEldoradoSale === false ? "0" : "1");
+    return url.toString();
   }
 
   async function copyDeliveryTemplate() {
