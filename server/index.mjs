@@ -734,6 +734,22 @@ function getCommunityOrderStockType(order) {
   return normalizeCommunityStockType(order?.categoryId ?? order?.stockType ?? getCommunityStockTypeFromService(order?.service));
 }
 
+function getCommunityResultStockType(order, result) {
+  return normalizeCommunityStockType(result?.categoryId ?? getCommunityOrderStockType(order));
+}
+
+function interleaveCommunityMembers(groups) {
+  const queues = groups.map((group) => [...group]);
+  const result = [];
+  while (queues.some((queue) => queue.length)) {
+    for (const queue of queues) {
+      const member = queue.shift();
+      if (member) result.push(member);
+    }
+  }
+  return result;
+}
+
 function createCommunityCategoryId() {
   return `cat_${crypto.randomBytes(8).toString("hex")}`;
 }
@@ -764,6 +780,17 @@ function addUtcMonths(value, months) {
 function isCommunityOrderManagementExpired(order) {
   if (!order?.expiredAt) return false;
   const expiresAt = new Date(order.expiredAt).getTime();
+  return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+function isCommunityResultManagementExpired(order, result) {
+  const categoryId = getCommunityResultStockType(order, result);
+  const allocation = Array.isArray(order?.categoryAllocations)
+    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
+    : null;
+  if (!allocation) return isCommunityOrderManagementExpired(order);
+  if (allocation.isPeriodic !== true || !allocation.expiredAt) return false;
+  const expiresAt = new Date(allocation.expiredAt).getTime();
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
@@ -2442,6 +2469,15 @@ async function runCommunityOrder(order, members, config) {
         activeDelay: terminalStatusRequested ? null : currentPayload.activeDelay ?? payload.activeDelay ?? null,
         nextMemberAt: terminalStatusRequested ? null : currentPayload.nextMemberAt ?? payload.nextMemberAt ?? null,
         communityResults: mergedResults,
+        ...(Array.isArray(payload.categoryAllocations) ? {
+          categoryAllocations: payload.categoryAllocations.map((allocation) => ({
+            ...allocation,
+            added: mergedResults.filter((item) =>
+              getCommunityResultStockType(payload, item) === allocation.categoryId
+              && String(item?.state ?? "").toLowerCase() === "joined"
+            ).length
+          }))
+        } : {}),
         ...(deliveryPaused ? {
           waitingCode: "manual_pause",
           pausedAt: currentPayload.pausedAt ?? new Date().toISOString(),
@@ -4677,6 +4713,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+         AND reserved_order_id IS NULL
          AND NOT (discord_user_id = ANY($3::text[]))`,
       [config.guildId, stockType, previouslyDeliveredUserIds]
     );
@@ -4704,59 +4741,94 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       joinMethod
     });
     const requestedCategoryId = req.body?.categoryId ?? getCommunityStockTypeFromService(service);
-    const stockType = normalizeCommunityStockType(requestedCategoryId);
+    const rawAllocations = Array.isArray(req.body?.categoryAllocations) ? req.body.categoryAllocations : [];
+    const allocationMap = new Map();
+    for (const allocation of rawAllocations) {
+      const categoryId = parseCommunityCategoryId(allocation?.categoryId);
+      const allocationAmount = Number.parseInt(allocation?.amount, 10);
+      if (!categoryId || !Number.isInteger(allocationAmount) || allocationAmount <= 0) {
+        return res.status(400).json({ message: "Choose valid Members 2 categories and amounts." });
+      }
+      allocationMap.set(categoryId, (allocationMap.get(categoryId) ?? 0) + allocationAmount);
+    }
+    if (!allocationMap.size) {
+      const categoryId = parseCommunityCategoryId(requestedCategoryId);
+      if (!categoryId) return res.status(400).json({ message: "Choose a valid Members 2 category." });
+      allocationMap.set(categoryId, amount);
+    }
+    const requestedAllocations = Array.from(allocationMap, ([categoryId, allocationAmount]) => ({ categoryId, amount: allocationAmount }));
+    const allocatedAmount = requestedAllocations.reduce((total, allocation) => total + allocation.amount, 0);
+    if (requestedAllocations.length > 12 || allocatedAmount !== amount) {
+      return res.status(400).json({ message: "Category amounts must equal the total member amount." });
+    }
+    const requestedCategoryIds = requestedAllocations.map((allocation) => allocation.categoryId);
     const categoryResult = await pool.query(
       `SELECT id, name, is_periodic
        FROM community_stock_categories
-       WHERE guild_id = $1 AND id = $2
-       LIMIT 1`,
-      [config.guildId, stockType]
+       WHERE guild_id = $1 AND id = ANY($2::text[])`,
+      [config.guildId, requestedCategoryIds]
     );
-    if (!categoryResult.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
-      return res.status(400).json({ message: "Choose a valid Members 2 category." });
+    if (categoryResult.rowCount !== requestedAllocations.length) {
+      return res.status(400).json({ message: "One or more Members 2 categories could not be found." });
     }
-    const category = categoryResult.rows[0];
-    const durationMonths = category.is_periodic === true ? Number.parseInt(req.body?.durationMonths, 10) : null;
-    if (category.is_periodic === true && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
+    const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
+    const hasPeriodicCategory = categoryResult.rows.some((category) => category.is_periodic === true);
+    const durationMonths = hasPeriodicCategory ? Number.parseInt(req.body?.durationMonths, 10) : null;
+    if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
       return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
     }
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
     const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId);
-    const selected = await client.query(
-       `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
-       FROM community_oauth_joins
-       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-         AND NOT (discord_user_id = ANY($4::text[]))
-       ORDER BY random()
-       LIMIT $3
-       FOR UPDATE SKIP LOCKED`,
-      [config.guildId, stockType, amount, previouslyDeliveredUserIds]
-    );
-    if (selected.rowCount < amount) {
-      const used = await client.query(
-        `SELECT COUNT(*)::int AS count
-         FROM community_oauth_joins
-         WHERE guild_id = $1 AND stock_type = $2 AND discord_user_id = ANY($3::text[])`,
-        [config.guildId, stockType, previouslyDeliveredUserIds]
-      );
-      await client.query("ROLLBACK");
-      const usedCount = Number(used.rows[0]?.count ?? 0);
-      const usedNotice = usedCount > 0
-        ? ` ${usedCount} stock member(s) were already used for this server; deleting an order does not remove them from Discord or restore them for the same server.`
-        : "";
-      return res.status(409).json({ message: `Only ${selected.rowCount} ${stockType} members are currently available.${usedNotice}` });
-    }
     const createdAt = new Date();
+    const selectedGroups = [];
+    const categoryAllocations = [];
+    for (const allocation of requestedAllocations) {
+      const category = categoriesById.get(allocation.categoryId);
+      const selected = await client.query(
+        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+         FROM community_oauth_joins
+         WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+           AND reserved_order_id IS NULL
+           AND NOT (discord_user_id = ANY($4::text[]))
+         ORDER BY random()
+         LIMIT $3
+         FOR UPDATE SKIP LOCKED`,
+        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds]
+      );
+      if (selected.rowCount < allocation.amount) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: `Only ${selected.rowCount} ${category.name} members are currently available.` });
+      }
+      selectedGroups.push(selected.rows);
+      categoryAllocations.push({
+        categoryId: category.id,
+        categoryName: category.name,
+        amount: allocation.amount,
+        added: 0,
+        isPeriodic: category.is_periodic === true,
+        durationMonths: category.is_periodic === true ? durationMonths : null,
+        expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null
+      });
+    }
+    const selectedMembers = interleaveCommunityMembers(selectedGroups);
+    await client.query(
+      `UPDATE community_oauth_joins
+       SET reserved_order_id = $3
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+      [config.guildId, selectedMembers.map((member) => member.discord_user_id), uniqid]
+    );
+    const primaryCategory = categoriesById.get(requestedAllocations[0].categoryId);
     const order = {
       uniqid,
       provider: "community",
       service,
-      stockType,
-      categoryId: category.id,
-      categoryName: category.name,
-      categoryIsPeriodic: category.is_periodic === true,
+      stockType: primaryCategory.id,
+      categoryId: primaryCategory.id,
+      categoryName: categoryAllocations.length > 1 ? `${categoryAllocations.length} categories` : primaryCategory.name,
+      categoryAllocations,
+      categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -4769,14 +4841,24 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       joinMethod,
       isEldoradoSale: req.body?.isEldoradoSale !== false,
       createdAt: createdAt.toISOString(),
-      expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null,
+      expiredAt: categoryAllocations.every((allocation) => allocation.isPeriodic)
+        ? addUtcMonths(createdAt, durationMonths).toISOString()
+        : null,
       status: invitesPaused ? "INVITES PAUSED" : waitingForBot ? "WAITING" : "PROCESS",
       waitingCode: invitesPaused ? "discord_guild_invites_limited" : waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot || invitesPaused ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
       experimentalJoin: joinMethod === "join_application",
       botApplicationId: config.clientId,
       botInvite,
-      communityResults: selected.rows.map((row) => ({ discordUserId: row.discord_user_id, username: row.username, avatarUrl: row.avatar_url ?? null, state: "queued", details: "Waiting for delivery." }))
+      communityResults: selectedMembers.map((row) => ({
+        discordUserId: row.discord_user_id,
+        username: row.username,
+        avatarUrl: row.avatar_url ?? null,
+        categoryId: row.category_id,
+        categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
+        state: "queued",
+        details: "Waiting for delivery."
+      }))
     };
     await client.query(
       `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -4785,7 +4867,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     );
     await client.query("COMMIT");
     if (!waitingForBot && !invitesPaused) {
-      void processCommunityOrder(order, selected.rows, config).catch(async (error) => {
+      void processCommunityOrder(order, selectedMembers, config).catch(async (error) => {
         console.error("Members order failed:", error instanceof Error ? error.message : error);
         await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]).catch(() => {});
         await saveTrackedOrderPayload({ ...order, status: "ERROR", details: error instanceof Error ? error.message : "Members order failed." }).catch(() => {});
@@ -4796,6 +4878,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       bot_invite: botInvite,
       categoryId: order.categoryId,
       categoryName: order.categoryName,
+      categoryAllocations: order.categoryAllocations,
       categoryIsPeriodic: order.categoryIsPeriodic,
       durationMonths: order.durationMonths,
       joinMethod: order.joinMethod,
@@ -5013,12 +5096,12 @@ async function activateWaitingCommunityOrder(order) {
       .filter(isDiscordGuildId);
 
     let members = (await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
+      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
        FROM community_oauth_joins
-        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND stock_type = $3 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, pendingUserIds, getCommunityOrderStockType(current)]
+      [resolved.config.guildId, pendingUserIds]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -5030,18 +5113,34 @@ async function activateWaitingCommunityOrder(order) {
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
       const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
-      const excludedUserIds = Array.from(new Set([...usedDiscordUserIds, ...pendingUserIds, ...previouslyDeliveredUserIds]));
-      const extra = await client.query(
-        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
-         FROM community_oauth_joins
-         WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-           AND NOT (discord_user_id = ANY($4::text[]))
-         ORDER BY random()
-         LIMIT $3
-         FOR UPDATE SKIP LOCKED`,
-        [resolved.config.guildId, getCommunityOrderStockType(current), missing, excludedUserIds]
-      );
-      if (extra.rowCount) members = [...members, ...extra.rows];
+      const excludedUserIds = new Set([...usedDiscordUserIds, ...pendingUserIds, ...previouslyDeliveredUserIds]);
+      const availableByCategory = new Map();
+      for (const member of members) {
+        const categoryId = normalizeCommunityStockType(member.category_id);
+        availableByCategory.set(categoryId, (availableByCategory.get(categoryId) ?? 0) + 1);
+      }
+      const requiredByCategory = new Map();
+      for (const item of existingResults.filter((result) => pendingStates.has(String(result?.state ?? "").toLowerCase()))) {
+        const categoryId = getCommunityResultStockType(current, item);
+        requiredByCategory.set(categoryId, (requiredByCategory.get(categoryId) ?? 0) + 1);
+      }
+      if (!requiredByCategory.size) requiredByCategory.set(getCommunityOrderStockType(current), missing);
+      for (const [categoryId, required] of requiredByCategory) {
+        const categoryMissing = Math.max(0, required - (availableByCategory.get(categoryId) ?? 0));
+        if (!categoryMissing) continue;
+        const extra = await client.query(
+          `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+           FROM community_oauth_joins
+           WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND reserved_order_id IS NULL AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+             AND NOT (discord_user_id = ANY($4::text[]))
+           ORDER BY random()
+           LIMIT $3
+           FOR UPDATE SKIP LOCKED`,
+          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds)]
+        );
+        for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
+        members = [...members, ...extra.rows];
+      }
     }
 
     const existingByUserId = new Map(existingResults.map((item) => [String(item?.discordUserId ?? ""), item]));
@@ -5063,7 +5162,7 @@ async function activateWaitingCommunityOrder(order) {
       const existing = existingByUserId.get(String(member.discord_user_id));
       return existing && pendingStates.has(String(existing?.state ?? "").toLowerCase())
         ? { ...existing, state: "queued", details: "Waiting for delivery." }
-        : { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "queued", details: "Waiting for delivery." };
+        : { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, categoryId: member.category_id, state: "queued", details: "Waiting for delivery." };
     });
     const activeOrder = {
       ...current,
@@ -5075,6 +5174,12 @@ async function activateWaitingCommunityOrder(order) {
       serverMemberCount: resolved.serverInfo.approximateMemberCount,
       communityResults: [...settledResults, ...pendingResults]
     };
+    if (members.length) {
+      await client.query(
+        "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
+        [resolved.config.guildId, members.map((member) => member.discord_user_id), current.uniqid]
+      );
+    }
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [current.uniqid, JSON.stringify(activeOrder)]);
     await client.query("COMMIT");
     void processCommunityOrder(activeOrder, members, resolved.config).catch(async (error) => {
@@ -5599,14 +5704,30 @@ app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res
     }
 
     const now = new Date();
-    const currentExpiration = new Date(order.expiredAt);
-    const extensionBase = Number.isFinite(currentExpiration.getTime()) && currentExpiration > now ? currentExpiration : now;
-    const nextExpiration = addUtcMonths(extensionBase, months).toISOString();
+    const extendExpiration = (value) => {
+      const currentExpiration = new Date(value);
+      const extensionBase = Number.isFinite(currentExpiration.getTime()) && currentExpiration > now ? currentExpiration : now;
+      return addUtcMonths(extensionBase, months).toISOString();
+    };
+    const nextCategoryAllocations = Array.isArray(order.categoryAllocations)
+      ? order.categoryAllocations.map((allocation) => allocation?.isPeriodic === true
+        ? {
+            ...allocation,
+            durationMonths: Math.max(0, Number(allocation.durationMonths) || 0) + months,
+            expiredAt: extendExpiration(allocation.expiredAt)
+          }
+        : allocation)
+      : null;
+    const allCategoriesPeriodic = nextCategoryAllocations?.length > 0 && nextCategoryAllocations.every((allocation) => allocation?.isPeriodic === true);
+    const nextExpiration = allCategoriesPeriodic
+      ? nextCategoryAllocations.reduce((latest, allocation) => !latest || new Date(allocation.expiredAt) > new Date(latest) ? allocation.expiredAt : latest, null)
+      : nextCategoryAllocations ? null : extendExpiration(order.expiredAt);
     const extendedAt = now.toISOString();
     const updatedOrder = {
       ...order,
       durationMonths: Math.max(0, Number(order.durationMonths) || 0) + months,
       expiredAt: nextExpiration,
+      ...(nextCategoryAllocations ? { categoryAllocations: nextCategoryAllocations } : {}),
       supportExtensions: [
         ...(Array.isArray(order.supportExtensions) ? order.supportExtensions : []),
         { months, previousExpiredAt: order.expiredAt ?? null, expiredAt: nextExpiration, extendedAt }
@@ -5678,7 +5799,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const replaceableIndices = results.flatMap((item, index) => {
       const state = String(item?.state ?? "").toLowerCase();
       const inactive = String(item?.authorizationStatus ?? "").toLowerCase() === "inactive";
-      return ["failed", "already_member"].includes(state) || inactive ? [index] : [];
+      return (["failed", "already_member"].includes(state) || inactive) && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
       await client.query("ROLLBACK");
@@ -5698,27 +5819,41 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       String(item?.previousUsername ?? "").trim(),
       ...(Array.isArray(item?.replacementHistoryUsernames) ? item.replacementHistoryUsernames.map((value) => String(value ?? "").trim()) : [])
     ]).filter(Boolean)));
-    const replacements = await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
-       FROM community_oauth_joins
-       WHERE guild_id = $1
-         AND stock_type = $4
-         AND status = 'authorized'
-         AND encrypted_access_token IS NOT NULL
-         AND access_token_expires_at > NOW()
-         AND NOT (discord_user_id = ANY($2::text[]))
-         AND NOT (username = ANY($3::text[]))
-       ORDER BY random()
-       LIMIT $5
-       FOR UPDATE SKIP LOCKED`,
-      [targetGuildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order), replaceableIndices.length]
-    );
-    if (!replacements.rowCount) {
+    const replacementPairs = [];
+    const indicesByCategory = new Map();
+    for (const resultIndex of replaceableIndices) {
+      const categoryId = getCommunityResultStockType(order, results[resultIndex]);
+      indicesByCategory.set(categoryId, [...(indicesByCategory.get(categoryId) ?? []), resultIndex]);
+    }
+    for (const [categoryId, categoryIndices] of indicesByCategory) {
+      const replacements = await client.query(
+        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+         FROM community_oauth_joins
+         WHERE guild_id = $1
+           AND stock_type = $4
+           AND status = 'authorized'
+           AND reserved_order_id IS NULL
+           AND encrypted_access_token IS NOT NULL
+           AND access_token_expires_at > NOW()
+           AND NOT (discord_user_id = ANY($2::text[]))
+           AND NOT (username = ANY($3::text[]))
+         ORDER BY random()
+         LIMIT $5
+         FOR UPDATE SKIP LOCKED`,
+        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length]
+      );
+      replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
+    }
+    if (!replacementPairs.length) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "No connected replacement member is currently available." });
     }
+    await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
+      [targetGuildId, replacementPairs.map(({ member }) => member.discord_user_id), uniqid]
+    );
 
-    const queuedReplacementIndices = replaceableIndices.slice(0, replacements.rowCount);
+    const queuedReplacementIndices = replacementPairs.map((pair) => pair.resultIndex);
     const failedUserIds = queuedReplacementIndices
       .map((index) => String(results[index]?.discordUserId ?? ""))
       .filter(isDiscordGuildId);
@@ -5729,11 +5864,11 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       );
     }
 
-    replacements.rows.forEach((member, replacementIndex) => {
-      const resultIndex = replaceableIndices[replacementIndex];
+    replacementPairs.forEach(({ member, resultIndex }) => {
       const previous = results[resultIndex];
       const previousUserId = String(previous?.discordUserId ?? "").trim();
       results[resultIndex] = {
+        ...previous,
         discordUserId: member.discord_user_id,
         username: member.username,
         avatarUrl: member.avatar_url ?? null,
@@ -5759,10 +5894,10 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       waitingCode: null,
       activeDelay: null,
       nextMemberAt: null,
-      details: `${Number(order.added ?? 0)}/${order.amount} members delivered. ${replacements.rowCount}/${replaceableIndices.length} available replacements are in progress.`,
+      details: `${Number(order.added ?? 0)}/${order.amount} members delivered. ${replacementPairs.length}/${replaceableIndices.length} available replacements are in progress.`,
       replacementBatch: {
         requested: replaceableIndices.length,
-        queued: replacements.rowCount,
+        queued: replacementPairs.length,
         startedAt: new Date().toISOString()
       },
       communityResults: results
@@ -5774,7 +5909,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     await client.query("COMMIT");
     if (!isAdminRequest) publicCommunityReplaceCooldowns.set(publicCooldownKey, Date.now() + publicCommunityReplaceCooldownMs);
 
-    void processCommunityOrder(activeOrder, replacements.rows, config).catch(async (error) => {
+    void processCommunityOrder(activeOrder, replacementPairs.map((pair) => pair.member), config).catch(async (error) => {
       console.error("Members bulk replacement failed:", error instanceof Error ? error.message : error);
       await saveTrackedOrderPayload({
         ...activeOrder,
@@ -5846,6 +5981,10 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(409).json({ message: "Another replacement member is already running for this order." });
     }
     const failedResult = results[resultIndex];
+    if (!isAdminRequest && isCommunityResultManagementExpired(order, failedResult)) {
+      await client.query("ROLLBACK");
+      return res.status(410).json({ message: "This category's member support period has expired." });
+    }
     const replaceableStates = new Set(["failed", "already_member"]);
     const hasInactiveAuthorization = String(failedResult?.authorizationStatus ?? "").toLowerCase() === "inactive";
     if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !hasInactiveAuthorization)) {
@@ -5913,6 +6052,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        WHERE guild_id = $1
          AND stock_type = $4
          AND status = 'authorized'
+         AND reserved_order_id IS NULL
          AND encrypted_access_token IS NOT NULL
          AND access_token_expires_at > NOW()
          AND NOT (discord_user_id = ANY($2::text[]))
@@ -5920,7 +6060,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, getCommunityOrderStockType(order)]
+       [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult)]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -5928,7 +6068,12 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
 
     const member = replacement.rows[0];
+    await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = $2",
+      [config.guildId, member.discord_user_id, uniqid]
+    );
     results[resultIndex] = {
+      ...failedResult,
       discordUserId: member.discord_user_id,
       username: member.username,
       avatarUrl: member.avatar_url ?? null,

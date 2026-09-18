@@ -51,6 +51,7 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     details: order.details,
     categoryId: order.categoryId,
     categoryName: order.categoryName,
+    categoryAllocations: order.categoryAllocations,
     categoryIsPeriodic: order.categoryIsPeriodic,
     durationMonths: order.durationMonths,
     expiredAt: order.expiredAt,

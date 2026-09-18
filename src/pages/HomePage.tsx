@@ -107,6 +107,7 @@ const EMPTY_FORM = {
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",
+  communityCategoryAmounts: { offline: 100 } as Record<string, number>,
   communityDurationMonths: 1,
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
@@ -653,6 +654,7 @@ export default function HomePage() {
   const [deletingTrackedOrder, setDeletingTrackedOrder] = useState(false);
   const [availability, setAvailability] = useState("");
   const [availabilityMaximum, setAvailabilityMaximum] = useState<number | null>(null);
+  const [communityAvailability, setCommunityAvailability] = useState<Record<string, number>>({});
   const availabilityRequestRef = useRef(0);
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
@@ -721,8 +723,13 @@ export default function HomePage() {
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
   const communityCategories = communityStatus?.stockCategories ?? [];
-  const selectedCommunityCategory = communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
-  const confirmationCommunityCategory = communityCategories.find((category) => category.id === orderConfirmationPayload?.categoryId);
+  const selectedCommunityAllocations = communityCategories.flatMap((category) => {
+    const amount = Number(form.communityCategoryAmounts[category.id] ?? 0);
+    return amount > 0 ? [{ category, amount }] : [];
+  });
+  const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
+  const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
+  const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
@@ -731,8 +738,10 @@ export default function HomePage() {
       Boolean(form.serverId.trim()) &&
       !checkingAvailability &&
       availabilityMaximum !== null &&
+      selectedCommunityAllocations.length > 0 &&
       availabilityMaximum > 0 &&
-      form.amount <= availabilityMaximum
+      selectedCommunityAmount === form.amount &&
+      selectedCommunityAllocations.every(({ category, amount }) => amount <= (communityAvailability[category.id] ?? 0))
     )
   );
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
@@ -947,6 +956,7 @@ export default function HomePage() {
     if (!form.serverId.trim()) {
       setAvailability("");
       setAvailabilityMaximum(null);
+      setCommunityAvailability({});
       setCheckingAvailability(false);
       return;
     }
@@ -960,7 +970,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryAmounts, form.communityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -978,10 +988,25 @@ export default function HomePage() {
     const categories = communityStatus?.stockCategories ?? [];
     if (!categories.length) return;
     if (!categories.some((category) => category.id === communityStockType)) setCommunityStockType(categories[0].id);
-    if (!categories.some((category) => category.id === form.communityCategoryId)) {
-      setForm((current) => ({ ...current, communityCategoryId: categories[0].id }));
+    const validAllocations = Object.entries(form.communityCategoryAmounts).filter(([categoryId, amount]) =>
+      Number(amount) > 0 && categories.some((category) => category.id === categoryId)
+    );
+    if (!validAllocations.length) {
+      setForm((current) => ({
+        ...current,
+        communityCategoryId: categories[0].id,
+        communityCategoryAmounts: { [categories[0].id]: Math.max(1, Math.min(current.amount, categories[0].summary.ready || 1)) }
+      }));
+    } else if (validAllocations.length !== Object.keys(form.communityCategoryAmounts).length) {
+      const nextAmounts = Object.fromEntries(validAllocations);
+      setForm((current) => ({
+        ...current,
+        communityCategoryId: validAllocations[0][0],
+        communityCategoryAmounts: nextAmounts,
+        amount: validAllocations.reduce((total, [, amount]) => total + Number(amount), 0)
+      }));
     }
-  }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryId]);
+  }, [communityStatus?.stockCategories, communityStockType, form.communityCategoryAmounts]);
 
   useEffect(() => {
     setSelectedCommunityMemberIds([]);
@@ -1332,23 +1357,44 @@ export default function HomePage() {
   async function refreshAvailability(requestId: number) {
     try {
       const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
+      if (selectedIsCommunity) {
+        const allocations = communityCategories.flatMap((category) =>
+          Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : []
+        );
+        if (!allocations.length) throw new Error("Choose at least one stock category.");
+        const availabilityEntries = await Promise.all(allocations.map(async (category) => {
+          const data = await checkAvailableAmount(
+            form.service,
+            serverId,
+            form.duration,
+            category.id,
+            form.communityJoinMethod
+          );
+          return [category.id, data.maximum] as const;
+        }));
+        if (requestId !== availabilityRequestRef.current) return;
+        const nextAvailability = Object.fromEntries(availabilityEntries);
+        const totalMaximum = availabilityEntries.reduce((total, [, maximum]) => total + maximum, 0);
+        setCommunityAvailability(nextAvailability);
+        setAvailability(`Available ${totalMaximum} across ${availabilityEntries.length} selected categor${availabilityEntries.length === 1 ? "y" : "ies"}`);
+        setAvailabilityMaximum(totalMaximum);
+        return;
+      }
       const data = await checkAvailableAmount(
         form.service,
         serverId,
         form.duration,
-        selectedIsCommunity ? form.communityCategoryId : undefined,
-        selectedIsCommunity ? form.communityJoinMethod : undefined
+        undefined,
+        undefined
       );
       if (requestId !== availabilityRequestRef.current) return;
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
       setAvailabilityMaximum(data.maximum);
-      if (selectedIsCommunity && data.maximum > 0) {
-        setForm((current) => ({ ...current, amount: Math.min(current.amount, data.maximum) }));
-      }
     } catch (error) {
       if (requestId !== availabilityRequestRef.current) return;
       setAvailability(error instanceof Error ? error.message : "Availability could not be loaded. Try the invite again.");
       setAvailabilityMaximum(null);
+      setCommunityAvailability({});
     } finally {
       if (requestId === availabilityRequestRef.current) setCheckingAvailability(false);
     }
@@ -1825,6 +1871,7 @@ export default function HomePage() {
       botInvite: created.bot_invite,
       categoryId: created.categoryId,
       categoryName: created.categoryName,
+      categoryAllocations: created.categoryAllocations,
       categoryIsPeriodic: created.categoryIsPeriodic,
       durationMonths: created.durationMonths,
       expiredAt: created.expiredAt,
@@ -1847,8 +1894,8 @@ export default function HomePage() {
       notifyError("Wait for the available member count to load.");
       return;
     }
-    if (selectedIsCommunity && form.amount > (availabilityMaximum ?? 0)) {
-      notifyError(`You can order up to ${availabilityMaximum ?? 0} available members for this server.`);
+    if (selectedIsCommunity && selectedCommunityAllocations.some(({ category, amount }) => amount > (communityAvailability[category.id] ?? 0))) {
+      notifyError("One or more selected categories do not have enough available members.");
       return;
     }
 
@@ -1862,7 +1909,8 @@ export default function HomePage() {
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
-      durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined,
+      categoryAllocations: selectedIsCommunity ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
+      durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
       isEldoradoSale: form.isEldoradoSale
@@ -2253,6 +2301,9 @@ export default function HomePage() {
                                       ? "COMMUNITY-OFFLINE"
                                       : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
                                   communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
+                                  communityCategoryAmounts: option.value === "community" && communityCategories[0]
+                                    ? { [communityCategories[0].id]: Math.max(1, Math.min(100, communityCategories[0].summary.ready || 1)) }
+                                    : current.communityCategoryAmounts,
                                   amount: option.value === "boosts" ? 2 : option.value === "community" ? Math.max(1, Math.min(100, communityCategories[0]?.summary.ready ?? 1)) : 100,
                                   delay: option.value === "community" ? current.communityCustomDelay : current.delay,
                                   communitySpeedProfile: option.value === "community" ? "custom" : current.communitySpeedProfile,
@@ -2347,13 +2398,15 @@ export default function HomePage() {
                       <div className="service-grid community-mode-grid">
                         {communityCategories.map((category) => {
                           const Icon = getCommunityCategoryIcon(category.iconName);
-                          const selected = form.communityCategoryId === category.id;
+                          const categoryAmount = Number(form.communityCategoryAmounts[category.id] ?? 0);
+                          const selected = categoryAmount > 0;
                           const ready = category.summary.ready;
+                          const available = communityAvailability[category.id] ?? ready;
                           return (
                             <label key={category.id} className={`service-option ${selected ? "is-selected" : ""}`} data-service="COMMUNITY-CATEGORY" style={getCommunityCategoryAppearance(category.colorKey)}>
                               <input
                                 className="sr-only"
-                                type="radio"
+                                type="checkbox"
                                 name="communityService"
                                 value={category.id}
                                 checked={selected}
@@ -2361,12 +2414,19 @@ export default function HomePage() {
                                   availabilityRequestRef.current += 1;
                                   setAvailability("");
                                   setAvailabilityMaximum(null);
-                                  setForm((current) => ({
-                                    ...current,
-                                    service: "COMMUNITY-OFFLINE",
-                                    communityCategoryId: category.id,
-                                    amount: Math.max(1, Math.min(current.amount, ready || 1))
-                                  }));
+                                  setForm((current) => {
+                                    const nextAmounts = { ...current.communityCategoryAmounts };
+                                    if (Number(nextAmounts[category.id] ?? 0) > 0) delete nextAmounts[category.id];
+                                    else nextAmounts[category.id] = Math.max(1, Math.min(50, available || 1));
+                                    const total = Object.values(nextAmounts).reduce((sum, value) => sum + (Number(value) || 0), 0);
+                                    return {
+                                      ...current,
+                                      service: "COMMUNITY-OFFLINE",
+                                      communityCategoryId: Object.keys(nextAmounts)[0] ?? category.id,
+                                      communityCategoryAmounts: nextAmounts,
+                                      amount: total
+                                    };
+                                  });
                                 }}
                               />
                               <span className="service-option-head" aria-hidden="true">
@@ -2375,6 +2435,25 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{category.name}</span>
                               <span className="service-option-description">{ready} connected members available</span>
+                              {selected ? (
+                                <span className="community-category-amount">
+                                  <small>Order amount</small>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={Math.max(1, available)}
+                                    value={categoryAmount}
+                                    onClick={(event) => event.stopPropagation()}
+                                    onChange={(event) => {
+                                      const amount = Math.max(1, Math.min(Number(event.target.value) || 1, Math.max(1, available)));
+                                      setForm((current) => {
+                                        const nextAmounts = { ...current.communityCategoryAmounts, [category.id]: amount };
+                                        return { ...current, communityCategoryAmounts: nextAmounts, amount: Object.values(nextAmounts).reduce((sum, value) => sum + (Number(value) || 0), 0) };
+                                      });
+                                    }}
+                                  />
+                                </span>
+                              ) : null}
                               <span className="community-service-option-footer">
                                 <span className="service-option-code service-option-code-badge"><span>{ready} MEMBERS</span></span>
                                 <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>
@@ -2638,7 +2717,7 @@ export default function HomePage() {
                             </div>
                           </>
                         ) : null}
-                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? "is-periodic" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -2647,10 +2726,11 @@ export default function HomePage() {
                               min={1}
                               max={selectedIsCommunity ? Math.max(1, selectedCommunityOrderLimit) : undefined}
                               value={form.amount}
+                              readOnly={selectedIsCommunity}
                               onChange={(event) => {
+                                if (selectedIsCommunity) return;
                                 const requested = Math.max(1, Number(event.target.value) || 1);
-                                const amount = selectedIsCommunity ? Math.min(requested, Math.max(1, selectedCommunityOrderLimit)) : requested;
-                                setForm((current) => ({ ...current, amount }));
+                                setForm((current) => ({ ...current, amount: requested }));
                               }}
                             />
                           </div>
@@ -2685,7 +2765,7 @@ export default function HomePage() {
                             </label>
                           ) : null}
 
-                          {selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? (
+                          {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">
                               <span className="boost-order-label">Month</span>
                               <div className="community-order-month-options" aria-label="Order support period">
@@ -3490,7 +3570,9 @@ export default function HomePage() {
                 <span className="order-confirm-service-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
                 <span className="order-confirm-primary-copy">
                   <small>Service</small>
-                  <strong>{isCommunityService(orderConfirmationPayload.service) ? (communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.name ?? "Members 2") : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)}</strong>
+                  <strong>{isCommunityService(orderConfirmationPayload.service)
+                    ? orderConfirmationPayload.categoryAllocations?.map((allocation) => `${communityCategories.find((category) => category.id === allocation.categoryId)?.name ?? allocation.categoryId} × ${allocation.amount}`).join(" + ") ?? "Members 2"
+                    : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)}</strong>
                 </span>
                 <span className="order-confirm-amount"><small>Amount</small><strong>{orderConfirmationPayload.amount}</strong></span>
               </div>
@@ -3505,7 +3587,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "join_application" ? "Join Application" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
-                  {confirmationCommunityCategory?.isPeriodic && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) && orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>
               ) : null}
             </div>

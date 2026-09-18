@@ -470,6 +470,7 @@ export default function PublicOrderPage() {
       ? Math.min(Math.max(membersAdded / totalMembers, 0), 1)
       : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
+  const categoryAllocations = Array.isArray(status?.categoryAllocations) ? status.categoryAllocations : [];
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
@@ -908,6 +909,17 @@ export default function PublicOrderPage() {
                     {!isBoostOrder && !isDeliveryPaused && !isInvitesPaused && currentDelay !== 0 && estimatedCompletionSeconds !== undefined ? <span className="monitor-estimate">ETA {formatDuration(estimatedCompletionSeconds)}</span> : null}
                   </div>
                 </div>
+                {categoryAllocations.length > 1 ? (
+                  <div className="category-progress-grid">
+                    {categoryAllocations.map((allocation) => {
+                      const categoryProgress = allocation.amount > 0 ? Math.min((allocation.added ?? 0) / allocation.amount, 1) : 0;
+                      return <div key={allocation.categoryId} className="category-progress-item">
+                        <span><strong>{allocation.categoryName ?? allocation.categoryId}</strong><small>{allocation.added ?? 0}/{allocation.amount}</small></span>
+                        <i><b style={{ width: `${categoryProgress * 100}%` }} /></i>
+                      </div>;
+                    })}
+                  </div>
+                ) : null}
                 <div className="monitor-live-progress-track" aria-label={progress === null ? "Progress unavailable" : `${progressPercent}% complete`}>
                   <span style={{ width: progress === null ? "0%" : `${Math.max(progress * 100, 4)}%` }}><i aria-hidden="true" /></span>
                 </div>

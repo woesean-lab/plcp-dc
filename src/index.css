@@ -1828,6 +1828,96 @@
     transform: translateY(2px);
   }
 
+  .community-category-amount {
+    display: flex;
+    margin-top: 0.75rem;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid var(--service-tone-border);
+    border-radius: 10px;
+    background: rgba(8, 9, 20, 0.58);
+    padding: 0.45rem 0.55rem 0.45rem 0.7rem;
+  }
+
+  .community-category-amount small {
+    color: var(--app-muted);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .community-category-amount input {
+    width: 76px;
+    border: 1px solid var(--app-border);
+    border-radius: 8px;
+    background: var(--app-input);
+    padding: 0.4rem 0.5rem;
+    color: var(--app-text);
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+    outline: none;
+  }
+
+  .community-category-amount input:focus {
+    border-color: var(--service-tone-border);
+    box-shadow: 0 0 0 2px var(--service-tone-soft);
+  }
+
+  .category-progress-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.65rem;
+    margin-top: 1rem;
+  }
+
+  .category-progress-item {
+    display: grid;
+    gap: 0.5rem;
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    background: rgba(10, 11, 24, 0.42);
+    padding: 0.65rem 0.75rem;
+  }
+
+  .category-progress-item > span {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .category-progress-item strong {
+    overflow: hidden;
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .category-progress-item small {
+    color: var(--app-muted);
+    font-family: "SFMono-Regular", Consolas, monospace;
+    font-size: 10px;
+  }
+
+  .category-progress-item > i {
+    display: block;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
+  .category-progress-item > i > b {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, var(--app-accent), #6eddb2);
+    transition: width 240ms ease;
+  }
+
   .boost-order-block {
     display: grid;
     max-width: 860px;

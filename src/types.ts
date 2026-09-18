@@ -6,6 +6,16 @@ export type OrderProvider = "tokenu" | "community" | "dcord";
 export type BoostDuration = 1 | 3;
 export type CommunityJoinMethod = "create_invite" | "join_application";
 
+export interface CommunityCategoryAllocation {
+  categoryId: string;
+  categoryName?: string;
+  amount: number;
+  added?: number;
+  isPeriodic?: boolean;
+  durationMonths?: number | null;
+  expiredAt?: string | null;
+}
+
 export type OrderStatus =
   | "NEW"
   | "PROCESS"
@@ -26,6 +36,7 @@ export interface CreateOrderPayload {
   concurrency?: number;
   allowMembershipScreening?: boolean;
   categoryId?: string;
+  categoryAllocations?: CommunityCategoryAllocation[];
   durationMonths?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
@@ -38,6 +49,7 @@ export interface CreateOrderResponse {
   cost?: number;
   categoryId?: string;
   categoryName?: string;
+  categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   joinMethod?: CommunityJoinMethod;
@@ -68,6 +80,7 @@ export interface OrderStatusResponse {
   serverMemberCount?: number;
   categoryId?: string;
   categoryName?: string;
+  categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   error?: string;
@@ -114,6 +127,7 @@ export interface TrackedOrder {
   details?: string;
   categoryId?: string;
   categoryName?: string;
+  categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
