@@ -7254,13 +7254,13 @@
 .community-member-transfer-picker {
   position: relative;
   z-index: 3;
-  width: 142px;
+  width: 170px;
 }
 
 .community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger {
-  min-height: 30px;
-  padding: 0 8px;
-  border-radius: 7px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
   gap: 6px;
   font-size: 12px;
   justify-content: space-between;
