@@ -9,6 +9,7 @@ export type CommunityJoinMethod = "create_invite" | "join_application";
 export interface CommunityCategoryAllocation {
   categoryId: string;
   categoryName?: string;
+  colorKey?: string;
   amount: number;
   added?: number;
   isPeriodic?: boolean;

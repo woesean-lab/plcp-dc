@@ -3989,6 +3989,7 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
        RETURNING id, name, is_periodic, icon_name, color_key, created_at, updated_at`,
       [config.guildId, id, name, isPeriodic, iconName, colorKey]
     );
+    invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
   } catch (error) {
     if (error?.code === "23505") return res.status(409).json({ message: "A category with this name already exists." });
@@ -4019,6 +4020,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
       [config.guildId, categoryId, name, isPeriodic, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
+    invalidateCommunityCategoryDisplayCache();
     res.json(updated.rows[0]);
   } catch (error) {
     if (error?.code === "23505") return res.status(409).json({ message: "A category with this name already exists." });
@@ -4048,6 +4050,7 @@ app.delete("/api/community/categories/:categoryId", requireSession, async (req, 
     );
     await client.query("COMMIT");
     if (!removed.rowCount) return res.status(404).json({ message: "Category not found." });
+    invalidateCommunityCategoryDisplayCache();
     res.status(204).end();
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
@@ -5380,6 +5383,57 @@ function sanitizePublicCommunityOrder(order) {
   };
 }
 
+const communityCategoryDisplayCache = { guildId: null, expiresAt: 0, categories: new Map() };
+
+function invalidateCommunityCategoryDisplayCache() {
+  communityCategoryDisplayCache.expiresAt = 0;
+}
+
+async function hydrateCommunityOrderCategories(order) {
+  if (!order || order.provider !== "community") return order;
+  const categoryIds = Array.from(new Set([
+    String(order.categoryId ?? "").trim(),
+    ...(Array.isArray(order.categoryAllocations) ? order.categoryAllocations.map((item) => String(item?.categoryId ?? "").trim()) : []),
+    ...(Array.isArray(order.communityResults) ? order.communityResults.map((item) => String(item?.categoryId ?? "").trim()) : [])
+  ].filter(Boolean)));
+  if (!categoryIds.length) return order;
+
+  const config = await getCommunityOAuthConfig();
+  if (!config.guildId) return order;
+  if (communityCategoryDisplayCache.guildId !== config.guildId || communityCategoryDisplayCache.expiresAt <= Date.now()) {
+    const result = await pool.query(
+      "SELECT id, name, color_key FROM community_stock_categories WHERE guild_id = $1",
+      [config.guildId]
+    );
+    communityCategoryDisplayCache.guildId = config.guildId;
+    communityCategoryDisplayCache.expiresAt = Date.now() + 3_000;
+    communityCategoryDisplayCache.categories = new Map(result.rows.map((category) => [category.id, category]));
+  }
+
+  const currentCategories = communityCategoryDisplayCache.categories;
+  const categoryAllocations = Array.isArray(order.categoryAllocations)
+    ? order.categoryAllocations.map((allocation) => {
+        const current = currentCategories.get(String(allocation?.categoryId ?? ""));
+        return current ? { ...allocation, categoryName: current.name, colorKey: current.color_key } : allocation;
+      })
+    : order.categoryAllocations;
+  const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
+  return {
+    ...order,
+    categoryName: Array.isArray(categoryAllocations) && categoryAllocations.length > 1
+      ? `${categoryAllocations.length} categories`
+      : primaryCategory?.name ?? order.categoryName,
+    categoryColorKey: primaryCategory?.color_key ?? order.categoryColorKey,
+    categoryAllocations,
+    communityResults: Array.isArray(order.communityResults)
+      ? order.communityResults.map((item) => {
+          const current = currentCategories.get(String(item?.categoryId ?? order.categoryId ?? ""));
+          return current ? { ...item, categoryName: current.name, colorKey: current.color_key } : item;
+        })
+      : order.communityResults
+  };
+}
+
 app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -5392,6 +5446,7 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
     payload = await activateWaitingCommunityOrder(payload);
     payload = await reconcileCommunityPendingJoinResults(payload);
     payload = await hydrateCommunityOrderAvatars(payload);
+    payload = await hydrateCommunityOrderCategories(payload);
     res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
@@ -6139,6 +6194,7 @@ async function pollPublicCommunityOrderStreams() {
           console.error(`Community monitor bot check failed for ${row.uniqid}:`, error instanceof Error ? error.message : error);
         }
       }
+      livePayload = await hydrateCommunityOrderCategories(livePayload);
       const snapshot = {
         ...sanitizePublicCommunityOrder(livePayload),
         canManageCommunityMembers: !isCommunityOrderManagementExpired(livePayload)
@@ -6182,9 +6238,10 @@ app.get("/api/public/orders/:uniqid/stream", async (req, res, next) => {
     res.flushHeaders?.();
     res.write("retry: 2000\n\n");
 
+    const hydratedPayload = await hydrateCommunityOrderCategories(tracked.rows[0].payload);
     const snapshot = {
-      ...sanitizePublicCommunityOrder(tracked.rows[0].payload),
-      canManageCommunityMembers: !isCommunityOrderManagementExpired(tracked.rows[0].payload)
+      ...sanitizePublicCommunityOrder(hydratedPayload),
+      canManageCommunityMembers: !isCommunityOrderManagementExpired(hydratedPayload)
     };
     const serialized = JSON.stringify(snapshot);
     res.write(`data: ${serialized}\n\n`);
@@ -6226,6 +6283,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       trackedPayload = await activateWaitingCommunityOrder(trackedPayload);
       trackedPayload = await reconcileCommunityPendingJoinResults(trackedPayload);
       trackedPayload = await hydrateCommunityOrderAvatars(trackedPayload);
+      trackedPayload = await hydrateCommunityOrderCategories(trackedPayload);
       return res.set("Cache-Control", "no-store").json({
         ...sanitizePublicCommunityOrder(trackedPayload),
         liveBoostStock,
