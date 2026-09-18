@@ -758,12 +758,11 @@ export default function PublicOrderPage() {
   if (isInitialLoading || !preloaderDelayComplete) {
     return (
       <section className="session-loading-screen app-shell" role="status" aria-live="polite" aria-label="Loading order monitor">
-        <div className="app-preloader">
-          <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-          <span><span className="brand-eyebrow">Pulcip</span><strong>Loading monitor…</strong></span>
-          <span className="app-spinner" aria-hidden="true" />
-          <span className="app-progress" aria-hidden="true"><span /></span>
-        </div>
+        <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+        <span>
+          <span className="brand-eyebrow">Pulcip</span>
+          <strong>Loading secure session…</strong>
+        </span>
       </section>
     );
   }
