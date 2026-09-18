@@ -771,8 +771,7 @@
     border: 1px solid var(--app-border);
     border-radius: 9px;
     padding: 6px;
-    background-color: var(--app-code-bg);
-    background-image: none;
+    background: var(--app-input-bg);
     color: var(--app-muted);
     cursor: pointer;
     transition: border-color .15s ease, background-color .15s ease, color .15s ease;
@@ -1405,8 +1404,7 @@
 
   .app-input:focus {
     border-color: var(--app-accent);
-    background-color: #0c0c18;
-    background-image: none;
+    background: var(--app-input-focus-bg);
     box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
@@ -1926,7 +1924,8 @@
     flex: 0 0 auto;
     border: 1px solid var(--app-border);
     border-radius: 8px;
-    background: var(--app-input-bg);
+    background-color: var(--app-code-bg);
+    background-image: none;
     padding: 0.43rem 0.5rem;
     color: var(--app-text);
     font-size: 13px;
@@ -1939,7 +1938,8 @@
 
   .community-category-drawer input:focus {
     border-color: var(--app-accent);
-    background: var(--app-input-focus-bg);
+    background-color: #0c0c18;
+    background-image: none;
     box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0, 0, 0, 0.1);
   }
 
