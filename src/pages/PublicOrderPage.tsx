@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, Copy, ExternalLink, LoaderCircle, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -748,6 +748,25 @@ export default function PublicOrderPage() {
       </div>
     </div>
   ) : null;
+
+  if (isInitialLoading) {
+    return (
+      <section className="monitor-preloader app-shell" role="status" aria-live="polite" aria-label="Loading order monitor">
+        <div className="app-ambient app-ambient-one" aria-hidden="true" />
+        <div className="app-ambient app-ambient-two" aria-hidden="true" />
+        <div className="monitor-preloader-card">
+          <span className="monitor-preloader-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+          <div className="monitor-preloader-copy">
+            <span className="brand-eyebrow">Pulcip</span>
+            <strong>Preparing your monitor</strong>
+            <small>Loading the latest order details…</small>
+          </div>
+          <LoaderCircle className="monitor-preloader-spinner" aria-hidden="true" />
+          <span className="monitor-preloader-track" aria-hidden="true"><i /></span>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="monitor-page app-shell min-h-screen text-[var(--app-text)]">
