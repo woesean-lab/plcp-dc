@@ -911,7 +911,7 @@ export default function OrderPage() {
                 <span aria-hidden="true" />
                 {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
-              {!isDcordProvider && Boolean(botInvite) ? (
+              {!isDcordProvider && !result?.isEldoradoSale && Boolean(botInvite) ? (
                 <Button
                   type="button"
                   variant="secondary"

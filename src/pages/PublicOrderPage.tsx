@@ -423,6 +423,7 @@ export default function PublicOrderPage() {
   const serviceType = seed.service ?? statusService ?? status?.type;
   const isBoostOrder = status?.provider === "dcord" || isBoostService(serviceType);
   const isCommunityOrder = status?.provider === "community";
+  const isEldoradoSale = status?.isEldoradoSale === true;
   const serverName = status?.serverName ?? seed.serverName ?? "Order monitor";
   const serviceName = isCommunityOrder && typeof status?.categoryName === "string"
     ? status.categoryName
@@ -766,7 +767,7 @@ export default function PublicOrderPage() {
                   ? "Live refresh · connected"
                   : autoRefreshing ? "Updating order" : `Live refresh · ${secondsUntilRefresh}s`}
             </span>
-            <Button asChild variant="secondary" size="sm" className="monitor-store-action">
+            {!isEldoradoSale ? <Button asChild variant="secondary" size="sm" className="monitor-store-action">
               <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
                 <Star className="monitor-store-star h-3.5 w-3.5" fill="currentColor" aria-hidden="true" />
                 <span>
@@ -775,7 +776,7 @@ export default function PublicOrderPage() {
                 </span>
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
-            </Button>
+            </Button> : null}
           </div>
         </header>
 

@@ -53,7 +53,8 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     categoryName: order.categoryName,
     categoryIsPeriodic: order.categoryIsPeriodic,
     durationMonths: order.durationMonths,
-    expiredAt: order.expiredAt
+    expiredAt: order.expiredAt,
+    isEldoradoSale: order.isEldoradoSale
   }));
   await parseResponse<{ saved: number }>(
     await fetch("/api/orders", {

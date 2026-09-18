@@ -110,7 +110,8 @@ const EMPTY_FORM = {
   communityDurationMonths: 1,
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
-  communityJoinMethod: "create_invite" as CommunityJoinMethod
+  communityJoinMethod: "create_invite" as CommunityJoinMethod,
+  isEldoradoSale: true
 };
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -1814,6 +1815,7 @@ export default function HomePage() {
       delay: payloadIsBoost ? undefined : payload.delay,
       speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
       joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
+      isEldoradoSale: payload.isEldoradoSale,
       billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
@@ -1861,7 +1863,8 @@ export default function HomePage() {
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
       durationMonths: selectedIsCommunity && selectedCommunityCategory?.isPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
-      joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined
+      joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
+      isEldoradoSale: form.isEldoradoSale
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
@@ -2711,6 +2714,12 @@ export default function HomePage() {
                     </div>
                   )}
                 </div>
+
+                <label className="boost-proxy-toggle">
+                  <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
+                  <span className="boost-proxy-toggle-icon"><Star className="h-4 w-4" /></span>
+                  <span><strong>Eldorado sale?</strong><small>Hide Eldorado promotion from the customer monitor.</small></span>
+                </label>
 
                 <div className="flex flex-wrap gap-3">
                   <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !selectedCanCreate}>

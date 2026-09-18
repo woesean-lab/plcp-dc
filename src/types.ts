@@ -29,6 +29,7 @@ export interface CreateOrderPayload {
   durationMonths?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
+  isEldoradoSale?: boolean;
 }
 
 export interface CreateOrderResponse {
@@ -78,6 +79,7 @@ export interface OrderStatusResponse {
   joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
+  isEldoradoSale?: boolean;
   liveBoostStock?: {
     oneMonth: number;
     threeMonth: number;
@@ -115,6 +117,7 @@ export interface TrackedOrder {
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
+  isEldoradoSale?: boolean;
 }
 
 export interface BoostStock {
