@@ -2547,6 +2547,13 @@ export default function HomePage() {
                             <strong>One-time proxy required</strong>
                             <small>{dcordProxyCount ? `${dcordProxyCount} available; one is consumed per token` : "No proxies saved"}</small>
                           </label>
+
+                          <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
+                            <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
+                            <span><Star className="h-4 w-4" aria-hidden="true" /></span>
+                            <strong>Eldorado sale?</strong>
+                            <small>Hide Eldorado promotion from the customer monitor.</small>
+                          </label>
                         </div>
                       </div>
                     </div>
