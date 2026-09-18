@@ -2709,17 +2709,18 @@ export default function HomePage() {
                               />
                             </label>
                           ) : null}
+
+                          <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
+                            <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
+                            <span><Star className="h-4 w-4" aria-hidden="true" /></span>
+                            <strong>Eldorado sale?</strong>
+                            <small>Hide Eldorado promotion from the customer monitor.</small>
+                          </label>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-
-                <label className="boost-proxy-toggle">
-                  <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
-                  <span className="boost-proxy-toggle-icon"><Star className="h-4 w-4" /></span>
-                  <span><strong>Eldorado sale?</strong><small>Hide Eldorado promotion from the customer monitor.</small></span>
-                </label>
 
                 <div className="flex flex-wrap gap-3">
                   <Button className="min-w-[150px] px-4 py-2.5 max-sm:w-full" type="submit" disabled={creating || !selectedCanCreate}>
