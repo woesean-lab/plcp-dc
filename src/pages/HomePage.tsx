@@ -1893,23 +1893,6 @@ export default function HomePage() {
     }
   }
 
-  async function retryBoostOrderAfterScreening() {
-    if (!boostScreeningPendingPayload || creating) return;
-    setCreating(true);
-    try {
-      await submitCreateOrder(boostScreeningPendingPayload);
-      setBoostScreeningPendingPayload(null);
-    } catch (error) {
-      if (error instanceof Error && error.message === BOOST_MEMBERSHIP_SCREENING_MESSAGE) {
-        notifyError("Registration form is still enabled. No order was created.");
-      } else {
-        notifyError(error instanceof Error ? error.message : "Order could not be created.");
-      }
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function continueBoostOrderDespiteScreening() {
     if (!boostScreeningPendingPayload || creating) return;
     const payload = boostScreeningPendingPayload;
@@ -3585,20 +3568,10 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">Boost warning</p>
             <h2 id="boost-screening-title">Registration form is enabled</h2>
             <p id="boost-screening-description">
-              ⚠️ Disable the registration form until your order is complete.
-              <br /><br />
-              Our bots can’t complete the registration form, so they can’t join your server and add the boosts.
-              <br /><br />
-              Server Settings → Access → Invite Only
-              <br /><br />
-              After changing the setting, please create a new server invite link and send it to us.
+              Create a new invite with <strong>Bypass Join Application</strong> enabled and send us that new invite link.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
-              <Button type="button" variant="secondary" disabled={creating} onClick={() => void retryBoostOrderAfterScreening()}>
-                {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
-                {creating ? "Checking..." : "Check again"}
-              </Button>
               <Button type="button" variant="destructive" disabled={creating} onClick={() => void continueBoostOrderDespiteScreening()}>
                 {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <TriangleAlert className="h-4 w-4" aria-hidden="true" />}
                 {creating ? "Creating..." : "Continue anyway"}
