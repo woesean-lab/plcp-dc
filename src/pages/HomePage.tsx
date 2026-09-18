@@ -984,9 +984,13 @@ export default function HomePage() {
     let pollHandle: number | null = null;
 
     const pollCommunitySync = async () => {
+      // A category save/delete invalidates every in-flight status response.
+      // Without this token, an older poll could redraw the previous name,
+      // colour, or period setting after the save has completed.
+      const requestId = ++communityStatusRequestRef.current;
       try {
         const nextStatus = await getCommunityAdminStatus(communityStockType);
-        if (cancelled) return;
+        if (cancelled || requestId !== communityStatusRequestRef.current) return;
         setCommunityStatus(nextStatus);
         if (nextStatus.syncing) {
           pollHandle = window.setTimeout(() => void pollCommunitySync(), 1500);
@@ -1176,6 +1180,8 @@ export default function HomePage() {
     if (!COMMUNITY_CATEGORY_ICONS[input.iconName]) return notifyError("Choose a valid Lucide icon name.");
     try {
       setSavingCommunityCategory(true);
+      // Stop any older status/poll request from repainting the old category.
+      communityStatusRequestRef.current += 1;
       if (editingCommunityCategoryId) await updateCommunityStockCategory(editingCommunityCategoryId, input);
       else await createCommunityStockCategory(input);
       await refreshCommunityStatus();
@@ -1193,6 +1199,8 @@ export default function HomePage() {
     if (!category) return;
     try {
       setSavingCommunityCategory(true);
+      // Stop any older status/poll request from restoring the deleted card.
+      communityStatusRequestRef.current += 1;
       await deleteCommunityStockCategory(category.id);
       await refreshCommunityStatus();
       if (editingCommunityCategoryId === category.id) resetCommunityCategoryDraft();

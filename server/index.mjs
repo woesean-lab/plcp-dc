@@ -648,17 +648,6 @@ async function loadCommunityStockCategories(config) {
   }));
 }
 
-async function ensureCommunityStockCategories(config) {
-  await pool.query(
-    `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-     SELECT $1, defaults.id, defaults.name, FALSE, defaults.icon_name, defaults.color_key
-     FROM (VALUES ('offline', 'Offline', 'Users', 'emerald'), ('online', 'Online', 'Timer', 'violet')) AS defaults(id, name, icon_name, color_key)
-     WHERE NOT EXISTS (SELECT 1 FROM community_stock_categories WHERE guild_id = $1)
-     ON CONFLICT (guild_id, id) DO NOTHING`,
-    [config.guildId]
-  );
-}
-
 async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuildId) {
   if (!sourceGuildId || !targetGuildId || sourceGuildId === targetGuildId) return;
 
@@ -3863,12 +3852,6 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
          ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
         [encryptedConfig]
       );
-      await client.query(
-        `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-         VALUES ($1, 'offline', 'Offline', FALSE, 'Users', 'emerald'), ($1, 'online', 'Online', FALSE, 'Timer', 'violet')
-         ON CONFLICT (guild_id, id) DO NOTHING`,
-        [candidate.guildId]
-      );
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK");
@@ -4214,7 +4197,6 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       });
     }
 
-    await ensureCommunityStockCategories(config);
     await normalizeCommunityStockRecords(config);
     const [bot, guild, summary, stockCategories, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
