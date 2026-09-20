@@ -3393,7 +3393,15 @@ export default function HomePage() {
                                   <span className="community-guild-copy">
                                     <strong>{guild.name}</strong>
                                     <small>{guild.id}{guild.configured ? " · Configured server" : ""}</small>
-                                    {guild.activeOrderCount > 0 ? <em>{guild.activeOrderCount} active order{guild.activeOrderCount === 1 ? "" : "s"}</em> : null}
+                                    {guild.activeOrderCount > 0 ? (
+                                      <span className="community-guild-order-statuses">
+                                        {guild.activeOrderStatuses.map((item) => (
+                                          <em key={item.status} data-status={item.status.toLowerCase().replace(/\s+/g, "-")}>
+                                            {item.count} active order{item.count === 1 ? "" : "s"} · {item.status}
+                                          </em>
+                                        ))}
+                                      </span>
+                                    ) : null}
                                   </span>
                                 </button>
                               );

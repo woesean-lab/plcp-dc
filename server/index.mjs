@@ -4126,14 +4126,25 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
     const [{ guilds, exact }, activeOrderResult] = await Promise.all([
       loadCommunityBotGuilds(config),
       pool.query(
-        `SELECT payload->>'serverId' AS guild_id, COUNT(*)::int AS active_orders
+        `SELECT payload->>'serverId' AS guild_id,
+                UPPER(COALESCE(payload->>'status', 'PROCESS')) AS order_status,
+                COUNT(*)::int AS active_orders
          FROM tracked_orders
          WHERE payload->>'provider' = 'community'
-           AND UPPER(COALESCE(payload->>'status', '')) IN ('PROCESS', 'WAITING', 'PAUSED', 'RECOVERING', 'INVITES PAUSED')
-         GROUP BY payload->>'serverId'`
+           AND UPPER(COALESCE(payload->>'status', '')) = 'PROCESS'
+         GROUP BY payload->>'serverId', UPPER(COALESCE(payload->>'status', 'PROCESS'))`
       )
     ]);
-    const activeOrdersByGuild = new Map(activeOrderResult.rows.map((row) => [String(row.guild_id ?? ""), Number(row.active_orders ?? 0)]));
+    const activeOrdersByGuild = new Map();
+    for (const row of activeOrderResult.rows) {
+      const guildId = String(row.guild_id ?? "");
+      const status = String(row.order_status ?? "PROCESS");
+      const count = Number(row.active_orders ?? 0);
+      const current = activeOrdersByGuild.get(guildId) ?? { count: 0, statuses: [] };
+      current.count += count;
+      current.statuses.push({ status, count });
+      activeOrdersByGuild.set(guildId, current);
+    }
     res.set("Cache-Control", "no-store").json({
       exact,
       guilds: guilds.map((guild) => {
@@ -4144,7 +4155,8 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
           name: String(guild?.name ?? "Discord server").slice(0, 100),
           iconUrl: icon ? `https://cdn.discordapp.com/icons/${encodeURIComponent(id)}/${encodeURIComponent(icon)}.png?size=64` : null,
           configured: id === config.guildId,
-          activeOrderCount: activeOrdersByGuild.get(id) ?? 0
+          activeOrderCount: activeOrdersByGuild.get(id)?.count ?? 0,
+          activeOrderStatuses: activeOrdersByGuild.get(id)?.statuses ?? []
         };
       }).sort((left, right) => left.name.localeCompare(right.name))
     });

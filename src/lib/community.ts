@@ -116,6 +116,7 @@ export type CommunityBotGuild = {
   iconUrl: string | null;
   configured: boolean;
   activeOrderCount: number;
+  activeOrderStatuses: Array<{ status: string; count: number }>;
 };
 
 export type CommunityGuildLeaveProgress = {

@@ -2974,9 +2974,15 @@
     white-space: nowrap;
   }
 
+  .community-guild-order-statuses {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.3rem;
+  }
+
   .community-guild-copy em {
     display: inline-flex;
-    margin-top: 0.3rem;
     border: 1px solid rgba(251, 191, 36, 0.3);
     border-radius: 999px;
     background: rgba(251, 191, 36, 0.1);
@@ -2987,6 +2993,18 @@
     font-weight: 700;
     letter-spacing: 0.04em;
     text-transform: uppercase;
+  }
+
+  .community-guild-copy em[data-status="process"] {
+    border-color: rgba(96, 165, 250, 0.34);
+    background: rgba(59, 130, 246, 0.12);
+    color: #93c5fd;
+  }
+
+  .community-guild-copy em[data-status="paused"] {
+    border-color: rgba(248, 113, 113, 0.32);
+    background: rgba(239, 68, 68, 0.1);
+    color: #fca5a5;
   }
 
   .community-guild-manager-actions {
