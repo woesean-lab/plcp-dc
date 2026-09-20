@@ -3286,6 +3286,20 @@ export default function HomePage() {
                   Configure the bot used by Members Stock. Its Discord server is detected automatically. Secrets are encrypted and never shown again after saving.
                 </p>
 
+                {communityConfig?.configured ? (
+                  <div className="settings-status-row mt-5">
+                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
+                    <span>
+                      <span className="settings-status-label">Active servers</span>
+                      <strong>
+                        {communityConfig.activeGuildCount === null
+                          ? "Could not sync"
+                          : `${communityConfig.activeGuildCountExact ? "" : "At least "}${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""}`}
+                      </strong>
+                    </span>
+                  </div>
+                ) : null}
+
                 <form onSubmit={handleSaveCommunityConfig} className="mt-6 grid gap-4">
                   <label className="grid gap-2">
                     <span className={fieldLabelClass}>Client ID</span>
@@ -3430,10 +3444,16 @@ export default function HomePage() {
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
-                    <span>
-                      <span className="settings-status-label">Members bot</span>
-                      <strong>{communityConfig?.configured ? "Configured" : "Missing"}</strong>
-                    </span>
+                      <span>
+                        <span className="settings-status-label">Members bot</span>
+                        <strong>
+                          {communityConfig?.configured
+                            ? communityConfig.activeGuildCount === null
+                              ? "Configured"
+                              : `${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""} active servers`
+                            : "Missing"}
+                        </strong>
+                      </span>
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true">

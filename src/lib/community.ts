@@ -97,6 +97,10 @@ export type CommunityConfig = {
   hasClientSecret: boolean;
   hasBotToken: boolean;
   guildName?: string;
+  activeGuildCount: number | null;
+  activeGuildCountExact: boolean;
+  botVerified: boolean;
+  serverLimit: number | null;
 };
 
 export type CommunityConfigInput = {

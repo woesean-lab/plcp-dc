@@ -226,6 +226,7 @@ async function forEachWithConcurrency(values, concurrency, task) {
 
 let communityGuildCache = null;
 let communityBotCache = null;
+let communityBotGuildCountCache = null;
 const communityMemberPresenceCache = new Map();
 
 function fallbackCommunityBot(config) {
@@ -268,12 +269,52 @@ async function loadCommunityBot(config) {
     id,
     name: String(payload?.global_name ?? payload?.username ?? "Members Bot"),
     username: String(payload?.username ?? "Members Bot"),
+    verified: (Number(payload?.public_flags ?? payload?.flags ?? 0) & (1 << 16)) !== 0,
     avatarUrl: avatar
       ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(id)}/${encodeURIComponent(avatar)}.png?size=256`
       : null
   };
   communityBotCache = { clientId: config.clientId, expiresAt: Date.now() + 60_000, value };
   return value;
+}
+
+async function loadCommunityBotGuildCount(config) {
+  if (communityBotGuildCountCache?.clientId === config.clientId && communityBotGuildCountCache.expiresAt > Date.now()) {
+    return communityBotGuildCountCache.value;
+  }
+
+  let count = 0;
+  let after = "";
+  let exact = true;
+  for (let page = 0; page < 25; page += 1) {
+    const endpoint = `users/@me/guilds?limit=200${after ? `&after=${encodeURIComponent(after)}` : ""}`;
+    const { response, payload } = await requestDiscord(endpoint, {
+      headers: { Authorization: `Bot ${config.botToken}` }
+    });
+    if (!response.ok || !Array.isArray(payload)) {
+      const error = new Error("The Members bot server count could not be loaded.");
+      error.statusCode = response.status || 502;
+      throw error;
+    }
+    count += payload.length;
+    if (payload.length < 200) break;
+    const nextAfter = String(payload[payload.length - 1]?.id ?? "");
+    if (!nextAfter || nextAfter === after) break;
+    after = nextAfter;
+    if (page === 24) exact = false;
+  }
+
+  const value = { count, exact };
+  communityBotGuildCountCache = { clientId: config.clientId, expiresAt: Date.now() + 30_000, value };
+  return value;
+}
+
+async function loadCommunityBotGuildCountSafe(config) {
+  try {
+    return await loadCommunityBotGuildCount(config);
+  } catch {
+    return { count: null, exact: false };
+  }
 }
 
 async function loadCommunityBotSafe(config) {
@@ -3848,14 +3889,22 @@ app.use(express.json({ limit: "10mb" }));
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
-    const storedResult = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'community_oauth_config' LIMIT 1");
+    const [storedResult, bot, guildCount] = await Promise.all([
+      pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'community_oauth_config' LIMIT 1"),
+      config.configured ? loadCommunityBotSafe(config) : Promise.resolve(null),
+      config.configured ? loadCommunityBotGuildCountSafe(config) : Promise.resolve({ count: null, exact: false })
+    ]);
     res.set("Cache-Control", "no-store").json({
       configured: config.configured,
       stored: Boolean(storedResult.rowCount),
       clientId: config.clientId,
       guildId: config.guildId,
       hasClientSecret: Boolean(config.clientSecret),
-      hasBotToken: Boolean(config.botToken)
+      hasBotToken: Boolean(config.botToken),
+      activeGuildCount: guildCount.count,
+      activeGuildCountExact: guildCount.exact,
+      botVerified: bot?.verified === true,
+      serverLimit: bot?.verified === true ? null : 100
     });
   } catch (error) {
     next(error);
@@ -3939,6 +3988,11 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
     }
     communityGuildCache = null;
     communityBotCache = null;
+    communityBotGuildCountCache = null;
+    const [bot, guildCount] = await Promise.all([
+      loadCommunityBotSafe(candidate),
+      loadCommunityBotGuildCountSafe(candidate)
+    ]);
     res.json({
       configured: true,
       stored: true,
@@ -3946,7 +4000,11 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       guildId: candidate.guildId,
       hasClientSecret: true,
       hasBotToken: true,
-      guildName: String(guildResult.payload?.name ?? "Discord server")
+      guildName: String(guildResult.payload?.name ?? "Discord server"),
+      activeGuildCount: guildCount.count,
+      activeGuildCountExact: guildCount.exact,
+      botVerified: bot?.verified === true,
+      serverLimit: bot?.verified === true ? null : 100
     });
   } catch (error) {
     next(error);
@@ -3958,6 +4016,7 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
     await pool.query("DELETE FROM app_settings WHERE setting_key = 'community_oauth_config'");
     communityGuildCache = null;
     communityBotCache = null;
+    communityBotGuildCountCache = null;
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -4662,6 +4721,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       config = nextConfig;
       communityGuildCache = null;
       communityBotCache = null;
+      communityBotGuildCountCache = null;
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;
