@@ -3046,6 +3046,10 @@
     font-size: 10px;
   }
 
+  .confirm-modal .community-guild-progress {
+    margin: 1rem 0 0;
+  }
+
   .community-guild-manager-loading {
     display: flex;
     align-items: center;
