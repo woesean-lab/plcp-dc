@@ -2396,14 +2396,12 @@ function normalizeCommunitySpeedProfile(value) {
   return ["safe", "balanced", "fast"].includes(profile) ? profile : "custom";
 }
 
-function normalizeCommunityJoinMethod(value, fallback = "create_invite") {
-  const method = String(value ?? fallback).trim().toLowerCase();
-  return method === "join_application" ? "join_application" : "create_invite";
+function normalizeCommunityJoinMethod() {
+  return "create_invite";
 }
 
-function getCommunityOrderJoinMethod(order) {
-  if (order?.joinMethod) return normalizeCommunityJoinMethod(order.joinMethod);
-  return order?.experimentalJoin === true ? "join_application" : "create_invite";
+function getCommunityOrderJoinMethod() {
+  return "create_invite";
 }
 
 function resetCommunityResultVerification(result, overrides = {}) {
@@ -2662,26 +2660,13 @@ async function runCommunityOrder(order, members, config) {
     try {
       const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
       if (isCommunityMembershipScreeningResponse(joined)) {
-        if (getCommunityOrderJoinMethod(order) === "join_application") {
-          const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
+        if (joined.response.status === 201 && joined.payload?.pending === true) {
           state = "joined";
-          details = pendingJoin.manualVerification
-            ? "Member joined and the Members bot approved Discord member verification automatically."
-            : pendingJoin.autoApproved
-            ? "Member applied and the Members bot approved the join request automatically."
-            : pendingJoin.pendingScreening
-              ? "Member joined the server and is pending Discord's server-rules screening."
-              : "Member joined the server.";
+          details = "Member joined the server and is pending Discord's server-rules screening.";
           added += 1;
         } else {
-          if (joined.response.status === 201 && joined.payload?.pending === true) {
-            state = "joined";
-            details = "Member joined the server and is pending Discord's server-rules screening.";
-            added += 1;
-          } else {
-            state = "blocked";
-            details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
-          }
+          state = "blocked";
+          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
         }
       } else if (joined.response.status === 201) {
         state = "joined";
@@ -2816,24 +2801,12 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
   try {
     const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
     if (isCommunityMembershipScreeningResponse(joined)) {
-      if (normalizeCommunityJoinMethod(joinMethod, "create_invite") === "join_application") {
-        const pendingJoin = await resolveCommunityPendingJoin(config, member.discord_user_id);
+      if (joined.response.status === 201 && joined.payload?.pending === true) {
         state = "joined";
-        details = pendingJoin.manualVerification
-          ? "Replacement member joined and the Members bot approved Discord member verification automatically."
-          : pendingJoin.autoApproved
-          ? "Replacement member applied and the Members bot approved the join request automatically."
-          : pendingJoin.pendingScreening
-            ? "Replacement member joined and is pending Discord's server-rules screening."
-            : "Replacement member joined the server.";
+        details = "Replacement member joined and is pending Discord's server-rules screening.";
       } else {
-        if (joined.response.status === 201 && joined.payload?.pending === true) {
-          state = "joined";
-          details = "Replacement member joined and is pending Discord's server-rules screening.";
-        } else {
-          state = "blocked";
-          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
-        }
+        state = "blocked";
+        details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
       }
     } else if (joined.response.status === 201) {
       state = "joined";
@@ -3659,6 +3632,19 @@ async function initializeDatabase() {
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_order_worker_leases_expires_at_idx ON community_order_worker_leases (expires_at)");
   await pool.query("DELETE FROM community_order_worker_leases WHERE expires_at <= NOW()");
+  await pool.query(`
+    UPDATE tracked_orders
+    SET payload = jsonb_set(
+      jsonb_set(payload, '{joinMethod}', to_jsonb('create_invite'::text), true),
+      '{experimentalJoin}', 'false'::jsonb,
+      true
+    ), updated_at = NOW()
+    WHERE payload->>'provider' = 'community'
+      AND (
+        COALESCE(payload->>'joinMethod', '') <> 'create_invite'
+        OR COALESCE(payload->>'experimentalJoin', 'false') <> 'false'
+      )
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS admin_sessions (
       token_hash TEXT PRIMARY KEY,
@@ -4577,12 +4563,11 @@ app.post("/api/community/members/reorder", requireSession, async (req, res, next
   }
 });
 
-function createCommunityBotInvite(config, guildId, joinMethod = "join_application") {
-  const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod, "join_application");
+function createCommunityBotInvite(config, guildId) {
   const query = new URLSearchParams({
     client_id: config.clientId,
     scope: "bot",
-    permissions: normalizedJoinMethod === "join_application" ? "35" : "1",
+    permissions: "1",
     guild_id: guildId,
     disable_guild_select: "true"
   });
@@ -4606,8 +4591,7 @@ function createCommunityBotGuildAccessError(status, context = {}) {
   return error;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, prepareJoin = true, joinMethod = "join_application" } = {}) {
-  const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod, "join_application");
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false } = {}) {
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
     const error = new Error("Configure the Members bot before creating an order.");
@@ -4645,7 +4629,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
         invite,
         serverInfo,
         waitingForBot: true,
-        botInvite: createCommunityBotInvite(config, serverInfo.guildId, normalizedJoinMethod)
+        botInvite: createCommunityBotInvite(config, serverInfo.guildId)
       };
     }
 
@@ -4694,7 +4678,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
           invite,
           serverInfo,
           waitingForBot: true,
-          botInvite: createCommunityBotInvite(config, serverInfo.guildId, normalizedJoinMethod)
+          botInvite: createCommunityBotInvite(config, serverInfo.guildId)
         };
       }
       throw createCommunityBotGuildAccessError(configuredGuildAccess.status, {
@@ -4711,23 +4695,16 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       invitesPaused: true,
       waitingCode: "discord_guild_invites_limited",
       waitingDetails: "Discord has temporarily limited new member access for this server. Check the server restriction before restarting delivery.",
-      botInvite: createCommunityBotInvite(config, serverInfo.guildId, normalizedJoinMethod)
+      botInvite: createCommunityBotInvite(config, serverInfo.guildId)
     };
-  }
-  if (prepareJoin) {
-    await ensureCommunityApplyToJoin(config, serverInfo.guildId);
-    await loadCommunityGuild(config);
   }
   return { config, invite, serverInfo };
 }
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    const joinMethod = normalizeCommunityJoinMethod(req.query?.joinMethod, "create_invite");
     const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, {
-      allowWaitingForBot: true,
-      prepareJoin: false,
-      joinMethod
+      allowWaitingForBot: true
     });
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
@@ -4768,9 +4745,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
     const { config, serverInfo, waitingForBot, invitesPaused, waitingDetails, waitingCode, botInvite } = await resolveConfiguredCommunityInvite(req.body?.id, {
-      allowWaitingForBot: true,
-      prepareJoin: joinMethod === "join_application",
-      joinMethod
+      allowWaitingForBot: true
     });
     const requestedCategoryId = req.body?.categoryId ?? getCommunityStockTypeFromService(service);
     const rawAllocations = Array.isArray(req.body?.categoryAllocations) ? req.body.categoryAllocations : [];
@@ -4879,7 +4854,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       status: invitesPaused ? "INVITES PAUSED" : waitingForBot ? "WAITING" : "PROCESS",
       waitingCode: invitesPaused ? "discord_guild_invites_limited" : waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot || invitesPaused ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
-      experimentalJoin: joinMethod === "join_application",
+      experimentalJoin: false,
       botApplicationId: config.clientId,
       botInvite,
       communityResults: selectedMembers.map((row) => ({
@@ -4998,7 +4973,6 @@ async function activateWaitingCommunityOrder(order) {
   activateWaitingCommunityOrder.lastChecks.set(order.uniqid, Date.now());
 
   let resolved = null;
-  let resolvedFromStoredGuildAccess = false;
   let storedGuildAccess = null;
   const waitingCode = String(order.waitingCode ?? "");
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
@@ -5013,7 +4987,6 @@ async function activateWaitingCommunityOrder(order) {
       const access = await checkCommunityBotDirectGuildAccess(targetConfig, targetGuildId).catch(() => null);
       storedGuildAccess = access;
       if (access?.accessible) {
-        resolvedFromStoredGuildAccess = true;
         resolved = {
           config: targetConfig,
           invite: extractDiscordInviteCode(order.serverInvite),
@@ -5055,10 +5028,7 @@ async function activateWaitingCommunityOrder(order) {
     return waitingOrder;
   }
   try {
-    resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite, {
-      prepareJoin: joinMethod === "join_application",
-      joinMethod
-    });
+    resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite);
   } catch (error) {
     if (error?.statusCode === 409) {
       const waitingOrder = {
@@ -5072,21 +5042,6 @@ async function activateWaitingCommunityOrder(order) {
       return waitingOrder;
     }
     throw error;
-  }
-
-  if (resolvedFromStoredGuildAccess && !resolved.invitesPaused && joinMethod === "join_application") {
-    try {
-      await ensureCommunityApplyToJoin(resolved.config, resolved.serverInfo.guildId);
-    } catch (error) {
-      const waitingOrder = {
-        ...order,
-        status: "WAITING",
-        waitingCode: "apply_to_join_setup",
-        details: error instanceof Error ? error.message : "Discord Apply to Join could not be enabled yet."
-      };
-      await saveTrackedOrderPayload(waitingOrder);
-      return waitingOrder;
-    }
   }
 
   if (resolved.invitesPaused) {

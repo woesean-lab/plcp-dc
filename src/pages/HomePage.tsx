@@ -2702,17 +2702,6 @@ export default function HomePage() {
                                   <span><strong>Create Invite</strong><small>Bot Invite · Create Invite only</small></span>
                                   {form.communityJoinMethod === "create_invite" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
-                                <button
-                                  type="button"
-                                  role="radio"
-                                  aria-checked={form.communityJoinMethod === "join_application"}
-                                  className={form.communityJoinMethod === "join_application" ? "is-selected" : ""}
-                                  onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "join_application" }))}
-                                >
-                                  <ListChecks className="h-4 w-4" aria-hidden="true" />
-                                  <span><strong>Join Application</strong><small>Apply to Join · permissions 35</small></span>
-                                  {form.communityJoinMethod === "join_application" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-                                </button>
                               </div>
                             </div>
 
@@ -3633,7 +3622,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
-                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "join_application" ? "Join Application" : "Create Invite"}</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />Create Invite</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>
