@@ -110,6 +110,13 @@ export type CommunityConfigInput = {
   guildId: string;
 };
 
+export type CommunityBotGuild = {
+  id: string;
+  name: string;
+  iconUrl: string | null;
+  configured: boolean;
+};
+
 export type CommunityOAuthImportResult = {
   total: number;
   imported: number;
@@ -210,6 +217,23 @@ export async function clearCommunityConfig() {
     const payload = (await response.json().catch(() => ({}))) as { message?: string };
     throw new Error(payload.message ?? `Request failed with ${response.status}`);
   }
+}
+
+export function getCommunityBotGuilds() {
+  return fetch("/api/community/bot/guilds", {
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ exact: boolean; guilds: CommunityBotGuild[] }>);
+}
+
+export function leaveCommunityBotGuilds(guildIds: string[]) {
+  return fetch("/api/community/bot/leave-guilds", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ guildIds, confirmation: "LEAVE SELECTED" })
+  }).then(parseResponse<{ requested: number; left: number; alreadyLeft: number; failed: number }>);
 }
 
 export function importCommunityOAuthStock(records: unknown[], categoryId: CommunityStockType) {

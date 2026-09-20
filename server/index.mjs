@@ -278,12 +278,12 @@ async function loadCommunityBot(config) {
   return value;
 }
 
-async function loadCommunityBotGuildCount(config) {
+async function loadCommunityBotGuilds(config) {
   if (communityBotGuildCountCache?.clientId === config.clientId && communityBotGuildCountCache.expiresAt > Date.now()) {
     return communityBotGuildCountCache.value;
   }
 
-  let count = 0;
+  const guilds = [];
   let after = "";
   let exact = true;
   for (let page = 0; page < 25; page += 1) {
@@ -296,7 +296,7 @@ async function loadCommunityBotGuildCount(config) {
       error.statusCode = response.status || 502;
       throw error;
     }
-    count += payload.length;
+    guilds.push(...payload);
     if (payload.length < 200) break;
     const nextAfter = String(payload[payload.length - 1]?.id ?? "");
     if (!nextAfter || nextAfter === after) break;
@@ -304,9 +304,14 @@ async function loadCommunityBotGuildCount(config) {
     if (page === 24) exact = false;
   }
 
-  const value = { count, exact };
+  const value = { guilds, count: guilds.length, exact };
   communityBotGuildCountCache = { clientId: config.clientId, expiresAt: Date.now() + 30_000, value };
   return value;
+}
+
+async function loadCommunityBotGuildCount(config) {
+  const { count, exact } = await loadCommunityBotGuilds(config);
+  return { count, exact };
 }
 
 async function loadCommunityBotGuildCountSafe(config) {
@@ -315,6 +320,46 @@ async function loadCommunityBotGuildCountSafe(config) {
   } catch {
     return { count: null, exact: false };
   }
+}
+
+async function leaveCommunityBotGuilds(config, guilds) {
+  const result = { requested: guilds.length, left: 0, alreadyLeft: 0, failed: 0, errors: [] };
+  await forEachWithConcurrency(guilds, 2, async (guild) => {
+    const guildId = String(guild?.id ?? "");
+    if (!isDiscordGuildId(guildId)) return;
+    try {
+      let leaveResult = null;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        leaveResult = await requestDiscord(`users/@me/guilds/${encodeURIComponent(guildId)}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bot ${config.botToken}` }
+        });
+        if (leaveResult.response.status !== 429) break;
+        const retrySeconds = Math.min(Math.max(Number(leaveResult.payload?.retry_after) || 1, 1), 10);
+        await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+      }
+      if (leaveResult?.response.status === 204) {
+        result.left += 1;
+        return;
+      }
+      if (leaveResult?.response.status === 404) {
+        result.alreadyLeft += 1;
+        return;
+      }
+      result.failed += 1;
+      if (result.errors.length < 10) {
+        result.errors.push({ guildId, guildName: String(guild?.name ?? "Discord server").slice(0, 100), status: Number(leaveResult?.response?.status ?? 0) });
+      }
+    } catch {
+      result.failed += 1;
+      if (result.errors.length < 10) {
+        result.errors.push({ guildId, guildName: String(guild?.name ?? "Discord server").slice(0, 100), status: 0 });
+      }
+    }
+  });
+  communityGuildCache = null;
+  communityBotGuildCountCache = null;
+  return result;
 }
 
 async function loadCommunityBotSafe(config) {
@@ -4019,6 +4064,83 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
     communityBotGuildCountCache = null;
     res.status(204).end();
   } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/bot/leave-all-guilds", requireSession, async (req, res, next) => {
+  try {
+    if (String(req.body?.confirmation ?? "") !== "LEAVE ALL") {
+      return res.status(400).json({ message: "Type LEAVE ALL to confirm removing the bot from every server." });
+    }
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
+    }
+
+    communityBotGuildCountCache = null;
+    const { guilds, exact } = await loadCommunityBotGuilds(config);
+    if (!exact) {
+      return res.status(409).json({ message: "The complete server list could not be loaded safely. No servers were changed." });
+    }
+
+    const result = await leaveCommunityBotGuilds(config, guilds);
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    communityBotGuildCountCache = null;
+    next(error);
+  }
+});
+
+app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
+    communityBotGuildCountCache = null;
+    const { guilds, exact } = await loadCommunityBotGuilds(config);
+    res.set("Cache-Control", "no-store").json({
+      exact,
+      guilds: guilds.map((guild) => {
+        const id = String(guild?.id ?? "");
+        const icon = String(guild?.icon ?? "");
+        return {
+          id,
+          name: String(guild?.name ?? "Discord server").slice(0, 100),
+          iconUrl: icon ? `https://cdn.discordapp.com/icons/${encodeURIComponent(id)}/${encodeURIComponent(icon)}.png?size=64` : null,
+          configured: id === config.guildId
+        };
+      }).sort((left, right) => left.name.localeCompare(right.name))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/bot/leave-guilds", requireSession, async (req, res, next) => {
+  try {
+    if (String(req.body?.confirmation ?? "") !== "LEAVE SELECTED") {
+      return res.status(400).json({ message: "Confirm the selected server removal before continuing." });
+    }
+    const requestedIds = Array.from(new Set(
+      (Array.isArray(req.body?.guildIds) ? req.body.guildIds : []).map((value) => String(value ?? "").trim()).filter(isDiscordGuildId)
+    ));
+    if (!requestedIds.length || requestedIds.length > 200) {
+      return res.status(400).json({ message: "Select between 1 and 200 servers." });
+    }
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
+    communityBotGuildCountCache = null;
+    const { guilds, exact } = await loadCommunityBotGuilds(config);
+    if (!exact) return res.status(409).json({ message: "The complete server list could not be loaded safely. No servers were changed." });
+    const requestedSet = new Set(requestedIds);
+    const selectedGuilds = guilds.filter((guild) => requestedSet.has(String(guild?.id ?? "")));
+    if (selectedGuilds.length !== requestedIds.length) {
+      return res.status(409).json({ message: "One or more selected servers are no longer connected. Refresh the list and try again." });
+    }
+    const result = await leaveCommunityBotGuilds(config, selectedGuilds);
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    communityBotGuildCountCache = null;
     next(error);
   }
 });

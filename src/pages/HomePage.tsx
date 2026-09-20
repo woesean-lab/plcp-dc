@@ -28,6 +28,7 @@ import {
   KeyRound,
   ListChecks,
   LoaderCircle,
+  LogOut,
   Minus,
   Plus,
   RefreshCw,
@@ -56,8 +57,10 @@ import {
   deleteCommunityStockCategory,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
+  getCommunityBotGuilds,
   getCommunityConfig,
   importCommunityOAuthStock,
+  leaveCommunityBotGuilds,
   removeCommunityAuthorization,
   removeCommunityAuthorizations,
   reorderCommunityAuthorizations,
@@ -66,6 +69,7 @@ import {
   transferCommunityAuthorizations,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
+  type CommunityBotGuild,
   type CommunityCategoryColorKey,
   type CommunityConfig,
   type CommunityStockCategory,
@@ -624,6 +628,11 @@ export default function HomePage() {
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
+  const [leavingCommunityGuilds, setLeavingCommunityGuilds] = useState(false);
+  const [showCommunityGuildManager, setShowCommunityGuildManager] = useState(false);
+  const [loadingCommunityGuilds, setLoadingCommunityGuilds] = useState(false);
+  const [communityGuilds, setCommunityGuilds] = useState<CommunityBotGuild[]>([]);
+  const [selectedCommunityGuildIds, setSelectedCommunityGuildIds] = useState<Record<string, boolean>>({});
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
   const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
@@ -1208,6 +1217,46 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Members bot settings could not be removed.");
     } finally {
       setSavingCommunityConfig(false);
+    }
+  }
+
+  async function loadCommunityGuildList() {
+    try {
+      setLoadingCommunityGuilds(true);
+      const result = await getCommunityBotGuilds();
+      setCommunityGuilds(result.guilds);
+      setSelectedCommunityGuildIds((current) => Object.fromEntries(result.guilds.filter((guild) => current[guild.id]).map((guild) => [guild.id, true])));
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "The Members bot server list could not be loaded.");
+    } finally {
+      setLoadingCommunityGuilds(false);
+    }
+  }
+
+  async function toggleCommunityGuildManager() {
+    const opening = !showCommunityGuildManager;
+    setShowCommunityGuildManager(opening);
+    if (opening) await loadCommunityGuildList();
+  }
+
+  async function handleLeaveSelectedCommunityGuilds() {
+    const guildIds = communityGuilds.filter((guild) => selectedCommunityGuildIds[guild.id]).map((guild) => guild.id);
+    if (leavingCommunityGuilds || !guildIds.length) return;
+    const includesConfigured = communityGuilds.some((guild) => guild.configured && selectedCommunityGuildIds[guild.id]);
+    const confirmed = window.confirm(
+      `Remove the Members bot from ${guildIds.length} selected server${guildIds.length === 1 ? "" : "s"}? Active deliveries, checks, and replacements there will stop.${includesConfigured ? " The currently configured Members Stock server is selected." : ""}`
+    );
+    if (!confirmed) return;
+    try {
+      setLeavingCommunityGuilds(true);
+      const result = await leaveCommunityBotGuilds(guildIds);
+      setSelectedCommunityGuildIds({});
+      await Promise.all([loadCommunityConfiguration(), loadCommunityGuildList()]);
+      notifySuccess(`${result.left} server${result.left === 1 ? "" : "s"} left${result.failed ? `; ${result.failed} failed` : ""}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "The Members bot could not leave its servers.");
+    } finally {
+      setLeavingCommunityGuilds(false);
     }
   }
 
@@ -3287,16 +3336,58 @@ export default function HomePage() {
                 </p>
 
                 {communityConfig?.configured ? (
-                  <div className="settings-status-row mt-5">
-                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
-                    <span>
-                      <span className="settings-status-label">Active servers</span>
-                      <strong>
-                        {communityConfig.activeGuildCount === null
-                          ? "Could not sync"
-                          : `${communityConfig.activeGuildCountExact ? "" : "At least "}${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""}`}
-                      </strong>
-                    </span>
+                  <div className="mt-5 grid gap-3">
+                    <div className="settings-status-row">
+                      <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
+                      <span>
+                        <span className="settings-status-label">Active servers</span>
+                        <strong>
+                          {communityConfig.activeGuildCount === null
+                            ? "Could not sync"
+                            : `${communityConfig.activeGuildCountExact ? "" : "At least "}${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""}`}
+                        </strong>
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button type="button" size="sm" variant="secondary" disabled={leavingCommunityGuilds || !communityConfig.activeGuildCount} onClick={() => void toggleCommunityGuildManager()}>
+                        <Settings2 className="h-4 w-4" />
+                        {showCommunityGuildManager ? "Close server list" : "Manage servers"}
+                      </Button>
+                    </div>
+                    {showCommunityGuildManager ? (
+                      <div className="community-guild-manager">
+                        <div className="community-guild-manager-head">
+                          <span><strong>Connected servers</strong><small>Select the servers the bot should leave.</small></span>
+                          <span>
+                            <Button type="button" size="xs" variant="secondary" disabled={loadingCommunityGuilds || !communityGuilds.length} onClick={() => setSelectedCommunityGuildIds(Object.fromEntries(communityGuilds.map((guild) => [guild.id, true])))}>Select all</Button>
+                            <Button type="button" size="xs" variant="ghost" disabled={loadingCommunityGuilds} onClick={() => setSelectedCommunityGuildIds({})}>Clear</Button>
+                          </span>
+                        </div>
+                        {loadingCommunityGuilds ? (
+                          <div className="community-guild-manager-loading"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading servers...</div>
+                        ) : (
+                          <div className="community-guild-list">
+                            {communityGuilds.map((guild) => {
+                              const selected = selectedCommunityGuildIds[guild.id] === true;
+                              return (
+                                <button key={guild.id} type="button" className="community-guild-row" data-selected={selected ? "true" : "false"} role="checkbox" aria-checked={selected} onClick={() => setSelectedCommunityGuildIds((current) => ({ ...current, [guild.id]: !selected }))}>
+                                  <span className="community-guild-check">{selected ? <Check className="h-3.5 w-3.5" /> : null}</span>
+                                  <span className="community-guild-avatar">{guild.iconUrl ? <img src={guild.iconUrl} alt="" /> : <Globe2 className="h-4 w-4" />}</span>
+                                  <span className="community-guild-copy"><strong>{guild.name}</strong><small>{guild.id}{guild.configured ? " · Configured server" : ""}</small></span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                        <div className="community-guild-manager-actions">
+                          <span>{Object.values(selectedCommunityGuildIds).filter(Boolean).length} selected</span>
+                          <Button type="button" size="sm" variant="destructive" disabled={leavingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => void handleLeaveSelectedCommunityGuilds()}>
+                            {leavingCommunityGuilds ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                            {leavingCommunityGuilds ? "Leaving..." : "Leave selected"}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
 

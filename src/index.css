@@ -2857,6 +2857,143 @@
     color: var(--app-subtle);
   }
 
+  .community-guild-manager {
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: var(--app-radius-md);
+    background: var(--app-surface-soft);
+  }
+
+  .community-guild-manager-head,
+  .community-guild-manager-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.85rem;
+  }
+
+  .community-guild-manager-head {
+    border-bottom: 1px solid var(--app-border);
+  }
+
+  .community-guild-manager-head > span,
+  .community-guild-copy {
+    min-width: 0;
+  }
+
+  .community-guild-manager-head > span:last-child {
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .community-guild-manager-head strong,
+  .community-guild-copy strong {
+    display: block;
+    color: var(--app-text);
+    font-size: 12px;
+  }
+
+  .community-guild-manager-head small,
+  .community-guild-copy small,
+  .community-guild-manager-actions > span {
+    display: block;
+    margin-top: 0.15rem;
+    color: var(--app-text-muted);
+    font-size: 10px;
+  }
+
+  .community-guild-list {
+    display: grid;
+    max-height: 320px;
+    overflow-y: auto;
+    padding: 0.45rem;
+  }
+
+  .community-guild-row {
+    display: grid;
+    grid-template-columns: 18px 32px minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    width: 100%;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 0.55rem 0.65rem;
+    text-align: left;
+    transition: border-color 160ms ease, background 160ms ease;
+  }
+
+  .community-guild-row:hover {
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .community-guild-row[data-selected="true"] {
+    border-color: var(--app-accent-border);
+    background: var(--app-accent-soft);
+  }
+
+  .community-guild-check {
+    display: grid;
+    width: 18px;
+    height: 18px;
+    place-items: center;
+    border: 1px solid var(--app-border-strong);
+    border-radius: 5px;
+    color: var(--app-text);
+  }
+
+  .community-guild-row[data-selected="true"] .community-guild-check {
+    border-color: var(--app-accent);
+    background: var(--app-accent);
+    color: #080711;
+  }
+
+  .community-guild-avatar {
+    display: grid;
+    width: 32px;
+    height: 32px;
+    place-items: center;
+    overflow: hidden;
+    border: 1px solid var(--app-border);
+    border-radius: 10px;
+    background: var(--app-surface);
+    color: var(--app-text-muted);
+  }
+
+  .community-guild-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .community-guild-copy strong,
+  .community-guild-copy small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .community-guild-manager-actions {
+    border-top: 1px solid var(--app-border);
+  }
+
+  .community-guild-manager-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 90px;
+    color: var(--app-text-muted);
+    font-size: 12px;
+  }
+
+  @media (max-width: 560px) {
+    .community-guild-manager-head {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+  }
+
   .tracked-order-sorting {
     font-size: 10px;
     font-weight: 650;
