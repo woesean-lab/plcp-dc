@@ -115,6 +115,16 @@ export type CommunityBotGuild = {
   name: string;
   iconUrl: string | null;
   configured: boolean;
+  activeOrderCount: number;
+};
+
+export type CommunityGuildLeaveProgress = {
+  active: boolean;
+  total: number;
+  completed: number;
+  currentGuilds: Array<{ id: string; name: string }>;
+  startedAt: string | null;
+  finishedAt: string | null;
 };
 
 export type CommunityOAuthImportResult = {
@@ -234,6 +244,13 @@ export function leaveCommunityBotGuilds(guildIds: string[]) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ guildIds, confirmation: "LEAVE SELECTED" })
   }).then(parseResponse<{ requested: number; left: number; alreadyLeft: number; failed: number }>);
+}
+
+export function getCommunityGuildLeaveProgress() {
+  return fetch("/api/community/bot/leave-progress", {
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<CommunityGuildLeaveProgress>);
 }
 
 export function importCommunityOAuthStock(records: unknown[], categoryId: CommunityStockType) {

@@ -59,6 +59,7 @@ import {
   getCommunityAdminStatus,
   getCommunityBotGuilds,
   getCommunityConfig,
+  getCommunityGuildLeaveProgress,
   importCommunityOAuthStock,
   leaveCommunityBotGuilds,
   removeCommunityAuthorization,
@@ -72,6 +73,7 @@ import {
   type CommunityBotGuild,
   type CommunityCategoryColorKey,
   type CommunityConfig,
+  type CommunityGuildLeaveProgress,
   type CommunityStockCategory,
   type CommunityStockType
 } from "../lib/community";
@@ -633,6 +635,7 @@ export default function HomePage() {
   const [loadingCommunityGuilds, setLoadingCommunityGuilds] = useState(false);
   const [communityGuilds, setCommunityGuilds] = useState<CommunityBotGuild[]>([]);
   const [selectedCommunityGuildIds, setSelectedCommunityGuildIds] = useState<Record<string, boolean>>({});
+  const [communityGuildLeaveProgress, setCommunityGuildLeaveProgress] = useState<CommunityGuildLeaveProgress | null>(null);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
   const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
@@ -1243,13 +1246,27 @@ export default function HomePage() {
     const guildIds = communityGuilds.filter((guild) => selectedCommunityGuildIds[guild.id]).map((guild) => guild.id);
     if (leavingCommunityGuilds || !guildIds.length) return;
     const includesConfigured = communityGuilds.some((guild) => guild.configured && selectedCommunityGuildIds[guild.id]);
+    const activeOrderCount = communityGuilds
+      .filter((guild) => selectedCommunityGuildIds[guild.id])
+      .reduce((total, guild) => total + guild.activeOrderCount, 0);
     const confirmed = window.confirm(
-      `Remove the Members bot from ${guildIds.length} selected server${guildIds.length === 1 ? "" : "s"}? Active deliveries, checks, and replacements there will stop.${includesConfigured ? " The currently configured Members Stock server is selected." : ""}`
+      `Remove the Members bot from ${guildIds.length} selected server${guildIds.length === 1 ? "" : "s"}? Active deliveries, checks, and replacements there will stop.${activeOrderCount ? ` Warning: the selection contains ${activeOrderCount} active order${activeOrderCount === 1 ? "" : "s"}.` : ""}${includesConfigured ? " The currently configured Members Stock server is selected." : ""}`
     );
     if (!confirmed) return;
     try {
       setLeavingCommunityGuilds(true);
-      const result = await leaveCommunityBotGuilds(guildIds);
+      setCommunityGuildLeaveProgress({ active: true, total: guildIds.length, completed: 0, currentGuilds: [], startedAt: new Date().toISOString(), finishedAt: null });
+      const progressTimer = window.setInterval(() => {
+        void getCommunityGuildLeaveProgress().then(setCommunityGuildLeaveProgress).catch(() => {});
+      }, 400);
+      let result;
+      try {
+        result = await leaveCommunityBotGuilds(guildIds);
+        const finalProgress = await getCommunityGuildLeaveProgress().catch(() => null);
+        if (finalProgress) setCommunityGuildLeaveProgress(finalProgress);
+      } finally {
+        window.clearInterval(progressTimer);
+      }
       setSelectedCommunityGuildIds({});
       await Promise.all([loadCommunityConfiguration(), loadCommunityGuildList()]);
       notifySuccess(`${result.left} server${result.left === 1 ? "" : "s"} left${result.failed ? `; ${result.failed} failed` : ""}.`);
@@ -3360,7 +3377,7 @@ export default function HomePage() {
                           <span><strong>Connected servers</strong><small>Select the servers the bot should leave.</small></span>
                           <span>
                             <Button type="button" size="xs" variant="secondary" disabled={loadingCommunityGuilds || !communityGuilds.length} onClick={() => setSelectedCommunityGuildIds(Object.fromEntries(communityGuilds.map((guild) => [guild.id, true])))}>Select all</Button>
-                            <Button type="button" size="xs" variant="ghost" disabled={loadingCommunityGuilds} onClick={() => setSelectedCommunityGuildIds({})}>Clear</Button>
+                            <Button type="button" size="xs" variant="destructive" disabled={loadingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => setSelectedCommunityGuildIds({})}>Clear</Button>
                           </span>
                         </div>
                         {loadingCommunityGuilds ? (
@@ -3373,12 +3390,29 @@ export default function HomePage() {
                                 <button key={guild.id} type="button" className="community-guild-row" data-selected={selected ? "true" : "false"} role="checkbox" aria-checked={selected} onClick={() => setSelectedCommunityGuildIds((current) => ({ ...current, [guild.id]: !selected }))}>
                                   <span className="community-guild-check">{selected ? <Check className="h-3.5 w-3.5" /> : null}</span>
                                   <span className="community-guild-avatar">{guild.iconUrl ? <img src={guild.iconUrl} alt="" /> : <Globe2 className="h-4 w-4" />}</span>
-                                  <span className="community-guild-copy"><strong>{guild.name}</strong><small>{guild.id}{guild.configured ? " · Configured server" : ""}</small></span>
+                                  <span className="community-guild-copy">
+                                    <strong>{guild.name}</strong>
+                                    <small>{guild.id}{guild.configured ? " · Configured server" : ""}</small>
+                                    {guild.activeOrderCount > 0 ? <em>{guild.activeOrderCount} active order{guild.activeOrderCount === 1 ? "" : "s"}</em> : null}
+                                  </span>
                                 </button>
                               );
                             })}
                           </div>
                         )}
+                        {communityGuildLeaveProgress?.active ? (
+                          <div className="community-guild-progress" role="status" aria-live="polite">
+                            <LoaderCircle className="h-4 w-4 animate-spin" />
+                            <span>
+                              <strong>Removing servers · {communityGuildLeaveProgress.completed}/{communityGuildLeaveProgress.total}</strong>
+                              <small>
+                                {communityGuildLeaveProgress.currentGuilds.length
+                                  ? `Processing: ${communityGuildLeaveProgress.currentGuilds.map((guild) => guild.name).join(", ")}`
+                                  : "Preparing the next server..."}
+                              </small>
+                            </span>
+                          </div>
+                        ) : null}
                         <div className="community-guild-manager-actions">
                           <span>{Object.values(selectedCommunityGuildIds).filter(Boolean).length} selected</span>
                           <Button type="button" size="sm" variant="destructive" disabled={leavingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => void handleLeaveSelectedCommunityGuilds()}>

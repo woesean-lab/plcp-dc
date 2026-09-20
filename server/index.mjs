@@ -227,6 +227,7 @@ async function forEachWithConcurrency(values, concurrency, task) {
 let communityGuildCache = null;
 let communityBotCache = null;
 let communityBotGuildCountCache = null;
+let communityGuildLeaveProgress = { active: false, total: 0, completed: 0, currentGuilds: [], startedAt: null, finishedAt: null };
 const communityMemberPresenceCache = new Map();
 
 function fallbackCommunityBot(config) {
@@ -323,10 +324,25 @@ async function loadCommunityBotGuildCountSafe(config) {
 }
 
 async function leaveCommunityBotGuilds(config, guilds) {
+  if (communityGuildLeaveProgress.active) {
+    const error = new Error("A server removal operation is already running.");
+    error.statusCode = 409;
+    throw error;
+  }
+  communityGuildLeaveProgress = {
+    active: true,
+    total: guilds.length,
+    completed: 0,
+    currentGuilds: [],
+    startedAt: new Date().toISOString(),
+    finishedAt: null
+  };
   const result = { requested: guilds.length, left: 0, alreadyLeft: 0, failed: 0, errors: [] };
   await forEachWithConcurrency(guilds, 2, async (guild) => {
     const guildId = String(guild?.id ?? "");
     if (!isDiscordGuildId(guildId)) return;
+    const currentGuild = { id: guildId, name: String(guild?.name ?? "Discord server").slice(0, 100) };
+    communityGuildLeaveProgress.currentGuilds = [...communityGuildLeaveProgress.currentGuilds, currentGuild];
     try {
       let leaveResult = null;
       for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -355,8 +371,18 @@ async function leaveCommunityBotGuilds(config, guilds) {
       if (result.errors.length < 10) {
         result.errors.push({ guildId, guildName: String(guild?.name ?? "Discord server").slice(0, 100), status: 0 });
       }
+    } finally {
+      communityGuildLeaveProgress.completed += 1;
+      communityGuildLeaveProgress.currentGuilds = communityGuildLeaveProgress.currentGuilds.filter((item) => item.id !== guildId);
     }
   });
+  communityGuildLeaveProgress = {
+    ...communityGuildLeaveProgress,
+    active: false,
+    completed: guilds.length,
+    currentGuilds: [],
+    finishedAt: new Date().toISOString()
+  };
   communityGuildCache = null;
   communityBotGuildCountCache = null;
   return result;
@@ -4097,7 +4123,17 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
     const config = await getCommunityOAuthConfig();
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
     communityBotGuildCountCache = null;
-    const { guilds, exact } = await loadCommunityBotGuilds(config);
+    const [{ guilds, exact }, activeOrderResult] = await Promise.all([
+      loadCommunityBotGuilds(config),
+      pool.query(
+        `SELECT payload->>'serverId' AS guild_id, COUNT(*)::int AS active_orders
+         FROM tracked_orders
+         WHERE payload->>'provider' = 'community'
+           AND UPPER(COALESCE(payload->>'status', '')) IN ('PROCESS', 'WAITING', 'PAUSED', 'RECOVERING', 'INVITES PAUSED')
+         GROUP BY payload->>'serverId'`
+      )
+    ]);
+    const activeOrdersByGuild = new Map(activeOrderResult.rows.map((row) => [String(row.guild_id ?? ""), Number(row.active_orders ?? 0)]));
     res.set("Cache-Control", "no-store").json({
       exact,
       guilds: guilds.map((guild) => {
@@ -4107,13 +4143,18 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
           id,
           name: String(guild?.name ?? "Discord server").slice(0, 100),
           iconUrl: icon ? `https://cdn.discordapp.com/icons/${encodeURIComponent(id)}/${encodeURIComponent(icon)}.png?size=64` : null,
-          configured: id === config.guildId
+          configured: id === config.guildId,
+          activeOrderCount: activeOrdersByGuild.get(id) ?? 0
         };
       }).sort((left, right) => left.name.localeCompare(right.name))
     });
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/community/bot/leave-progress", requireSession, (_req, res) => {
+  res.set("Cache-Control", "no-store").json(communityGuildLeaveProgress);
 });
 
 app.post("/api/community/bot/leave-guilds", requireSession, async (req, res, next) => {
