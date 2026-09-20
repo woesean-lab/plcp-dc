@@ -636,8 +636,13 @@ async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
       `SELECT id, name, is_periodic, icon_name, color_key, created_at, updated_at
-       FROM community_stock_categories
+       FROM community_stock_categories AS category
        WHERE guild_id = $1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM community_stock_category_tombstones AS tombstone
+           WHERE tombstone.id = category.id
+         )
        ORDER BY created_at ASC, name ASC`,
       [config.guildId]
     ),
@@ -662,8 +667,13 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
     `INSERT INTO community_stock_categories
        (guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at)
      SELECT $2, id, name, is_periodic, icon_name, color_key, created_at, NOW()
-     FROM community_stock_categories
+     FROM community_stock_categories AS category
      WHERE guild_id = $1
+       AND NOT EXISTS (
+         SELECT 1
+         FROM community_stock_category_tombstones AS tombstone
+         WHERE tombstone.id = category.id
+       )
      ON CONFLICT (guild_id, id) DO NOTHING`,
     [sourceGuildId, targetGuildId]
   );
@@ -680,6 +690,11 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
             stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
      WHERE guild_id = $1
+       AND NOT EXISTS (
+         SELECT 1
+         FROM community_stock_category_tombstones AS tombstone
+         WHERE tombstone.id = community_oauth_joins.stock_type
+       )
      ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
        username = EXCLUDED.username,
        display_name = EXCLUDED.display_name,
@@ -2391,6 +2406,16 @@ function getCommunityOrderJoinMethod(order) {
   return order?.experimentalJoin === true ? "join_application" : "create_invite";
 }
 
+function resetCommunityResultVerification(result, overrides = {}) {
+  const next = { ...result };
+  delete next.authorizationStatus;
+  delete next.authorizationDetails;
+  delete next.authorizationCheckedAt;
+  delete next.membershipStatus;
+  delete next.membershipDetails;
+  return { ...next, ...overrides };
+}
+
 function getCommunityBotUnavailableStatus(result) {
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
@@ -2621,7 +2646,13 @@ async function runCommunityOrder(order, members, config) {
       resultIndex = results.length;
       results.push({ discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "queued", details: "Waiting for delivery." });
     }
-    results[resultIndex] = { ...results[resultIndex], discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, state: "joining", details: "Discord membership request is running." };
+    results[resultIndex] = resetCommunityResultVerification(results[resultIndex], {
+      discordUserId: member.discord_user_id,
+      username: member.username,
+      avatarUrl: member.avatar_url ?? null,
+      state: "joining",
+      details: "Discord membership request is running."
+    });
     if (!await saveCommunityProgress({ ...order, added, status: "PROCESS", details: `${added}/${order.amount} members delivered.`, communityResults: results })) return;
 
     let state = "failed";
@@ -2701,8 +2732,7 @@ async function runCommunityOrder(order, members, config) {
     }
     const memberFailed = state === "failed";
     const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
-    results[resultIndex] = {
-      ...results[resultIndex],
+    results[resultIndex] = resetCommunityResultVerification(results[resultIndex], {
       discordUserId: member.discord_user_id,
       username: member.username,
       avatarUrl: member.avatar_url ?? null,
@@ -2714,7 +2744,7 @@ async function runCommunityOrder(order, members, config) {
         authorizationDetails: "Discord reported that this member account cannot authorize delivery, so it was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
-    };
+    });
     await pool.query(
       `UPDATE community_oauth_joins
        SET reserved_order_id = NULL,
@@ -2899,8 +2929,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         expiresAt: Date.now() + 60_000
       });
     }
-    results[resultIndex] = {
-      ...current,
+    results[resultIndex] = resetCommunityResultVerification(current, {
       state,
       details,
       completedAt: new Date().toISOString(),
@@ -2909,7 +2938,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         authorizationDetails: "Discord reported that this replacement account cannot authorize delivery, so it was disabled in Members Stock.",
         authorizationCheckedAt: new Date().toISOString()
       } : {})
-    };
+    });
     const added = results.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
     const amount = Number(order.amount) || results.length;
     const deliveryStillActive = results.some((item) => ["queued", "joining", "replacing"].includes(String(item?.state ?? "").toLowerCase()));
@@ -3647,6 +3676,12 @@ async function initializeDatabase() {
   `);
   await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_stock_category_tombstones (
+      id TEXT PRIMARY KEY,
+      deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS community_stock_categories (
       guild_id TEXT NOT NULL,
       id TEXT NOT NULL,
@@ -3742,28 +3777,6 @@ async function initializeDatabase() {
         SELECT 1 FROM community_stock_categories AS legacy
         WHERE legacy.guild_id = stock.guild_id AND legacy.id = 'online'
       )
-  `);
-  await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-    SELECT DISTINCT stock.guild_id, 'offline', 'Offline', FALSE, 'Users', 'emerald'
-    FROM community_oauth_joins AS stock
-    WHERE stock.stock_type = 'offline'
-      AND NOT EXISTS (
-        SELECT 1 FROM community_stock_categories AS category
-        WHERE category.guild_id = stock.guild_id AND category.id = 'offline'
-      )
-    ON CONFLICT (guild_id, id) DO NOTHING
-  `);
-  await pool.query(`
-    INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-    SELECT DISTINCT stock.guild_id, 'online', 'Online', FALSE, 'Timer', 'violet'
-    FROM community_oauth_joins AS stock
-    WHERE stock.stock_type = 'online'
-      AND NOT EXISTS (
-        SELECT 1 FROM community_stock_categories AS category
-        WHERE category.guild_id = stock.guild_id AND category.id = 'online'
-      )
-    ON CONFLICT (guild_id, id) DO NOTHING
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_status_idx ON community_oauth_joins (guild_id, status)");
   await pool.query("CREATE INDEX IF NOT EXISTS community_oauth_joins_guild_type_status_idx ON community_oauth_joins (guild_id, stock_type, status)");
@@ -4009,10 +4022,20 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const updated = await pool.query(
-      `UPDATE community_stock_categories
-       SET name = $3, is_periodic = $4, icon_name = $5, color_key = $6, updated_at = NOW()
-       WHERE guild_id = $1 AND id = $2
-       RETURNING id, name, is_periodic, icon_name, color_key, created_at, updated_at`,
+      `WITH updated AS (
+         UPDATE community_stock_categories
+         SET name = $3, is_periodic = $4, icon_name = $5, color_key = $6, updated_at = NOW()
+         WHERE id = $2
+           AND NOT EXISTS (
+             SELECT 1
+             FROM community_stock_category_tombstones AS tombstone
+             WHERE tombstone.id = community_stock_categories.id
+           )
+         RETURNING guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at
+       )
+       SELECT id, name, is_periodic, icon_name, color_key, created_at, updated_at
+       FROM updated
+       WHERE guild_id = $1`,
       [config.guildId, categoryId, name, isPeriodic, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
@@ -4032,6 +4055,14 @@ app.delete("/api/community/categories/:categoryId", requireSession, async (req, 
     const categoryId = parseCommunityCategoryId(req.params.categoryId);
     if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
     await client.query("BEGIN");
+    const category = await client.query(
+      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = $2 FOR UPDATE",
+      [config.guildId, categoryId]
+    );
+    if (!category.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Category not found." });
+    }
     const stock = await client.query(
       "SELECT COUNT(*)::int AS count FROM community_oauth_joins WHERE guild_id = $1 AND stock_type = $2",
       [config.guildId, categoryId]
@@ -4040,12 +4071,14 @@ app.delete("/api/community/categories/:categoryId", requireSession, async (req, 
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "Remove or move this category's stock before deleting it." });
     }
-    const removed = await client.query(
-      "DELETE FROM community_stock_categories WHERE guild_id = $1 AND id = $2 RETURNING id",
-      [config.guildId, categoryId]
+    await client.query(
+      `INSERT INTO community_stock_category_tombstones (id, deleted_at)
+       VALUES ($1, NOW())
+       ON CONFLICT (id) DO UPDATE SET deleted_at = EXCLUDED.deleted_at`,
+      [categoryId]
     );
+    await client.query("DELETE FROM community_stock_categories WHERE id = $1", [categoryId]);
     await client.query("COMMIT");
-    if (!removed.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
     res.status(204).end();
   } catch (error) {
@@ -5304,14 +5337,13 @@ async function reconcileCommunityPendingJoinResults(order) {
   const communityResults = order.communityResults.map((item) => {
     const discordUserId = String(item?.discordUserId ?? "");
     if (!joinedUserIds.has(discordUserId)) return item;
-    return {
-      ...item,
+    return resetCommunityResultVerification(item, {
       state: "joined",
       details: pendingUserIds.has(discordUserId)
         ? "Member joined the server and is pending Discord's server-rules screening."
         : "Member joined the server.",
       completedAt
-    };
+    });
   });
   await pool.query(
     `UPDATE community_oauth_joins
@@ -5920,8 +5952,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     replacementPairs.forEach(({ member, resultIndex }) => {
       const previous = results[resultIndex];
       const previousUserId = String(previous?.discordUserId ?? "").trim();
-      results[resultIndex] = {
-        ...previous,
+      results[resultIndex] = resetCommunityResultVerification(previous, {
         discordUserId: member.discord_user_id,
         username: member.username,
         avatarUrl: member.avatar_url ?? null,
@@ -5938,7 +5969,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
           previous?.previousUsername,
           previous?.username
         ].map((value) => String(value ?? "").trim()).filter(Boolean)))
-      };
+      });
     });
 
     const activeOrder = {
@@ -6125,8 +6156,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = $2",
       [config.guildId, member.discord_user_id, uniqid]
     );
-    results[resultIndex] = {
-      ...failedResult,
+    results[resultIndex] = resetCommunityResultVerification(failedResult, {
       discordUserId: member.discord_user_id,
       username: member.username,
       avatarUrl: member.avatar_url ?? null,
@@ -6136,7 +6166,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       previousUsername: failedResult.username,
       replacementHistoryUserIds,
       replacementHistoryUsernames
-    };
+    });
     const activeOrder = {
       ...order,
       status: "PROCESS",
