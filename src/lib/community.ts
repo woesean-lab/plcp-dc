@@ -244,7 +244,15 @@ export function leaveCommunityBotGuilds(guildIds: string[]) {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ guildIds, confirmation: "LEAVE SELECTED" })
-  }).then(parseResponse<{ requested: number; left: number; alreadyLeft: number; failed: number }>);
+  }).then(parseResponse<{
+    requested: number;
+    left: number;
+    alreadyLeft: number;
+    failed: number;
+    leftGuildIds: string[];
+    alreadyLeftGuildIds: string[];
+    failedGuildIds: string[];
+  }>);
 }
 
 export function getCommunityGuildLeaveProgress() {

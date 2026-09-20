@@ -337,7 +337,7 @@ async function leaveCommunityBotGuilds(config, guilds) {
     startedAt: new Date().toISOString(),
     finishedAt: null
   };
-  const result = { requested: guilds.length, left: 0, alreadyLeft: 0, failed: 0, errors: [] };
+  const result = { requested: guilds.length, left: 0, alreadyLeft: 0, failed: 0, leftGuildIds: [], alreadyLeftGuildIds: [], failedGuildIds: [], errors: [] };
   await forEachWithConcurrency(guilds, 2, async (guild) => {
     const guildId = String(guild?.id ?? "");
     if (!isDiscordGuildId(guildId)) return;
@@ -356,18 +356,22 @@ async function leaveCommunityBotGuilds(config, guilds) {
       }
       if (leaveResult?.response.status === 204) {
         result.left += 1;
+        result.leftGuildIds.push(guildId);
         return;
       }
       if (leaveResult?.response.status === 404) {
         result.alreadyLeft += 1;
+        result.alreadyLeftGuildIds.push(guildId);
         return;
       }
       result.failed += 1;
+      result.failedGuildIds.push(guildId);
       if (result.errors.length < 10) {
         result.errors.push({ guildId, guildName: String(guild?.name ?? "Discord server").slice(0, 100), status: Number(leaveResult?.response?.status ?? 0) });
       }
     } catch {
       result.failed += 1;
+      result.failedGuildIds.push(guildId);
       if (result.errors.length < 10) {
         result.errors.push({ guildId, guildName: String(guild?.name ?? "Discord server").slice(0, 100), status: 0 });
       }

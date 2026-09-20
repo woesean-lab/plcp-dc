@@ -1268,7 +1268,15 @@ export default function HomePage() {
       }
       setCommunityGuildsPendingLeave([]);
       setSelectedCommunityGuildIds({});
-      await Promise.all([loadCommunityConfiguration(), loadCommunityGuildList()]);
+      const removedGuildIds = new Set([...result.leftGuildIds, ...result.alreadyLeftGuildIds]);
+      setCommunityGuilds((current) => current.filter((guild) => !removedGuildIds.has(guild.id)));
+      setCommunityConfig((current) => current ? {
+        ...current,
+        activeGuildCount: current.activeGuildCount === null
+          ? Math.max(0, communityGuilds.length - removedGuildIds.size)
+          : Math.max(0, current.activeGuildCount - removedGuildIds.size),
+        activeGuildCountExact: true
+      } : current);
       notifySuccess(`${result.left} server${result.left === 1 ? "" : "s"} left${result.failed ? `; ${result.failed} failed` : ""}.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "The Members bot could not leave its servers.");
@@ -3366,7 +3374,7 @@ export default function HomePage() {
                       </span>
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="secondary" disabled={leavingCommunityGuilds || !communityConfig.activeGuildCount} onClick={() => void toggleCommunityGuildManager()}>
+                      <Button type="button" size="sm" variant="secondary" disabled={leavingCommunityGuilds || (!showCommunityGuildManager && !communityConfig.activeGuildCount)} onClick={() => void toggleCommunityGuildManager()}>
                         <Settings2 className="h-4 w-4" />
                         {showCommunityGuildManager ? "Close server list" : "Manage servers"}
                       </Button>
