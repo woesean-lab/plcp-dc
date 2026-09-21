@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, Check, ChevronDown, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Tags, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Check, ChevronDown, CircleHelp, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Tags, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, changeCommunityOrderCategory, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderCategories, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityOrderCategoryOption } from "../lib/integration";
@@ -1354,10 +1354,18 @@ export default function OrderPage() {
                 </div>
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
-                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
-                      <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                      {checkingCommunityMembers ? "Checking..." : "Check members"}
-                    </Button>
+                    <span className="member-check-control">
+                      <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
+                        <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                        {checkingCommunityMembers ? "Checking..." : "Check members"}
+                      </Button>
+                      <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="admin-member-check-description">
+                        <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+                      </button>
+                      <span id="admin-member-check-description" className="member-check-tooltip" role="tooltip">
+                        Refreshes OAuth access, confirms whether each member is still in the server, and checks online or offline presence. Eligible period-based offline members can then be replaced.
+                      </span>
+                    </span>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>

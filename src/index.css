@@ -1237,6 +1237,67 @@
     text-transform: none;
   }
 
+  .member-check-control {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+  }
+
+  .member-check-help {
+    display: grid;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    place-items: center;
+    border: 1px solid var(--app-border);
+    border-radius: 7px;
+    color: var(--app-muted);
+    background: var(--app-control-bg);
+    transition: border-color 160ms ease, color 160ms ease, background-color 160ms ease;
+  }
+
+  .member-check-help:hover,
+  .member-check-help:focus-visible {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+    outline: none;
+  }
+
+  .member-check-tooltip {
+    position: absolute;
+    z-index: 30;
+    top: calc(100% + 9px);
+    right: 0;
+    width: min(330px, calc(100vw - 32px));
+    padding: .7rem .8rem;
+    border: 1px solid var(--app-accent-border);
+    border-radius: 10px;
+    color: var(--app-text-secondary);
+    background: var(--app-surface-strong, #151624);
+    box-shadow: 0 16px 40px rgba(0, 0, 0, .38), inset 0 1px 0 var(--app-inset-line);
+    font-size: 11px;
+    font-weight: 550;
+    line-height: 1.5;
+    letter-spacing: 0;
+    text-align: left;
+    text-transform: none;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateY(-4px);
+    transition: opacity 140ms ease, transform 140ms ease, visibility 140ms ease;
+  }
+
+  .member-check-control:hover .member-check-tooltip,
+  .member-check-control:focus-within .member-check-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
   .lookup-token-panel .public-token-results-list { gap: .45rem; margin-top: .75rem; }
   .lookup-token-panel .public-token-result-row { padding-block: .48rem; border-radius: 7px; }
   .lookup-token-panel .public-token-result-index { width: 27px; height: 27px; border-radius: 7px; }

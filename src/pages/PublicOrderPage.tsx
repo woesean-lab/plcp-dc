@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -991,10 +991,18 @@ export default function PublicOrderPage() {
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
                       <span className="flex items-center gap-2">
                         {isCompleted ? (
-                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
-                            <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                            {checkingCommunityMembers ? "Checking..." : "Check members"}
-                          </Button>
+                          <span className="member-check-control">
+                            <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                              <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                              {checkingCommunityMembers ? "Checking..." : "Check members"}
+                            </Button>
+                            <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="public-member-check-description">
+                              <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                            <span id="public-member-check-description" className="member-check-tooltip" role="tooltip">
+                              Refreshes OAuth access, confirms whether each member is still in the server, and checks online or offline presence. Eligible period-based offline members can then be replaced.
+                            </span>
+                          </span>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
                           <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
