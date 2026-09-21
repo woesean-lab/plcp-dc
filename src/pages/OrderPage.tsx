@@ -4,10 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Check, ChevronDown, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Tags, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, changeCommunityOrderCategory, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderCategories, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityOrderCategoryOption } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -53,6 +53,62 @@ type CommunityMemberResult = {
   presenceDetails?: string;
   presenceCheckedAt?: string;
 };
+
+function OrderCategoryDropdown({
+  value,
+  options,
+  disabled,
+  onChange
+}: {
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value) ?? options[0];
+
+  return (
+    <div className="filter-dropdown lookup-category-dropdown">
+      <button
+        type="button"
+        className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
+        aria-label="Replacement stock category"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        disabled={disabled}
+        onClick={() => setOpen((current) => !current)}
+        onBlur={(event) => {
+          if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) setOpen(false);
+        }}
+      >
+        <span>{selected?.label ?? "Select category"}</span>
+        <ChevronDown className="h-4 w-4" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="filter-dropdown-menu" role="listbox" tabIndex={-1}>
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              className={`filter-dropdown-option ${option.value === value ? "is-selected" : ""}`}
+              role="option"
+              aria-selected={option.value === value}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                onChange(option.value);
+                setOpen(false);
+              }}
+            >
+              {option.label}
+              {option.value === value ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
@@ -381,6 +437,12 @@ export default function OrderPage() {
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
+  const [communityCategories, setCommunityCategories] = useState<CommunityOrderCategoryOption[]>([]);
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState("");
+  const [communityCategoryDuration, setCommunityCategoryDuration] = useState(1);
+  const [loadingCommunityCategories, setLoadingCommunityCategories] = useState(false);
+  const [migratingCommunityCategory, setMigratingCommunityCategory] = useState(false);
+  const [showCommunityCategoryModal, setShowCommunityCategoryModal] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
@@ -426,12 +488,19 @@ export default function OrderPage() {
     : null;
   const progressPercent = progress === null ? 0 : Math.round(progress * 100);
   const categoryAllocations = Array.isArray(result?.categoryAllocations) ? result.categoryAllocations : [];
+  const selectedCommunityCategory = communityCategories.find((category) => category.id === communityCategoryDraft) ?? null;
+  const canChangeCommunityCategory = isCommunityProvider
+    && Boolean(selectedCommunityCategory)
+    && communityCategoryDraft !== String(result?.replacementCategoryId ?? result?.categoryId ?? "")
+    && !["NEW", "WAITING", "PROCESS", "PAUSED", "RECOVERING", "INVITES PAUSED"].includes(normalizedStatus);
   const currentDelay = getNumberField(result, ["delay"]);
   const speedProfile = typeof result?.speedProfile === "string" ? result.speedProfile : "custom";
   const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : BALANCED_DELAY_PATTERN[0];
   const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
   const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
-  const expiration = result?.expiredAt ?? result?.expired_at;
+  const expiration = result?.replacementCategoryId
+    ? result.replacementExpiredAt
+    : result?.expiredAt ?? result?.expired_at;
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
     : formatEstimatedDuration(remainingAmount, effectiveEstimateDelay);
@@ -459,10 +528,14 @@ export default function OrderPage() {
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const isOfflinePeriodicReplacementEligible = (item: CommunityMemberResult) => {
     if (item.presenceStatus !== "offline") return false;
-    const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
-    const isPeriodic = allocation ? allocation.isPeriodic === true : result?.categoryIsPeriodic === true;
+    const allocation = result?.replacementCategoryId ? null : categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    const isPeriodic = result?.replacementCategoryId
+      ? result.replacementCategoryIsPeriodic === true
+      : allocation ? allocation.isPeriodic === true : result?.categoryIsPeriodic === true;
     if (!isPeriodic) return false;
-    const expirationValue = allocation?.expiredAt ?? result?.expiredAt ?? result?.expired_at;
+    const expirationValue = result?.replacementCategoryId
+      ? result.replacementExpiredAt
+      : allocation?.expiredAt ?? result?.expiredAt ?? result?.expired_at;
     const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
     if (Number.isFinite(expirationTime) && expirationTime <= Date.now()) return false;
     const checkedAt = item.presenceCheckedAt ? new Date(item.presenceCheckedAt).getTime() : Number.NaN;
@@ -491,6 +564,38 @@ export default function OrderPage() {
   }, []);
 
   useEffect(() => {
+    const target = String(result?.uniqid ?? "").trim();
+    if (!isCommunityProvider || !target) {
+      setCommunityCategories([]);
+      setCommunityCategoryDraft("");
+      return;
+    }
+
+    let active = true;
+    setLoadingCommunityCategories(true);
+    void getCommunityOrderCategories(target)
+      .then((payload) => {
+        if (!active) return;
+        setCommunityCategories(payload.categories);
+        setCommunityCategoryDraft(payload.categories.some((category) => category.id === payload.currentCategoryId)
+          ? payload.currentCategoryId
+          : payload.categories[0]?.id ?? "");
+        const currentAllocation = Array.isArray(result?.categoryAllocations)
+          ? result.categoryAllocations.find((allocation) => allocation.categoryId === payload.currentCategoryId)
+          : null;
+        setCommunityCategoryDuration(Number(result?.replacementDurationMonths ?? currentAllocation?.durationMonths ?? result?.durationMonths ?? 1));
+      })
+      .catch((error) => {
+        if (active) toast.error(error instanceof Error ? error.message : "Stock categories could not be loaded.");
+      })
+      .finally(() => {
+        if (active) setLoadingCommunityCategories(false);
+      });
+
+    return () => { active = false; };
+  }, [isCommunityProvider, result?.uniqid]);
+
+  useEffect(() => {
     const timer = window.setTimeout(() => {
       setPageLoading(false);
     }, 300);
@@ -506,15 +611,16 @@ export default function OrderPage() {
   }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showCommunityCategoryModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
       if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
+      if (event.key === "Escape" && !migratingCommunityCategory) setShowCommunityCategoryModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showCommunityCategoryModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, migratingCommunityCategory]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -633,6 +739,28 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Support period could not be extended.");
     } finally {
       setExtendingCommunityOrder(false);
+    }
+  }
+
+  async function handleChangeCommunityCategory() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !selectedCommunityCategory || !canChangeCommunityCategory || migratingCommunityCategory) return;
+
+    try {
+      setMigratingCommunityCategory(true);
+      const payload = await changeCommunityOrderCategory(
+        target,
+        selectedCommunityCategory.id,
+        selectedCommunityCategory.isPeriodic ? communityCategoryDuration : undefined
+      );
+      setResult((current) => mergeOrderStatus(current, payload.order));
+      setCommunityCategoryDraft(selectedCommunityCategory.id);
+      setShowCommunityCategoryModal(false);
+      toast.success(`Replacement stock changed to ${selectedCommunityCategory.name}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Order category could not be changed.");
+    } finally {
+      setMigratingCommunityCategory(false);
     }
   }
 
@@ -1181,6 +1309,43 @@ export default function OrderPage() {
           ) : null}
 
           {isCommunityProvider ? (
+            <section className="lookup-category-manager">
+              <div className="lookup-category-manager-copy">
+                <span className="lookup-category-manager-icon" aria-hidden="true"><Tags className="h-4 w-4" /></span>
+                <span>
+                  <p className="app-kicker">Replacement stock</p>
+                  <strong>Replacement category</strong>
+                  <small>Choose which Members Stock category future replacements use.</small>
+                </span>
+              </div>
+              <div className="lookup-category-manager-actions">
+                <OrderCategoryDropdown
+                  value={communityCategoryDraft}
+                  disabled={loadingCommunityCategories || migratingCommunityCategory || !communityCategories.length}
+                  options={communityCategories.map((category) => ({
+                    value: category.id,
+                    label: `${category.name} · ${category.available} ready${category.isPeriodic ? " · Period based" : ""}`
+                  }))}
+                  onChange={(categoryId) => {
+                    setCommunityCategoryDraft(categoryId);
+                    const category = communityCategories.find((item) => item.id === categoryId);
+                    if (category?.isPeriodic) setCommunityCategoryDuration(Math.min(Math.max(Number(result?.replacementDurationMonths ?? result?.durationMonths ?? 1), 1), 6));
+                  }}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={!canChangeCommunityCategory || loadingCommunityCategories || migratingCommunityCategory}
+                  onClick={() => setShowCommunityCategoryModal(true)}
+                >
+                  <RefreshCw className={`h-4 w-4 ${migratingCommunityCategory ? "animate-spin" : ""}`} aria-hidden="true" />
+                  {loadingCommunityCategories ? "Loading..." : "Change replacement stock"}
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {isCommunityProvider ? (
             <section className="lookup-token-panel community-order-log">
               <div className="lookup-section-heading">
                 <div>
@@ -1294,6 +1459,50 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showCommunityCategoryModal && selectedCommunityCategory ? createPortal(
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !migratingCommunityCategory) setShowCommunityCategoryModal(false);
+          }}
+        >
+          <div className="confirm-modal lookup-category-migration-modal" role="dialog" aria-modal="true" aria-labelledby="community-category-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Tags className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Replacement stock</p>
+            <h2 id="community-category-title">Use {selectedCommunityCategory.name} for replacements?</h2>
+            <p>
+              Existing delivered-member records and their original categories will stay unchanged. Only future replacements will use <strong>{selectedCommunityCategory.name}</strong> stock.
+            </p>
+            {selectedCommunityCategory.isPeriodic ? (
+              <>
+                <p className="lookup-category-period-note">This is a period-based category. A new support period starts when you confirm.</p>
+                <div className="lookup-extension-options" aria-label="New support duration">
+                  {[1, 2, 3, 4, 5, 6].map((months) => (
+                    <button
+                      key={months}
+                      type="button"
+                      aria-pressed={communityCategoryDuration === months}
+                      className={communityCategoryDuration === months ? "is-selected" : ""}
+                      disabled={migratingCommunityCategory}
+                      onClick={() => setCommunityCategoryDuration(months)}
+                    >
+                      <strong>{months}</strong><small>{months === 1 ? "month" : "months"}</small>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : null}
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={migratingCommunityCategory} onClick={() => setShowCommunityCategoryModal(false)}>Cancel</Button>
+              <Button type="button" disabled={migratingCommunityCategory} onClick={() => void handleChangeCommunityCategory()}>
+                <RefreshCw className={`h-4 w-4 ${migratingCommunityCategory ? "animate-spin" : ""}`} aria-hidden="true" />
+                {migratingCommunityCategory ? "Updating..." : "Use for replacements"}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
       {showExtendCommunityModal ? createPortal(
         <div
           className="confirm-modal-backdrop"

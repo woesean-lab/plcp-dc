@@ -1154,6 +1154,65 @@
     border-bottom: 1px solid var(--app-divider);
   }
 
+  .lookup-category-manager {
+    position: relative;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    padding: .85rem 1.15rem;
+    border-bottom: 1px solid var(--app-divider);
+    background: rgba(155, 140, 255, .035);
+  }
+
+  .lookup-category-manager-copy,
+  .lookup-category-manager-actions {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    min-width: 0;
+  }
+
+  .lookup-category-manager-copy > span:last-child {
+    display: grid;
+    min-width: 0;
+    gap: .15rem;
+  }
+
+  .lookup-category-manager-copy strong { color: var(--app-text); font-size: 13px; }
+  .lookup-category-manager-copy small { color: var(--app-muted); font-size: 10px; }
+
+  .lookup-category-manager-icon {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    flex: 0 0 34px;
+    place-items: center;
+    border: 1px solid var(--app-accent-border);
+    border-radius: 9px;
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+  }
+
+  .lookup-category-dropdown { width: min(430px, 38vw); }
+  .lookup-category-dropdown .filter-dropdown-trigger { width: 100%; min-width: 0; }
+  .lookup-category-dropdown .filter-dropdown-trigger > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .lookup-category-dropdown .filter-dropdown-menu { right: 0; left: auto; width: max(100%, 320px); }
+
+  .lookup-category-period-note {
+    margin: -.15rem 0 .75rem !important;
+    color: var(--app-accent-bright) !important;
+    font-size: 11px !important;
+  }
+
+  .lookup-category-migration-modal { width: min(520px, calc(100vw - 2rem)); }
+
   .lookup-section-heading {
     display: flex;
     align-items: center;
@@ -1257,6 +1316,9 @@
     .lookup-delay-control.has-speed-profiles .lookup-delay-actions,
     .lookup-delay-control.has-speed-profiles .lookup-next-member { grid-column: 1; }
     .lookup-technical-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .lookup-category-manager { align-items: stretch; flex-direction: column; }
+    .lookup-category-manager-actions { width: 100%; }
+    .lookup-category-dropdown { width: auto; flex: 1 1 auto; }
     .lookup-technical-grid > div { border-bottom: 1px solid var(--app-divider); }
     .lookup-technical-grid > div:nth-child(2n) { border-right: 0; }
     .lookup-technical-grid > div:last-child { grid-column: 1 / -1; border-right: 0; border-bottom: 0; }

@@ -1096,6 +1096,61 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
   );
 }
 
+async function copyCommunityCategoryStockForGuild(queryable, sourceGuildId, targetGuildId, categoryId) {
+  if (!sourceGuildId || !targetGuildId || sourceGuildId === targetGuildId || !categoryId) return 0;
+
+  await queryable.query(
+    `INSERT INTO community_stock_categories
+       (guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, is_periodic, icon_name, color_key, created_at, NOW()
+     FROM community_stock_categories AS category
+     WHERE guild_id = $1
+       AND id = $3
+       AND NOT EXISTS (
+         SELECT 1
+         FROM community_stock_category_tombstones AS tombstone
+         WHERE tombstone.id = category.id
+       )
+     ON CONFLICT (guild_id, id) DO UPDATE SET
+       name = EXCLUDED.name,
+       is_periodic = EXCLUDED.is_periodic,
+       icon_name = EXCLUDED.icon_name,
+       color_key = EXCLUDED.color_key,
+       updated_at = NOW()`,
+    [sourceGuildId, targetGuildId, categoryId]
+  );
+
+  const copied = await queryable.query(
+    `INSERT INTO community_oauth_joins
+       (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+     SELECT discord_user_id, $2, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at,
+            CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
+            stock_type, NULL, authorized_at, NULL, NULL, sort_position
+     FROM community_oauth_joins
+     WHERE guild_id = $1
+       AND stock_type = $3
+     ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
+       username = EXCLUDED.username,
+       display_name = EXCLUDED.display_name,
+       avatar_url = EXCLUDED.avatar_url,
+       encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, community_oauth_joins.encrypted_refresh_token),
+       encrypted_access_token = EXCLUDED.encrypted_access_token,
+       access_token_expires_at = EXCLUDED.access_token_expires_at,
+       status = CASE
+         WHEN EXCLUDED.status = 'failed' THEN 'failed'
+         WHEN community_oauth_joins.status IN ('joined', 'already_member') THEN community_oauth_joins.status
+         ELSE 'authorized'
+       END,
+       stock_type = EXCLUDED.stock_type,
+       details = EXCLUDED.details,
+       joined_at = community_oauth_joins.joined_at,
+       reserved_order_id = NULL,
+       sort_position = EXCLUDED.sort_position`,
+    [sourceGuildId, targetGuildId, categoryId]
+  );
+  return copied.rowCount ?? 0;
+}
+
 async function normalizeCommunityStockRecords(config) {
   await pool.query(
     `UPDATE community_oauth_joins
@@ -1130,7 +1185,7 @@ function getCommunityOrderStockType(order) {
 }
 
 function getCommunityResultStockType(order, result) {
-  return normalizeCommunityStockType(result?.categoryId ?? getCommunityOrderStockType(order));
+  return normalizeCommunityStockType(order?.replacementCategoryId ?? result?.categoryId ?? getCommunityOrderStockType(order));
 }
 
 function interleaveCommunityMembers(groups) {
@@ -1173,12 +1228,18 @@ function addUtcMonths(value, months) {
 }
 
 function isCommunityOrderManagementExpired(order) {
-  if (!order?.expiredAt) return false;
-  const expiresAt = new Date(order.expiredAt).getTime();
+  const expiration = order?.replacementCategoryId ? order?.replacementExpiredAt : order?.expiredAt;
+  if (!expiration) return false;
+  const expiresAt = new Date(expiration).getTime();
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
 function isCommunityResultManagementExpired(order, result) {
+  if (order?.replacementCategoryId) {
+    if (order.replacementCategoryIsPeriodic !== true || !order.replacementExpiredAt) return false;
+    const replacementExpiresAt = new Date(order.replacementExpiredAt).getTime();
+    return Number.isFinite(replacementExpiresAt) && replacementExpiresAt <= Date.now();
+  }
   const categoryId = getCommunityResultStockType(order, result);
   const allocation = Array.isArray(order?.categoryAllocations)
     ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
@@ -1192,6 +1253,7 @@ function isCommunityResultManagementExpired(order, result) {
 const communityOfflineReplacementCheckMaxAgeMs = 5 * 60_000;
 
 function isCommunityResultPeriodic(order, result) {
+  if (order?.replacementCategoryId) return order.replacementCategoryIsPeriodic === true;
   const categoryId = getCommunityResultStockType(order, result);
   const allocation = Array.isArray(order?.categoryAllocations)
     ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
@@ -5930,6 +5992,7 @@ async function hydrateCommunityOrderCategories(order) {
   if (!order || order.provider !== "community") return order;
   const categoryIds = Array.from(new Set([
     String(order.categoryId ?? "").trim(),
+    String(order.replacementCategoryId ?? "").trim(),
     ...(Array.isArray(order.categoryAllocations) ? order.categoryAllocations.map((item) => String(item?.categoryId ?? "").trim()) : []),
     ...(Array.isArray(order.communityResults) ? order.communityResults.map((item) => String(item?.categoryId ?? "").trim()) : [])
   ].filter(Boolean)));
@@ -5955,12 +6018,15 @@ async function hydrateCommunityOrderCategories(order) {
       })
     : order.categoryAllocations;
   const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
+  const replacementCategory = currentCategories.get(String(order.replacementCategoryId ?? ""));
   return {
     ...order,
     categoryName: Array.isArray(categoryAllocations) && categoryAllocations.length > 1
       ? `${categoryAllocations.length} categories`
       : primaryCategory?.name ?? order.categoryName,
     categoryColorKey: primaryCategory?.color_key ?? order.categoryColorKey,
+    replacementCategoryName: replacementCategory?.name ?? order.replacementCategoryName,
+    replacementCategoryColorKey: replacementCategory?.color_key ?? order.replacementCategoryColorKey,
     categoryAllocations,
     communityResults: Array.isArray(order.communityResults)
       ? order.communityResults.map((item) => {
@@ -5987,6 +6053,124 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
     res.set("Cache-Control", "no-store").json(payload);
   } catch (error) {
     next(error);
+  }
+});
+
+app.get("/api/community/orders/:uniqid/categories", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    const config = await getCommunityOAuthConfig();
+    if (!config.guildId) {
+      return res.status(503).json({ message: "Members Stock is not configured." });
+    }
+    const categories = await loadCommunityStockCategories(config);
+    res.set("Cache-Control", "no-store").json({
+      currentCategoryId: normalizeCommunityStockType(order.replacementCategoryId ?? getCommunityOrderStockType(order)),
+      categories: categories.map((category) => ({
+        id: category.id,
+        name: category.name,
+        isPeriodic: category.isPeriodic,
+        colorKey: category.colorKey,
+        available: category.summary.ready
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/community/orders/:uniqid/category", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const categoryId = parseCommunityCategoryId(req.body?.categoryId);
+    const requestedDuration = Number.parseInt(req.body?.durationMonths, 10);
+    if (!uniqid || uniqid.length > 160 || !categoryId) {
+      return res.status(400).json({ message: "A valid order and category are required." });
+    }
+
+    const config = await getCommunityOAuthConfig();
+    if (!config.guildId) {
+      return res.status(503).json({ message: "Members Stock is not configured." });
+    }
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    const currentStatus = String(order.status ?? "").trim().toUpperCase();
+    if (["NEW", "WAITING", "PROCESS", "PAUSED", "RECOVERING", "INVITES PAUSED"].includes(currentStatus)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Pause or finish this delivery before changing its stock category." });
+    }
+
+    const categoryResult = await client.query(
+      `SELECT id, name, is_periodic, color_key
+       FROM community_stock_categories AS category
+       WHERE guild_id = $1
+         AND id = $2
+         AND NOT EXISTS (
+           SELECT 1 FROM community_stock_category_tombstones AS tombstone
+           WHERE tombstone.id = category.id
+         )
+       LIMIT 1`,
+      [config.guildId, categoryId]
+    );
+    const category = categoryResult.rows[0];
+    if (!category) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "The selected Members Stock category no longer exists." });
+    }
+
+    const targetGuildId = String(order.serverId ?? "").trim();
+    if (!isDiscordGuildId(targetGuildId)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This order does not have a valid Discord server ID." });
+    }
+
+    const isPeriodic = category.is_periodic === true;
+    const durationMonths = isPeriodic
+      ? ([1, 2, 3, 4, 5, 6].includes(requestedDuration) ? requestedDuration : Math.min(Math.max(Number.parseInt(order.durationMonths, 10) || 1, 1), 6))
+      : null;
+    const expiredAt = isPeriodic ? addUtcMonths(new Date(), durationMonths).toISOString() : null;
+    const migratedAt = new Date().toISOString();
+    const copiedStock = await copyCommunityCategoryStockForGuild(client, config.guildId, targetGuildId, category.id);
+    const nextOrder = {
+      ...order,
+      replacementCategoryId: category.id,
+      replacementCategoryName: category.name,
+      replacementCategoryColorKey: category.color_key,
+      replacementCategoryIsPeriodic: isPeriodic,
+      replacementDurationMonths: durationMonths,
+      replacementExpiredAt: expiredAt,
+      replacementCategoryUpdatedAt: migratedAt
+    };
+
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(nextOrder)]
+    );
+    await client.query("COMMIT");
+    invalidateCommunityCategoryDisplayCache();
+    res.set("Cache-Control", "no-store").json({ order: nextOrder, copiedStock });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (error?.code === "23505" && error?.constraint === "community_stock_categories_guild_name_idx") {
+      return res.status(409).json({ message: "A category with this name already exists in the order's stock view. Refresh Members Stock and try again." });
+    }
+    next(error);
+  } finally {
+    client.release();
   }
 });
 
@@ -6289,6 +6473,37 @@ app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res
     if (!order || order.provider !== "community") {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (order.replacementCategoryId) {
+      if (order.replacementCategoryIsPeriodic !== true || !order.replacementExpiredAt) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "This replacement category does not have a support period." });
+      }
+      const now = new Date();
+      const currentExpiration = new Date(order.replacementExpiredAt);
+      const extensionBase = Number.isFinite(currentExpiration.getTime()) && currentExpiration > now ? currentExpiration : now;
+      const replacementExpiredAt = addUtcMonths(extensionBase, months).toISOString();
+      const updatedOrder = {
+        ...order,
+        replacementDurationMonths: Math.max(0, Number(order.replacementDurationMonths) || 0) + months,
+        replacementExpiredAt,
+        supportExtensions: [
+          ...(Array.isArray(order.supportExtensions) ? order.supportExtensions : []),
+          {
+            months,
+            scope: "replacement_category",
+            previousExpiredAt: order.replacementExpiredAt,
+            expiredAt: replacementExpiredAt,
+            extendedAt: now.toISOString()
+          }
+        ]
+      };
+      await client.query(
+        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+        [uniqid, JSON.stringify(updatedOrder)]
+      );
+      await client.query("COMMIT");
+      return res.set("Cache-Control", "no-store").json(updatedOrder);
     }
     if (order.categoryIsPeriodic !== true && !order.expiredAt) {
       await client.query("ROLLBACK");

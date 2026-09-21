@@ -53,6 +53,12 @@ export interface CreateOrderResponse {
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
+  replacementCategoryId?: string;
+  replacementCategoryName?: string;
+  replacementCategoryColorKey?: string;
+  replacementCategoryIsPeriodic?: boolean;
+  replacementDurationMonths?: number | null;
+  replacementExpiredAt?: string | null;
   joinMethod?: CommunityJoinMethod;
   createdAt?: string;
   expiredAt?: string | null;
@@ -84,6 +90,12 @@ export interface OrderStatusResponse {
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
+  replacementCategoryId?: string;
+  replacementCategoryName?: string;
+  replacementCategoryColorKey?: string;
+  replacementCategoryIsPeriodic?: boolean;
+  replacementDurationMonths?: number | null;
+  replacementExpiredAt?: string | null;
   error?: string;
   canManageDcordTokens?: boolean;
   canManageCommunityMembers?: boolean;
@@ -132,6 +144,12 @@ export interface TrackedOrder {
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
+  replacementCategoryId?: string;
+  replacementCategoryName?: string;
+  replacementCategoryColorKey?: string;
+  replacementCategoryIsPeriodic?: boolean;
+  replacementDurationMonths?: number | null;
+  replacementExpiredAt?: string | null;
   isEldoradoSale?: boolean;
 }
 

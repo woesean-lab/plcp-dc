@@ -238,6 +238,31 @@ export function checkCommunityOrderMembers(uniqid: string) {
   );
 }
 
+export type CommunityOrderCategoryOption = {
+  id: string;
+  name: string;
+  isPeriodic: boolean;
+  colorKey: string;
+  available: number;
+};
+
+export function getCommunityOrderCategories(uniqid: string) {
+  return requestJson<{ currentCategoryId: string; categories: CommunityOrderCategoryOption[] }>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/categories`
+  );
+}
+
+export function changeCommunityOrderCategory(uniqid: string, categoryId: string, durationMonths?: number) {
+  return requestJson<{ order: OrderStatusResponse; copiedStock: number }>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/category`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ categoryId, ...(durationMonths ? { durationMonths } : {}) })
+    }
+  );
+}
+
 export function checkPublicCommunityOrderMembers(uniqid: string) {
   return requestJson<CommunityMemberCheckResult>(
     `/api/public/orders/${encodeURIComponent(uniqid)}/check-members`,
