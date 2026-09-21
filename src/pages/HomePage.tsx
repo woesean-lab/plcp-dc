@@ -2091,6 +2091,8 @@ export default function HomePage() {
   const communityVisibleRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType)
     .sort((left, right) => {
+      const inactiveOrder = Number(left.status === "failed") - Number(right.status === "failed");
+      if (inactiveOrder !== 0) return inactiveOrder;
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
       return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
