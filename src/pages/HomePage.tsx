@@ -651,7 +651,6 @@ export default function HomePage() {
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
-  const [communityImportErrorCounts, setCommunityImportErrorCounts] = useState<Record<string, number>>({});
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
   const communityImportInputRef = useRef<HTMLInputElement>(null);
   const [checkingAvailability, setCheckingAvailability] = useState(false);
@@ -1358,7 +1357,6 @@ export default function HomePage() {
     if (!communityImportFile) return;
     try {
       setImportingCommunityStock(true);
-      setCommunityImportErrorCounts({});
       if (communityImportFile.size > 10 * 1024 * 1024) throw new Error("OAuth stock JSON must be smaller than 10 MB.");
       const parsed = JSON.parse(await communityImportFile.text()) as unknown;
       const records = Array.isArray(parsed)
@@ -1398,7 +1396,6 @@ export default function HomePage() {
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
       const summary = `${result.imported} imported to ${result.categoryName ?? communityVisibleCategory?.name ?? "category"}, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) {
-        setCommunityImportErrorCounts(result.errorCounts);
         const leadingReason = Object.entries(result.errorCounts).sort((left, right) => right[1] - left[1])[0];
         notifyError(leadingReason ? `${summary} ${leadingReason[1]}: ${leadingReason[0]}` : summary);
       }
@@ -2230,15 +2227,6 @@ export default function HomePage() {
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
         </div>
-        {Object.keys(communityImportErrorCounts).length ? (
-          <div className="community-admin-note" role="alert">
-            <strong>Import failures:</strong>{" "}
-            {Object.entries(communityImportErrorCounts)
-              .sort((left, right) => right[1] - left[1])
-              .map(([message, count]) => `${count} × ${message}`)
-              .join(" · ")}
-          </div>
-        ) : null}
       </form>
 
       <div className="community-member-toolbar">
