@@ -36,7 +36,10 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
         : typeof payload === "string"
           ? payload.slice(0, 500)
           : `Request failed with ${response.status}`;
-    throw new Error(message);
+    const requestError = new Error(message) as Error & { status?: number; payload?: unknown };
+    requestError.status = response.status;
+    requestError.payload = payload;
+    throw requestError;
   }
 
   return payload as T;

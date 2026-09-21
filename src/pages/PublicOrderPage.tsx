@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarDays, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
-import { extractBotInvite } from "../lib/bot-invite";
+import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
 import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
@@ -41,12 +41,16 @@ type CommunityMemberResult = {
   index: number;
   username: string;
   avatarUrl: string | null;
+  categoryId?: string;
   state: string;
   details: string;
   completedAt?: string;
   authorizationStatus?: string;
   membershipStatus?: string;
   membershipDetails?: string;
+  presenceStatus?: string;
+  presenceDetails?: string;
+  presenceCheckedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -83,12 +87,16 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       index,
       username: typeof row.username === "string" && row.username.trim() ? maskUsername(row.username) : `Member ${index + 1}`,
       avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
+      categoryId: typeof row.categoryId === "string" ? row.categoryId : undefined,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
       authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
+      presenceStatus: typeof row.presenceStatus === "string" ? row.presenceStatus : undefined,
+      presenceDetails: typeof row.presenceDetails === "string" ? row.presenceDetails : undefined,
+      presenceCheckedAt: typeof row.presenceCheckedAt === "string" ? row.presenceCheckedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -484,8 +492,19 @@ export default function PublicOrderPage() {
     ? "Next member joins in"
     : communityMemberJoining ? "Member delivery" : "Next member";
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
+  const isOfflinePeriodicReplacementEligible = (item: CommunityMemberResult) => {
+    if (item.presenceStatus !== "offline") return false;
+    const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    const isPeriodic = allocation ? allocation.isPeriodic === true : status?.categoryIsPeriodic === true;
+    if (!isPeriodic) return false;
+    const expirationValue = allocation?.expiredAt ?? status?.expiredAt ?? status?.expired_at;
+    const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
+    if (Number.isFinite(expirationTime) && expirationTime <= Date.now()) return false;
+    const checkedAt = item.presenceCheckedAt ? new Date(item.presenceCheckedAt).getTime() : Number.NaN;
+    return Number.isFinite(checkedAt) && checkedAt >= Date.now() - 5 * 60_000;
+  };
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed")
+    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed" || isOfflinePeriodicReplacementEligible(item))
     .map((item) => item.index);
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
@@ -646,7 +665,11 @@ export default function PublicOrderPage() {
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Members could not be checked.";
-      if (/add the bot to your discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      if (/add the bot to .*discord server/i.test(message)) {
+        const errorBotInvite = extractBotInviteFromError(err);
+        if (errorBotInvite) setStatus((current) => current ? { ...current, botInvite: errorBotInvite } : current);
+        setCommunityCheckNeedsBot(true);
+      }
       toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
@@ -659,9 +682,16 @@ export default function PublicOrderPage() {
       setReplacingAllCommunityMembers(true);
       const data = await replaceAllCommunityMembers(uniqid);
       setStatus((current) => mergeOrderStatus(current, data));
+      setCommunityCheckNeedsBot(false);
       toast.success("Available replacement members started with the order delay.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Bulk replacement could not be started.");
+      const message = err instanceof Error ? err.message : "Bulk replacement could not be started.";
+      if (/add the bot to .*discord server/i.test(message)) {
+        const errorBotInvite = extractBotInviteFromError(err);
+        if (errorBotInvite) setStatus((current) => current ? { ...current, botInvite: errorBotInvite } : current);
+        setCommunityCheckNeedsBot(true);
+      }
+      toast.error(message);
     } finally {
       setReplacingAllCommunityMembers(false);
     }
@@ -971,7 +1001,7 @@ export default function PublicOrderPage() {
                     </div>
                     {communityCheckNeedsBot && botInvite ? (
                       <div className="monitor-member-check-bot-alert" role="alert">
-                        <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check members.</strong></span>
+                        <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check or replace members.</strong></span>
                         <div className="monitor-member-check-bot-actions">
                           <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink()}>
                             <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy link
@@ -1002,6 +1032,11 @@ export default function PublicOrderPage() {
                               {item.membershipStatus === "removed" ? (
                                 <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
                                   Removed from server
+                                </span>
+                              ) : null}
+                              {item.presenceStatus ? (
+                                <span className="public-token-result-pill" data-state={`presence-${item.presenceStatus}`} title={item.presenceDetails}>
+                                  {item.presenceStatus}
                                 </span>
                               ) : null}
                               <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

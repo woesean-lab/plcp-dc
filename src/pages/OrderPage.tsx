@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
-import { extractBotInvite, getPlainDetails } from "../lib/bot-invite";
+import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
@@ -771,7 +771,11 @@ export default function OrderPage() {
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Members could not be checked.";
-      if (/add the bot to .*discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      if (/add the bot to .*discord server/i.test(message)) {
+        const errorBotInvite = extractBotInviteFromError(error);
+        if (errorBotInvite) setResult((current) => current ? { ...current, botInvite: errorBotInvite } : current);
+        setCommunityCheckNeedsBot(true);
+      }
       toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
@@ -789,7 +793,11 @@ export default function OrderPage() {
       toast.success("Available replacement members started with the order delay.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Bulk replacement could not be started.";
-      if (/add the bot to .*discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      if (/add the bot to .*discord server/i.test(message)) {
+        const errorBotInvite = extractBotInviteFromError(error);
+        if (errorBotInvite) setResult((current) => current ? { ...current, botInvite: errorBotInvite } : current);
+        setCommunityCheckNeedsBot(true);
+      }
       toast.error(message);
     } finally {
       setReplacingAllCommunityMembers(false);
@@ -1198,7 +1206,7 @@ export default function OrderPage() {
 
               {communityCheckNeedsBot && botInvite ? (
                 <div className="monitor-member-check-bot-alert" role="alert">
-                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check members.</strong></span>
+                  <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check or replace members.</strong></span>
                   <div className="monitor-member-check-bot-actions">
                     <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInvite()}>
                       <Copy className="h-3.5 w-3.5" aria-hidden="true" /> Copy link

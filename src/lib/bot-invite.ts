@@ -26,6 +26,12 @@ export function extractBotInvite(source: BotInviteSource | null) {
   return normalizeDiscordInvite(document.querySelector("a[href]")?.getAttribute("href"));
 }
 
+export function extractBotInviteFromError(error: unknown) {
+  if (!error || typeof error !== "object" || !("payload" in error)) return null;
+  const payload = (error as { payload?: unknown }).payload;
+  return payload && typeof payload === "object" ? extractBotInvite(payload as BotInviteSource) : null;
+}
+
 export function getPlainDetails(value?: unknown) {
   if (typeof value !== "string" || !value.trim()) return "No details.";
   const document = new DOMParser().parseFromString(value, "text/html");
