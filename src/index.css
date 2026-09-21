@@ -843,6 +843,7 @@
 
   .community-order-result-state {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
     gap: .45rem;
@@ -4618,7 +4619,8 @@
 
   .public-token-result-pill[data-state="joined"],
   .public-token-result-pill[data-state="boosted"],
-  .public-token-result-pill[data-state="active"] {
+  .public-token-result-pill[data-state="active"],
+  .public-token-result-pill[data-state="presence-online"] {
     border-color: rgba(105, 221, 178, .18);
     color: #8be0bf;
     background: rgba(105, 221, 178, .085);
@@ -4655,6 +4657,25 @@
     border-color: rgba(244, 190, 78, .28);
     color: #f4c95e;
     background: rgba(244, 190, 78, .09);
+  }
+
+  .public-token-result-pill[data-state="presence-idle"] {
+    border-color: rgba(244, 190, 78, .28);
+    color: #f4c95e;
+    background: rgba(244, 190, 78, .09);
+  }
+
+  .public-token-result-pill[data-state="presence-dnd"] {
+    border-color: var(--app-danger-button-border);
+    color: var(--app-danger-text);
+    background: var(--app-danger-soft);
+  }
+
+  .public-token-result-pill[data-state="presence-offline"],
+  .public-token-result-pill[data-state="presence-unknown"] {
+    border-color: var(--app-border);
+    color: var(--app-muted);
+    background: rgba(255,255,255,.035);
   }
 
   .public-token-result-pill[data-state="blocked"],

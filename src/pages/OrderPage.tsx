@@ -40,6 +40,7 @@ type CommunityMemberResult = {
   index: number;
   username: string;
   avatarUrl: string | null;
+  categoryId?: string;
   state: string;
   details: string;
   completedAt?: string;
@@ -48,6 +49,9 @@ type CommunityMemberResult = {
   authorizationCheckedAt?: string;
   membershipStatus?: string;
   membershipDetails?: string;
+  presenceStatus?: string;
+  presenceDetails?: string;
+  presenceCheckedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -77,6 +81,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       index,
       username: typeof row.username === "string" && row.username.trim() ? row.username.trim() : `Member ${index + 1}`,
       avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
+      categoryId: typeof row.categoryId === "string" ? row.categoryId : undefined,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
@@ -85,6 +90,9 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined,
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
+      presenceStatus: typeof row.presenceStatus === "string" ? row.presenceStatus : undefined,
+      presenceDetails: typeof row.presenceDetails === "string" ? row.presenceDetails : undefined,
+      presenceCheckedAt: typeof row.presenceCheckedAt === "string" ? row.presenceCheckedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -449,8 +457,19 @@ export default function OrderPage() {
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
+  const isOfflinePeriodicReplacementEligible = (item: CommunityMemberResult) => {
+    if (item.presenceStatus !== "offline") return false;
+    const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    const isPeriodic = allocation ? allocation.isPeriodic === true : result?.categoryIsPeriodic === true;
+    if (!isPeriodic) return false;
+    const expirationValue = allocation?.expiredAt ?? result?.expiredAt ?? result?.expired_at;
+    const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
+    if (Number.isFinite(expirationTime) && expirationTime <= Date.now()) return false;
+    const checkedAt = item.presenceCheckedAt ? new Date(item.presenceCheckedAt).getTime() : Number.NaN;
+    return Number.isFinite(checkedAt) && checkedAt >= Date.now() - 5 * 60_000;
+  };
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed")
+    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed" || isOfflinePeriodicReplacementEligible(item))
     .map((item) => item.index);
   const summary = isDcordProvider
     ? [
@@ -539,6 +558,7 @@ export default function OrderPage() {
     try {
       const data = await getOrderStatus(target, provider);
       setResult(data);
+      setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       toast.success(`Loaded ${target}.`);
       setParams(provider === "tokenu" ? { uniqid: target } : { uniqid: target, provider });
@@ -751,7 +771,7 @@ export default function OrderPage() {
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Members could not be checked.";
-      if (/add the bot to your discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      if (/add the bot to .*discord server/i.test(message)) setCommunityCheckNeedsBot(true);
       toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
@@ -765,9 +785,12 @@ export default function OrderPage() {
       setReplacingAllCommunityMembers(true);
       const data = await replaceAllCommunityMembers(target);
       setResult((current) => mergeOrderStatus(current, data));
+      setCommunityCheckNeedsBot(false);
       toast.success("Available replacement members started with the order delay.");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Bulk replacement could not be started.");
+      const message = error instanceof Error ? error.message : "Bulk replacement could not be started.";
+      if (/add the bot to .*discord server/i.test(message)) setCommunityCheckNeedsBot(true);
+      toast.error(message);
     } finally {
       setReplacingAllCommunityMembers(false);
     }
@@ -1210,6 +1233,11 @@ export default function OrderPage() {
                         {item.membershipStatus === "removed" ? (
                           <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
                             Removed from server
+                          </span>
+                        ) : null}
+                        {item.presenceStatus ? (
+                          <span className="public-token-result-pill" data-state={`presence-${item.presenceStatus}`} title={item.presenceDetails}>
+                            {item.presenceStatus}
                           </span>
                         ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

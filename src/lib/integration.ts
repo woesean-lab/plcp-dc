@@ -218,7 +218,14 @@ export function replaceAllCommunityMembers(uniqid: string) {
 
 export type CommunityMemberCheckResult = {
   order: OrderStatusResponse;
-  summary: { checked: number; active: number; inactive: number; unknown: number; checkedAt: string };
+  summary: {
+    checked: number;
+    active: number;
+    inactive: number;
+    unknown: number;
+    presence: { online: number; idle: number; dnd: number; offline: number; unknown: number };
+    checkedAt: string;
+  };
 };
 
 export function checkCommunityOrderMembers(uniqid: string) {

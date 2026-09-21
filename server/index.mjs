@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import pg from "pg";
+import WebSocket from "ws";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -229,6 +230,269 @@ let communityBotCache = null;
 let communityBotGuildCountCache = null;
 let communityGuildLeaveProgress = { active: false, total: 0, completed: 0, currentGuilds: [], startedAt: null, finishedAt: null };
 const communityMemberPresenceCache = new Map();
+const communityGatewayPresenceCache = new Map();
+const communityGatewayWatchedPresenceKeys = new Map();
+const communityGatewayIntents = (1 << 0) | (1 << 1) | (1 << 8);
+let communityPresenceGateway = null;
+
+function normalizeCommunityPresenceStatus(value) {
+  const status = String(value ?? "").trim().toLowerCase();
+  return ["online", "idle", "dnd", "offline"].includes(status) ? status : "unknown";
+}
+
+function cacheCommunityGatewayPresence(guildId, discordUserId, status) {
+  const normalizedGuildId = String(guildId ?? "");
+  const normalizedUserId = String(discordUserId ?? "");
+  if (!isDiscordGuildId(normalizedGuildId) || !isDiscordGuildId(normalizedUserId)) return;
+  const cacheKey = `${normalizedGuildId}:${normalizedUserId}`;
+  if ((communityGatewayWatchedPresenceKeys.get(cacheKey) ?? 0) <= Date.now()) {
+    communityGatewayWatchedPresenceKeys.delete(cacheKey);
+    communityGatewayPresenceCache.delete(cacheKey);
+    return;
+  }
+  communityGatewayPresenceCache.set(cacheKey, {
+    status: normalizeCommunityPresenceStatus(status),
+    updatedAt: Date.now()
+  });
+}
+
+function stopCommunityPresenceGateway() {
+  const gateway = communityPresenceGateway;
+  communityPresenceGateway = null;
+  if (!gateway) return;
+  if (gateway.heartbeatTimer) clearInterval(gateway.heartbeatTimer);
+  if (gateway.initialHeartbeatTimer) clearTimeout(gateway.initialHeartbeatTimer);
+  for (const pending of gateway.pendingMemberRequests.values()) {
+    clearTimeout(pending.timeout);
+    pending.reject(new Error("Discord presence connection was closed."));
+  }
+  gateway.pendingMemberRequests.clear();
+  try {
+    gateway.socket?.close(1000, "Configuration changed");
+  } catch {
+    // The socket may already be closed.
+  }
+}
+
+function completeCommunityPresenceRequest(gateway, nonce) {
+  const pending = gateway.pendingMemberRequests.get(nonce);
+  if (!pending) return;
+  clearTimeout(pending.timeout);
+  gateway.pendingMemberRequests.delete(nonce);
+  const statuses = new Map();
+  for (const discordUserId of pending.requestedUserIds) {
+    const status = pending.presences.get(discordUserId)
+      ?? (pending.memberIds.has(discordUserId) ? "offline" : "unknown");
+    statuses.set(discordUserId, status);
+    if (status !== "unknown") cacheCommunityGatewayPresence(pending.guildId, discordUserId, status);
+  }
+  pending.resolve(statuses);
+}
+
+function handleCommunityGatewayDispatch(gateway, eventType, data) {
+  if (eventType === "READY") {
+    gateway.sessionId = String(data?.session_id ?? "");
+    gateway.guildIds = new Set((Array.isArray(data?.guilds) ? data.guilds : [])
+      .map((guild) => String(guild?.id ?? ""))
+      .filter(isDiscordGuildId));
+    gateway.ready = true;
+    gateway.resolveReady(gateway);
+    return;
+  }
+  if (eventType === "GUILD_CREATE") {
+    const guildId = String(data?.id ?? "");
+    if (isDiscordGuildId(guildId)) gateway.guildIds.add(guildId);
+    return;
+  }
+  if (eventType === "GUILD_DELETE") {
+    const guildId = String(data?.id ?? "");
+    if (data?.unavailable !== true) gateway.guildIds.delete(guildId);
+    return;
+  }
+  if (eventType === "PRESENCE_UPDATE") {
+    cacheCommunityGatewayPresence(data?.guild_id, data?.user?.id, data?.status);
+    return;
+  }
+  if (eventType !== "GUILD_MEMBERS_CHUNK") return;
+
+  const guildId = String(data?.guild_id ?? "");
+  for (const presence of Array.isArray(data?.presences) ? data.presences : []) {
+    cacheCommunityGatewayPresence(guildId, presence?.user?.id, presence?.status);
+  }
+  const nonce = String(data?.nonce ?? "");
+  const pending = gateway.pendingMemberRequests.get(nonce);
+  if (!pending || pending.guildId !== guildId) return;
+  for (const member of Array.isArray(data?.members) ? data.members : []) {
+    const discordUserId = String(member?.user?.id ?? "");
+    if (isDiscordGuildId(discordUserId)) pending.memberIds.add(discordUserId);
+  }
+  for (const presence of Array.isArray(data?.presences) ? data.presences : []) {
+    const discordUserId = String(presence?.user?.id ?? "");
+    if (isDiscordGuildId(discordUserId)) pending.presences.set(discordUserId, normalizeCommunityPresenceStatus(presence?.status));
+  }
+  pending.receivedChunks.add(Number(data?.chunk_index ?? 0));
+  pending.chunkCount = Math.max(1, Number(data?.chunk_count ?? 1));
+  if (pending.receivedChunks.size >= pending.chunkCount) completeCommunityPresenceRequest(gateway, nonce);
+}
+
+async function ensureCommunityPresenceGateway(config) {
+  const tokenKey = hashToken(config.botToken);
+  if (communityPresenceGateway?.tokenKey === tokenKey) {
+    if (communityPresenceGateway.ready && communityPresenceGateway.socket?.readyState === WebSocket.OPEN) return communityPresenceGateway;
+    if (communityPresenceGateway.readyPromise) return communityPresenceGateway.readyPromise;
+  }
+  stopCommunityPresenceGateway();
+
+  const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
+  let resolveReady;
+  let rejectReady;
+  const readyPromise = new Promise((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+  const gateway = {
+    tokenKey,
+    socket,
+    ready: false,
+    readyPromise,
+    resolveReady,
+    rejectReady,
+    settled: false,
+    sequence: null,
+    heartbeatTimer: null,
+    initialHeartbeatTimer: null,
+    guildIds: new Set(),
+    pendingMemberRequests: new Map()
+  };
+  communityPresenceGateway = gateway;
+
+  const readyTimeout = setTimeout(() => {
+    if (gateway.settled) return;
+    gateway.settled = true;
+    rejectReady(new Error("Discord presence connection timed out."));
+    try { socket.close(); } catch {}
+  }, 15_000);
+
+  socket.on("message", (raw) => {
+    let payload;
+    try {
+      payload = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (Number.isInteger(payload?.s)) gateway.sequence = payload.s;
+    if (payload?.op === 10) {
+      const heartbeatInterval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
+      const heartbeat = () => {
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: gateway.sequence }));
+      };
+      gateway.initialHeartbeatTimer = setTimeout(heartbeat, Math.floor(Math.random() * heartbeatInterval));
+      gateway.heartbeatTimer = setInterval(heartbeat, heartbeatInterval);
+      gateway.heartbeatTimer.unref?.();
+      socket.send(JSON.stringify({
+        op: 2,
+        d: {
+          token: config.botToken,
+          intents: communityGatewayIntents,
+          properties: { os: process.platform, browser: "plcp-dc", device: "plcp-dc" }
+        }
+      }));
+      return;
+    }
+    if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ op: 1, d: gateway.sequence }));
+      return;
+    }
+    if (payload?.op === 7 || payload?.op === 9) {
+      try { socket.close(); } catch {}
+      return;
+    }
+    if (payload?.op === 0) handleCommunityGatewayDispatch(gateway, payload.t, payload.d);
+  });
+  socket.on("error", () => {
+    // The close handler returns a safe Unknown presence result to the caller.
+  });
+  socket.on("close", (code) => {
+    if (gateway.heartbeatTimer) clearInterval(gateway.heartbeatTimer);
+    if (gateway.initialHeartbeatTimer) clearTimeout(gateway.initialHeartbeatTimer);
+    for (const pending of gateway.pendingMemberRequests.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(new Error("Discord presence connection closed before the member check completed."));
+    }
+    gateway.pendingMemberRequests.clear();
+    gateway.ready = false;
+    gateway.readyPromise = null;
+    if (!gateway.settled) {
+      gateway.settled = true;
+      clearTimeout(readyTimeout);
+      rejectReady(new Error(code === 4014
+        ? "Discord Presence Intent or Server Members Intent is not enabled for this bot."
+        : `Discord presence connection closed (${code}).`));
+    }
+  });
+  readyPromise.then(() => {
+    if (!gateway.settled) {
+      gateway.settled = true;
+      clearTimeout(readyTimeout);
+    }
+  }, () => {});
+  return readyPromise;
+}
+
+function requestCommunityGatewayPresences(gateway, guildId, discordUserIds) {
+  if (!gateway.ready || gateway.socket?.readyState !== WebSocket.OPEN) {
+    return Promise.reject(new Error("Discord presence connection is not ready."));
+  }
+  const nonce = crypto.randomBytes(12).toString("hex");
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      gateway.pendingMemberRequests.delete(nonce);
+      reject(new Error("Discord presence member request timed out."));
+    }, 10_000);
+    gateway.pendingMemberRequests.set(nonce, {
+      guildId,
+      requestedUserIds: new Set(discordUserIds),
+      memberIds: new Set(),
+      presences: new Map(),
+      receivedChunks: new Set(),
+      chunkCount: 1,
+      timeout,
+      resolve,
+      reject
+    });
+    try {
+      gateway.socket.send(JSON.stringify({
+        op: 8,
+        d: { guild_id: guildId, user_ids: discordUserIds, presences: true, nonce }
+      }));
+    } catch (error) {
+      clearTimeout(timeout);
+      gateway.pendingMemberRequests.delete(nonce);
+      reject(error);
+    }
+  });
+}
+
+async function loadCommunityGatewayPresences(config, guildId, discordUserIds) {
+  const userIds = [...new Set(discordUserIds.map(String).filter(isDiscordGuildId))];
+  const statuses = new Map(userIds.map((discordUserId) => {
+    const cacheKey = `${guildId}:${discordUserId}`;
+    communityGatewayWatchedPresenceKeys.set(cacheKey, Date.now() + 15 * 60_000);
+    const cached = communityGatewayPresenceCache.get(cacheKey);
+    return [discordUserId, cached?.updatedAt > Date.now() - 5 * 60_000 ? cached.status : "unknown"];
+  }));
+  if (!userIds.length) return statuses;
+  const gateway = await ensureCommunityPresenceGateway(config);
+  if (!gateway.guildIds.has(guildId)) return statuses;
+  const batches = [];
+  for (let index = 0; index < userIds.length; index += 100) batches.push(userIds.slice(index, index + 100));
+  const results = await Promise.allSettled(batches.map((batch) => requestCommunityGatewayPresences(gateway, guildId, batch)));
+  for (const result of results) {
+    if (result.status !== "fulfilled") continue;
+    for (const [discordUserId, status] of result.value) statuses.set(discordUserId, status);
+  }
+  return statuses;
+}
 
 function fallbackCommunityBot(config) {
   return {
@@ -923,6 +1187,23 @@ function isCommunityResultManagementExpired(order, result) {
   if (allocation.isPeriodic !== true || !allocation.expiredAt) return false;
   const expiresAt = new Date(allocation.expiredAt).getTime();
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
+}
+
+const communityOfflineReplacementCheckMaxAgeMs = 5 * 60_000;
+
+function isCommunityResultPeriodic(order, result) {
+  const categoryId = getCommunityResultStockType(order, result);
+  const allocation = Array.isArray(order?.categoryAllocations)
+    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
+    : null;
+  return allocation ? allocation.isPeriodic === true : order?.categoryIsPeriodic === true;
+}
+
+function isCommunityOfflineReplacementEligible(order, result) {
+  if (!isCommunityResultPeriodic(order, result) || isCommunityResultManagementExpired(order, result)) return false;
+  if (String(result?.presenceStatus ?? "").toLowerCase() !== "offline") return false;
+  const checkedAt = new Date(result?.presenceCheckedAt).getTime();
+  return Number.isFinite(checkedAt) && checkedAt >= Date.now() - communityOfflineReplacementCheckMaxAgeMs;
 }
 
 function isCommunityServiceType(service) {
@@ -2094,6 +2375,12 @@ async function checkCommunityOrderAuthorizations(order) {
   const discordUserIds = order.communityResults
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId);
+  let presenceByUserId = new Map(discordUserIds.map((discordUserId) => [discordUserId, "unknown"]));
+  try {
+    presenceByUserId = await loadCommunityGatewayPresences(orderConfig, targetGuildId, discordUserIds);
+  } catch (error) {
+    console.warn("Members presence check unavailable:", error instanceof Error ? error.message : error);
+  }
   const stock = discordUserIds.length
     ? await pool.query(
         `SELECT DISTINCT ON (discord_user_id)
@@ -2114,6 +2401,16 @@ async function checkCommunityOrderAuthorizations(order) {
     const batch = discordUserIds.slice(start, start + 10);
     const results = await Promise.all(batch.map(async (discordUserId) => {
       const record = stockByUserId.get(discordUserId);
+      const presenceStatus = normalizeCommunityPresenceStatus(presenceByUserId.get(discordUserId));
+      const presenceFields = {
+        presenceStatus,
+        presenceDetails: presenceStatus === "unknown"
+          ? "Discord presence could not be determined right now."
+          : presenceStatus === "offline"
+            ? "Discord currently reports this member as offline or invisible."
+            : `Discord currently reports this member as ${presenceStatus}.`,
+        presenceCheckedAt: new Date().toISOString()
+      };
       let membershipStatus = "unknown";
       let membershipDetails = "Server membership could not be verified right now.";
       try {
@@ -2143,7 +2440,7 @@ async function checkCommunityOrderAuthorizations(order) {
       }
       const expiresAt = new Date(record?.access_token_expires_at).getTime();
       if (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired.", membershipStatus, membershipDetails }];
+        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired.", membershipStatus, membershipDetails, ...presenceFields }];
       }
       try {
         let identity = await requestDiscord("oauth2/@me", {
@@ -2158,18 +2455,19 @@ async function checkCommunityOrderAuthorizations(order) {
         }
         if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId) {
           if ([401, 403].includes(identity.response.status) || identity.response.ok) {
-            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails }];
+            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails, ...presenceFields }];
           }
-          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails }];
+          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails, ...presenceFields }];
         }
         return [discordUserId, {
           status: "active",
           details: "OAuth authorization is active.",
           membershipStatus,
-          membershipDetails
+          membershipDetails,
+          ...presenceFields
         }];
       } catch {
-        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails }];
+        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails, ...presenceFields }];
       }
     }));
     results.forEach(([discordUserId, result]) => checks.set(discordUserId, result));
@@ -2194,6 +2492,9 @@ async function checkCommunityOrderAuthorizations(order) {
       authorizationDetails: check.details,
       membershipStatus: check.membershipStatus,
       membershipDetails: check.membershipDetails,
+      presenceStatus: check.presenceStatus,
+      presenceDetails: check.presenceDetails,
+      presenceCheckedAt: check.presenceCheckedAt,
       authorizationCheckedAt: checkedAt
     } : item;
   });
@@ -2202,6 +2503,13 @@ async function checkCommunityOrderAuthorizations(order) {
     active: [...checks.values()].filter((check) => check.status === "active").length,
     inactive: inactiveUserIds.length,
     unknown: [...checks.values()].filter((check) => check.status === "unknown").length,
+    presence: {
+      online: [...checks.values()].filter((check) => check.presenceStatus === "online").length,
+      idle: [...checks.values()].filter((check) => check.presenceStatus === "idle").length,
+      dnd: [...checks.values()].filter((check) => check.presenceStatus === "dnd").length,
+      offline: [...checks.values()].filter((check) => check.presenceStatus === "offline").length,
+      unknown: [...checks.values()].filter((check) => check.presenceStatus === "unknown").length
+    },
     checkedAt
   };
   const checkedOrder = { ...order, communityResults, memberCheckSummary: summary };
@@ -2527,6 +2835,9 @@ function resetCommunityResultVerification(result, overrides = {}) {
   delete next.authorizationCheckedAt;
   delete next.membershipStatus;
   delete next.membershipDetails;
+  delete next.presenceStatus;
+  delete next.presenceDetails;
+  delete next.presenceCheckedAt;
   return { ...next, ...overrides };
 }
 
@@ -4064,6 +4375,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
     communityGuildCache = null;
     communityBotCache = null;
     communityBotGuildCountCache = null;
+    stopCommunityPresenceGateway();
     const [bot, guildCount] = await Promise.all([
       loadCommunityBotSafe(candidate),
       loadCommunityBotGuildCountSafe(candidate)
@@ -4092,6 +4404,7 @@ app.delete("/api/community/config", requireSession, async (_req, res, next) => {
     communityGuildCache = null;
     communityBotCache = null;
     communityBotGuildCountCache = null;
+    stopCommunityPresenceGateway();
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -6078,7 +6391,9 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const replaceableIndices = results.flatMap((item, index) => {
       const state = String(item?.state ?? "").toLowerCase();
       const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed";
-      return (["failed", "blocked", "already_member"].includes(state) || removed) && !isCommunityResultManagementExpired(order, item) ? [index] : [];
+      const offlineWithPeriodicSupport = isCommunityOfflineReplacementEligible(order, item);
+      return (["failed", "blocked", "already_member"].includes(state) || removed || offlineWithPeriodicSupport)
+        && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
       await client.query("ROLLBACK");
@@ -6265,9 +6580,10 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
     const replaceableStates = new Set(["failed", "blocked", "already_member"]);
     const memberWasRemoved = String(failedResult?.membershipStatus ?? "").toLowerCase() === "removed";
-    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved)) {
+    const offlineWithPeriodicSupport = isCommunityOfflineReplacementEligible(order, failedResult);
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved && !offlineWithPeriodicSupport)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Only failed, already-member or removed members can be replaced." });
+      return res.status(409).json({ message: "Only failed, already-member, removed, or recently checked offline members from period-based categories can be replaced." });
     }
 
     let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;
