@@ -2088,7 +2088,13 @@ export default function HomePage() {
     failed: 0
   };
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
-  const communityVisibleRecords = (communityStatus?.recent ?? []).filter((record) => record.stockType === communityStockType);
+  const communityVisibleRecords = (communityStatus?.recent ?? [])
+    .filter((record) => record.stockType === communityStockType)
+    .sort((left, right) => {
+      const leftName = left.displayName || left.username;
+      const rightName = right.displayName || right.username;
+      return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
+    });
 
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
