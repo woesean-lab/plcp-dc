@@ -454,9 +454,7 @@ export default function PublicOrderPage() {
     ? membersRemaining * effectiveEstimateDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
-  const expiredAt = parseTimestamp(status?.replacementCategoryId
-    ? status.replacementExpiredAt ?? undefined
-    : status?.expiredAt ?? status?.expired_at ?? undefined);
+  const expiredAt = parseTimestamp(status?.expiredAt ?? status?.expired_at ?? undefined);
   const supportExpired = expiredAt !== undefined && expiredAt <= supportClock;
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const nextMemberTimestamp = parseTimestamp(status?.nextMemberAt ?? undefined);
@@ -496,14 +494,10 @@ export default function PublicOrderPage() {
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const isOfflinePeriodicReplacementEligible = (item: CommunityMemberResult) => {
     if (item.presenceStatus !== "offline") return false;
-    const allocation = status?.replacementCategoryId ? null : categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
-    const isPeriodic = status?.replacementCategoryId
-      ? status.replacementCategoryIsPeriodic === true
-      : allocation ? allocation.isPeriodic === true : status?.categoryIsPeriodic === true;
+    const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    const isPeriodic = allocation ? allocation.isPeriodic === true : status?.categoryIsPeriodic === true;
     if (!isPeriodic) return false;
-    const expirationValue = status?.replacementCategoryId
-      ? status.replacementExpiredAt
-      : allocation?.expiredAt ?? status?.expiredAt ?? status?.expired_at;
+    const expirationValue = allocation?.expiredAt ?? status?.expiredAt ?? status?.expired_at;
     const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
     if (Number.isFinite(expirationTime) && expirationTime <= Date.now()) return false;
     const checkedAt = item.presenceCheckedAt ? new Date(item.presenceCheckedAt).getTime() : Number.NaN;
