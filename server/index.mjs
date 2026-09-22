@@ -2386,7 +2386,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
   const stock = discordUserIds.length
     ? await pool.query(
         `SELECT DISTINCT ON (discord_user_id)
-                discord_user_id, encrypted_access_token, access_token_expires_at
+                discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
          FROM community_oauth_joins
          WHERE discord_user_id = ANY($1::text[])
          ORDER BY discord_user_id,
@@ -2441,23 +2441,40 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
       } catch {
         // Keep membership unknown; an unknown result must not grant replacement.
       }
-      const expiresAt = new Date(record?.access_token_expires_at).getTime();
-      if (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
-        return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired.", membershipStatus, membershipDetails, ...presenceFields }];
-      }
+      let accessToken = null;
       try {
+        const expiresAt = new Date(record?.access_token_expires_at).getTime();
+        if (record?.encrypted_refresh_token && (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
+          accessToken = (await refreshStoredCommunityOAuthCredential(config, record)).accessToken;
+        } else if (record?.encrypted_access_token && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
+          accessToken = decryptCredential(record.encrypted_access_token);
+        }
+        if (!accessToken) {
+          return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired and no refresh token is available.", membershipStatus, membershipDetails, ...presenceFields }];
+        }
         let identity = await requestDiscord("oauth2/@me", {
-          headers: { Authorization: `Bearer ${decryptCredential(record.encrypted_access_token)}` }
+          headers: { Authorization: `Bearer ${accessToken}` }
         });
         if (identity.response.status === 429) {
           const retrySeconds = Math.min(Math.max(Number(identity.payload?.retry_after) || 1, 1), 5);
           await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
           identity = await requestDiscord("oauth2/@me", {
-            headers: { Authorization: `Bearer ${decryptCredential(record.encrypted_access_token)}` }
+            headers: { Authorization: `Bearer ${accessToken}` }
           });
         }
+        if (identity.response.status === 401 && record?.encrypted_refresh_token) {
+          try {
+            accessToken = (await refreshStoredCommunityOAuthCredential(config, record, { force: true })).accessToken;
+            identity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } });
+          } catch (error) {
+            if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
+              return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...presenceFields }];
+            }
+            return [discordUserId, { status: "unknown", details: "OAuth refresh could not be completed right now.", membershipStatus, membershipDetails, ...presenceFields }];
+          }
+        }
         if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId) {
-          if ([401, 403].includes(identity.response.status) || identity.response.ok) {
+          if (identity.response.status === 401 || identity.response.ok) {
             return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails, ...presenceFields }];
           }
           return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails, ...presenceFields }];
@@ -2469,7 +2486,10 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
           membershipDetails,
           ...presenceFields
         }];
-      } catch {
+      } catch (error) {
+        if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
+          return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...presenceFields }];
+        }
         return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails, ...presenceFields }];
       }
     }));
@@ -2478,12 +2498,24 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
   }
 
   const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
+  const activeUserIds = [...checks.entries()].filter(([, check]) => check.status === "active").map(([discordUserId]) => discordUserId);
   if (inactiveUserIds.length) {
     await pool.query(
       `UPDATE community_oauth_joins
-       SET status = 'failed', details = 'OAuth access token expired or became invalid. Re-import a current export; automatic refresh is disabled.', reserved_order_id = NULL
+       SET status = 'failed', details = 'OAuth authorization expired or became invalid and could not be refreshed.', reserved_order_id = NULL
        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
        [config.guildId, inactiveUserIds]
+    );
+  }
+  if (activeUserIds.length) {
+    await pool.query(
+      `UPDATE community_oauth_joins
+       SET status = 'authorized', details = NULL
+       WHERE guild_id = $1
+         AND discord_user_id = ANY($2::text[])
+         AND status = 'failed'
+         AND COALESCE(details, '') ~* 'OAuth'`,
+      [config.guildId, activeUserIds]
     );
   }
 
