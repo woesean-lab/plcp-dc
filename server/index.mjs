@@ -44,6 +44,7 @@ const publicCommunityReplaceCooldownMs = 60 * 1000;
 const publicCommunityReplaceCooldowns = new Map();
 const publicCommunityCheckCooldownMs = 60 * 1000;
 const publicCommunityCheckCooldowns = new Map();
+const communityOrderMemberCheckProgress = new Map();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 let dcordCircuitOpenUntil = 0;
@@ -2351,7 +2352,7 @@ async function refreshCommunityOAuthTokensDue(config, limit = 5_000) {
   return summary;
 }
 
-async function checkCommunityOrderAuthorizations(order) {
+async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
   if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
     const error = new Error("This order does not contain Members 2 delivery results.");
     error.statusCode = 400;
@@ -2375,6 +2376,7 @@ async function checkCommunityOrderAuthorizations(order) {
   const discordUserIds = order.communityResults
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId);
+  onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "presence" });
   let presenceByUserId = new Map(discordUserIds.map((discordUserId) => [discordUserId, "unknown"]));
   try {
     presenceByUserId = await loadCommunityGatewayPresences(orderConfig, targetGuildId, discordUserIds);
@@ -2396,6 +2398,7 @@ async function checkCommunityOrderAuthorizations(order) {
     : { rows: [] };
   const stockByUserId = new Map(stock.rows.map((row) => [String(row.discord_user_id), row]));
   const checks = new Map();
+  onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "members" });
 
   for (let start = 0; start < discordUserIds.length; start += 10) {
     const batch = discordUserIds.slice(start, start + 10);
@@ -2471,6 +2474,7 @@ async function checkCommunityOrderAuthorizations(order) {
       }
     }));
     results.forEach(([discordUserId, result]) => checks.set(discordUserId, result));
+    onProgress({ active: true, total: discordUserIds.length, checked: Math.min(start + results.length, discordUserIds.length), stage: "members" });
   }
 
   const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
@@ -2513,8 +2517,52 @@ async function checkCommunityOrderAuthorizations(order) {
     checkedAt
   };
   const checkedOrder = { ...order, communityResults, memberCheckSummary: summary };
+  onProgress({ active: true, total: discordUserIds.length, checked: discordUserIds.length, stage: "saving" });
   await saveTrackedOrderPayload(checkedOrder);
   return { order: checkedOrder, summary };
+}
+
+async function runCommunityOrderMemberCheck(order) {
+  const uniqid = String(order?.uniqid ?? "").trim();
+  const existing = communityOrderMemberCheckProgress.get(uniqid);
+  if (existing?.active) {
+    const error = new Error("This member check is already running.");
+    error.statusCode = 409;
+    throw error;
+  }
+  const initial = {
+    active: true,
+    total: Array.isArray(order?.communityResults) ? order.communityResults.length : 0,
+    checked: 0,
+    stage: "starting",
+    startedAt: new Date().toISOString()
+  };
+  communityOrderMemberCheckProgress.set(uniqid, initial);
+  try {
+    const result = await checkCommunityOrderAuthorizations(order, (progress) => {
+      communityOrderMemberCheckProgress.set(uniqid, { ...initial, ...progress });
+    });
+    communityOrderMemberCheckProgress.set(uniqid, {
+      ...initial,
+      active: false,
+      total: result.summary.checked,
+      checked: result.summary.checked,
+      stage: "complete",
+      completedAt: new Date().toISOString()
+    });
+    return result;
+  } catch (error) {
+    communityOrderMemberCheckProgress.set(uniqid, {
+      ...initial,
+      active: false,
+      stage: "failed",
+      message: error instanceof Error ? error.message : "Member check failed."
+    });
+    throw error;
+  } finally {
+    const cleanup = setTimeout(() => communityOrderMemberCheckProgress.delete(uniqid), 60_000);
+    cleanup.unref?.();
+  }
 }
 
 async function addCommunityGuildMember(config, discordUserId, accessToken) {
@@ -6029,11 +6077,21 @@ app.post("/api/community/orders/:uniqid/check-members", requireSession, async (r
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
-    const result = await checkCommunityOrderAuthorizations(order);
+    const result = await runCommunityOrderMemberCheck(order);
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/community/orders/:uniqid/check-members/progress", requireSession, (req, res) => {
+  const uniqid = String(req.params.uniqid ?? "").trim();
+  res.set("Cache-Control", "no-store").json(communityOrderMemberCheckProgress.get(uniqid) ?? {
+    active: false,
+    total: 0,
+    checked: 0,
+    stage: "idle"
+  });
 });
 
 app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res, next) => {
@@ -6932,11 +6990,21 @@ app.post("/api/public/orders/:uniqid/check-members", async (req, res, next) => {
       return res.status(410).json({ message: "This order's member support period has expired." });
     }
     publicCommunityCheckCooldowns.set(cooldownKey, Date.now() + publicCommunityCheckCooldownMs);
-    const result = await checkCommunityOrderAuthorizations(order);
+    const result = await runCommunityOrderMemberCheck(order);
     res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });
   } catch (error) {
     next(error);
   }
+});
+
+app.get("/api/public/orders/:uniqid/check-members/progress", (req, res) => {
+  const uniqid = String(req.params.uniqid ?? "").trim();
+  res.set("Cache-Control", "no-store").json(communityOrderMemberCheckProgress.get(uniqid) ?? {
+    active: false,
+    total: 0,
+    checked: 0,
+    stage: "idle"
+  });
 });
 
 app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {

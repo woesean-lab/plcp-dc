@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -56,12 +56,12 @@ type CommunityMemberResult = {
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
-  if (state === "joining") return 0;
+  if (item.presenceStatus === "offline") return 0;
   if (item.authorizationStatus === "inactive") return 1;
   if (item.membershipStatus === "removed") return 2;
   if (["failed", "blocked", "already_member"].includes(state)) return 3;
-  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 4;
-  if (state === "replacing") return 5;
+  if (state === "joining" || state === "replacing") return 4;
+  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 5;
   if (state === "queued") return 6;
   return 7;
 }
@@ -380,6 +380,7 @@ export default function OrderPage() {
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
@@ -765,10 +766,24 @@ export default function OrderPage() {
     if (!target || checkingCommunityMembers) return;
     try {
       setCheckingCommunityMembers(true);
+      setCommunityMemberCheckProgress({ active: true, total: communityMemberResults.length, checked: 0, stage: "starting" });
+      let progressRequestRunning = false;
+      const progressTimer = window.setInterval(() => {
+        if (progressRequestRunning) return;
+        progressRequestRunning = true;
+        void getCommunityOrderMemberCheckProgress(target)
+          .then(setCommunityMemberCheckProgress)
+          .catch(() => {})
+          .finally(() => { progressRequestRunning = false; });
+      }, 500);
+      try {
       const data = await checkCommunityOrderMembers(target);
       setResult((current) => mergeOrderStatus(current, data.order));
       setCommunityCheckNeedsBot(false);
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
+      } finally {
+        window.clearInterval(progressTimer);
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Members could not be checked.";
       if (/add the bot to .*discord server/i.test(message)) {
@@ -779,6 +794,7 @@ export default function OrderPage() {
       toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
+      setCommunityMemberCheckProgress(null);
     }
   }
 
@@ -1192,7 +1208,9 @@ export default function OrderPage() {
                     <span className="member-check-control">
                       <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
                         <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                        {checkingCommunityMembers ? "Checking..." : "Check members"}
+                        {checkingCommunityMembers
+                          ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
+                          : "Check members"}
                       </Button>
                       <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="admin-member-check-description">
                         <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />

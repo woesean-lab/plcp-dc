@@ -8,7 +8,7 @@ import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Pla
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -55,12 +55,12 @@ type CommunityMemberResult = {
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
-  if (state === "joining") return 0;
+  if (item.presenceStatus === "offline") return 0;
   if (item.authorizationStatus === "inactive") return 1;
   if (item.membershipStatus === "removed") return 2;
   if (["failed", "blocked", "already_member"].includes(state)) return 3;
-  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 4;
-  if (state === "replacing") return 5;
+  if (state === "joining" || state === "replacing") return 4;
+  if (item.authorizationStatus === "unknown" || item.membershipStatus === "unknown") return 5;
   if (state === "queued") return 6;
   return 7;
 }
@@ -248,6 +248,7 @@ export default function PublicOrderPage() {
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
@@ -659,10 +660,24 @@ export default function PublicOrderPage() {
     if (!uniqid || checkingCommunityMembers) return;
     try {
       setCheckingCommunityMembers(true);
+      setCommunityMemberCheckProgress({ active: true, total: communityMemberResults.length, checked: 0, stage: "starting" });
+      let progressRequestRunning = false;
+      const progressTimer = window.setInterval(() => {
+        if (progressRequestRunning) return;
+        progressRequestRunning = true;
+        void getPublicCommunityOrderMemberCheckProgress(uniqid)
+          .then(setCommunityMemberCheckProgress)
+          .catch(() => {})
+          .finally(() => { progressRequestRunning = false; });
+      }, 500);
+      try {
       const data = await checkPublicCommunityOrderMembers(uniqid);
       setStatus((current) => mergeOrderStatus(current, data.order));
       setCommunityCheckNeedsBot(false);
       toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
+      } finally {
+        window.clearInterval(progressTimer);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Members could not be checked.";
       if (/add the bot to .*discord server/i.test(message)) {
@@ -673,6 +688,7 @@ export default function PublicOrderPage() {
       toast.error(message);
     } finally {
       setCheckingCommunityMembers(false);
+      setCommunityMemberCheckProgress(null);
     }
   }
 
@@ -988,7 +1004,9 @@ export default function PublicOrderPage() {
                           <span className="member-check-control">
                             <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                              {checkingCommunityMembers ? "Checking..." : "Check members"}
+                              {checkingCommunityMembers
+                                ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
+                                : "Check members"}
                             </Button>
                             <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="public-member-check-description">
                               <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />

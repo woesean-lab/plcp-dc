@@ -231,6 +231,14 @@ export type CommunityMemberCheckResult = {
   };
 };
 
+export type CommunityMemberCheckProgress = {
+  active: boolean;
+  total: number;
+  checked: number;
+  stage: "idle" | "starting" | "presence" | "members" | "saving" | "complete" | "failed";
+  message?: string;
+};
+
 export function checkCommunityOrderMembers(uniqid: string) {
   return requestJson<CommunityMemberCheckResult>(
     `/api/community/orders/${encodeURIComponent(uniqid)}/check-members`,
@@ -238,10 +246,22 @@ export function checkCommunityOrderMembers(uniqid: string) {
   );
 }
 
+export function getCommunityOrderMemberCheckProgress(uniqid: string) {
+  return requestJson<CommunityMemberCheckProgress>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/check-members/progress`
+  );
+}
+
 export function checkPublicCommunityOrderMembers(uniqid: string) {
   return requestJson<CommunityMemberCheckResult>(
     `/api/public/orders/${encodeURIComponent(uniqid)}/check-members`,
     { method: "POST" }
+  );
+}
+
+export function getPublicCommunityOrderMemberCheckProgress(uniqid: string) {
+  return requestJson<CommunityMemberCheckProgress>(
+    `/api/public/orders/${encodeURIComponent(uniqid)}/check-members/progress`
   );
 }
 
