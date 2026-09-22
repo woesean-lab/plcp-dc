@@ -23,6 +23,8 @@ import {
   ChevronsDown,
   ChevronsUp,
   Download,
+  Eye,
+  EyeOff,
   History,
   Heart,
   KeyRound,
@@ -57,6 +59,7 @@ import {
   deleteCommunityStockCategory,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
+  getCommunityMemberAccessToken,
   getCommunityBotGuilds,
   getCommunityConfig,
   getCommunityGuildLeaveProgress,
@@ -629,6 +632,8 @@ export default function HomePage() {
   const [checkingDcordConnection, setCheckingDcordConnection] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
+  const [loadingCommunityAccessTokenId, setLoadingCommunityAccessTokenId] = useState<string | null>(null);
+  const [communityAccessTokens, setCommunityAccessTokens] = useState<Record<string, { accessToken: string; expiresAt: string | null }>>({});
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [leavingCommunityGuilds, setLeavingCommunityGuilds] = useState(false);
   const [showCommunityGuildManager, setShowCommunityGuildManager] = useState(false);
@@ -1090,7 +1095,10 @@ export default function HomePage() {
     try {
       setLoadingCommunityStatus(true);
       const nextStatus = await getCommunityAdminStatus(communityStockType);
-      if (requestId === communityStatusRequestRef.current) setCommunityStatus(nextStatus);
+      if (requestId === communityStatusRequestRef.current) {
+        setCommunityStatus(nextStatus);
+        setCommunityAccessTokens({});
+      }
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
     } finally {
@@ -1108,6 +1116,7 @@ export default function HomePage() {
       const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
+      setCommunityAccessTokens({});
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");
     } finally {
@@ -1127,6 +1136,37 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Connected user could not be removed.");
     } finally {
       setRemovingCommunityUserId(null);
+    }
+  }
+
+  async function toggleCommunityAccessToken(record: CommunityAdminStatus["recent"][number]) {
+    if (communityAccessTokens[record.id]) {
+      setCommunityAccessTokens((current) => {
+        const next = { ...current };
+        delete next[record.id];
+        return next;
+      });
+      return;
+    }
+    try {
+      setLoadingCommunityAccessTokenId(record.id);
+      const token = await getCommunityMemberAccessToken(record.id);
+      setCommunityAccessTokens((current) => ({ ...current, [record.id]: token }));
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Access token could not be loaded.");
+    } finally {
+      setLoadingCommunityAccessTokenId(null);
+    }
+  }
+
+  async function copyCommunityAccessToken(record: CommunityAdminStatus["recent"][number]) {
+    const token = communityAccessTokens[record.id]?.accessToken;
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      notifySuccess(`${record.username} access token copied.`);
+    } catch {
+      notifyError("Access token could not be copied.");
     }
   }
 
@@ -2166,6 +2206,7 @@ export default function HomePage() {
                   onClick={() => {
                     setCommunityStockType(category.id);
                     setSelectedCommunityMemberIds([]);
+                    setCommunityAccessTokens({});
                     setCommunityImportFile(null);
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
                   }}
@@ -2266,6 +2307,7 @@ export default function HomePage() {
         <div className="community-recent-list">
           {communityVisibleRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
+            const revealedToken = communityAccessTokens[record.id];
             return (
               <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
                 <input
@@ -2283,6 +2325,27 @@ export default function HomePage() {
                   <small>{record.displayName
                     ? `@${record.username} · ${record.details || new Date(record.authorizedAt).toLocaleString()}`
                     : record.details || new Date(record.authorizedAt).toLocaleString()}</small>
+                  <span className="community-member-access-token" data-visible={Boolean(revealedToken)}>
+                    <KeyRound className="h-3 w-3" aria-hidden="true" />
+                    <code title={revealedToken?.accessToken}>{revealedToken?.accessToken ?? "Access token hidden"}</code>
+                    {revealedToken?.expiresAt ? <time dateTime={revealedToken.expiresAt}>{new Date(revealedToken.expiresAt).toLocaleString()}</time> : null}
+                    <button
+                      type="button"
+                      title={revealedToken ? "Hide access token" : "Show access token"}
+                      aria-label={`${revealedToken ? "Hide" : "Show"} ${record.username} access token`}
+                      disabled={loadingCommunityAccessTokenId !== null}
+                      onClick={() => void toggleCommunityAccessToken(record)}
+                    >
+                      {loadingCommunityAccessTokenId === record.id
+                        ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
+                        : revealedToken ? <EyeOff className="h-3 w-3" aria-hidden="true" /> : <Eye className="h-3 w-3" aria-hidden="true" />}
+                    </button>
+                    {revealedToken ? (
+                      <button type="button" title="Copy access token" aria-label={`Copy ${record.username} access token`} onClick={() => void copyCommunityAccessToken(record)}>
+                        <Copy className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </span>
                 </span>
                 <Badge variant={badge.variant}>{badge.label}</Badge>
                 <Button

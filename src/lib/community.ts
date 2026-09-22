@@ -174,6 +174,13 @@ export function removeCommunityAuthorization(discordUserId: string) {
   }).then(parseResponse<{ removed: boolean; username: string; revoked: boolean }>);
 }
 
+export function getCommunityMemberAccessToken(discordUserId: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/access-token`, {
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ accessToken: string; expiresAt: string | null }>);
+}
+
 export function removeCommunityAuthorizations(ids: string[]) {
   return fetch("/api/community/members/bulk-delete", {
     method: "POST",
