@@ -4308,7 +4308,7 @@ async function initializeDatabase() {
         details = 'The previous delivery attempt failed, but the OAuth authorization remains active.'
     WHERE status = 'failed'
       AND details ~* '^(Delivery|Replacement) failed:'
-      AND details !~* '(Unknown User|10013)'
+      AND details !~* '(Unknown User|10013|50178|user account must first be verified)'
   `);
   await pool.query(`
     UPDATE tracked_orders
@@ -4319,7 +4319,7 @@ async function initializeDatabase() {
         SELECT jsonb_agg(
           CASE
             WHEN item->>'authorizationStatus' = 'inactive'
-              AND COALESCE(item->>'details', '') !~* '(Unknown User|10013)'
+              AND COALESCE(item->>'details', '') !~* '(Unknown User|10013|50178|user account must first be verified)'
             THEN item - 'authorizationStatus' - 'authorizationDetails' - 'authorizationCheckedAt'
             ELSE item
           END
@@ -4334,7 +4334,7 @@ async function initializeDatabase() {
         SELECT 1
         FROM jsonb_array_elements(payload->'communityResults') AS entries(item)
         WHERE item->>'authorizationStatus' = 'inactive'
-          AND COALESCE(item->>'details', '') !~* '(Unknown User|10013)'
+          AND COALESCE(item->>'details', '') !~* '(Unknown User|10013|50178|user account must first be verified)'
       )
   `);
   await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
