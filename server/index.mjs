@@ -4954,11 +4954,14 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
 
     await normalizeCommunityStockRecords(config);
     const requestedCategoryId = parseCommunityCategoryId(_req.query?.categoryId);
-    const [bot, guild, summary, stockCategories, recentResult] = await Promise.all([
+    const stockCategories = await loadCommunityStockCategories(config);
+    const activeCategoryId = stockCategories.some((category) => category.id === requestedCategoryId)
+      ? requestedCategoryId
+      : stockCategories[0]?.id ?? null;
+    const [bot, guild, summary, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
-      loadCommunityStockCategories(config),
       pool.query(
         `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at
          FROM community_oauth_joins
@@ -4968,10 +4971,10 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
                   CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC,
                   sort_position ASC,
                   authorized_at ASC`,
-        [config.guildId, requestedCategoryId]
+        [config.guildId, activeCategoryId]
       )
     ]);
-    const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, requestedCategoryId);
+    const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, activeCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
       bot,
@@ -4980,6 +4983,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       syncing: syncProgress?.syncing === true,
       syncProgress,
       stockCategories,
+      activeCategoryId,
       recent: recentResult.rows.map((row) => ({
         id: row.discord_user_id,
         username: row.username,

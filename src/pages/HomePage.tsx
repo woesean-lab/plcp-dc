@@ -1064,6 +1064,7 @@ export default function HomePage() {
         const nextStatus = await getCommunityAdminStatus(communityStockType);
         if (cancelled || requestId !== communityStatusRequestRef.current) return;
         setCommunityStatus(nextStatus);
+        if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
         if (nextStatus.syncing) {
           pollHandle = window.setTimeout(() => void pollCommunitySync(), 1500);
           return;
@@ -1102,6 +1103,7 @@ export default function HomePage() {
       const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId === communityStatusRequestRef.current) {
         setCommunityStatus(nextStatus);
+        if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
         setCommunityAccessTokens({});
       }
     } catch (error) {
@@ -1121,6 +1123,7 @@ export default function HomePage() {
       const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
+      if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
       setCommunityAccessTokens({});
     } catch (error) {
       if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members Stock could not be refreshed.");

@@ -88,6 +88,7 @@ export type CommunityJoinRecord = {
 };
 
 export type CommunityAdminStatus = CommunityJoinSummary & {
+  activeCategoryId?: string | null;
   recent: CommunityJoinRecord[];
 };
 
