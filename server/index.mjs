@@ -487,11 +487,14 @@ async function loadCommunityGatewayPresences(config, guildId, discordUserIds) {
   if (!gateway.guildIds.has(guildId)) return statuses;
   const batches = [];
   for (let index = 0; index < userIds.length; index += 100) batches.push(userIds.slice(index, index + 100));
-  const results = await Promise.allSettled(batches.map((batch) => requestCommunityGatewayPresences(gateway, guildId, batch)));
-  for (const result of results) {
-    if (result.status !== "fulfilled") continue;
-    for (const [discordUserId, status] of result.value) statuses.set(discordUserId, status);
-  }
+  await forEachWithConcurrency(batches, 3, async (batch) => {
+    try {
+      const result = await requestCommunityGatewayPresences(gateway, guildId, batch);
+      for (const [discordUserId, status] of result) statuses.set(discordUserId, status);
+    } catch {
+      // Keep cached/unknown values for a failed Discord presence batch.
+    }
+  });
   return statuses;
 }
 
@@ -2497,6 +2500,22 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     onProgress({ active: true, total: discordUserIds.length, checked: Math.min(start + results.length, discordUserIds.length), stage: "members" });
   }
 
+  const presenceUpdates = [...checks.entries()].map(([discordUserId, check]) => ({
+    discord_user_id: discordUserId,
+    presence_status: normalizeCommunityPresenceStatus(check.presenceStatus),
+    presence_checked_at: check.presenceCheckedAt
+  }));
+  if (presenceUpdates.length) {
+    await pool.query(
+      `UPDATE community_oauth_joins AS stock
+       SET presence_status = checked.presence_status,
+           presence_checked_at = checked.presence_checked_at
+       FROM jsonb_to_recordset($1::jsonb) AS checked(discord_user_id text, presence_status text, presence_checked_at timestamptz)
+       WHERE stock.discord_user_id = checked.discord_user_id`,
+      [JSON.stringify(presenceUpdates)]
+    );
+  }
+
   const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
   const activeUserIds = [...checks.entries()].filter(([, check]) => check.status === "active").map(([discordUserId]) => discordUserId);
   if (inactiveUserIds.length) {
@@ -4213,6 +4232,8 @@ async function initializeDatabase() {
       details TEXT,
       authorized_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       joined_at TIMESTAMPTZ,
+      presence_status TEXT,
+      presence_checked_at TIMESTAMPTZ,
       PRIMARY KEY (discord_user_id, guild_id)
     )
   `);
@@ -4223,6 +4244,8 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS sort_position BIGINT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS presence_status TEXT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS presence_checked_at TIMESTAMPTZ");
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
   await pool.query(`
     WITH ranked AS (
@@ -4930,23 +4953,24 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     }
 
     await normalizeCommunityStockRecords(config);
+    const requestedCategoryId = parseCommunityCategoryId(_req.query?.categoryId);
     const [bot, guild, summary, stockCategories, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
       loadCommunityStockCategories(config),
       pool.query(
-        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position
+        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at
          FROM community_oauth_joins
          WHERE guild_id = $1
+           AND ($2::text IS NULL OR stock_type = $2)
          ORDER BY stock_type ASC,
                   CASE WHEN status = 'failed' THEN 1 ELSE 0 END ASC,
                   sort_position ASC,
                   authorized_at ASC`,
-        [config.guildId]
+        [config.guildId, requestedCategoryId]
       )
     ]);
-    const requestedCategoryId = parseCommunityCategoryId(_req.query?.categoryId);
     const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, requestedCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
@@ -4967,7 +4991,9 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         reservedOrderId: row.reserved_order_id,
         sortPosition: Number(row.sort_position),
         authorizedAt: row.authorized_at,
-        joinedAt: row.joined_at
+        joinedAt: row.joined_at,
+        presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
+        presenceCheckedAt: row.presence_checked_at
       }))
     });
   } catch (error) {

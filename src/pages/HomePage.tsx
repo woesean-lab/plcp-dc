@@ -222,6 +222,11 @@ function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number])
   return { label: "Connected", variant: "success" as const };
 }
 
+function getCommunityPresenceLabel(status: CommunityAdminStatus["recent"][number]["presenceStatus"]) {
+  if (status === "dnd") return "DND";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
 const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
   clientSecret: "",
@@ -2347,7 +2352,12 @@ export default function HomePage() {
                     ) : null}
                   </span>
                 </span>
-                <Badge variant={badge.variant}>{badge.label}</Badge>
+                <span className="community-member-state-badges">
+                  <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
+                    <i aria-hidden="true" /> {getCommunityPresenceLabel(record.presenceStatus)}
+                  </span>
+                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                </span>
                 <Button
                   type="button"
                   size="icon-sm"
