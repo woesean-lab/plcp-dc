@@ -7735,7 +7735,14 @@
   width: 170px;
 }
 
-.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger {
+.community-member-presence-filter {
+  position: relative;
+  z-index: 4;
+  width: 138px;
+}
+
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger,
+.community-member-priority-actions .community-member-presence-filter .filter-dropdown-trigger {
   min-height: 40px;
   padding: 0 10px;
   border-radius: 10px;
@@ -7744,19 +7751,22 @@
   justify-content: space-between;
 }
 
-.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger > span {
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger > span,
+.community-member-priority-actions .community-member-presence-filter .filter-dropdown-trigger > span {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger svg {
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-trigger svg,
+.community-member-priority-actions .community-member-presence-filter .filter-dropdown-trigger svg {
   width: 14px;
   height: 14px;
 }
 
-.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu {
+.community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu,
+.community-member-priority-actions .community-member-presence-filter .filter-dropdown-menu {
   right: 0;
   left: auto;
   min-width: 190px;
@@ -7785,7 +7795,12 @@
     flex: 1 1 0;
   }
 
-  .community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu {
+  .community-member-presence-filter {
+    width: 100%;
+  }
+
+  .community-member-priority-actions .community-member-transfer-picker .filter-dropdown-menu,
+  .community-member-priority-actions .community-member-presence-filter .filter-dropdown-menu {
     right: auto;
     left: 0;
     width: max-content;

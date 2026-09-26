@@ -649,6 +649,7 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
+  const [communityPresenceFilter, setCommunityPresenceFilter] = useState("all");
   const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     isPeriodic: false,
@@ -2133,11 +2134,16 @@ export default function HomePage() {
     failed: 0
   };
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
-  const communityVisibleRecords = (communityStatus?.recent ?? [])
-    .filter((record) => record.stockType === communityStockType)
+  const communityCategoryRecords = (communityStatus?.recent ?? [])
+    .filter((record) => record.stockType === communityStockType);
+  const communityPresenceOrder = { online: 0, idle: 1, dnd: 2, offline: 3, unknown: 4 } as const;
+  const communityVisibleRecords = communityCategoryRecords
+    .filter((record) => communityPresenceFilter === "all" || record.presenceStatus === communityPresenceFilter)
     .sort((left, right) => {
       const inactiveOrder = Number(left.status === "failed") - Number(right.status === "failed");
       if (inactiveOrder !== 0) return inactiveOrder;
+      const presenceOrder = communityPresenceOrder[left.presenceStatus] - communityPresenceOrder[right.presenceStatus];
+      if (presenceOrder !== 0) return presenceOrder;
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
       return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
@@ -2291,6 +2297,24 @@ export default function HomePage() {
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
           </label>
           <div className="community-member-priority-actions">
+            <FilterDropdown
+              label="Presence status"
+              showLabel={false}
+              className="community-member-presence-filter"
+              value={communityPresenceFilter}
+              options={[
+                { value: "all", label: "All presence" },
+                { value: "online", label: "Online" },
+                { value: "idle", label: "Idle" },
+                { value: "dnd", label: "DND" },
+                { value: "offline", label: "Offline" },
+                { value: "unknown", label: "Unknown" }
+              ]}
+              onChange={(value) => {
+                setCommunityPresenceFilter(value);
+                setSelectedCommunityMemberIds([]);
+              }}
+            />
             <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
@@ -2380,7 +2404,11 @@ export default function HomePage() {
           })}
         </div>
       ) : communityStatus?.configured ? (
-        <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
+        communityCategoryRecords.length ? (
+          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members match this presence</strong><span>Choose another presence status to see members in this category.</span></div>
+        ) : (
+          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
+        )
       ) : null}
 
     </section>
