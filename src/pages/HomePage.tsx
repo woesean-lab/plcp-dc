@@ -1096,11 +1096,11 @@ export default function HomePage() {
     }
   }
 
-  async function refreshCommunityStatus() {
+  async function refreshCommunityStatus(categoryId = communityStockType) {
     const requestId = ++communityStatusRequestRef.current;
     try {
       setLoadingCommunityStatus(true);
-      const nextStatus = await getCommunityAdminStatus(communityStockType);
+      const nextStatus = await getCommunityAdminStatus(categoryId);
       if (requestId === communityStatusRequestRef.current) {
         setCommunityStatus(nextStatus);
         if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
@@ -2217,6 +2217,7 @@ export default function HomePage() {
                     setCommunityAccessTokens({});
                     setCommunityImportFile(null);
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
+                    void refreshCommunityStatus(category.id);
                   }}
                 >
                   <span className="community-category-icon" aria-hidden="true"><CategoryIcon className="h-4 w-4" /></span>
