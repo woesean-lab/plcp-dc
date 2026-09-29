@@ -235,6 +235,7 @@ const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
+const discordGatewayIdentityProperties = { os: process.platform, browser: "bot", device: "bot" };
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
 const defaultDiscordOnlinerSpotifyPlaylistId = "37i9dQZF1DX0XUsuxWHRQd";
 const discordOnlinerSpotifyPlaylistCache = new Map();
@@ -1102,7 +1103,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         d: {
           token: account.botToken,
           intents: 1,
-          properties: { os: process.platform, browser: "plcp-onliner", device: "plcp-onliner" },
+          properties: discordGatewayIdentityProperties,
           presence
         }
       }));
@@ -1450,7 +1451,7 @@ async function ensureCommunityPresenceGateway(config) {
         d: {
           token: config.botToken,
           intents: communityGatewayIntents,
-          properties: { os: process.platform, browser: "plcp-dc", device: "plcp-dc" }
+          properties: discordGatewayIdentityProperties
         }
       }));
       return;
