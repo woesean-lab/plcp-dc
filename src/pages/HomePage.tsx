@@ -86,6 +86,7 @@ import {
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import {
   addDiscordOnlinerAccount,
+  addDiscordOnlinerAccountsBulk,
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
   getDiscordOnliner,
@@ -659,6 +660,9 @@ export default function HomePage() {
   const [onlinerLogTransport, setOnlinerLogTransport] = useState<"connecting" | "live" | "polling">("connecting");
   const onlinerLogCursorRef = useRef(0);
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
+  const [showOnlinerBulkModal, setShowOnlinerBulkModal] = useState(false);
+  const [onlinerBulkDraft, setOnlinerBulkDraft] = useState("");
+  const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
@@ -924,6 +928,20 @@ export default function HomePage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [showAddTokensModal, savingBoostStock]);
+
+  useEffect(() => {
+    if (!showOnlinerBulkModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !addingOnlinerBulk) setShowOnlinerBulkModal(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showOnlinerBulkModal, addingOnlinerBulk]);
 
   useEffect(() => {
     void loadIntegrationConnection();
@@ -1371,6 +1389,36 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Bot profile could not be added.");
     } finally {
       setAddingOnlinerAccount(false);
+    }
+  }
+
+  async function handleAddOnlinerAccountsBulk(event: FormEvent) {
+    event.preventDefault();
+    const accounts = onlinerBulkDraft.split(/\r?\n/).map((rawLine, index) => ({ rawLine: rawLine.trim(), lineNumber: index + 1 }))
+      .filter(({ rawLine }) => rawLine && !rawLine.startsWith("#"))
+      .map(({ rawLine, lineNumber }) => {
+        const separatorIndex = rawLine.indexOf("|");
+        return {
+          botToken: (separatorIndex >= 0 ? rawLine.slice(0, separatorIndex) : rawLine).trim(),
+          proxyUrl: separatorIndex >= 0 ? rawLine.slice(separatorIndex + 1).trim() : undefined,
+          lineNumber
+        };
+      });
+    if (!accounts.length) {
+      notifyError("Paste at least one bot token.");
+      return;
+    }
+    try {
+      setAddingOnlinerBulk(true);
+      const snapshot = await addDiscordOnlinerAccountsBulk(accounts);
+      setOnlinerSnapshot(snapshot);
+      setOnlinerBulkDraft("");
+      setShowOnlinerBulkModal(false);
+      notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added and Gateway connections restarted.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bot profiles could not be added.");
+    } finally {
+      setAddingOnlinerBulk(false);
     }
   }
 
@@ -3704,9 +3752,14 @@ export default function HomePage() {
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <span className="app-copy text-xs">HTTP(S), SOCKS4/5 and host:port:user:pass are supported.</span>
-                      <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || !onlinerAccountDraft.botToken.trim()} onClick={() => void handleAddOnlinerAccount()}>
-                        {addingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add bot
-                      </Button>
+                      <span className="flex flex-wrap gap-2">
+                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(true)}>
+                          <ListChecks className="h-4 w-4" /> Bulk add
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk || !onlinerAccountDraft.botToken.trim()} onClick={() => void handleAddOnlinerAccount()}>
+                          {addingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add bot
+                        </Button>
+                      </span>
                     </div>
                   </div>
 
@@ -4423,6 +4476,48 @@ export default function HomePage() {
                 {creating ? "Creating..." : "Continue anyway"}
               </Button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showOnlinerBulkModal ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !addingOnlinerBulk) setShowOnlinerBulkModal(false);
+          }}
+        >
+          <div className="confirm-modal add-tokens-modal onliner-bulk-modal w-[min(760px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="onliner-bulk-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Bot className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Onliner</p>
+            <h2 id="onliner-bulk-title">Bulk add bot profiles</h2>
+            <p>Paste one bot per line. Add an optional dedicated proxy after a <code>|</code> separator. The batch is validated and saved atomically.</p>
+
+            <form onSubmit={handleAddOnlinerAccountsBulk} className="mt-5 grid gap-4">
+              <label className="grid gap-2">
+                <span className={fieldLabelClass}>Bot token and proxy pairs</span>
+                <textarea
+                  className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
+                  value={onlinerBulkDraft}
+                  onChange={(event) => setOnlinerBulkDraft(event.target.value)}
+                  placeholder={"BOT_TOKEN_1 | http://user:pass@host:port\nBOT_TOKEN_2 | socks5://user:pass@host:port\nBOT_TOKEN_3"}
+                  autoFocus
+                />
+              </label>
+              <div className="onliner-bulk-help">
+                <span><strong>Format</strong><code>TOKEN | PROXY</code></span>
+                <span><strong>Proxy optional</strong><code>TOKEN</code></span>
+                <span><strong>Remaining capacity</strong><code>{Math.max(0, 100 - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
+              </div>
+              <div className="confirm-modal-actions">
+                <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
+                <Button type="button" variant="secondary" disabled={addingOnlinerBulk || !onlinerBulkDraft} onClick={() => setOnlinerBulkDraft("")}>Clear input</Button>
+                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkDraft.trim() || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
+                  {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {addingOnlinerBulk ? "Adding..." : "Add profiles"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

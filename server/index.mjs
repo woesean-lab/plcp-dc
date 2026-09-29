@@ -4964,6 +4964,43 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
   }
 });
 
+app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    const requestedAccounts = Array.isArray(req.body?.accounts) ? req.body.accounts : [];
+    if (!requestedAccounts.length) return res.status(400).json({ message: "Add at least one bot profile." });
+    if (requestedAccounts.length > 100 || current.accounts.length + requestedAccounts.length > 100) {
+      return res.status(409).json({ message: `You can add at most ${Math.max(0, 100 - current.accounts.length)} more bot profiles.` });
+    }
+
+    const knownTokens = new Set(current.accounts.map((account) => account.botToken));
+    const additions = [];
+    for (let index = 0; index < requestedAccounts.length; index += 1) {
+      const input = requestedAccounts[index];
+      const lineNumber = Number.parseInt(input?.lineNumber, 10) || index + 1;
+      const botToken = String(input?.botToken ?? "").trim();
+      const suppliedProxyUrl = String(input?.proxyUrl ?? "").trim();
+      if (!botToken || botToken.length > 2000) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid Discord bot token.` });
+      if (knownTokens.has(botToken)) return res.status(409).json({ message: `Line ${lineNumber}: this bot token is duplicated or already saved.` });
+      const proxyUrl = suppliedProxyUrl ? normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl) : "";
+      if (suppliedProxyUrl && !proxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid HTTP, HTTPS, or SOCKS proxy.` });
+      knownTokens.add(botToken);
+      additions.push({ id: crypto.randomUUID(), botToken, proxyUrl });
+    }
+
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: [...current.accounts, ...additions]
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    startDiscordOnliner(candidate);
+    appendDiscordOnlinerLog("info", `${additions.length} bot profiles added in bulk.`);
+    res.status(201).json(getDiscordOnlinerSnapshot(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();

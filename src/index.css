@@ -3970,6 +3970,24 @@
     scrollbar-gutter: stable;
   }
 
+  .onliner-bulk-help {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: .65rem;
+  }
+
+  .onliner-bulk-help > span {
+    display: grid;
+    gap: .35rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    padding: .7rem .8rem;
+    background: rgba(255,255,255,.018);
+  }
+
+  .onliner-bulk-help strong { color: var(--app-muted); font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; }
+  .onliner-bulk-help code { overflow: hidden; color: var(--app-text); font-size: .7rem; text-overflow: ellipsis; white-space: nowrap; }
+
   @media (max-width: 640px) {
     .confirm-modal-backdrop:has(.add-tokens-modal) {
       align-items: start;
@@ -3988,6 +4006,8 @@
       min-height: 11rem;
       resize: vertical;
     }
+
+    .onliner-bulk-help { grid-template-columns: 1fr; }
 
     .add-tokens-modal .confirm-modal-actions {
       position: sticky;

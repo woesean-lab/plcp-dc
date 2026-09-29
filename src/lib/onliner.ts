@@ -96,6 +96,15 @@ export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl?: s
   }).then(parseResponse);
 }
 
+export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl?: string; lineNumber: number }>) {
+  return fetch("/api/onliner/accounts/bulk", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accounts })
+  }).then(parseResponse);
+}
+
 export function removeDiscordOnlinerAccount(accountId: string) {
   return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}`, {
     method: "DELETE",
