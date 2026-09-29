@@ -3934,12 +3934,6 @@ export default function HomePage() {
                   <div className="onliner-presence-panel">
                     <div className="onliner-presence-heading">
                       <span><strong>Streaming · Twitch</strong><small>Each bot randomly combines one Twitch user, category and title from these pools.</small></span>
-                      <Button type="button" size="sm" variant="secondary" onClick={() => setOnlinerDraft((current) => ({
-                        ...current,
-                        streamingUsers: DEFAULT_ONLINER_TWITCH_USERS.join("\n"),
-                        streamingCategories: DEFAULT_ONLINER_STREAMING_CATEGORIES.join("\n"),
-                        streamingTitles: DEFAULT_ONLINER_STREAMING_TITLES.join("\n")
-                      }))}>Load random pool</Button>
                     </div>
                     <div className="onliner-stream-grid">
                       <label><span className={fieldLabelClass}>Users · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder="dazznovanation" /></label>
