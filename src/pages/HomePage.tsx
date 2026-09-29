@@ -167,7 +167,7 @@ const EMPTY_ONLINER_DRAFT = {
   streamingTitles: DEFAULT_ONLINER_STREAMING_TITLES.join("\n"),
   watch: "",
   rotationMinMinutes: 30,
-  rotationMaxMinutes: 1440
+  rotationMaxMinutes: 60
 };
 
 const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "" };
@@ -1428,8 +1428,8 @@ export default function HomePage() {
         streamingCategories: parseOnlinerBulkLines(onlinerDraft.streamingCategories),
         streamingTitles: parseOnlinerBulkLines(onlinerDraft.streamingTitles),
         watch: parseOnlinerBulkLines(onlinerDraft.watch),
-        rotationMinMinutes: Math.max(1, Number(onlinerDraft.rotationMinMinutes) || 10),
-        rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
+        rotationMinMinutes: Math.min(60, Math.max(30, Number(onlinerDraft.rotationMinMinutes) || 30)),
+        rotationMaxMinutes: Math.min(60, Math.max(30, Number(onlinerDraft.rotationMinMinutes) || 30, Number(onlinerDraft.rotationMaxMinutes) || 60))
       });
       setOnlinerSnapshot(snapshot);
       notifySuccess(!snapshot.enabled
@@ -3978,8 +3978,8 @@ export default function HomePage() {
                   <div className="onliner-rotation-panel">
                     <label className="onliner-rotation-toggle"><input type="checkbox" checked={onlinerDraft.randomizeEnabled} onChange={(event) => setOnlinerDraft((current) => ({ ...current, randomizeEnabled: event.target.checked }))} /><span><strong>Randomize entire presence</strong><small>Re-roll status and every activity type at a random interval.</small></span></label>
                     {onlinerDraft.randomizeEnabled ? <div className="grid gap-4 sm:grid-cols-2">
-                      <label className="grid gap-2"><span className={fieldLabelClass}>Minimum interval · minutes</span><Input type="number" min={1} max={1440} value={onlinerDraft.rotationMinMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMinMinutes: Number(event.target.value) }))} /></label>
-                      <label className="grid gap-2"><span className={fieldLabelClass}>Maximum interval · minutes</span><Input type="number" min={1} max={1440} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} /></label>
+                      <label className="grid gap-2"><span className={fieldLabelClass}>Minimum interval · minutes</span><Input type="number" min={30} max={60} value={onlinerDraft.rotationMinMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMinMinutes: Number(event.target.value) }))} /></label>
+                      <label className="grid gap-2"><span className={fieldLabelClass}>Maximum interval · minutes</span><Input type="number" min={30} max={60} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} /></label>
                     </div> : null}
                   </div>
 

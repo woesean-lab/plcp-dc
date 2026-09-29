@@ -238,12 +238,21 @@ const discordOnlinerWorkerId = `${process.pid}-${crypto.randomBytes(8).toString(
 const discordOnlinerWorkerLockKey = 1_746_203_913;
 const discordOnlinerWorkerPollMs = 2_000;
 const discordOnlinerWorkerHeartbeatMs = 5_000;
+const discordOnlinerMaxReconnectAttempts = 2;
+const discordOnlinerRateLimitCooldownMs = 5 * 60_000;
+const discordOnlinerHeartbeatCooldownMs = 60_000;
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
 const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
-const discordGatewayIdentityProperties = { os: process.platform, browser: "bot", device: "bot" };
+function createDiscordGatewayIdentityProperties() {
+  return {
+    os: "Windows",
+    browser: "Discord Client",
+    device: "desktop"
+  };
+}
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
 const defaultDiscordOnlinerSpotifyPlaylistId = "37i9dQZF1DX0XUsuxWHRQd";
 const discordOnlinerSpotifyPlaylistCache = new Map();
@@ -386,6 +395,8 @@ function createDiscordOnlinerRuntime(accountId) {
     lastDisconnectedAt: null,
     lastError: null,
     reconnectAttempt: 0,
+    automaticReconnectBlocked: false,
+    reconnectNotBefore: 0,
     currentActivity: null,
     currentActivities: null,
     currentStatus: null,
@@ -520,8 +531,8 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   const rotationItems = [...new Set((Array.isArray(value.rotationItems) ? value.rotationItems : defaultDiscordOnlinerGames)
     .map((item) => String(item ?? "").trim().slice(0, 128))
     .filter(Boolean))].slice(0, 100);
-  const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "30", 10) || 30, 1), 1440);
-  const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "1440", 10) || 1440, rotationMinMinutes), 1440);
+  const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "30", 10) || 30, 30), 60);
+  const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "60", 10) || 60, rotationMinMinutes), 60);
   const statuses = [...new Set((Array.isArray(value.statuses)
     ? value.statuses
     : status === "mixed" ? discordOnlinerStatusValues : [status])
@@ -945,6 +956,8 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.state = "disconnected";
   runtime.connectedAt = null;
   runtime.reconnectAttempt = 0;
+  runtime.automaticReconnectBlocked = false;
+  runtime.reconnectNotBefore = 0;
   runtime.guildIds = new Set();
   runtime.currentActivity = null;
   runtime.currentActivities = null;
@@ -975,9 +988,24 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
     queueDiscordOnlinerRuntimePersist(runtime);
     return;
   }
+  if (runtime.automaticReconnectBlocked) {
+    runtime.state = "error";
+    queueDiscordOnlinerRuntimePersist(runtime);
+    return;
+  }
+  if (runtime.reconnectAttempt >= discordOnlinerMaxReconnectAttempts) {
+    runtime.automaticReconnectBlocked = true;
+    runtime.state = "error";
+    runtime.lastError = `Automatic reconnect stopped after ${discordOnlinerMaxReconnectAttempts} failed attempts. Check the bot token and proxy, then use Continue or Start.`;
+    appendDiscordOnlinerLog("error", `[RECONNECT_LIMIT] ${runtime.lastError}`, account.id);
+    queueDiscordOnlinerRuntimePersist(runtime);
+    return;
+  }
   runtime.reconnectAttempt += 1;
   runtime.state = "reconnecting";
-  const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, runtime.reconnectAttempt - 1)));
+  const backoffDelay = Math.min(60_000, 1_000 * (2 ** Math.min(6, runtime.reconnectAttempt - 1)));
+  const cooldownDelay = Math.max(0, runtime.reconnectNotBefore - Date.now());
+  const delay = Math.max(backoffDelay, cooldownDelay);
   appendDiscordOnlinerLog("warn", `Reconnect attempt ${runtime.reconnectAttempt} scheduled in ${Math.round(delay / 1000)}s.`, account.id);
   runtime.reconnectTimer = setTimeout(() => {
     runtime.reconnectTimer = null;
@@ -1183,6 +1211,32 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       ? `Proxy route reached Discord; Gateway HTTP upgrade accepted (${response.statusCode ?? 101}).`
       : `Direct route reached Discord; Gateway HTTP upgrade accepted (${response.statusCode ?? 101}).`, account.id);
   });
+  socket.on("unexpected-response", (_request, response) => {
+    if (generation !== runtime.generation) return;
+    const statusCode = Number(response.statusCode) || 0;
+    if (statusCode === 407) {
+      runtime.automaticReconnectBlocked = true;
+      runtime.state = "error";
+      runtime.lastError = "Proxy authentication failed (HTTP 407). Automatic reconnect stopped until the proxy credentials change or Start/Continue is used.";
+      appendDiscordOnlinerLog("error", `[407] ${runtime.lastError}`, account.id);
+    } else if (statusCode === 429) {
+      const retryAfterHeader = Array.isArray(response.headers?.["retry-after"])
+        ? response.headers["retry-after"][0]
+        : response.headers?.["retry-after"];
+      const retryAfterSeconds = Math.max(0, Number.parseFloat(String(retryAfterHeader ?? "0")) || 0);
+      const cooldownMs = Math.max(discordOnlinerRateLimitCooldownMs, Math.ceil(retryAfterSeconds * 1_000));
+      runtime.reconnectNotBefore = Date.now() + cooldownMs;
+      runtime.lastError = `Discord Gateway returned HTTP 429. Reconnect delayed for ${Math.ceil(cooldownMs / 1000)} seconds.`;
+      appendDiscordOnlinerLog("warn", `[429] ${runtime.lastError}`, account.id);
+    } else {
+      runtime.lastError = `Discord Gateway returned unexpected HTTP status ${statusCode || "unknown"}.`;
+      appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+    }
+    queueDiscordOnlinerRuntimePersist(runtime);
+    response.resume();
+    response.destroy();
+    try { socket.terminate(); } catch {}
+  });
   socket.on("open", () => {
     if (generation !== runtime.generation) return;
     transportOpened = true;
@@ -1214,8 +1268,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       const heartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
         if (!runtime.heartbeatAcknowledged) {
-          runtime.lastError = "Discord stopped acknowledging heartbeats.";
-          appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+          runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerHeartbeatCooldownMs);
+          runtime.lastError = "Discord stopped acknowledging heartbeats; reconnect delayed for 60 seconds.";
+          appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError}`, account.id);
+          queueDiscordOnlinerRuntimePersist(runtime);
           socket.terminate();
           return;
         }
@@ -1231,7 +1287,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         d: {
           token: account.botToken,
           intents: 1,
-          properties: discordGatewayIdentityProperties,
+          properties: createDiscordGatewayIdentityProperties(),
           presence
         }
       }));
@@ -1277,6 +1333,8 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.connectedAt = new Date().toISOString();
       runtime.lastError = null;
       runtime.reconnectAttempt = 0;
+      runtime.automaticReconnectBlocked = false;
+      runtime.reconnectNotBefore = 0;
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, runtime, generation);
       return;
@@ -1293,9 +1351,24 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   });
   socket.on("error", (error) => {
     if (generation === runtime.generation) {
-      runtime.lastError = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+      const errorMessage = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+      if (/\b407\b/.test(errorMessage)) {
+        runtime.automaticReconnectBlocked = true;
+        runtime.state = "error";
+        runtime.lastError = "Proxy authentication failed (HTTP 407). Automatic reconnect stopped until the proxy credentials change or Start/Continue is used.";
+        appendDiscordOnlinerLog("error", `[407] ${runtime.lastError}`, account.id);
+      } else if (/\b429\b/.test(errorMessage)) {
+        runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerRateLimitCooldownMs);
+        runtime.lastError = "Discord Gateway returned HTTP 429. Reconnect delayed for at least 5 minutes.";
+        appendDiscordOnlinerLog("warn", `[429] ${runtime.lastError}`, account.id);
+      } else if (runtime.automaticReconnectBlocked || runtime.reconnectNotBefore > Date.now()) {
+        // Keep the classified 407/429 error recorded by unexpected-response.
+      } else {
+        runtime.lastError = errorMessage;
+        appendDiscordOnlinerLog("error", `Gateway error: ${runtime.lastError}`, account.id);
+      }
       if (proxyEndpoint && !transportOpened) appendDiscordOnlinerLog("error", `Proxy route failed: ${proxyEndpoint} -> ${gatewayEndpoint}.`, account.id);
-      appendDiscordOnlinerLog("error", `Gateway error: ${runtime.lastError}`, account.id);
+      queueDiscordOnlinerRuntimePersist(runtime);
     }
   });
   socket.on("close", (code, reason) => {
@@ -1309,11 +1382,21 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     runtime.lastDisconnectedAt = new Date().toISOString();
     const closeReason = reason?.toString().trim();
     appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", `Gateway closed with code ${code}${closeReason ? ` (${closeReason})` : ""}.`, account.id);
-    if (code === 4004) {
+    if ([4004, 4010, 4011, 4012, 4013, 4014].includes(code)) {
+      runtime.automaticReconnectBlocked = true;
       runtime.state = "error";
-      runtime.lastError = "Discord rejected the saved bot token.";
-      appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+      runtime.lastError = code === 4004
+        ? "Discord rejected the saved bot token. Automatic reconnect stopped."
+        : `Discord rejected this Gateway session with non-retryable close code ${code}. Automatic reconnect stopped.`;
+      appendDiscordOnlinerLog("error", `[${code}] ${runtime.lastError}`, account.id);
+      queueDiscordOnlinerRuntimePersist(runtime);
       return;
+    }
+    if (code === 4008) {
+      runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerRateLimitCooldownMs);
+      runtime.lastError = "Discord Gateway rate limited the connection (4008). Reconnect delayed for 5 minutes.";
+      appendDiscordOnlinerLog("warn", `[4008] ${runtime.lastError}`, account.id);
+      queueDiscordOnlinerRuntimePersist(runtime);
     }
     const latestConfig = runtime.config ?? config;
     const latestAccount = latestConfig.accounts.find((item) => item.id === account.id) ?? account;
@@ -1393,7 +1476,14 @@ function continueDiscordOnlinerConnections(config) {
   discordOnlinerConnectionsPaused = false;
   const remainingAccounts = config.accounts.filter((account) => {
     const runtime = discordOnlinerRuntimes.get(account.id);
-    return runtime?.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN;
+    const needsConnection = runtime?.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN;
+    if (runtime && needsConnection) {
+      runtime.automaticReconnectBlocked = false;
+      runtime.reconnectAttempt = 0;
+      runtime.reconnectNotBefore = 0;
+      runtime.lastError = null;
+    }
+    return needsConnection;
   });
   startDiscordOnlinerAccounts(config, remainingAccounts, { stagger: true });
   appendDiscordOnlinerLog("info", `Gateway connection queue continued with ${remainingAccounts.length} remaining bot${remainingAccounts.length === 1 ? "" : "s"}.`);
@@ -1791,7 +1881,7 @@ async function ensureCommunityPresenceGateway(config) {
         d: {
           token: config.botToken,
           intents: communityGatewayIntents,
-          properties: discordGatewayIdentityProperties
+          properties: createDiscordGatewayIdentityProperties()
         }
       }));
       return;
