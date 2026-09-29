@@ -257,6 +257,7 @@ function createDiscordOnlinerRuntime(accountId) {
     accountId,
     generation: 0,
     socket: null,
+    startupTimer: null,
     heartbeatTimer: null,
     reconnectTimer: null,
     activityTimer: null,
@@ -466,9 +467,11 @@ function getDiscordOnlinerSnapshot(config) {
 }
 
 function clearDiscordOnlinerTimers(runtime) {
+  if (runtime.startupTimer) clearTimeout(runtime.startupTimer);
   if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
   if (runtime.reconnectTimer) clearTimeout(runtime.reconnectTimer);
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
+  runtime.startupTimer = null;
   runtime.heartbeatTimer = null;
   runtime.reconnectTimer = null;
   runtime.activityTimer = null;
@@ -573,6 +576,7 @@ function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
 
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
+  runtime.startupTimer = null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   const gatewayEndpoint = "wss://gateway.discord.gg:443";
   const proxyEndpoint = account.proxyUrl ? getDiscordOnlinerProxyEndpoint(account.proxyUrl) : null;
@@ -727,6 +731,37 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   });
 }
 
+function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
+  const runtime = getDiscordOnlinerRuntime(account.id);
+  if (!account.proxyUrl) {
+    runtime.state = "error";
+    runtime.lastError = "A dedicated proxy is required before this bot can connect.";
+    appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+    return;
+  }
+  const generation = runtime.generation;
+  if (delayMs <= 0) {
+    connectDiscordOnliner(config, account, runtime, generation);
+    return;
+  }
+  runtime.state = "connecting";
+  appendDiscordOnlinerLog("info", `Gateway connection queued; starting in ${(delayMs / 1000).toFixed(1)}s.`, account.id);
+  runtime.startupTimer = setTimeout(() => {
+    runtime.startupTimer = null;
+    connectDiscordOnliner(config, account, runtime, generation);
+  }, delayMs);
+  runtime.startupTimer.unref?.();
+}
+
+function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {}) {
+  if (!config.enabled) return;
+  let delayMs = 0;
+  for (const account of accounts) {
+    scheduleDiscordOnlinerAccountStart(config, account, delayMs);
+    if (stagger) delayMs += 2_000 + Math.floor(Math.random() * 1_001);
+  }
+}
+
 function startDiscordOnliner(config) {
   stopDiscordOnliner({ resetIdentity: true });
   discordOnlinerRuntimes.clear();
@@ -734,16 +769,7 @@ function startDiscordOnliner(config) {
     appendDiscordOnlinerLog("info", config.accounts.length ? "Onliner is disabled; Gateway connections were not started." : "No bot token is saved; Gateway connections were not started.");
     return;
   }
-  for (const account of config.accounts) {
-    const runtime = getDiscordOnlinerRuntime(account.id);
-    if (!account.proxyUrl) {
-      runtime.state = "error";
-      runtime.lastError = "A dedicated proxy is required before this bot can connect.";
-      appendDiscordOnlinerLog("error", runtime.lastError, account.id);
-      continue;
-    }
-    connectDiscordOnliner(config, account, runtime, runtime.generation);
-  }
+  startDiscordOnlinerAccounts(config, config.accounts, { stagger: true });
 }
 
 let communityGuildCache = null;
@@ -4981,7 +5007,7 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
       accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl }]
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    startDiscordOnliner(candidate);
+    startDiscordOnlinerAccounts(candidate, [candidate.accounts.at(-1)]);
     res.status(201).json(getDiscordOnlinerSnapshot(candidate));
   } catch (error) {
     next(error);
@@ -5018,8 +5044,8 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
       accounts: [...current.accounts, ...additions]
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    startDiscordOnliner(candidate);
     appendDiscordOnlinerLog("info", `${additions.length} bot profiles added in bulk.`);
+    startDiscordOnlinerAccounts(candidate, additions, { stagger: true });
     res.status(201).json(getDiscordOnlinerSnapshot(candidate));
   } catch (error) {
     next(error);
@@ -5036,7 +5062,11 @@ app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, 
       accounts: current.accounts.filter((account) => account.id !== accountId)
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    startDiscordOnliner(candidate);
+    const runtime = discordOnlinerRuntimes.get(accountId);
+    if (runtime) {
+      stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      discordOnlinerRuntimes.delete(accountId);
+    }
     appendDiscordOnlinerLog("info", "Bot profile removed.", accountId);
     res.json(getDiscordOnlinerSnapshot(candidate));
   } catch (error) {
