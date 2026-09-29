@@ -300,6 +300,7 @@ function appendDiscordOnlinerLog(level, message, accountId = null) {
   for (const client of discordOnlinerLogClients) {
     try {
       client.write(event);
+      client.flush?.();
     } catch {
       discordOnlinerLogClients.delete(client);
     }
@@ -376,6 +377,24 @@ function createDiscordOnlinerProxyAgent(proxyUrl) {
   return proxyUrl.startsWith("socks")
     ? new SocksProxyAgent(proxyUrl)
     : new HttpsProxyAgent(proxyUrl);
+}
+
+function getDiscordOnlinerProxyEndpoint(proxyUrl) {
+  try {
+    const parsed = new URL(proxyUrl);
+    const defaultPort = ["socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"].includes(parsed.protocol)
+      ? "1080"
+      : parsed.protocol === "https:" ? "443" : "80";
+    return `${parsed.protocol}//${parsed.hostname}:${parsed.port || defaultPort}`;
+  } catch {
+    return "saved proxy";
+  }
+}
+
+function formatDiscordOnlinerSocketAddress(address, port) {
+  if (!address) return "unknown";
+  const host = String(address).includes(":") && !String(address).startsWith("[") ? `[${address}]` : String(address);
+  return port ? `${host}:${port}` : host;
 }
 
 async function getDiscordOnlinerConfig() {
@@ -538,12 +557,37 @@ function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken) return;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
-  appendDiscordOnlinerLog("info", `Connecting to Discord Gateway${account.proxyUrl ? " through the saved proxy" : " directly"}.`, account.id);
+  const gatewayEndpoint = "wss://gateway.discord.gg:443";
+  const proxyEndpoint = account.proxyUrl ? getDiscordOnlinerProxyEndpoint(account.proxyUrl) : null;
+  appendDiscordOnlinerLog("info", proxyEndpoint
+    ? `Outbound route: ${proxyEndpoint} -> ${gatewayEndpoint}.`
+    : `Outbound route: direct -> ${gatewayEndpoint}.`, account.id);
   const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
     agent: account.proxyUrl ? createDiscordOnlinerProxyAgent(account.proxyUrl) : undefined
   });
   runtime.socket = socket;
   let sequence = null;
+  let transportOpened = false;
+
+  socket.on("upgrade", (response) => {
+    if (generation === runtime.generation) appendDiscordOnlinerLog("success", proxyEndpoint
+      ? `Proxy route reached Discord; Gateway HTTP upgrade accepted (${response.statusCode ?? 101}).`
+      : `Direct route reached Discord; Gateway HTTP upgrade accepted (${response.statusCode ?? 101}).`, account.id);
+  });
+  socket.on("open", () => {
+    if (generation !== runtime.generation) return;
+    transportOpened = true;
+    const networkSocket = socket._socket;
+    const localAddress = formatDiscordOnlinerSocketAddress(networkSocket?.localAddress, networkSocket?.localPort);
+    const peerAddress = formatDiscordOnlinerSocketAddress(networkSocket?.remoteAddress, networkSocket?.remotePort);
+    appendDiscordOnlinerLog("success", `WebSocket open; TCP ${localAddress} -> ${peerAddress}; target ${gatewayEndpoint}${proxyEndpoint ? ` via ${proxyEndpoint}` : ""}.`, account.id);
+  });
+  socket.on("ping", () => {
+    if (generation === runtime.generation) appendDiscordOnlinerLog("info", "WebSocket PING received; PONG handled automatically.", account.id);
+  });
+  socket.on("pong", () => {
+    if (generation === runtime.generation) appendDiscordOnlinerLog("info", "WebSocket PONG received.", account.id);
+  });
 
   socket.on("message", (raw) => {
     if (generation !== runtime.generation) return;
@@ -551,6 +595,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     try {
       payload = JSON.parse(raw.toString());
     } catch {
+      appendDiscordOnlinerLog("warn", `Ignored a non-JSON Gateway frame (${raw.length ?? 0} bytes).`, account.id);
       return;
     }
     if (Number.isInteger(payload?.s)) sequence = payload.s;
@@ -567,6 +612,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         }
         runtime.heartbeatAcknowledged = false;
         socket.send(JSON.stringify({ op: 1, d: sequence }));
+        appendDiscordOnlinerLog("info", `HEARTBEAT sent${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
       };
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
@@ -586,19 +632,30 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 11) {
       runtime.heartbeatAcknowledged = true;
+      appendDiscordOnlinerLog("success", `HEARTBEAT ACK received${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
       runtime.heartbeatAcknowledged = false;
       socket.send(JSON.stringify({ op: 1, d: sequence }));
+      appendDiscordOnlinerLog("info", `Discord requested a HEARTBEAT; sent${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
       return;
     }
-    if (payload?.op === 7 || payload?.op === 9) {
-      appendDiscordOnlinerLog("warn", `Discord requested a reconnect (opcode ${payload.op}).`, account.id);
+    if (payload?.op === 7) {
+      appendDiscordOnlinerLog("warn", "RECONNECT requested by Discord (opcode 7).", account.id);
       socket.close(4000, "Discord requested reconnect");
       return;
     }
-    if (payload?.op !== 0) return;
+    if (payload?.op === 9) {
+      appendDiscordOnlinerLog("warn", `INVALID SESSION received (opcode 9, resumable: ${payload.d === true ? "yes" : "no"}).`, account.id);
+      socket.close(4000, "Discord invalidated session");
+      return;
+    }
+    if (payload?.op !== 0) {
+      appendDiscordOnlinerLog("info", `Gateway opcode ${String(payload?.op ?? "unknown")} received.`, account.id);
+      return;
+    }
+    appendDiscordOnlinerLog("info", `DISPATCH ${String(payload.t ?? "UNKNOWN")}${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
     if (payload.t === "READY") {
       const user = payload.d?.user ?? {};
       const userId = String(user.id ?? "");
@@ -628,6 +685,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("error", (error) => {
     if (generation === runtime.generation) {
       runtime.lastError = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+      if (proxyEndpoint && !transportOpened) appendDiscordOnlinerLog("error", `Proxy route failed: ${proxyEndpoint} -> ${gatewayEndpoint}.`, account.id);
       appendDiscordOnlinerLog("error", `Gateway error: ${runtime.lastError}`, account.id);
     }
   });
@@ -4832,17 +4890,35 @@ app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
   }
 });
 
+app.get("/api/onliner/logs", requireSession, (req, res) => {
+  const after = Math.max(0, Number.parseInt(String(req.query.after ?? "0"), 10) || 0);
+  res.set("Cache-Control", "no-store").json({
+    logs: discordOnlinerLogs.filter((entry) => entry.id > after).slice(-100)
+  });
+});
+
 app.get("/api/onliner/logs/stream", requireSession, (req, res) => {
   res.set({
     "Cache-Control": "no-cache, no-transform",
+    "Content-Encoding": "identity",
     "Content-Type": "text/event-stream",
     Connection: "keep-alive",
     "X-Accel-Buffering": "no"
   });
   res.flushHeaders();
+  res.socket?.setNoDelay(true);
   res.write(": connected\n\n");
+  res.flush?.();
   discordOnlinerLogClients.add(res);
-  const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 20_000);
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(": heartbeat\n\n");
+      res.flush?.();
+    } catch {
+      clearInterval(heartbeat);
+      discordOnlinerLogClients.delete(res);
+    }
+  }, 15_000);
   heartbeat.unref?.();
   req.on("close", () => {
     clearInterval(heartbeat);

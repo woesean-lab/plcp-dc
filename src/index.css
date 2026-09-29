@@ -5288,6 +5288,35 @@
   max-height: calc(100dvh - 210px);
 }
 
+.onliner-console-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--app-muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.onliner-console-live i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--app-subtle);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-subtle) 12%, transparent);
+}
+
+.onliner-console-live[data-state="live"] { color: var(--app-success); }
+.onliner-console-live[data-state="live"] i { background: var(--app-success); box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-success) 15%, transparent); animation: onliner-live-pulse 1.8s ease-in-out infinite; }
+.onliner-console-live[data-state="polling"] { color: #f5b942; }
+.onliner-console-live[data-state="polling"] i { background: #f5b942; box-shadow: 0 0 0 3px color-mix(in srgb, #f5b942 15%, transparent); }
+
+@keyframes onliner-live-pulse {
+  50% { opacity: .45; transform: scale(.82); }
+}
+
 .onliner-console {
   min-height: 180px;
   max-height: 380px;

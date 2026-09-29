@@ -71,6 +71,13 @@ export function getDiscordOnliner() {
   return fetch("/api/onliner", { cache: "no-store", credentials: "same-origin" }).then(parseResponse);
 }
 
+export async function getDiscordOnlinerLogs(after = 0) {
+  const response = await fetch(`/api/onliner/logs?after=${encodeURIComponent(String(after))}`, { cache: "no-store", credentials: "same-origin" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return (Array.isArray(payload?.logs) ? payload.logs : []) as DiscordOnlinerLogEntry[];
+}
+
 export function saveDiscordOnliner(input: DiscordOnlinerInput) {
   return fetch("/api/onliner", {
     method: "PUT",

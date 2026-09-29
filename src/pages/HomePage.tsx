@@ -89,6 +89,7 @@ import {
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
   getDiscordOnliner,
+  getDiscordOnlinerLogs,
   reconnectDiscordOnliner,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
@@ -655,6 +656,8 @@ export default function HomePage() {
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
   const [savingOnliner, setSavingOnliner] = useState(false);
+  const [onlinerLogTransport, setOnlinerLogTransport] = useState<"connecting" | "live" | "polling">("connecting");
+  const onlinerLogCursorRef = useRef(0);
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
@@ -954,6 +957,7 @@ export default function HomePage() {
     setLoadingOnliner(true);
     void getDiscordOnliner().then((snapshot) => {
       if (cancelled) return;
+      onlinerLogCursorRef.current = snapshot.logs.reduce((highest, entry) => Math.max(highest, entry.id), 0);
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft({
         enabled: snapshot.enabled,
@@ -975,27 +979,41 @@ export default function HomePage() {
         if (!cancelled) setOnlinerSnapshot((current) => {
           if (!current?.logs?.length) return snapshot;
           const logsById = new Map([...snapshot.logs, ...current.logs].map((entry) => [entry.id, entry]));
+          onlinerLogCursorRef.current = Math.max(onlinerLogCursorRef.current, ...logsById.keys());
           return { ...snapshot, logs: [...logsById.values()].sort((left, right) => left.id - right.id).slice(-100) };
         });
       }).catch(() => {});
     }, 3000);
+    const mergeLiveLogs = (entries: DiscordOnlinerLogEntry[]) => {
+      if (cancelled || !entries.length) return;
+      setOnlinerSnapshot((current) => {
+        if (!current) return current;
+        const logsById = new Map([...current.logs, ...entries].map((entry) => [entry.id, entry]));
+        onlinerLogCursorRef.current = Math.max(onlinerLogCursorRef.current, ...entries.map((entry) => entry.id));
+        return { ...current, logs: [...logsById.values()].sort((left, right) => left.id - right.id).slice(-100) };
+      });
+    };
     const logStream = new EventSource("/api/onliner/logs/stream", { withCredentials: true });
+    logStream.onopen = () => setOnlinerLogTransport("live");
+    logStream.onerror = () => setOnlinerLogTransport("polling");
     logStream.onmessage = (event) => {
       try {
         const entry = JSON.parse(event.data) as DiscordOnlinerLogEntry;
         if (!entry || typeof entry.id !== "number" || typeof entry.message !== "string") return;
-        setOnlinerSnapshot((current) => {
-          if (!current || current.logs.some((item) => item.id === entry.id)) return current;
-          return { ...current, logs: [...current.logs, entry].slice(-100) };
-        });
+        mergeLiveLogs([entry]);
       } catch {
         // Ignore malformed stream events and keep the status poll running.
       }
     };
+    const logFallbackPoll = window.setInterval(() => {
+      void getDiscordOnlinerLogs(onlinerLogCursorRef.current).then(mergeLiveLogs).catch(() => setOnlinerLogTransport("polling"));
+    }, 1000);
     return () => {
       cancelled = true;
       window.clearInterval(poll);
+      window.clearInterval(logFallbackPoll);
       logStream.close();
+      setOnlinerLogTransport("connecting");
     };
   }, [activeTab]);
 
@@ -3802,9 +3820,14 @@ export default function HomePage() {
                       <h2 className="app-title mt-1 text-base font-semibold">Gateway console</h2>
                     </div>
                   </div>
-                  <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
-                    <Trash2 className="h-3.5 w-3.5" /> Clear
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <span className="onliner-console-live" data-state={onlinerLogTransport}>
+                      <i />{onlinerLogTransport === "live" ? "Live" : onlinerLogTransport === "polling" ? "Live fallback" : "Connecting"}
+                    </span>
+                    <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
+                      <Trash2 className="h-3.5 w-3.5" /> Clear
+                    </Button>
+                  </div>
                 </div>
                 <div className="onliner-console" role="log" aria-live="polite">
                   {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => {
