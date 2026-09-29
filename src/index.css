@@ -5173,11 +5173,12 @@
 
 .onliner-account-manager {
   display: grid;
-  gap: 14px;
+  gap: 13px;
   border: 1px solid var(--app-border);
   border-radius: 14px;
-  padding: 14px;
-  background: var(--app-surface-soft);
+  padding: 15px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, .038), rgba(255, 255, 255, .018));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
 }
 
 .onliner-account-manager-head {
@@ -5195,10 +5196,13 @@
   display: grid;
   max-height: 274px;
   min-height: 0;
-  gap: 6px;
+  gap: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 2px 5px 2px 0;
+  padding: 4px 5px 4px 4px;
+  border: 1px solid var(--app-divider);
+  border-radius: 11px;
+  background: rgba(9, 10, 19, .28);
   scrollbar-color: color-mix(in srgb, var(--app-accent-bright) 30%, transparent) transparent;
   scrollbar-width: thin;
 }
@@ -5212,34 +5216,57 @@
 
 .onliner-account-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  min-height: 48px;
-  gap: 9px;
-  border: 1px solid color-mix(in srgb, var(--app-border-strong) 76%, transparent);
-  border-radius: 8px;
-  padding: 7px 9px;
-  background: rgba(7, 8, 15, .46);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+  min-height: 52px;
+  gap: 11px;
+  border-bottom: 1px solid var(--app-divider);
+  border-radius: 7px;
+  padding: 7px 8px;
+  background: transparent;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
-.onliner-account-row .onliner-bot-avatar { width: 32px; height: 32px; border-radius: 8px; }
+.onliner-account-row:last-child { border-bottom-color: transparent; }
+.onliner-account-row:hover {
+  background: color-mix(in srgb, var(--app-accent) 7%, rgba(255, 255, 255, .018));
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--app-accent-bright) 52%, transparent);
+}
+
+.onliner-account-row .onliner-bot-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border-color: color-mix(in srgb, var(--app-accent-bright) 28%, var(--app-border));
+  background: var(--app-accent-soft);
+}
 .onliner-account-copy strong { overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .onliner-account-copy small { color: var(--app-muted); font-size: 10px; text-transform: capitalize; }
 .onliner-account-copy em { overflow: hidden; color: var(--app-danger); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
 
-.onliner-account-meta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 7px;
-}
-
 .onliner-account-status {
-  min-height: 16px;
-  padding: 1px 6px;
+  min-height: 18px;
+  padding: 2px 7px;
   font-size: 8px;
   line-height: 1;
+}
+
+.onliner-account-remove {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--app-muted);
+  opacity: .66;
+}
+
+.onliner-account-row:hover .onliner-account-remove,
+.onliner-account-remove:focus-visible { opacity: 1; }
+
+@media (max-width: 520px) {
+  .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .onliner-account-status { grid-column: 2; justify-self: start; }
+  .onliner-account-remove { grid-column: 3; grid-row: 1 / span 2; }
 }
 
 .onliner-rotation-panel {

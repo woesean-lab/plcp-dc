@@ -3729,21 +3729,19 @@ export default function HomePage() {
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
-                          <div key={account.id} className="onliner-account-row">
+                          <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
                             <span className="onliner-bot-avatar" aria-hidden="true">
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
                             </span>
                             <div className="onliner-account-copy">
                               <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
-                              <div className="onliner-account-meta">
-                                <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"}</small>
-                                <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
-                                  {account.connectionState}
-                                </Badge>
-                              </div>
+                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </div>
-                            <Button type="button" size="xs" variant="dangerGhost" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
+                            <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
+                              {account.connectionState}
+                            </Badge>
+                            <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
                               {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                             </Button>
                           </div>
