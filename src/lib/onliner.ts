@@ -71,6 +71,7 @@ export type DiscordOnlinerSnapshot = {
     startedAt?: string | null;
     heartbeatAt: string | null;
     lastError?: string | null;
+    connectionPaused: boolean;
   };
 };
 
@@ -168,7 +169,15 @@ export function removeDiscordOnlinerAccount(accountId: string) {
 }
 
 export function reconnectDiscordOnliner() {
-  return fetch("/api/onliner/reconnect", { method: "POST", credentials: "same-origin" }).then(parseResponse);
+  return fetch("/api/onliner/start", { method: "POST", credentials: "same-origin" }).then(parseResponse);
+}
+
+export function stopDiscordOnlinerConnections() {
+  return fetch("/api/onliner/stop", { method: "POST", credentials: "same-origin" }).then(parseResponse);
+}
+
+export function continueDiscordOnlinerConnections() {
+  return fetch("/api/onliner/continue", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }
 
 export function clearDiscordOnliner() {

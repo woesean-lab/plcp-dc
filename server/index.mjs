@@ -366,6 +366,7 @@ const discordOnlinerPendingRuntimeWrites = new Map();
 const discordOnlinerPendingLogWrites = [];
 let discordOnlinerRuntimeFlushTimer = null;
 let discordOnlinerLogFlushTimer = null;
+let discordOnlinerConnectionsPaused = false;
 
 function createDiscordOnlinerRuntime(accountId) {
   return {
@@ -875,7 +876,8 @@ function getDiscordOnlinerSnapshot(config) {
   });
   return buildDiscordOnlinerSnapshot(config, accounts, discordOnlinerLogs.slice(-100), {
     status: serviceRunsOnliner ? "online" : "offline",
-    heartbeatAt: serviceRunsOnliner ? new Date().toISOString() : null
+    heartbeatAt: serviceRunsOnliner ? new Date().toISOString() : null,
+    connectionPaused: discordOnlinerConnectionsPaused
   });
 }
 
@@ -884,7 +886,7 @@ async function getDiscordOnlinerSnapshotForApi(config) {
   const [runtimeResult, logsResult, workerResult] = await Promise.all([
     pool.query("SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [config.accounts.map((account) => account.id)]),
     pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs ORDER BY id DESC LIMIT 100"),
-    pool.query("SELECT worker_id, status, started_at, heartbeat_at, last_error FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+    pool.query("SELECT worker_id, status, started_at, heartbeat_at, last_error, connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
   ]);
   const runtimeByAccountId = new Map(runtimeResult.rows.map((row) => [String(row.account_id), row.payload ?? {}]));
   const workerRow = workerResult.rows[0] ?? {};
@@ -919,7 +921,8 @@ async function getDiscordOnlinerSnapshotForApi(config) {
     workerId: workerRow.worker_id ?? null,
     startedAt: workerRow.started_at ? new Date(workerRow.started_at).toISOString() : null,
     heartbeatAt,
-    lastError: workerRow.last_error ?? null
+    lastError: workerRow.last_error ?? null,
+    connectionPaused: workerRow.connection_paused === true
   });
 }
 
@@ -967,6 +970,11 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
   const activeConfig = runtime.config ?? config;
   const activeAccount = activeConfig.accounts.find((item) => item.id === account.id) ?? account;
   if (generation !== runtime.generation || !activeConfig.enabled || !activeAccount.botToken) return;
+  if (discordOnlinerConnectionsPaused) {
+    runtime.state = "disconnected";
+    queueDiscordOnlinerRuntimePersist(runtime);
+    return;
+  }
   runtime.reconnectAttempt += 1;
   runtime.state = "reconnecting";
   const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, runtime.reconnectAttempt - 1)));
@@ -1316,6 +1324,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
 function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
   const runtime = getDiscordOnlinerRuntime(account.id);
   runtime.config = config;
+  if (discordOnlinerConnectionsPaused) {
+    runtime.state = "disconnected";
+    queueDiscordOnlinerRuntimePersist(runtime);
+    return;
+  }
   if (!account.proxyUrl) {
     runtime.state = "error";
     runtime.lastError = "A dedicated proxy is required before this bot can connect.";
@@ -1337,7 +1350,7 @@ function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
 }
 
 function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {}) {
-  if (!config.enabled) return;
+  if (!config.enabled || discordOnlinerConnectionsPaused) return;
   let delayMs = 0;
   for (const account of accounts) {
     scheduleDiscordOnlinerAccountStart(config, account, delayMs);
@@ -1346,6 +1359,7 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
 }
 
 function startDiscordOnliner(config) {
+  if (discordOnlinerConnectionsPaused) return;
   stopDiscordOnliner({ resetIdentity: true });
   discordOnlinerRuntimes.clear();
   if (!config.enabled || !config.accounts.length) {
@@ -1353,6 +1367,36 @@ function startDiscordOnliner(config) {
     return;
   }
   startDiscordOnlinerAccounts(config, config.accounts, { stagger: true });
+}
+
+function pauseDiscordOnlinerConnections() {
+  discordOnlinerConnectionsPaused = true;
+  for (const runtime of discordOnlinerRuntimes.values()) {
+    if (runtime.state === "connected" && runtime.socket?.readyState === WebSocket.OPEN) continue;
+    runtime.generation += 1;
+    clearDiscordOnlinerTimers(runtime);
+    const socket = runtime.socket;
+    runtime.socket = null;
+    runtime.state = "disconnected";
+    runtime.reconnectAttempt = 0;
+    try {
+      if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) socket.close(1000, "Connection queue paused");
+    } catch {
+      // The pending socket may already have closed.
+    }
+    queueDiscordOnlinerRuntimePersist(runtime);
+  }
+  appendDiscordOnlinerLog("info", "Gateway connection queue paused; already connected bots were kept online.");
+}
+
+function continueDiscordOnlinerConnections(config) {
+  discordOnlinerConnectionsPaused = false;
+  const remainingAccounts = config.accounts.filter((account) => {
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    return runtime?.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN;
+  });
+  startDiscordOnlinerAccounts(config, remainingAccounts, { stagger: true });
+  appendDiscordOnlinerLog("info", `Gateway connection queue continued with ${remainingAccounts.length} remaining bot${remainingAccounts.length === 1 ? "" : "s"}.`);
 }
 
 function getDiscordOnlinerPresenceConfigFingerprint(config) {
@@ -1477,11 +1521,21 @@ async function processDiscordOnlinerWorkerCommands() {
   `);
   for (const command of result.rows) {
     try {
-      if (command.command_type === "reconnect_all") {
+      if (["reconnect_all", "start_all"].includes(command.command_type)) {
         const config = await getDiscordOnlinerConfig();
+        discordOnlinerConnectionsPaused = false;
+        await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
         startDiscordOnliner(config);
         discordOnlinerWorkerCurrentConfig = config;
-        appendDiscordOnlinerLog("info", "All Gateway connections are being restarted by an explicit panel command.");
+        appendDiscordOnlinerLog("info", "Gateway connection process started from the beginning by a panel command.");
+      } else if (command.command_type === "pause_connections") {
+        pauseDiscordOnlinerConnections();
+        await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = TRUE WHERE singleton = TRUE");
+      } else if (command.command_type === "continue_connections") {
+        const config = await getDiscordOnlinerConfig();
+        await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
+        continueDiscordOnlinerConnections(config);
+        discordOnlinerWorkerCurrentConfig = config;
       }
       await pool.query("UPDATE discord_onliner_commands SET status = 'complete', completed_at = NOW(), error = NULL WHERE id = $1", [command.id]);
     } catch (error) {
@@ -1514,12 +1568,19 @@ async function pollDiscordOnlinerWorker() {
 async function activateDiscordOnlinerWorker(lockClient) {
   discordOnlinerWorkerLockClient = lockClient;
   discordOnlinerWorkerCurrentConfig = await getDiscordOnlinerConfig();
+  const controlResult = await pool.query("SELECT connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1");
+  discordOnlinerConnectionsPaused = controlResult.rows[0]?.connection_paused === true;
   await pool.query(`
     UPDATE discord_onliner_worker_state
     SET worker_id = $1, status = 'online', started_at = NOW(), heartbeat_at = NOW(), last_error = NULL
     WHERE singleton = TRUE
   `, [discordOnlinerWorkerId]);
-  startDiscordOnliner(discordOnlinerWorkerCurrentConfig);
+  if (discordOnlinerConnectionsPaused) {
+    await pool.query("DELETE FROM discord_onliner_runtime");
+    appendDiscordOnlinerLog("info", "Onliner worker started with the Gateway connection queue paused.");
+  } else {
+    startDiscordOnliner(discordOnlinerWorkerCurrentConfig);
+  }
   discordOnlinerWorkerPollTimer = setInterval(() => void pollDiscordOnlinerWorker(), discordOnlinerWorkerPollMs);
   discordOnlinerWorkerHeartbeatTimer = setInterval(() => {
     void pool.query("UPDATE discord_onliner_worker_state SET heartbeat_at = NOW(), status = 'online' WHERE singleton = TRUE AND worker_id = $1", [discordOnlinerWorkerId]);
@@ -5497,9 +5558,11 @@ async function initializeDiscordOnlinerDatabase() {
       status TEXT NOT NULL DEFAULT 'offline',
       started_at TIMESTAMPTZ,
       heartbeat_at TIMESTAMPTZ,
-      last_error TEXT
+      last_error TEXT,
+      connection_paused BOOLEAN NOT NULL DEFAULT FALSE
     )
   `);
+  await pool.query("ALTER TABLE discord_onliner_worker_state ADD COLUMN IF NOT EXISTS connection_paused BOOLEAN NOT NULL DEFAULT FALSE");
   await pool.query(`
     INSERT INTO discord_onliner_worker_state (singleton, status)
     VALUES (TRUE, 'offline')
@@ -6019,13 +6082,45 @@ app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, 
   }
 });
 
-app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
+app.post(["/api/onliner/reconnect", "/api/onliner/start"], requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
     if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
     if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting." });
-    if (serviceRunsOnliner) startDiscordOnliner(config);
-    else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('reconnect_all')");
+    await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
+    if (serviceRunsOnliner) {
+      discordOnlinerConnectionsPaused = false;
+      startDiscordOnliner(config);
+    } else {
+      await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('start_all')");
+    }
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/stop", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
+    await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = TRUE WHERE singleton = TRUE");
+    if (serviceRunsOnliner) pauseDiscordOnlinerConnections();
+    else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('pause_connections')");
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/continue", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
+    if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before continuing connections." });
+    await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
+    if (serviceRunsOnliner) continueDiscordOnlinerConnections(config);
+    else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('continue_connections')");
     res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);
