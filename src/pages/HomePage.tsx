@@ -3815,7 +3815,8 @@ export default function HomePage() {
                       <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
                         <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
                         <span className="onliner-console-level">{entry.level}</span>
-                        <span className="onliner-console-message"><b>[{accountLabel}]</b> {entry.message}</span>
+                        <span className="onliner-console-account" title={accountLabel}>{accountLabel}</span>
+                        <span className="onliner-console-message">{entry.message}</span>
                       </div>
                     );
                   }) : (
