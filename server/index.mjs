@@ -870,7 +870,12 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
           name: "Twitch",
           type: discordOnlinerActivityCodes.streaming,
           url: `https://www.twitch.tv/${encodeURIComponent(user)}`,
-          state: [title, category].filter(Boolean).join(" · ").slice(0, 128)
+          details: title.slice(0, 128),
+          state: category || undefined,
+          assets: {
+            large_image: `twitch:${user}`,
+            large_text: title.slice(0, 128)
+          }
         });
       }
     }
@@ -936,7 +941,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
     runtime.currentActivity = activities.map((activity) => activity.type === discordOnlinerActivityCodes.watching
         ? [activity.name, activity.state].filter(Boolean).join(" — ")
         : activity.type === discordOnlinerActivityCodes.streaming
-          ? [activity.name, activity.state].filter(Boolean).join(" — ")
+          ? [activity.name, activity.details, activity.state].filter(Boolean).join(" — ")
         : activity.name).join(" · ") || null;
     runtime.currentActivityType = activities.map((activity) => discordOnlinerActivityTypeValues.find((type) => discordOnlinerActivityCodes[type] === activity.type)).filter(Boolean).join(", ") || "none";
   }
