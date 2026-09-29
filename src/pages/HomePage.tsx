@@ -3916,7 +3916,7 @@ export default function HomePage() {
                   </div>
 
                   <div className="onliner-source-grid">
-                    <label className="onliner-source-card"><span><strong>Playing · games</strong><small>One game per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Minecraft\nVALORANT\nCounter-Strike 2"} /></label>
+                    <label className="onliner-source-card"><span><strong>Playing · games</strong><small>One per line · leave empty to load the built-in game catalog</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Leave empty for automatic game catalog\n—or enter custom games here"} /></label>
                     <label className="onliner-source-card"><span><strong>Listening · music</strong><small>Track, artist or playlist labels</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Spotify\nLo-fi Beats\nDiscover Weekly"} /></label>
                     <label className="onliner-source-card"><span><strong>Watching</strong><small>One platform or title per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.watch} onChange={(event) => setOnlinerDraft((current) => ({ ...current, watch: event.target.value }))} placeholder={"YouTube\nTwitch\nKick"} /></label>
                   </div>
