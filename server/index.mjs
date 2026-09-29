@@ -4683,12 +4683,6 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
     if (!candidate.botToken || candidate.botToken.length > 2000) {
       return res.status(400).json({ message: "A valid Discord bot token is required." });
     }
-    const identity = await requestDiscord("users/@me", {
-      headers: { Authorization: `Bot ${candidate.botToken}` }
-    });
-    if (!identity.response.ok || identity.payload?.bot !== true) {
-      return res.status(400).json({ message: "Discord rejected this bot token." });
-    }
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
     startDiscordOnliner(candidate);
     res.json(getDiscordOnlinerSnapshot(candidate));
