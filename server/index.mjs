@@ -1489,6 +1489,13 @@ function continueDiscordOnlinerConnections(config) {
   appendDiscordOnlinerLog("info", `Gateway connection queue continued with ${remainingAccounts.length} remaining bot${remainingAccounts.length === 1 ? "" : "s"}.`);
 }
 
+function reconnectDiscordOnlinerAccount(config, account) {
+  const runtime = discordOnlinerRuntimes.get(account.id);
+  if (runtime) stopDiscordOnlinerRuntime(runtime);
+  startDiscordOnlinerAccounts(config, [account]);
+  appendDiscordOnlinerLog("info", "Gateway connection restart requested for this bot.", account.id);
+}
+
 function getDiscordOnlinerPresenceConfigFingerprint(config) {
   return JSON.stringify({
     statuses: config.statuses,
@@ -1625,6 +1632,14 @@ async function processDiscordOnlinerWorkerCommands() {
         const config = await getDiscordOnlinerConfig();
         await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
         continueDiscordOnlinerConnections(config);
+        discordOnlinerWorkerCurrentConfig = config;
+      } else if (command.command_type === "reconnect_account") {
+        if (discordOnlinerConnectionsPaused) throw new Error("Gateway connections are paused. Continue them before reconnecting a bot.");
+        const config = await getDiscordOnlinerConfig();
+        const accountId = String(command.payload?.accountId ?? "");
+        const account = config.accounts.find((item) => item.id === accountId);
+        if (!account) throw new Error("Bot profile not found.");
+        reconnectDiscordOnlinerAccount(config, account);
         discordOnlinerWorkerCurrentConfig = config;
       } else if (command.command_type === "stop_all") {
         discordOnlinerConnectionsPaused = true;
@@ -6172,6 +6187,29 @@ app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, 
     discordOnlinerPendingRuntimeWrites.delete(accountId);
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
     res.json(await getDiscordOnlinerSnapshotForApi(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/accounts/:accountId/reconnect", requireSession, async (req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    const accountId = String(req.params.accountId ?? "");
+    const account = config.accounts.find((item) => item.id === accountId);
+    if (!account) return res.status(404).json({ message: "Bot profile not found." });
+    if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting a bot." });
+    const workerState = await pool.query("SELECT connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1");
+    if (workerState.rows[0]?.connection_paused === true) return res.status(409).json({ message: "Gateway connections are paused. Continue them before reconnecting a bot." });
+    if (serviceRunsOnliner) {
+      reconnectDiscordOnlinerAccount(config, account);
+    } else {
+      await pool.query(
+        "INSERT INTO discord_onliner_commands (command_type, payload) VALUES ('reconnect_account', $1::jsonb)",
+        [JSON.stringify({ accountId })]
+      );
+    }
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);
   }

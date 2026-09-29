@@ -99,6 +99,7 @@ import {
   getDiscordOnlinerLogs,
   pauseDiscordOnlinerConnections,
   reconnectDiscordOnliner,
+  reconnectDiscordOnlinerAccount,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
   stopDiscordOnlinerConnections,
@@ -694,6 +695,7 @@ export default function HomePage() {
   const [onlinerBulkProxyDraft, setOnlinerBulkProxyDraft] = useState("");
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
+  const [reconnectingOnlinerAccountId, setReconnectingOnlinerAccountId] = useState<string | null>(null);
   const [editingOnlinerAccountId, setEditingOnlinerAccountId] = useState<string | null>(null);
   const [onlinerEditDraft, setOnlinerEditDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnlinerCredentials, setLoadingOnlinerCredentials] = useState(false);
@@ -1568,6 +1570,18 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Bot profile could not be removed.");
     } finally {
       setRemovingOnlinerAccountId(null);
+    }
+  }
+
+  async function handleReconnectOnlinerAccount(accountId: string) {
+    try {
+      setReconnectingOnlinerAccountId(accountId);
+      setOnlinerSnapshot(await reconnectDiscordOnlinerAccount(accountId));
+      notifySuccess("Bot Gateway connection is restarting.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bot Gateway connection could not be restarted.");
+    } finally {
+      setReconnectingOnlinerAccountId(null);
     }
   }
 
@@ -3913,6 +3927,9 @@ export default function HomePage() {
                               {account.connectionState}
                             </Badge>
                             <div className="onliner-account-actions">
+                              <Button className="onliner-account-reconnect" type="button" size="xs" variant="ghost" aria-label={`Reconnect ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Reconnect this bot" disabled={reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || savingOnlinerAccount || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleReconnectOnlinerAccount(account.id)}>
+                                {reconnectingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                              </Button>
                               <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token and proxy" disabled={loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
                                 {loadingOnlinerCredentials && editingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
                               </Button>

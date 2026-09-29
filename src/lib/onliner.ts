@@ -168,6 +168,13 @@ export function removeDiscordOnlinerAccount(accountId: string) {
   }).then(parseResponse);
 }
 
+export function reconnectDiscordOnlinerAccount(accountId: string) {
+  return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}/reconnect`, {
+    method: "POST",
+    credentials: "same-origin"
+  }).then(parseResponse);
+}
+
 export function reconnectDiscordOnliner() {
   return fetch("/api/onliner/start", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }

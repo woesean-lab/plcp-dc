@@ -5259,6 +5259,7 @@
   gap: 2px;
 }
 
+.onliner-account-reconnect,
 .onliner-account-edit,
 .onliner-account-remove {
   width: 28px;
@@ -5269,11 +5270,15 @@
   opacity: .66;
 }
 
+.onliner-account-reconnect:hover,
+.onliner-account-reconnect:focus-visible,
 .onliner-account-edit:hover,
 .onliner-account-edit:focus-visible,
 .onliner-account-remove:hover,
 .onliner-account-remove:focus-visible { opacity: 1; }
 
+.onliner-account-reconnect:not(:disabled):hover,
+.onliner-account-reconnect:not(:disabled):focus-visible,
 .onliner-account-edit:not(:disabled):hover,
 .onliner-account-edit:not(:disabled):focus-visible {
   border-color: transparent;
