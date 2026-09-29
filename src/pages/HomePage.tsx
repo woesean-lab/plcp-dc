@@ -3638,7 +3638,7 @@ export default function HomePage() {
               </div>
             </header>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] xl:items-start">
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
@@ -3793,71 +3793,37 @@ export default function HomePage() {
                 </form>
               </section>
 
-              <aside className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="onliner-bot-avatar" aria-hidden="true">
-                    {onlinerSnapshot?.bot?.avatarUrl ? <img src={onlinerSnapshot.bot.avatarUrl} alt="" /> : <Bot className="h-5 w-5" />}
-                  </span>
-                  <div className="min-w-0">
-                    <p className={labelClass}>Connection</p>
-                    <h2 className="app-title mt-1 truncate text-lg font-semibold">Bot fleet</h2>
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Gateway</span><strong>{onlinerConnectionLabel}</strong></span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Connected bots</span><strong>{onlinerSnapshot?.connectedCount ?? 0} / {onlinerSnapshot?.accounts.length ?? 0}</strong></span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Presence</span><strong>{onlinerSnapshot ? `${getCommunityPresenceLabel(onlinerSnapshot.status)} · ${onlinerSnapshot.activityType === "none" ? "No activity" : onlinerSnapshot.currentActivity || onlinerSnapshot.activityText || "No text"}` : "Not configured"}</strong></span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><RefreshCw className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Reconnects</span><strong>{onlinerSnapshot?.reconnectAttempt ?? 0}</strong></span>
-                  </div>
-                </div>
-
-                {onlinerSnapshot?.connectedAt ? <p className="community-admin-note mt-4">Connected {new Date(onlinerSnapshot.connectedAt).toLocaleString()}</p> : null}
-                {onlinerSnapshot?.lastError ? <div className="onliner-error-note"><TriangleAlert className="h-4 w-4" /><span>{onlinerSnapshot.lastError}</span></div> : null}
-              </aside>
-            </div>
-
-            <section className={`${shell} mt-5 overflow-hidden`}>
-              <div className="onliner-console-head">
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true"><Terminal className="h-4 w-4" /></span>
-                  <div>
-                    <p className={labelClass}>Live stream</p>
-                    <h2 className="app-title mt-1 text-base font-semibold">Gateway console</h2>
-                  </div>
-                </div>
-                <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
-                  <Trash2 className="h-3.5 w-3.5" /> Clear
-                </Button>
-              </div>
-              <div className="onliner-console" role="log" aria-live="polite">
-                {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => {
-                  const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
-                  const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
-                  const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
-                  return (
-                    <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
-                      <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
-                      <span className="onliner-console-level">{entry.level}</span>
-                      <span className="onliner-console-message"><b>[{accountLabel}]</b> {entry.message}</span>
+              <section className={`${shell} onliner-console-panel overflow-hidden`}>
+                <div className="onliner-console-head">
+                  <div className="flex items-center gap-3">
+                    <span className="stat-icon" aria-hidden="true"><Terminal className="h-4 w-4" /></span>
+                    <div>
+                      <p className={labelClass}>Live stream</p>
+                      <h2 className="app-title mt-1 text-base font-semibold">Gateway console</h2>
                     </div>
-                  );
-                }) : (
-                  <div className="onliner-console-empty">Gateway events will appear here when the Onliner starts.</div>
-                )}
-              </div>
-            </section>
+                  </div>
+                  <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
+                    <Trash2 className="h-3.5 w-3.5" /> Clear
+                  </Button>
+                </div>
+                <div className="onliner-console" role="log" aria-live="polite">
+                  {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => {
+                    const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
+                    const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
+                    const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
+                    return (
+                      <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
+                        <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                        <span className="onliner-console-level">{entry.level}</span>
+                        <span className="onliner-console-message"><b>[{accountLabel}]</b> {entry.message}</span>
+                      </div>
+                    );
+                  }) : (
+                    <div className="onliner-console-empty">Gateway events will appear here when the Onliner starts.</div>
+                  )}
+                </div>
+              </section>
+            </div>
           </>
         ) : null}
 
