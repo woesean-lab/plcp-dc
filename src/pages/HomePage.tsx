@@ -1460,7 +1460,7 @@ export default function HomePage() {
       const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl });
       setOnlinerSnapshot(snapshot);
       setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
-      notifySuccess("Bot profile added and Gateway connections restarted.");
+      notifySuccess("Bot profile added; the Onliner worker will connect it.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Bot profile could not be added.");
     } finally {
@@ -1488,7 +1488,7 @@ export default function HomePage() {
       setOnlinerBulkTokenDraft("");
       setOnlinerBulkProxyDraft("");
       setShowOnlinerBulkModal(false);
-      notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added and Gateway connections restarted.`);
+      notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added; the Onliner worker will connect them.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Bot profiles could not be added.");
     } finally {
@@ -1545,7 +1545,7 @@ export default function HomePage() {
       setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       setShowOnlinerEditToken(false);
       setShowOnlinerEditProxy(false);
-      notifySuccess("Bot profile updated; only this Gateway connection was restarted.");
+      notifySuccess("Bot profile saved; the worker restarts only this bot if its credentials changed.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Bot profile could not be updated.");
     } finally {
@@ -1595,6 +1595,7 @@ export default function HomePage() {
   async function handleClearOnlinerLogs() {
     try {
       await clearDiscordOnlinerLogs();
+      onlinerLogCursorRef.current = 0;
       setOnlinerSnapshot((current) => current ? { ...current, logs: [] } : current);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner console could not be cleared.");
@@ -3830,6 +3831,9 @@ export default function HomePage() {
                 <p className="app-copy page-copy">Keep multiple Discord bots connected to Gateway v10, each with its own proxy and reconnect loop.</p>
               </div>
               <div className="page-heading-meta">
+                <Badge variant={onlinerSnapshot?.worker?.status === "online" ? "success" : onlinerSnapshot?.worker?.status === "standby" ? "secondary" : "destructive"}>
+                  Worker {onlinerSnapshot?.worker?.status ?? "offline"}
+                </Badge>
                 <Badge variant={onlinerBadgeVariant}>{onlinerConnectionLabel}</Badge>
                 <Badge variant={onlinerSnapshot?.configured ? "success" : "destructive"}>{onlinerSnapshot?.accounts.length ? `${onlinerSnapshot.accounts.length} bot${onlinerSnapshot.accounts.length === 1 ? "" : "s"} saved` : "No bots"}</Badge>
               </div>
@@ -4613,7 +4617,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Pencil className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Bot profile</p>
             <h2 id="onliner-account-edit-title">Edit token and proxy</h2>
-            <p>Credentials remain hidden by default. Updating this profile restarts only its own Gateway connection.</p>
+            <p>Credentials remain hidden by default. Changed credentials restart only this bot's Gateway connection.</p>
 
             <form onSubmit={handleUpdateOnlinerAccount} className="mt-5 grid gap-4">
               <label className="grid gap-2">

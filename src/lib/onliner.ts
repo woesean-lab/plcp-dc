@@ -65,6 +65,13 @@ export type DiscordOnlinerSnapshot = {
     presenceUpdated: boolean;
     connectionsRestarted: boolean;
   };
+  worker?: {
+    status: "online" | "offline" | "standby";
+    workerId?: string | null;
+    startedAt?: string | null;
+    heartbeatAt: string | null;
+    lastError?: string | null;
+  };
 };
 
 export type DiscordOnlinerInput = {

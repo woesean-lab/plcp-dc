@@ -25,6 +25,19 @@ npm run build
 
 Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olarak calisir.
 
+## EasyPanel servis rolleri
+
+Ayni image iki ayri EasyPanel App servisinde calistirilabilir:
+
+- `plcp-dc`: `SERVICE_ROLE=web` — paneli ve API'yi sunar, Discord Gateway baglantisi acmaz.
+- `plcp-onliner`: `SERVICE_ROLE=onliner` — yalnizca Discord Onliner worker'ini calistirir, domain gerektirmez.
+- `SERVICE_ROLE=all`: geriye donuk uyumluluk ve yerel gelistirme icin iki rolu ayni process'te calistirir.
+
+Iki servis ayni PostgreSQL baglanti ve sifreleme ortam degiskenlerini kullanmalidir. Onliner servisi
+tek replica olarak calistirilmalidir. PostgreSQL advisory lock, gecis veya yanlis yapilandirma sirasinda
+ikinci worker'in ayni botlari baglamasini engeller. Web deploylari worker process'ini etkilemez; worker
+ayar, komut, runtime durumu ve loglari ortak PostgreSQL uzerinden panelle senkronize eder.
+
 ## Notlar
 
 - API anahtarlari koda gommeli degil; admin panelindeki ayarlar bolumune girilir ve PostgreSQL'de sifreli saklanir.

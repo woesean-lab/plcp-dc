@@ -15,6 +15,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "../dist");
 const port = Number(process.env.PORT ?? 3000);
 const isProduction = process.env.NODE_ENV === "production";
+const requestedServiceRole = String(process.env.SERVICE_ROLE ?? "all").trim().toLowerCase();
+const serviceRole = ["web", "onliner", "all"].includes(requestedServiceRole) ? requestedServiceRole : "all";
+const serviceRunsWeb = serviceRole === "web" || serviceRole === "all";
+const serviceRunsOnliner = serviceRole === "onliner" || serviceRole === "all";
 const sessionCookie = "plcp_session";
 const sessionDurationMs = 12 * 60 * 60 * 1000;
 const legacyApiPrefix = "/api/tokenu";
@@ -230,6 +234,10 @@ async function forEachWithConcurrency(values, concurrency, task) {
 
 const discordOnlinerSettingKey = "discord_onliner_config";
 const discordOnlinerAccountLimit = 3000;
+const discordOnlinerWorkerId = `${process.pid}-${crypto.randomBytes(8).toString("hex")}`;
+const discordOnlinerWorkerLockKey = 1_746_203_913;
+const discordOnlinerWorkerPollMs = 2_000;
+const discordOnlinerWorkerHeartbeatMs = 5_000;
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
 const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
@@ -354,6 +362,10 @@ const discordOnlinerRuntimes = new Map();
 const discordOnlinerLogs = [];
 let discordOnlinerNextLogId = 1;
 const discordOnlinerLogClients = new Set();
+const discordOnlinerPendingRuntimeWrites = new Map();
+const discordOnlinerPendingLogWrites = [];
+let discordOnlinerRuntimeFlushTimer = null;
+let discordOnlinerLogFlushTimer = null;
 
 function createDiscordOnlinerRuntime(accountId) {
   return {
@@ -389,6 +401,63 @@ function getDiscordOnlinerRuntime(accountId) {
   return runtime;
 }
 
+function serializeDiscordOnlinerRuntime(runtime) {
+  return {
+    currentActivity: runtime.currentActivity,
+    connectionState: runtime.state,
+    bot: runtime.bot,
+    guildCount: runtime.guildIds.size,
+    connectedAt: runtime.connectedAt,
+    lastDisconnectedAt: runtime.lastDisconnectedAt,
+    lastError: runtime.lastError,
+    reconnectAttempt: runtime.reconnectAttempt
+  };
+}
+
+function queueDiscordOnlinerRuntimePersist(runtime) {
+  if (!serviceRunsOnliner || !runtime?.accountId) return;
+  discordOnlinerPendingRuntimeWrites.set(runtime.accountId, serializeDiscordOnlinerRuntime(runtime));
+  if (discordOnlinerRuntimeFlushTimer) return;
+  discordOnlinerRuntimeFlushTimer = setTimeout(() => {
+    discordOnlinerRuntimeFlushTimer = null;
+    const rows = [...discordOnlinerPendingRuntimeWrites.entries()].map(([accountId, payload]) => ({ account_id: accountId, payload }));
+    discordOnlinerPendingRuntimeWrites.clear();
+    if (!rows.length) return;
+    void pool.query(`
+      INSERT INTO discord_onliner_runtime (account_id, payload, updated_at)
+      SELECT account_id, payload, NOW()
+      FROM jsonb_to_recordset($1::jsonb) AS records(account_id text, payload jsonb)
+      ON CONFLICT (account_id) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()
+    `, [JSON.stringify(rows)]).catch((error) => console.error("Onliner runtime persistence failed:", error instanceof Error ? error.message : error));
+  }, 500);
+  discordOnlinerRuntimeFlushTimer.unref?.();
+}
+
+function queueDiscordOnlinerLogPersist(entry) {
+  if (!serviceRunsOnliner) return;
+  discordOnlinerPendingLogWrites.push({
+    timestamp: entry.timestamp,
+    level: entry.level,
+    account_id: entry.accountId,
+    message: entry.message
+  });
+  if (discordOnlinerLogFlushTimer) return;
+  discordOnlinerLogFlushTimer = setTimeout(() => {
+    discordOnlinerLogFlushTimer = null;
+    const rows = discordOnlinerPendingLogWrites.splice(0, discordOnlinerPendingLogWrites.length);
+    if (!rows.length) return;
+    void pool.query(`
+      INSERT INTO discord_onliner_persisted_logs (timestamp, level, account_id, message)
+      SELECT timestamp, level, account_id, message
+      FROM jsonb_to_recordset($1::jsonb) AS records(timestamp timestamptz, level text, account_id text, message text)
+    `, [JSON.stringify(rows)]).then(() => pool.query(`
+      DELETE FROM discord_onliner_persisted_logs
+      WHERE id < COALESCE((SELECT MAX(id) - 5000 FROM discord_onliner_persisted_logs), 0)
+    `)).catch((error) => console.error("Onliner log persistence failed:", error instanceof Error ? error.message : error));
+  }, 500);
+  discordOnlinerLogFlushTimer.unref?.();
+}
+
 function appendDiscordOnlinerLog(level, message, accountId = null) {
   const safeMessage = String(message ?? "")
     .replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, "$1***@")
@@ -406,6 +475,11 @@ function appendDiscordOnlinerLog(level, message, accountId = null) {
   };
   discordOnlinerLogs.push(entry);
   if (discordOnlinerLogs.length > 300) discordOnlinerLogs.splice(0, discordOnlinerLogs.length - 300);
+  queueDiscordOnlinerLogPersist(entry);
+  if (accountId) {
+    const runtime = discordOnlinerRuntimes.get(accountId);
+    if (runtime) queueDiscordOnlinerRuntimePersist(runtime);
+  }
   const event = `data: ${JSON.stringify(entry)}\n\n`;
   for (const client of discordOnlinerLogClients) {
     try {
@@ -739,23 +813,7 @@ async function getDiscordOnlinerConfig() {
   }
 }
 
-function getDiscordOnlinerSnapshot(config) {
-  const accounts = config.accounts.map((account) => {
-    const runtime = discordOnlinerRuntimes.get(account.id) ?? createDiscordOnlinerRuntime(account.id);
-    return {
-      id: account.id,
-      hasBotToken: Boolean(account.botToken),
-      hasProxy: Boolean(account.proxyUrl),
-      currentActivity: runtime.currentActivity,
-      connectionState: runtime.state,
-      bot: runtime.bot,
-      guildCount: runtime.guildIds.size,
-      connectedAt: runtime.connectedAt,
-      lastDisconnectedAt: runtime.lastDisconnectedAt,
-      lastError: runtime.lastError,
-      reconnectAttempt: runtime.reconnectAttempt
-    };
-  });
+function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
   const connectedAccounts = accounts.filter((account) => account.connectionState === "connected");
   const firstAccount = accounts[0] ?? null;
   const aggregateState = !accounts.length
@@ -800,8 +858,69 @@ function getDiscordOnlinerSnapshot(config) {
     lastDisconnectedAt: firstAccount?.lastDisconnectedAt ?? null,
     lastError: accounts.find((account) => account.lastError)?.lastError ?? null,
     reconnectAttempt: accounts.reduce((total, account) => total + account.reconnectAttempt, 0),
-    logs: discordOnlinerLogs.slice(-100)
+    logs,
+    worker
   };
+}
+
+function getDiscordOnlinerSnapshot(config) {
+  const accounts = config.accounts.map((account) => {
+    const runtime = discordOnlinerRuntimes.get(account.id) ?? createDiscordOnlinerRuntime(account.id);
+    return {
+      id: account.id,
+      hasBotToken: Boolean(account.botToken),
+      hasProxy: Boolean(account.proxyUrl),
+      ...serializeDiscordOnlinerRuntime(runtime)
+    };
+  });
+  return buildDiscordOnlinerSnapshot(config, accounts, discordOnlinerLogs.slice(-100), {
+    status: serviceRunsOnliner ? "online" : "offline",
+    heartbeatAt: serviceRunsOnliner ? new Date().toISOString() : null
+  });
+}
+
+async function getDiscordOnlinerSnapshotForApi(config) {
+  if (serviceRunsOnliner) return getDiscordOnlinerSnapshot(config);
+  const [runtimeResult, logsResult, workerResult] = await Promise.all([
+    pool.query("SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [config.accounts.map((account) => account.id)]),
+    pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs ORDER BY id DESC LIMIT 100"),
+    pool.query("SELECT worker_id, status, started_at, heartbeat_at, last_error FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+  ]);
+  const runtimeByAccountId = new Map(runtimeResult.rows.map((row) => [String(row.account_id), row.payload ?? {}]));
+  const workerRow = workerResult.rows[0] ?? {};
+  const heartbeatAt = workerRow.heartbeat_at ? new Date(workerRow.heartbeat_at).toISOString() : null;
+  const heartbeatAge = heartbeatAt ? Date.now() - new Date(heartbeatAt).getTime() : Number.POSITIVE_INFINITY;
+  const workerOnline = workerRow.status === "online" && heartbeatAge < discordOnlinerWorkerHeartbeatMs * 3;
+  const accounts = config.accounts.map((account) => {
+    const saved = runtimeByAccountId.get(account.id) ?? {};
+    return {
+      id: account.id,
+      hasBotToken: Boolean(account.botToken),
+      hasProxy: Boolean(account.proxyUrl),
+      currentActivity: saved.currentActivity ?? null,
+      connectionState: workerOnline ? saved.connectionState ?? "disconnected" : "disconnected",
+      bot: saved.bot ?? null,
+      guildCount: Math.max(0, Number(saved.guildCount) || 0),
+      connectedAt: workerOnline ? saved.connectedAt ?? null : null,
+      lastDisconnectedAt: saved.lastDisconnectedAt ?? null,
+      lastError: workerOnline ? saved.lastError ?? null : "Onliner worker is offline.",
+      reconnectAttempt: Math.max(0, Number(saved.reconnectAttempt) || 0)
+    };
+  });
+  const logs = logsResult.rows.reverse().map((row) => ({
+    id: Number(row.id),
+    timestamp: new Date(row.timestamp).toISOString(),
+    level: row.level,
+    accountId: row.account_id,
+    message: row.message
+  }));
+  return buildDiscordOnlinerSnapshot(config, accounts, logs, {
+    status: workerOnline ? "online" : workerRow.status === "standby" ? "standby" : "offline",
+    workerId: workerRow.worker_id ?? null,
+    startedAt: workerRow.started_at ? new Date(workerRow.started_at).toISOString() : null,
+    heartbeatAt,
+    lastError: workerRow.last_error ?? null
+  });
 }
 
 function clearDiscordOnlinerTimers(runtime) {
@@ -837,6 +956,7 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   } catch {
     // The socket may already be closed.
   }
+  queueDiscordOnlinerRuntimePersist(runtime);
 }
 
 function stopDiscordOnliner({ resetIdentity = false } = {}) {
@@ -1156,9 +1276,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     if (payload.t === "GUILD_CREATE") {
       const guildId = String(payload.d?.id ?? "");
       if (isDiscordGuildId(guildId)) runtime.guildIds.add(guildId);
+      queueDiscordOnlinerRuntimePersist(runtime);
     }
     if (payload.t === "GUILD_DELETE" && payload.d?.unavailable !== true) {
       runtime.guildIds.delete(String(payload.d?.id ?? ""));
+      queueDiscordOnlinerRuntimePersist(runtime);
     }
   });
   socket.on("error", (error) => {
@@ -1280,6 +1402,163 @@ function applyDiscordOnlinerSettings(current, candidate) {
     scheduleDiscordOnlinerActivityRotation(candidate, runtime, runtime.generation);
   }
   return { changed: true, presenceUpdated, connectionsRestarted: false };
+}
+
+let discordOnlinerWorkerLockClient = null;
+let discordOnlinerWorkerCurrentConfig = null;
+let discordOnlinerWorkerPollTimer = null;
+let discordOnlinerWorkerHeartbeatTimer = null;
+let discordOnlinerWorkerLockRetryTimer = null;
+let discordOnlinerWorkerPollActive = false;
+
+async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
+  if (current.enabled !== candidate.enabled) {
+    applyDiscordOnlinerSettings(current, candidate);
+    if (!candidate.enabled) {
+      for (const account of current.accounts) discordOnlinerPendingRuntimeWrites.delete(account.id);
+      if (current.accounts.length) await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [current.accounts.map((account) => account.id)]);
+    }
+    discordOnlinerWorkerCurrentConfig = candidate;
+    return;
+  }
+
+  const currentById = new Map(current.accounts.map((account) => [account.id, account]));
+  const candidateById = new Map(candidate.accounts.map((account) => [account.id, account]));
+  const removedIds = current.accounts.filter((account) => !candidateById.has(account.id)).map((account) => account.id);
+  const addedAccounts = candidate.accounts.filter((account) => !currentById.has(account.id));
+  const changedAccounts = candidate.accounts.filter((account) => {
+    const previous = currentById.get(account.id);
+    return previous && (previous.botToken !== account.botToken || previous.proxyUrl !== account.proxyUrl);
+  });
+
+  for (const accountId of removedIds) {
+    const runtime = discordOnlinerRuntimes.get(accountId);
+    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+    discordOnlinerRuntimes.delete(accountId);
+    discordOnlinerPendingRuntimeWrites.delete(accountId);
+  }
+  if (removedIds.length) await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [removedIds]);
+
+  if (candidate.enabled) {
+    for (const account of changedAccounts) {
+      const runtime = discordOnlinerRuntimes.get(account.id);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      startDiscordOnlinerAccounts(candidate, [account]);
+      appendDiscordOnlinerLog("info", "Bot token or proxy changed; restarting only this Gateway connection.", account.id);
+    }
+    if (addedAccounts.length) {
+      appendDiscordOnlinerLog("info", `${addedAccounts.length} new bot profile${addedAccounts.length === 1 ? "" : "s"} detected by the worker.`);
+      startDiscordOnlinerAccounts(candidate, addedAccounts, { stagger: true });
+    }
+  }
+
+  const changedIds = new Set(changedAccounts.map((account) => account.id));
+  for (const account of candidate.accounts) {
+    if (changedIds.has(account.id)) continue;
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    if (runtime) runtime.config = candidate;
+  }
+  applyDiscordOnlinerSettings(current, candidate);
+  discordOnlinerWorkerCurrentConfig = candidate;
+}
+
+async function processDiscordOnlinerWorkerCommands() {
+  const result = await pool.query(`
+    UPDATE discord_onliner_commands
+    SET status = 'processing', started_at = NOW()
+    WHERE id IN (
+      SELECT id FROM discord_onliner_commands
+      WHERE status = 'pending'
+      ORDER BY id ASC
+      LIMIT 10
+      FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, command_type, payload
+  `);
+  for (const command of result.rows) {
+    try {
+      if (command.command_type === "reconnect_all") {
+        const config = await getDiscordOnlinerConfig();
+        startDiscordOnliner(config);
+        discordOnlinerWorkerCurrentConfig = config;
+        appendDiscordOnlinerLog("info", "All Gateway connections are being restarted by an explicit panel command.");
+      }
+      await pool.query("UPDATE discord_onliner_commands SET status = 'complete', completed_at = NOW(), error = NULL WHERE id = $1", [command.id]);
+    } catch (error) {
+      await pool.query("UPDATE discord_onliner_commands SET status = 'failed', completed_at = NOW(), error = $2 WHERE id = $1", [command.id, String(error instanceof Error ? error.message : error).slice(0, 500)]);
+    }
+  }
+  await pool.query("DELETE FROM discord_onliner_commands WHERE completed_at < NOW() - INTERVAL '1 day'");
+}
+
+async function pollDiscordOnlinerWorker() {
+  if (discordOnlinerWorkerPollActive || !discordOnlinerWorkerLockClient) return;
+  discordOnlinerWorkerPollActive = true;
+  try {
+    const candidate = await getDiscordOnlinerConfig();
+    if (!discordOnlinerWorkerCurrentConfig) {
+      discordOnlinerWorkerCurrentConfig = candidate;
+      startDiscordOnliner(candidate);
+    } else if (JSON.stringify(discordOnlinerWorkerCurrentConfig) !== JSON.stringify(candidate)) {
+      await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig, candidate);
+    }
+    await processDiscordOnlinerWorkerCommands();
+  } catch (error) {
+    console.error("Onliner worker poll failed:", error instanceof Error ? error.message : error);
+    await pool.query("UPDATE discord_onliner_worker_state SET last_error = $1 WHERE singleton = TRUE AND worker_id = $2", [String(error instanceof Error ? error.message : error).slice(0, 500), discordOnlinerWorkerId]).catch(() => {});
+  } finally {
+    discordOnlinerWorkerPollActive = false;
+  }
+}
+
+async function activateDiscordOnlinerWorker(lockClient) {
+  discordOnlinerWorkerLockClient = lockClient;
+  discordOnlinerWorkerCurrentConfig = await getDiscordOnlinerConfig();
+  await pool.query(`
+    UPDATE discord_onliner_worker_state
+    SET worker_id = $1, status = 'online', started_at = NOW(), heartbeat_at = NOW(), last_error = NULL
+    WHERE singleton = TRUE
+  `, [discordOnlinerWorkerId]);
+  startDiscordOnliner(discordOnlinerWorkerCurrentConfig);
+  discordOnlinerWorkerPollTimer = setInterval(() => void pollDiscordOnlinerWorker(), discordOnlinerWorkerPollMs);
+  discordOnlinerWorkerHeartbeatTimer = setInterval(() => {
+    void pool.query("UPDATE discord_onliner_worker_state SET heartbeat_at = NOW(), status = 'online' WHERE singleton = TRUE AND worker_id = $1", [discordOnlinerWorkerId]);
+  }, discordOnlinerWorkerHeartbeatMs);
+  console.log(`Discord Onliner worker active (${discordOnlinerWorkerId}).`);
+}
+
+async function tryStartDiscordOnlinerWorker() {
+  if (discordOnlinerWorkerLockClient) return;
+  const client = await pool.connect();
+  try {
+    const result = await client.query("SELECT pg_try_advisory_lock($1) AS acquired", [discordOnlinerWorkerLockKey]);
+    if (result.rows[0]?.acquired) {
+      if (discordOnlinerWorkerLockRetryTimer) clearInterval(discordOnlinerWorkerLockRetryTimer);
+      discordOnlinerWorkerLockRetryTimer = null;
+      await activateDiscordOnlinerWorker(client);
+      return;
+    }
+  } catch (error) {
+    console.error("Onliner worker lock failed:", error instanceof Error ? error.message : error);
+  }
+  client.release();
+  if (!discordOnlinerWorkerLockRetryTimer) {
+    console.log("Discord Onliner worker is standing by; another instance owns the database lock.");
+    discordOnlinerWorkerLockRetryTimer = setInterval(() => void tryStartDiscordOnlinerWorker(), discordOnlinerWorkerHeartbeatMs);
+  }
+}
+
+async function stopDiscordOnlinerWorker() {
+  if (discordOnlinerWorkerPollTimer) clearInterval(discordOnlinerWorkerPollTimer);
+  if (discordOnlinerWorkerHeartbeatTimer) clearInterval(discordOnlinerWorkerHeartbeatTimer);
+  if (discordOnlinerWorkerLockRetryTimer) clearInterval(discordOnlinerWorkerLockRetryTimer);
+  stopDiscordOnliner();
+  await pool.query("UPDATE discord_onliner_worker_state SET status = 'offline', heartbeat_at = NOW() WHERE singleton = TRUE AND worker_id = $1", [discordOnlinerWorkerId]).catch(() => {});
+  if (discordOnlinerWorkerLockClient) {
+    await discordOnlinerWorkerLockClient.query("SELECT pg_advisory_unlock($1)", [discordOnlinerWorkerLockKey]).catch(() => {});
+    discordOnlinerWorkerLockClient.release();
+    discordOnlinerWorkerLockClient = null;
+  }
 }
 
 let communityGuildCache = null;
@@ -5196,6 +5475,61 @@ async function requestTokenuPublicData(pathname, init = {}) {
   return payload;
 }
 
+async function initializeDiscordOnlinerDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key TEXT PRIMARY KEY,
+      encrypted_value TEXT NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_onliner_runtime (
+      account_id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_onliner_worker_state (
+      singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      worker_id TEXT,
+      status TEXT NOT NULL DEFAULT 'offline',
+      started_at TIMESTAMPTZ,
+      heartbeat_at TIMESTAMPTZ,
+      last_error TEXT
+    )
+  `);
+  await pool.query(`
+    INSERT INTO discord_onliner_worker_state (singleton, status)
+    VALUES (TRUE, 'offline')
+    ON CONFLICT (singleton) DO NOTHING
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_onliner_commands (
+      id BIGSERIAL PRIMARY KEY,
+      command_type TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      started_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      error TEXT
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS discord_onliner_commands_pending_idx ON discord_onliner_commands (status, id)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_onliner_persisted_logs (
+      id BIGSERIAL PRIMARY KEY,
+      timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      level TEXT NOT NULL,
+      account_id TEXT,
+      message TEXT NOT NULL
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS discord_onliner_persisted_logs_timestamp_idx ON discord_onliner_persisted_logs (timestamp DESC)");
+}
+
 async function initializeDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tracked_orders (
@@ -5242,6 +5576,7 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await initializeDiscordOnlinerDatabase();
   await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_stock_category_tombstones (
@@ -5393,11 +5728,13 @@ async function initializeDatabase() {
           AND COALESCE(item->>'details', '') !~* '(Unknown User|10013|50178|user account must first be verified)'
       )
   `);
-  await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
-  await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
-  await recoverBlockedDcordJobOrders();
-  await recoverPendingDcordOrders();
-  await recoverInterruptedCommunityOrders();
+  if (serviceRunsWeb) {
+    await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
+    await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
+    await recoverBlockedDcordJobOrders();
+    await recoverPendingDcordOrders();
+    await recoverInterruptedCommunityOrders();
+  }
 }
 
 async function requireSession(req, res, next) {
@@ -5434,7 +5771,7 @@ app.use(express.json({ limit: "10mb" }));
 app.get("/api/onliner", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
-    res.set("Cache-Control", "no-store").json(getDiscordOnlinerSnapshot(config));
+    res.set("Cache-Control", "no-store").json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);
   }
@@ -5443,20 +5780,38 @@ app.get("/api/onliner", requireSession, async (_req, res, next) => {
 app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
   try {
     discordOnlinerLogs.length = 0;
+    await pool.query("TRUNCATE TABLE discord_onliner_persisted_logs RESTART IDENTITY");
     res.status(204).end();
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/api/onliner/logs", requireSession, (req, res) => {
-  const after = Math.max(0, Number.parseInt(String(req.query.after ?? "0"), 10) || 0);
-  res.set("Cache-Control", "no-store").json({
-    logs: discordOnlinerLogs.filter((entry) => entry.id > after).slice(-100)
-  });
+app.get("/api/onliner/logs", requireSession, async (req, res, next) => {
+  try {
+    const after = Math.max(0, Number.parseInt(String(req.query.after ?? "0"), 10) || 0);
+    if (serviceRunsOnliner) {
+      return res.set("Cache-Control", "no-store").json({ logs: discordOnlinerLogs.filter((entry) => entry.id > after).slice(-100) });
+    }
+    const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 ORDER BY id ASC LIMIT 100", [after]);
+    res.set("Cache-Control", "no-store").json({
+      logs: result.rows.map((row) => ({ id: Number(row.id), timestamp: new Date(row.timestamp).toISOString(), level: row.level, accountId: row.account_id, message: row.message }))
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get("/api/onliner/logs/stream", requireSession, (req, res) => {
+app.get("/api/onliner/logs/stream", requireSession, async (req, res, next) => {
+  let databaseLogCursor = 0;
+  try {
+    if (!serviceRunsOnliner) {
+      const cursorResult = await pool.query("SELECT COALESCE(MAX(id), 0) AS id FROM discord_onliner_persisted_logs");
+      databaseLogCursor = Number(cursorResult.rows[0]?.id) || 0;
+    }
+  } catch (error) {
+    return next(error);
+  }
   res.set({
     "Cache-Control": "no-cache, no-transform",
     "Content-Encoding": "identity",
@@ -5468,16 +5823,23 @@ app.get("/api/onliner/logs/stream", requireSession, (req, res) => {
   res.socket?.setNoDelay(true);
   res.write(": connected\n\n");
   res.flush?.();
-  discordOnlinerLogClients.add(res);
-  const heartbeat = setInterval(() => {
+  if (serviceRunsOnliner) discordOnlinerLogClients.add(res);
+  const heartbeat = setInterval(async () => {
     try {
+      if (!serviceRunsOnliner) {
+        const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 ORDER BY id ASC LIMIT 100", [databaseLogCursor]);
+        for (const row of result.rows) {
+          databaseLogCursor = Number(row.id);
+          res.write(`data: ${JSON.stringify({ id: databaseLogCursor, timestamp: new Date(row.timestamp).toISOString(), level: row.level, accountId: row.account_id, message: row.message })}\n\n`);
+        }
+      }
       res.write(": heartbeat\n\n");
       res.flush?.();
     } catch {
       clearInterval(heartbeat);
       discordOnlinerLogClients.delete(res);
     }
-  }, 15_000);
+  }, serviceRunsOnliner ? 15_000 : 1_000);
   heartbeat.unref?.();
   req.on("close", () => {
     clearInterval(heartbeat);
@@ -5494,8 +5856,17 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
       accounts: current.accounts
     }));
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    const applyResult = applyDiscordOnlinerSettings(current, candidate);
-    res.json({ ...getDiscordOnlinerSnapshot(candidate), applyResult });
+    const applyResult = serviceRunsOnliner
+      ? applyDiscordOnlinerSettings(current, candidate)
+      : {
+          changed: current.enabled !== candidate.enabled
+            || getDiscordOnlinerPresenceConfigFingerprint(current) !== getDiscordOnlinerPresenceConfigFingerprint(candidate)
+            || getDiscordOnlinerRotationConfigFingerprint(current) !== getDiscordOnlinerRotationConfigFingerprint(candidate),
+          presenceUpdated: false,
+          connectionsRestarted: false
+        };
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.json({ ...await getDiscordOnlinerSnapshotForApi(candidate), applyResult });
   } catch (error) {
     next(error);
   }
@@ -5517,8 +5888,9 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
       accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl }]
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    startDiscordOnlinerAccounts(candidate, [candidate.accounts.at(-1)]);
-    res.status(201).json(getDiscordOnlinerSnapshot(candidate));
+    if (serviceRunsOnliner) startDiscordOnlinerAccounts(candidate, [candidate.accounts.at(-1)]);
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.status(201).json(await getDiscordOnlinerSnapshotForApi(candidate));
   } catch (error) {
     next(error);
   }
@@ -5564,12 +5936,16 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
 
-    const runtime = discordOnlinerRuntimes.get(accountId);
-    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
-    const savedAccount = candidate.accounts.find((account) => account.id === accountId);
-    if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
-    appendDiscordOnlinerLog("info", "Bot token or proxy updated; restarting this Gateway connection.", accountId);
-    res.json(getDiscordOnlinerSnapshot(candidate));
+    const credentialsChanged = current.accounts[accountIndex].botToken !== botToken || current.accounts[accountIndex].proxyUrl !== proxyUrl;
+    if (serviceRunsOnliner && credentialsChanged) {
+      const runtime = discordOnlinerRuntimes.get(accountId);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      const savedAccount = candidate.accounts.find((account) => account.id === accountId);
+      if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
+      appendDiscordOnlinerLog("info", "Bot token or proxy updated; restarting this Gateway connection.", accountId);
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.json(await getDiscordOnlinerSnapshotForApi(candidate));
   } catch (error) {
     next(error);
   }
@@ -5605,9 +5981,12 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
       accounts: [...current.accounts, ...additions]
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    appendDiscordOnlinerLog("info", `${additions.length} bot profiles added in bulk.`);
-    startDiscordOnlinerAccounts(candidate, additions, { stagger: true });
-    res.status(201).json(getDiscordOnlinerSnapshot(candidate));
+    if (serviceRunsOnliner) {
+      appendDiscordOnlinerLog("info", `${additions.length} bot profiles added in bulk.`);
+      startDiscordOnlinerAccounts(candidate, additions, { stagger: true });
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.status(201).json(await getDiscordOnlinerSnapshotForApi(candidate));
   } catch (error) {
     next(error);
   }
@@ -5623,13 +6002,18 @@ app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, 
       accounts: current.accounts.filter((account) => account.id !== accountId)
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    const runtime = discordOnlinerRuntimes.get(accountId);
-    if (runtime) {
-      stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
-      discordOnlinerRuntimes.delete(accountId);
+    if (serviceRunsOnliner) {
+      const runtime = discordOnlinerRuntimes.get(accountId);
+      if (runtime) {
+        stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+        discordOnlinerRuntimes.delete(accountId);
+      }
+      appendDiscordOnlinerLog("info", "Bot profile removed.", accountId);
     }
-    appendDiscordOnlinerLog("info", "Bot profile removed.", accountId);
-    res.json(getDiscordOnlinerSnapshot(candidate));
+    await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = $1", [accountId]);
+    discordOnlinerPendingRuntimeWrites.delete(accountId);
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.json(await getDiscordOnlinerSnapshotForApi(candidate));
   } catch (error) {
     next(error);
   }
@@ -5640,8 +6024,9 @@ app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
     const config = await getDiscordOnlinerConfig();
     if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
     if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting." });
-    startDiscordOnliner(config);
-    res.json(getDiscordOnlinerSnapshot(config));
+    if (serviceRunsOnliner) startDiscordOnliner(config);
+    else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('reconnect_all')");
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);
   }
@@ -5649,12 +6034,17 @@ app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
 
 app.delete("/api/onliner", requireSession, async (_req, res, next) => {
   try {
-    stopDiscordOnliner({ resetIdentity: true });
-    discordOnlinerRuntimes.clear();
+    if (serviceRunsOnliner) {
+      stopDiscordOnliner({ resetIdentity: true });
+      discordOnlinerRuntimes.clear();
+    }
     await pool.query("DELETE FROM app_settings WHERE setting_key = $1", [discordOnlinerSettingKey]);
-    appendDiscordOnlinerLog("info", "Onliner settings were removed.");
+    await pool.query("DELETE FROM discord_onliner_runtime");
+    discordOnlinerPendingRuntimeWrites.clear();
+    if (serviceRunsOnliner) appendDiscordOnlinerLog("info", "Onliner settings were removed.");
     const config = normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
-    res.json(getDiscordOnlinerSnapshot(config));
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = config;
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);
   }
@@ -9402,30 +9792,43 @@ app.use((error, _req, res, _next) => {
   res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });
 });
 
-await initializeDatabase();
-const initialDiscordOnlinerConfig = await getDiscordOnlinerConfig();
-if (initialDiscordOnlinerConfig.enabled && initialDiscordOnlinerConfig.accounts.length) {
-  startDiscordOnliner(initialDiscordOnlinerConfig);
+if (serviceRunsWeb) await initializeDatabase();
+else await initializeDiscordOnlinerDatabase();
+if (serviceRunsOnliner) {
+  await tryStartDiscordOnlinerWorker();
 }
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Pulcip Members listening on port ${port}`);
-});
-const communityRecoveryTimer = setInterval(() => {
-  void recoverInterruptedCommunityOrders().catch((error) => {
-    console.error("Members recovery scan failed:", error instanceof Error ? error.message : error);
+if (serviceRunsWeb) {
+  app.listen(port, "0.0.0.0", () => {
+    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}).`);
   });
-}, 10_000);
-communityRecoveryTimer.unref();
+  const communityRecoveryTimer = setInterval(() => {
+    void recoverInterruptedCommunityOrders().catch((error) => {
+      console.error("Members recovery scan failed:", error instanceof Error ? error.message : error);
+    });
+  }, 10_000);
+  communityRecoveryTimer.unref();
 
-const refreshCommunityOAuthTokens = async () => {
-  try {
-    const config = await getCommunityOAuthConfig();
-    if (config.configured) await refreshCommunityOAuthTokensDue(config);
-  } catch (error) {
-    console.error("Members OAuth refresh scan failed:", error instanceof Error ? error.message : error);
-  }
-};
-const communityOAuthRefreshTimer = setInterval(() => void refreshCommunityOAuthTokens(), communityOAuthRefreshIntervalMs);
-communityOAuthRefreshTimer.unref();
-const communityOAuthInitialRefreshTimer = setTimeout(() => void refreshCommunityOAuthTokens(), 10_000);
-communityOAuthInitialRefreshTimer.unref();
+  const refreshCommunityOAuthTokens = async () => {
+    try {
+      const config = await getCommunityOAuthConfig();
+      if (config.configured) await refreshCommunityOAuthTokensDue(config);
+    } catch (error) {
+      console.error("Members OAuth refresh scan failed:", error instanceof Error ? error.message : error);
+    }
+  };
+  const communityOAuthRefreshTimer = setInterval(() => void refreshCommunityOAuthTokens(), communityOAuthRefreshIntervalMs);
+  communityOAuthRefreshTimer.unref();
+  const communityOAuthInitialRefreshTimer = setTimeout(() => void refreshCommunityOAuthTokens(), 10_000);
+  communityOAuthInitialRefreshTimer.unref();
+}
+
+if (serviceRunsOnliner) {
+  let shuttingDownOnlinerWorker = false;
+  const shutdownOnlinerWorker = () => {
+    if (shuttingDownOnlinerWorker) return;
+    shuttingDownOnlinerWorker = true;
+    void stopDiscordOnlinerWorker().finally(() => process.exit(0));
+  };
+  process.once("SIGTERM", shutdownOnlinerWorker);
+  process.once("SIGINT", shutdownOnlinerWorker);
+}
