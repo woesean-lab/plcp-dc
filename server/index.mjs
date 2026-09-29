@@ -866,7 +866,12 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
       const title = chooseDiscordOnlinerActivity(config.streamingTitles.length ? config.streamingTitles : ["Live on Twitch"], runtime.currentActivity);
       const category = chooseDiscordOnlinerActivity(config.streamingCategories);
       if (user && title && Math.random() * 100 < config.activityChances.streaming) {
-        activities.push({ name: title, type: discordOnlinerActivityCodes.streaming, url: `https://www.twitch.tv/${encodeURIComponent(user)}`, ...(category ? { state: category } : {}) });
+        activities.push({
+          name: "Twitch",
+          type: discordOnlinerActivityCodes.streaming,
+          url: `https://www.twitch.tv/${encodeURIComponent(user)}`,
+          state: [title, category].filter(Boolean).join(" · ").slice(0, 128)
+        });
       }
     }
     if (Math.random() * 100 < config.activityChances.listening) {
@@ -930,6 +935,8 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
     runtime.currentActivities = activities;
     runtime.currentActivity = activities.map((activity) => activity.type === discordOnlinerActivityCodes.watching
         ? [activity.name, activity.state].filter(Boolean).join(" — ")
+        : activity.type === discordOnlinerActivityCodes.streaming
+          ? [activity.name, activity.state].filter(Boolean).join(" — ")
         : activity.name).join(" · ") || null;
     runtime.currentActivityType = activities.map((activity) => discordOnlinerActivityTypeValues.find((type) => discordOnlinerActivityCodes[type] === activity.type)).filter(Boolean).join(", ") || "none";
   }
