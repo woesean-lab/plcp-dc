@@ -226,6 +226,216 @@ async function forEachWithConcurrency(values, concurrency, task) {
   }));
 }
 
+const discordOnlinerSettingKey = "discord_onliner_config";
+const discordOnlinerStatuses = new Set(["online", "idle", "dnd"]);
+const discordOnlinerActivityTypes = new Set(["playing", "listening", "watching", "none"]);
+const discordOnlinerActivityCodes = { playing: 0, listening: 2, watching: 3 };
+const discordOnlinerRuntime = {
+  generation: 0,
+  socket: null,
+  heartbeatTimer: null,
+  reconnectTimer: null,
+  heartbeatAcknowledged: true,
+  state: "disconnected",
+  bot: null,
+  guildIds: new Set(),
+  connectedAt: null,
+  lastDisconnectedAt: null,
+  lastError: null,
+  reconnectAttempt: 0
+};
+
+function normalizeDiscordOnlinerConfig(value = {}) {
+  const botToken = String(value.botToken ?? "").trim();
+  const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
+    ? String(value.status).toLowerCase()
+    : "online";
+  const activityType = discordOnlinerActivityTypes.has(String(value.activityType ?? "").toLowerCase())
+    ? String(value.activityType).toLowerCase()
+    : "playing";
+  return {
+    botToken,
+    enabled: value.enabled !== false,
+    status,
+    activityType,
+    activityText: String(value.activityText ?? "Pulcip Members").trim().slice(0, 128)
+  };
+}
+
+async function getDiscordOnlinerConfig() {
+  const raw = await loadEncryptedSetting(discordOnlinerSettingKey);
+  if (!raw) return normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
+  try {
+    return normalizeDiscordOnlinerConfig(JSON.parse(raw));
+  } catch {
+    return normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
+  }
+}
+
+function getDiscordOnlinerSnapshot(config) {
+  return {
+    configured: Boolean(config.botToken),
+    hasBotToken: Boolean(config.botToken),
+    enabled: Boolean(config.enabled),
+    status: config.status,
+    activityType: config.activityType,
+    activityText: config.activityText,
+    connectionState: discordOnlinerRuntime.state,
+    bot: discordOnlinerRuntime.bot,
+    guildCount: discordOnlinerRuntime.guildIds.size,
+    connectedAt: discordOnlinerRuntime.connectedAt,
+    lastDisconnectedAt: discordOnlinerRuntime.lastDisconnectedAt,
+    lastError: discordOnlinerRuntime.lastError,
+    reconnectAttempt: discordOnlinerRuntime.reconnectAttempt
+  };
+}
+
+function clearDiscordOnlinerTimers() {
+  if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
+  if (discordOnlinerRuntime.reconnectTimer) clearTimeout(discordOnlinerRuntime.reconnectTimer);
+  discordOnlinerRuntime.heartbeatTimer = null;
+  discordOnlinerRuntime.reconnectTimer = null;
+}
+
+function stopDiscordOnliner({ resetIdentity = false } = {}) {
+  discordOnlinerRuntime.generation += 1;
+  clearDiscordOnlinerTimers();
+  const socket = discordOnlinerRuntime.socket;
+  discordOnlinerRuntime.socket = null;
+  discordOnlinerRuntime.state = "disconnected";
+  discordOnlinerRuntime.connectedAt = null;
+  discordOnlinerRuntime.reconnectAttempt = 0;
+  discordOnlinerRuntime.guildIds = new Set();
+  if (resetIdentity) discordOnlinerRuntime.bot = null;
+  try {
+    if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) socket.close(1000, "Onliner stopped");
+  } catch {
+    // The socket may already be closed.
+  }
+}
+
+function scheduleDiscordOnlinerReconnect(config, generation) {
+  if (generation !== discordOnlinerRuntime.generation || !config.enabled || !config.botToken) return;
+  discordOnlinerRuntime.reconnectAttempt += 1;
+  discordOnlinerRuntime.state = "reconnecting";
+  const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, discordOnlinerRuntime.reconnectAttempt - 1)));
+  discordOnlinerRuntime.reconnectTimer = setTimeout(() => {
+    discordOnlinerRuntime.reconnectTimer = null;
+    connectDiscordOnliner(config, generation);
+  }, delay);
+  discordOnlinerRuntime.reconnectTimer.unref?.();
+}
+
+function connectDiscordOnliner(config, generation) {
+  if (generation !== discordOnlinerRuntime.generation || !config.enabled || !config.botToken) return;
+  discordOnlinerRuntime.state = discordOnlinerRuntime.reconnectAttempt ? "reconnecting" : "connecting";
+  const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
+  discordOnlinerRuntime.socket = socket;
+  let sequence = null;
+
+  socket.on("message", (raw) => {
+    if (generation !== discordOnlinerRuntime.generation) return;
+    let payload;
+    try {
+      payload = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (Number.isInteger(payload?.s)) sequence = payload.s;
+    if (payload?.op === 10) {
+      const interval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
+      const heartbeat = () => {
+        if (socket.readyState !== WebSocket.OPEN) return;
+        if (!discordOnlinerRuntime.heartbeatAcknowledged) {
+          discordOnlinerRuntime.lastError = "Discord stopped acknowledging heartbeats.";
+          socket.terminate();
+          return;
+        }
+        discordOnlinerRuntime.heartbeatAcknowledged = false;
+        socket.send(JSON.stringify({ op: 1, d: sequence }));
+      };
+      discordOnlinerRuntime.heartbeatAcknowledged = true;
+      discordOnlinerRuntime.heartbeatTimer = setInterval(heartbeat, interval);
+      discordOnlinerRuntime.heartbeatTimer.unref?.();
+      const activities = config.activityType === "none" || !config.activityText
+        ? []
+        : [{ name: config.activityText, type: discordOnlinerActivityCodes[config.activityType] }];
+      socket.send(JSON.stringify({
+        op: 2,
+        d: {
+          token: config.botToken,
+          intents: 1,
+          properties: { os: process.platform, browser: "plcp-onliner", device: "plcp-onliner" },
+          presence: { since: null, activities, status: config.status, afk: false }
+        }
+      }));
+      return;
+    }
+    if (payload?.op === 11) {
+      discordOnlinerRuntime.heartbeatAcknowledged = true;
+      return;
+    }
+    if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
+      discordOnlinerRuntime.heartbeatAcknowledged = false;
+      socket.send(JSON.stringify({ op: 1, d: sequence }));
+      return;
+    }
+    if (payload?.op === 7 || payload?.op === 9) {
+      socket.close(4000, "Discord requested reconnect");
+      return;
+    }
+    if (payload?.op !== 0) return;
+    if (payload.t === "READY") {
+      const user = payload.d?.user ?? {};
+      const userId = String(user.id ?? "");
+      discordOnlinerRuntime.bot = {
+        id: userId,
+        username: String(user.global_name ?? user.username ?? "Discord Bot"),
+        tag: String(user.discriminator ?? "0") === "0" ? String(user.username ?? "") : `${user.username}#${user.discriminator}`,
+        avatarUrl: user.avatar && userId ? `https://cdn.discordapp.com/avatars/${userId}/${user.avatar}.png?size=128` : null
+      };
+      discordOnlinerRuntime.guildIds = new Set((Array.isArray(payload.d?.guilds) ? payload.d.guilds : []).map((guild) => String(guild?.id ?? "")).filter(isDiscordGuildId));
+      discordOnlinerRuntime.state = "connected";
+      discordOnlinerRuntime.connectedAt = new Date().toISOString();
+      discordOnlinerRuntime.lastError = null;
+      discordOnlinerRuntime.reconnectAttempt = 0;
+      return;
+    }
+    if (payload.t === "GUILD_CREATE") {
+      const guildId = String(payload.d?.id ?? "");
+      if (isDiscordGuildId(guildId)) discordOnlinerRuntime.guildIds.add(guildId);
+    }
+    if (payload.t === "GUILD_DELETE" && payload.d?.unavailable !== true) {
+      discordOnlinerRuntime.guildIds.delete(String(payload.d?.id ?? ""));
+    }
+  });
+  socket.on("error", (error) => {
+    if (generation === discordOnlinerRuntime.generation) discordOnlinerRuntime.lastError = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+  });
+  socket.on("close", (code) => {
+    if (generation !== discordOnlinerRuntime.generation) return;
+    if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
+    discordOnlinerRuntime.heartbeatTimer = null;
+    discordOnlinerRuntime.socket = null;
+    discordOnlinerRuntime.connectedAt = null;
+    discordOnlinerRuntime.lastDisconnectedAt = new Date().toISOString();
+    if (code === 4004) {
+      discordOnlinerRuntime.state = "error";
+      discordOnlinerRuntime.lastError = "Discord rejected the saved bot token.";
+      return;
+    }
+    scheduleDiscordOnlinerReconnect(config, generation);
+  });
+}
+
+function startDiscordOnliner(config) {
+  stopDiscordOnliner({ resetIdentity: true });
+  if (!config.enabled || !config.botToken) return;
+  const generation = discordOnlinerRuntime.generation;
+  discordOnlinerRuntime.lastError = null;
+  connectDiscordOnliner(config, generation);
+}
+
 let communityGuildCache = null;
 let communityBotCache = null;
 let communityBotGuildCountCache = null;
@@ -4375,6 +4585,65 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "10mb" }));
 
+app.get("/api/onliner", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    res.set("Cache-Control", "no-store").json(getDiscordOnlinerSnapshot(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/onliner", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    const suppliedToken = String(req.body?.botToken ?? "").trim();
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      ...req.body,
+      botToken: suppliedToken || current.botToken
+    });
+    if (!candidate.botToken || candidate.botToken.length > 2000) {
+      return res.status(400).json({ message: "A valid Discord bot token is required." });
+    }
+    const identity = await requestDiscord("users/@me", {
+      headers: { Authorization: `Bot ${candidate.botToken}` }
+    });
+    if (!identity.response.ok || identity.payload?.bot !== true) {
+      return res.status(400).json({ message: "Discord rejected this bot token." });
+    }
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    startDiscordOnliner(candidate);
+    res.json(getDiscordOnlinerSnapshot(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    if (!config.botToken) return res.status(409).json({ message: "Save a Discord bot token first." });
+    if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting." });
+    startDiscordOnliner(config);
+    res.json(getDiscordOnlinerSnapshot(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/onliner", requireSession, async (_req, res, next) => {
+  try {
+    stopDiscordOnliner({ resetIdentity: true });
+    discordOnlinerRuntime.lastError = null;
+    await pool.query("DELETE FROM app_settings WHERE setting_key = $1", [discordOnlinerSettingKey]);
+    const config = normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
+    res.json(getDiscordOnlinerSnapshot(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
@@ -8118,6 +8387,10 @@ app.use((error, _req, res, _next) => {
 });
 
 await initializeDatabase();
+const initialDiscordOnlinerConfig = await getDiscordOnlinerConfig();
+if (initialDiscordOnlinerConfig.enabled && initialDiscordOnlinerConfig.botToken) {
+  startDiscordOnliner(initialDiscordOnlinerConfig);
+}
 app.listen(port, "0.0.0.0", () => {
   console.log(`Pulcip Members listening on port ${port}`);
 });

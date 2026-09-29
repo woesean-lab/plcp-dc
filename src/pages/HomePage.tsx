@@ -33,6 +33,8 @@ import {
   LogOut,
   Minus,
   Plus,
+  Power,
+  RadioTower,
   RefreshCw,
   Rocket,
   RotateCcw,
@@ -81,6 +83,15 @@ import {
   type CommunityStockType
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
+import {
+  clearDiscordOnliner,
+  getDiscordOnliner,
+  reconnectDiscordOnliner,
+  saveDiscordOnliner,
+  type DiscordOnlinerActivityType,
+  type DiscordOnlinerSnapshot,
+  type DiscordOnlinerStatus
+} from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
 import {
   checkAvailableAmount,
@@ -123,6 +134,14 @@ const EMPTY_FORM = {
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
   isEldoradoSale: true
+};
+
+const EMPTY_ONLINER_DRAFT = {
+  botToken: "",
+  enabled: true,
+  status: "online" as DiscordOnlinerStatus,
+  activityType: "playing" as DiscordOnlinerActivityType,
+  activityText: "Pulcip Members"
 };
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -454,7 +473,7 @@ function SkeletonField({ className = "" }: { className?: string }) {
 }
 
 function HomePageSkeleton({ tab }: { tab: AdminTab }) {
-  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : "settings";
+  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
 
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
@@ -559,7 +578,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
         </div>
       ) : null}
 
-      {tab === "stock" || tab === "settings" ? (
+      {tab === "stock" || tab === "onliner" || tab === "settings" ? (
         <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start" aria-hidden="true">
           <div className={`${shell} p-5 sm:p-6`}>
             <Skeleton className="h-3 w-24" />
@@ -621,6 +640,11 @@ export default function HomePage() {
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
+  const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
+  const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
+  const [loadingOnliner, setLoadingOnliner] = useState(false);
+  const [savingOnliner, setSavingOnliner] = useState(false);
+  const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
@@ -910,6 +934,36 @@ export default function HomePage() {
     // Tokenu balance is loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
+
+  useEffect(() => {
+    if (activeTab !== "onliner") return;
+    let cancelled = false;
+    setLoadingOnliner(true);
+    void getDiscordOnliner().then((snapshot) => {
+      if (cancelled) return;
+      setOnlinerSnapshot(snapshot);
+      setOnlinerDraft({
+        botToken: "",
+        enabled: snapshot.enabled,
+        status: snapshot.status,
+        activityType: snapshot.activityType,
+        activityText: snapshot.activityText
+      });
+    }).catch((error) => {
+      if (!cancelled) notifyError(error instanceof Error ? error.message : "Onliner status could not be loaded.");
+    }).finally(() => {
+      if (!cancelled) setLoadingOnliner(false);
+    });
+    const poll = window.setInterval(() => {
+      void getDiscordOnliner().then((snapshot) => {
+        if (!cancelled) setOnlinerSnapshot(snapshot);
+      }).catch(() => {});
+    }, 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+    };
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "stock") return;
@@ -1222,6 +1276,54 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Selected members could not be transferred.");
     } finally {
       setCommunityBulkAction(null);
+    }
+  }
+
+  async function handleSaveOnliner(event: FormEvent) {
+    event.preventDefault();
+    if (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken) {
+      notifyError("Enter the Discord bot token.");
+      return;
+    }
+    try {
+      setSavingOnliner(true);
+      const snapshot = await saveDiscordOnliner({
+        ...onlinerDraft,
+        botToken: onlinerDraft.botToken.trim() || undefined
+      });
+      setOnlinerSnapshot(snapshot);
+      setOnlinerDraft((current) => ({ ...current, botToken: "" }));
+      notifySuccess(snapshot.enabled ? "Onliner saved and bot connection started." : "Onliner saved in disabled state.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner settings could not be saved.");
+    } finally {
+      setSavingOnliner(false);
+    }
+  }
+
+  async function handleReconnectOnliner() {
+    try {
+      setReconnectingOnliner(true);
+      setOnlinerSnapshot(await reconnectDiscordOnliner());
+      notifySuccess("Discord Gateway reconnect started.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner could not reconnect.");
+    } finally {
+      setReconnectingOnliner(false);
+    }
+  }
+
+  async function handleClearOnliner() {
+    try {
+      setSavingOnliner(true);
+      const snapshot = await clearDiscordOnliner();
+      setOnlinerSnapshot(snapshot);
+      setOnlinerDraft(EMPTY_ONLINER_DRAFT);
+      notifySuccess("Onliner bot token and settings removed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner settings could not be removed.");
+    } finally {
+      setSavingOnliner(false);
     }
   }
 
@@ -2415,6 +2517,19 @@ export default function HomePage() {
   );
 
   const showManageSkeleton = refreshingManage && !orders.length;
+  const onlinerConnectionState = onlinerSnapshot?.connectionState ?? (loadingOnliner ? "connecting" : "disconnected");
+  const onlinerConnectionLabel = onlinerConnectionState === "connected"
+    ? "Connected"
+    : onlinerConnectionState === "reconnecting"
+      ? "Reconnecting"
+      : onlinerConnectionState === "connecting"
+        ? "Connecting"
+        : onlinerConnectionState === "error" ? "Error" : "Disconnected";
+  const onlinerBadgeVariant = onlinerConnectionState === "connected"
+    ? "success" as const
+    : onlinerConnectionState === "error"
+      ? "destructive" as const
+      : "secondary" as const;
 
   return (
     <div className="relative">
@@ -3429,6 +3544,145 @@ export default function HomePage() {
               )}
             </section>
             </> : communityStockPanel}
+          </>
+        ) : null}
+
+        {activeTab === "onliner" ? (
+          <>
+            <header className="page-heading">
+              <div>
+                <p className={labelClass}>Onliner</p>
+                <h1 className="page-title">Discord bot presence</h1>
+                <p className="app-copy page-copy">Keep a dedicated Discord bot connected to Gateway v10 with automatic reconnect.</p>
+              </div>
+              <div className="page-heading-meta">
+                <Badge variant={onlinerBadgeVariant}>{onlinerConnectionLabel}</Badge>
+                <Badge variant={onlinerSnapshot?.configured ? "success" : "destructive"}>{onlinerSnapshot?.configured ? "Token saved" : "Token missing"}</Badge>
+              </div>
+            </header>
+
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
+              <section className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
+                  <div>
+                    <p className={labelClass}>Gateway v10</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Onliner configuration</h2>
+                  </div>
+                </div>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">This connection is independent from the Members bot. The token is encrypted in PostgreSQL and is never returned after saving.</p>
+
+                <form className="mt-6 grid gap-5" onSubmit={handleSaveOnliner}>
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>{onlinerSnapshot?.hasBotToken ? "Replace bot token" : "Discord bot token"}</span>
+                    <Input
+                      type="password"
+                      value={onlinerDraft.botToken}
+                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, botToken: event.target.value }))}
+                      placeholder={onlinerSnapshot?.hasBotToken ? "Saved — leave blank to keep" : "Paste the test bot token"}
+                      autoComplete="new-password"
+                    />
+                  </label>
+
+                  <label className="onliner-enabled-card">
+                    <input
+                      type="checkbox"
+                      checked={onlinerDraft.enabled}
+                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, enabled: event.target.checked }))}
+                    />
+                    <span className="stat-icon" aria-hidden="true"><Power className="h-4 w-4" /></span>
+                    <span><strong>Keep bot online</strong><small>Connect automatically when the backend starts and reconnect after interruptions.</small></span>
+                  </label>
+
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <FilterDropdown
+                      label="Bot status"
+                      value={onlinerDraft.status}
+                      options={[
+                        { value: "online", label: "Online" },
+                        { value: "idle", label: "Idle" },
+                        { value: "dnd", label: "Do not disturb" }
+                      ]}
+                      onChange={(value) => setOnlinerDraft((current) => ({ ...current, status: value as DiscordOnlinerStatus }))}
+                    />
+                    <FilterDropdown
+                      label="Activity type"
+                      value={onlinerDraft.activityType}
+                      options={[
+                        { value: "playing", label: "Playing" },
+                        { value: "listening", label: "Listening" },
+                        { value: "watching", label: "Watching" },
+                        { value: "none", label: "No activity" }
+                      ]}
+                      onChange={(value) => setOnlinerDraft((current) => ({ ...current, activityType: value as DiscordOnlinerActivityType }))}
+                    />
+                  </div>
+
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>Activity text</span>
+                    <Input
+                      value={onlinerDraft.activityText}
+                      maxLength={128}
+                      disabled={onlinerDraft.activityType === "none"}
+                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, activityText: event.target.value }))}
+                      placeholder="Pulcip Members"
+                    />
+                  </label>
+
+                  <div className="flex flex-wrap gap-3">
+                    <Button type="submit" disabled={savingOnliner || loadingOnliner || (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken)}>
+                      {savingOnliner ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                      {savingOnliner ? "Saving..." : "Save & apply"}
+                    </Button>
+                    {onlinerSnapshot?.configured && onlinerSnapshot.enabled ? (
+                      <Button type="button" variant="secondary" disabled={savingOnliner || reconnectingOnliner} onClick={() => void handleReconnectOnliner()}>
+                        <RefreshCw className={`h-4 w-4 ${reconnectingOnliner ? "animate-spin" : ""}`} />
+                        Reconnect
+                      </Button>
+                    ) : null}
+                    {onlinerSnapshot?.configured ? (
+                      <Button type="button" variant="destructive" disabled={savingOnliner} onClick={() => void handleClearOnliner()}>
+                        <Trash2 className="h-4 w-4" /> Remove settings
+                      </Button>
+                    ) : null}
+                  </div>
+                </form>
+              </section>
+
+              <aside className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="onliner-bot-avatar" aria-hidden="true">
+                    {onlinerSnapshot?.bot?.avatarUrl ? <img src={onlinerSnapshot.bot.avatarUrl} alt="" /> : <Bot className="h-5 w-5" />}
+                  </span>
+                  <div className="min-w-0">
+                    <p className={labelClass}>Connection</p>
+                    <h2 className="app-title mt-1 truncate text-lg font-semibold">{onlinerSnapshot?.bot?.username ?? "Test bot"}</h2>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-3">
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
+                    <span><span className="settings-status-label">Gateway</span><strong>{onlinerConnectionLabel}</strong></span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
+                    <span><span className="settings-status-label">Active servers</span><strong>{onlinerSnapshot?.guildCount ?? 0}</strong></span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span>
+                    <span><span className="settings-status-label">Presence</span><strong>{onlinerSnapshot ? `${getCommunityPresenceLabel(onlinerSnapshot.status)} · ${onlinerSnapshot.activityType === "none" ? "No activity" : onlinerSnapshot.activityText || "No text"}` : "Not configured"}</strong></span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><RefreshCw className="h-4 w-4" /></span>
+                    <span><span className="settings-status-label">Reconnects</span><strong>{onlinerSnapshot?.reconnectAttempt ?? 0}</strong></span>
+                  </div>
+                </div>
+
+                {onlinerSnapshot?.connectedAt ? <p className="community-admin-note mt-4">Connected {new Date(onlinerSnapshot.connectedAt).toLocaleString()}</p> : null}
+                {onlinerSnapshot?.lastError ? <div className="onliner-error-note"><TriangleAlert className="h-4 w-4" /><span>{onlinerSnapshot.lastError}</span></div> : null}
+              </aside>
+            </div>
           </>
         ) : null}
 

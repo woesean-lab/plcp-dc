@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, Settings2, ShieldCheck } from "lucide-react";
+import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -83,6 +83,16 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 >
                   <Boxes className="h-4 w-4" aria-hidden="true" />
                   <span>Stock</span>
+                </Link>
+                <Link
+                  to="/manage?tab=onliner"
+                  aria-label="Onliner"
+                  title="Onliner"
+                  className={`app-nav-button ${isManage && tab === "onliner" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "onliner" ? "page" : undefined}
+                >
+                  <RadioTower className="h-4 w-4" aria-hidden="true" />
+                  <span>Onliner</span>
                 </Link>
                 <Link
                   to="/manage?tab=settings"
