@@ -5231,6 +5231,47 @@
 
 .onliner-error-note svg { flex: 0 0 auto; margin-top: 1px; }
 
+.onliner-console-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--app-border);
+  padding: 16px 18px;
+}
+
+.onliner-console {
+  min-height: 180px;
+  max-height: 380px;
+  overflow: auto;
+  padding: 8px 0;
+  background: color-mix(in srgb, var(--app-bg-deep) 86%, #020409);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.onliner-console-line {
+  display: grid;
+  grid-template-columns: 90px 58px minmax(0, 1fr);
+  gap: 10px;
+  padding: 5px 18px;
+  color: var(--app-muted);
+}
+
+.onliner-console-line:hover { background: rgba(255,255,255,.025); }
+.onliner-console-line time { color: var(--app-subtle); }
+.onliner-console-level { color: var(--app-accent-bright); text-transform: uppercase; }
+.onliner-console-line[data-level="success"] .onliner-console-level { color: var(--app-success); }
+.onliner-console-line[data-level="warn"] .onliner-console-level { color: #f5b942; }
+.onliner-console-line[data-level="error"] .onliner-console-level { color: var(--app-danger); }
+.onliner-console-message { min-width: 0; overflow-wrap: anywhere; color: var(--app-text); }
+.onliner-console-empty { padding: 56px 18px; text-align: center; color: var(--app-subtle); }
+
+@media (max-width: 640px) {
+  .onliner-console-line { grid-template-columns: 76px 50px minmax(0, 1fr); gap: 7px; padding-inline: 12px; font-size: 10px; }
+}
+
 .session-loading-screen {
   display: flex;
   min-height: 100dvh;

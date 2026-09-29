@@ -43,6 +43,7 @@ import {
   Shield,
   ShieldCheck,
   Star,
+  Terminal,
   Timer,
   TriangleAlert,
   Trash2,
@@ -85,10 +86,12 @@ import {
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import {
   clearDiscordOnliner,
+  clearDiscordOnlinerLogs,
   getDiscordOnliner,
   reconnectDiscordOnliner,
   saveDiscordOnliner,
   type DiscordOnlinerActivityType,
+  type DiscordOnlinerLogEntry,
   type DiscordOnlinerSnapshot,
   type DiscordOnlinerStatus
 } from "../lib/onliner";
@@ -968,12 +971,30 @@ export default function HomePage() {
     });
     const poll = window.setInterval(() => {
       void getDiscordOnliner().then((snapshot) => {
-        if (!cancelled) setOnlinerSnapshot(snapshot);
+        if (!cancelled) setOnlinerSnapshot((current) => {
+          if (!current?.logs?.length) return snapshot;
+          const logsById = new Map([...snapshot.logs, ...current.logs].map((entry) => [entry.id, entry]));
+          return { ...snapshot, logs: [...logsById.values()].sort((left, right) => left.id - right.id).slice(-100) };
+        });
       }).catch(() => {});
     }, 3000);
+    const logStream = new EventSource("/api/onliner/logs/stream", { withCredentials: true });
+    logStream.onmessage = (event) => {
+      try {
+        const entry = JSON.parse(event.data) as DiscordOnlinerLogEntry;
+        if (!entry || typeof entry.id !== "number" || typeof entry.message !== "string") return;
+        setOnlinerSnapshot((current) => {
+          if (!current || current.logs.some((item) => item.id === entry.id)) return current;
+          return { ...current, logs: [...current.logs, entry].slice(-100) };
+        });
+      } catch {
+        // Ignore malformed stream events and keep the status poll running.
+      }
+    };
     return () => {
       cancelled = true;
       window.clearInterval(poll);
+      logStream.close();
     };
   }, [activeTab]);
 
@@ -1344,6 +1365,15 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Onliner settings could not be removed.");
     } finally {
       setSavingOnliner(false);
+    }
+  }
+
+  async function handleClearOnlinerLogs() {
+    try {
+      await clearDiscordOnlinerLogs();
+      setOnlinerSnapshot((current) => current ? { ...current, logs: [] } : current);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner console could not be cleared.");
     }
   }
 
@@ -3763,6 +3793,32 @@ export default function HomePage() {
                 {onlinerSnapshot?.lastError ? <div className="onliner-error-note"><TriangleAlert className="h-4 w-4" /><span>{onlinerSnapshot.lastError}</span></div> : null}
               </aside>
             </div>
+
+            <section className={`${shell} mt-5 overflow-hidden`}>
+              <div className="onliner-console-head">
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true"><Terminal className="h-4 w-4" /></span>
+                  <div>
+                    <p className={labelClass}>Live stream</p>
+                    <h2 className="app-title mt-1 text-base font-semibold">Gateway console</h2>
+                  </div>
+                </div>
+                <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
+                  <Trash2 className="h-3.5 w-3.5" /> Clear
+                </Button>
+              </div>
+              <div className="onliner-console" role="log" aria-live="polite">
+                {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => (
+                  <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
+                    <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                    <span className="onliner-console-level">{entry.level}</span>
+                    <span className="onliner-console-message">{entry.message}</span>
+                  </div>
+                )) : (
+                  <div className="onliner-console-empty">Gateway events will appear here when the Onliner starts.</div>
+                )}
+              </div>
+            </section>
           </>
         ) : null}
 

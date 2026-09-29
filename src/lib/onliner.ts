@@ -1,6 +1,14 @@
 export type DiscordOnlinerStatus = "online" | "idle" | "dnd";
 export type DiscordOnlinerActivityType = "playing" | "listening" | "watching" | "none";
 export type DiscordOnlinerConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
+export type DiscordOnlinerLogLevel = "info" | "success" | "warn" | "error";
+
+export type DiscordOnlinerLogEntry = {
+  id: number;
+  timestamp: string;
+  level: DiscordOnlinerLogLevel;
+  message: string;
+};
 
 export type DiscordOnlinerSnapshot = {
   configured: boolean;
@@ -22,6 +30,7 @@ export type DiscordOnlinerSnapshot = {
   lastDisconnectedAt: string | null;
   lastError: string | null;
   reconnectAttempt: number;
+  logs: DiscordOnlinerLogEntry[];
 };
 
 export type DiscordOnlinerInput = {
@@ -62,4 +71,12 @@ export function reconnectDiscordOnliner() {
 
 export function clearDiscordOnliner() {
   return fetch("/api/onliner", { method: "DELETE", credentials: "same-origin" }).then(parseResponse);
+}
+
+export async function clearDiscordOnlinerLogs() {
+  const response = await fetch("/api/onliner/logs", { method: "DELETE", credentials: "same-origin" });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  }
 }
