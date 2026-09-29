@@ -9,6 +9,11 @@ export type DiscordOnlinerSnapshot = {
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;
   activityText: string;
+  rotationEnabled: boolean;
+  rotationItems: string[];
+  rotationMinMinutes: number;
+  rotationMaxMinutes: number;
+  currentActivity: string | null;
   connectionState: DiscordOnlinerConnectionState;
   bot: { id: string; username: string; tag: string; avatarUrl: string | null } | null;
   guildCount: number;
@@ -24,6 +29,10 @@ export type DiscordOnlinerInput = {
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;
   activityText: string;
+  rotationEnabled: boolean;
+  rotationItems: string[];
+  rotationMinMinutes: number;
+  rotationMaxMinutes: number;
 };
 
 async function parseResponse(response: Response) {

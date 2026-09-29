@@ -230,11 +230,24 @@ const discordOnlinerSettingKey = "discord_onliner_config";
 const discordOnlinerStatuses = new Set(["online", "idle", "dnd"]);
 const discordOnlinerActivityTypes = new Set(["playing", "listening", "watching", "none"]);
 const discordOnlinerActivityCodes = { playing: 0, listening: 2, watching: 3 };
+const defaultDiscordOnlinerGames = [
+  "Minecraft",
+  "VALORANT",
+  "Counter-Strike 2",
+  "League of Legends",
+  "Grand Theft Auto V",
+  "Elden Ring",
+  "Apex Legends",
+  "Fortnite",
+  "World of Warcraft",
+  "Euro Truck Simulator 2"
+];
 const discordOnlinerRuntime = {
   generation: 0,
   socket: null,
   heartbeatTimer: null,
   reconnectTimer: null,
+  activityTimer: null,
   heartbeatAcknowledged: true,
   state: "disconnected",
   bot: null,
@@ -242,7 +255,8 @@ const discordOnlinerRuntime = {
   connectedAt: null,
   lastDisconnectedAt: null,
   lastError: null,
-  reconnectAttempt: 0
+  reconnectAttempt: 0,
+  currentActivity: null
 };
 
 function normalizeDiscordOnlinerConfig(value = {}) {
@@ -253,12 +267,21 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   const activityType = discordOnlinerActivityTypes.has(String(value.activityType ?? "").toLowerCase())
     ? String(value.activityType).toLowerCase()
     : "playing";
+  const rotationItems = [...new Set((Array.isArray(value.rotationItems) ? value.rotationItems : defaultDiscordOnlinerGames)
+    .map((item) => String(item ?? "").trim().slice(0, 128))
+    .filter(Boolean))].slice(0, 100);
+  const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "10", 10) || 10, 1), 1440);
+  const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "30", 10) || 30, rotationMinMinutes), 1440);
   return {
     botToken,
     enabled: value.enabled !== false,
     status,
     activityType,
-    activityText: String(value.activityText ?? "Pulcip Members").trim().slice(0, 128)
+    activityText: String(value.activityText ?? "Pulcip Members").trim().slice(0, 128),
+    rotationEnabled: value.rotationEnabled !== false,
+    rotationItems,
+    rotationMinMinutes,
+    rotationMaxMinutes
   };
 }
 
@@ -280,6 +303,11 @@ function getDiscordOnlinerSnapshot(config) {
     status: config.status,
     activityType: config.activityType,
     activityText: config.activityText,
+    rotationEnabled: config.rotationEnabled,
+    rotationItems: config.rotationItems,
+    rotationMinMinutes: config.rotationMinMinutes,
+    rotationMaxMinutes: config.rotationMaxMinutes,
+    currentActivity: discordOnlinerRuntime.currentActivity,
     connectionState: discordOnlinerRuntime.state,
     bot: discordOnlinerRuntime.bot,
     guildCount: discordOnlinerRuntime.guildIds.size,
@@ -293,8 +321,10 @@ function getDiscordOnlinerSnapshot(config) {
 function clearDiscordOnlinerTimers() {
   if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
   if (discordOnlinerRuntime.reconnectTimer) clearTimeout(discordOnlinerRuntime.reconnectTimer);
+  if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
   discordOnlinerRuntime.heartbeatTimer = null;
   discordOnlinerRuntime.reconnectTimer = null;
+  discordOnlinerRuntime.activityTimer = null;
 }
 
 function stopDiscordOnliner({ resetIdentity = false } = {}) {
@@ -306,6 +336,7 @@ function stopDiscordOnliner({ resetIdentity = false } = {}) {
   discordOnlinerRuntime.connectedAt = null;
   discordOnlinerRuntime.reconnectAttempt = 0;
   discordOnlinerRuntime.guildIds = new Set();
+  discordOnlinerRuntime.currentActivity = null;
   if (resetIdentity) discordOnlinerRuntime.bot = null;
   try {
     if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) socket.close(1000, "Onliner stopped");
@@ -324,6 +355,51 @@ function scheduleDiscordOnlinerReconnect(config, generation) {
     connectDiscordOnliner(config, generation);
   }, delay);
   discordOnlinerRuntime.reconnectTimer.unref?.();
+}
+
+function chooseDiscordOnlinerActivity(config) {
+  const candidates = config.activityType === "playing" && config.rotationEnabled && config.rotationItems.length
+    ? config.rotationItems
+    : [config.activityText].filter(Boolean);
+  if (!candidates.length) return null;
+  const alternatives = candidates.length > 1
+    ? candidates.filter((item) => item !== discordOnlinerRuntime.currentActivity)
+    : candidates;
+  return alternatives[Math.floor(Math.random() * alternatives.length)] ?? candidates[0];
+}
+
+function buildDiscordOnlinerActivities(config, chooseNext = false) {
+  if (config.activityType === "none") {
+    discordOnlinerRuntime.currentActivity = null;
+    return [];
+  }
+  if (chooseNext || !discordOnlinerRuntime.currentActivity) {
+    discordOnlinerRuntime.currentActivity = chooseDiscordOnlinerActivity(config);
+  }
+  return discordOnlinerRuntime.currentActivity
+    ? [{ name: discordOnlinerRuntime.currentActivity, type: discordOnlinerActivityCodes[config.activityType] }]
+    : [];
+}
+
+function scheduleDiscordOnlinerActivityRotation(config, generation) {
+  if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
+  discordOnlinerRuntime.activityTimer = null;
+  if (generation !== discordOnlinerRuntime.generation || config.activityType !== "playing" || !config.rotationEnabled || config.rotationItems.length < 2) return;
+  const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
+  discordOnlinerRuntime.activityTimer = setTimeout(() => {
+    if (generation !== discordOnlinerRuntime.generation || discordOnlinerRuntime.socket?.readyState !== WebSocket.OPEN) return;
+    discordOnlinerRuntime.socket.send(JSON.stringify({
+      op: 3,
+      d: {
+        since: null,
+        activities: buildDiscordOnlinerActivities(config, true),
+        status: config.status,
+        afk: false
+      }
+    }));
+    scheduleDiscordOnlinerActivityRotation(config, generation);
+  }, Math.round(intervalMinutes * 60_000));
+  discordOnlinerRuntime.activityTimer.unref?.();
 }
 
 function connectDiscordOnliner(config, generation) {
@@ -357,9 +433,7 @@ function connectDiscordOnliner(config, generation) {
       discordOnlinerRuntime.heartbeatAcknowledged = true;
       discordOnlinerRuntime.heartbeatTimer = setInterval(heartbeat, interval);
       discordOnlinerRuntime.heartbeatTimer.unref?.();
-      const activities = config.activityType === "none" || !config.activityText
-        ? []
-        : [{ name: config.activityText, type: discordOnlinerActivityCodes[config.activityType] }];
+      const activities = buildDiscordOnlinerActivities(config, true);
       socket.send(JSON.stringify({
         op: 2,
         d: {
@@ -399,6 +473,7 @@ function connectDiscordOnliner(config, generation) {
       discordOnlinerRuntime.connectedAt = new Date().toISOString();
       discordOnlinerRuntime.lastError = null;
       discordOnlinerRuntime.reconnectAttempt = 0;
+      scheduleDiscordOnlinerActivityRotation(config, generation);
       return;
     }
     if (payload.t === "GUILD_CREATE") {
@@ -415,7 +490,9 @@ function connectDiscordOnliner(config, generation) {
   socket.on("close", (code) => {
     if (generation !== discordOnlinerRuntime.generation) return;
     if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
+    if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
     discordOnlinerRuntime.heartbeatTimer = null;
+    discordOnlinerRuntime.activityTimer = null;
     discordOnlinerRuntime.socket = null;
     discordOnlinerRuntime.connectedAt = null;
     discordOnlinerRuntime.lastDisconnectedAt = new Date().toISOString();

@@ -141,7 +141,11 @@ const EMPTY_ONLINER_DRAFT = {
   enabled: true,
   status: "online" as DiscordOnlinerStatus,
   activityType: "playing" as DiscordOnlinerActivityType,
-  activityText: "Pulcip Members"
+  activityText: "Pulcip Members",
+  rotationEnabled: true,
+  rotationItems: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
+  rotationMinMinutes: 10,
+  rotationMaxMinutes: 30
 };
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -947,7 +951,11 @@ export default function HomePage() {
         enabled: snapshot.enabled,
         status: snapshot.status,
         activityType: snapshot.activityType,
-        activityText: snapshot.activityText
+        activityText: snapshot.activityText,
+        rotationEnabled: snapshot.rotationEnabled,
+        rotationItems: snapshot.rotationItems.join("\n"),
+        rotationMinMinutes: snapshot.rotationMinMinutes,
+        rotationMaxMinutes: snapshot.rotationMaxMinutes
       });
     }).catch((error) => {
       if (!cancelled) notifyError(error instanceof Error ? error.message : "Onliner status could not be loaded.");
@@ -1289,7 +1297,10 @@ export default function HomePage() {
       setSavingOnliner(true);
       const snapshot = await saveDiscordOnliner({
         ...onlinerDraft,
-        botToken: onlinerDraft.botToken.trim() || undefined
+        botToken: onlinerDraft.botToken.trim() || undefined,
+        rotationItems: onlinerDraft.rotationItems.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+        rotationMinMinutes: Math.max(1, Number(onlinerDraft.rotationMinMinutes) || 10),
+        rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
       });
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft((current) => ({ ...current, botToken: "" }));
@@ -3619,7 +3630,7 @@ export default function HomePage() {
                   </div>
 
                   <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Activity text</span>
+                    <span className={fieldLabelClass}>{onlinerDraft.activityType === "playing" && onlinerDraft.rotationEnabled ? "Fallback activity text" : "Activity text"}</span>
                     <Input
                       value={onlinerDraft.activityText}
                       maxLength={128}
@@ -3628,6 +3639,42 @@ export default function HomePage() {
                       placeholder="Pulcip Members"
                     />
                   </label>
+
+                  {onlinerDraft.activityType === "playing" ? (
+                    <div className="onliner-rotation-panel">
+                      <label className="onliner-rotation-toggle">
+                        <input
+                          type="checkbox"
+                          checked={onlinerDraft.rotationEnabled}
+                          onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationEnabled: event.target.checked }))}
+                        />
+                        <span><strong>Rotate playing activity</strong><small>Choose another game from the list at a random interval without disconnecting the bot.</small></span>
+                      </label>
+                      {onlinerDraft.rotationEnabled ? (
+                        <>
+                          <label className="grid gap-2">
+                            <span className={fieldLabelClass}>Game list · one per line</span>
+                            <textarea
+                              className="onliner-game-textarea"
+                              value={onlinerDraft.rotationItems}
+                              onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationItems: event.target.value }))}
+                              placeholder={"Minecraft\nVALORANT\nCounter-Strike 2"}
+                            />
+                          </label>
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="grid gap-2">
+                              <span className={fieldLabelClass}>Minimum interval · minutes</span>
+                              <Input type="number" min={1} max={1440} value={onlinerDraft.rotationMinMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMinMinutes: Number(event.target.value) }))} />
+                            </label>
+                            <label className="grid gap-2">
+                              <span className={fieldLabelClass}>Maximum interval · minutes</span>
+                              <Input type="number" min={1} max={1440} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} />
+                            </label>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  ) : null}
 
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={savingOnliner || loadingOnliner || (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken)}>
@@ -3671,7 +3718,7 @@ export default function HomePage() {
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Presence</span><strong>{onlinerSnapshot ? `${getCommunityPresenceLabel(onlinerSnapshot.status)} · ${onlinerSnapshot.activityType === "none" ? "No activity" : onlinerSnapshot.activityText || "No text"}` : "Not configured"}</strong></span>
+                    <span><span className="settings-status-label">Presence</span><strong>{onlinerSnapshot ? `${getCommunityPresenceLabel(onlinerSnapshot.status)} · ${onlinerSnapshot.activityType === "none" ? "No activity" : onlinerSnapshot.currentActivity || onlinerSnapshot.activityText || "No text"}` : "Not configured"}</strong></span>
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><RefreshCw className="h-4 w-4" /></span>

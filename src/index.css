@@ -5151,6 +5151,55 @@
 .onliner-enabled-card strong { color: var(--app-text); font-size: 13px; }
 .onliner-enabled-card small { color: var(--app-muted); font-size: 11px; line-height: 1.45; }
 
+.onliner-rotation-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--app-surface-soft);
+}
+
+.onliner-rotation-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.onliner-rotation-toggle input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: 2px;
+  accent-color: var(--app-accent-bright);
+}
+
+.onliner-rotation-toggle > span { display: grid; gap: 3px; }
+.onliner-rotation-toggle strong { color: var(--app-text); font-size: 12px; }
+.onliner-rotation-toggle small { color: var(--app-muted); font-size: 10px; line-height: 1.45; }
+
+.onliner-game-textarea {
+  min-height: 150px;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  color: var(--app-text);
+  background: var(--app-control-bg);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.65;
+  outline: none;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+
+.onliner-game-textarea:focus {
+  border-color: var(--app-accent-bright);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent-bright) 18%, transparent);
+}
+
 .onliner-bot-avatar {
   display: grid;
   width: 44px;
