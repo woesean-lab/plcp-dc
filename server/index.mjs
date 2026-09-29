@@ -890,15 +890,30 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
     }
     if (Math.random() * 100 < config.activityChances.watching) {
       const youtubeVideos = discordOnlinerYouTubePlaylistCache.get(config.youtubePlaylistId)?.videos ?? [];
-      const previousVideoId = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes.watching)?.sync_id;
-      const video = chooseDiscordOnlinerActivity(youtubeVideos.filter((item) => item.videoId !== previousVideoId), null)
-        ?? chooseDiscordOnlinerActivity(youtubeVideos, null);
-      if (video) {
+      const youtubeItems = youtubeVideos.map((video) => ({
+        name: video.title,
+        state: ["YouTube", video.channel].filter(Boolean).join(" · ").slice(0, 128),
+        url: video.url
+      }));
+      const twitchItems = config.streamingUsers.map((user) => {
+        const title = chooseDiscordOnlinerActivity(config.streamingTitles, null) || `${user}'s stream`;
+        const category = chooseDiscordOnlinerActivity(config.streamingCategories, null);
+        return {
+          name: title.slice(0, 128),
+          state: ["Twitch", category, user].filter(Boolean).join(" · ").slice(0, 128),
+          url: `https://www.twitch.tv/${encodeURIComponent(user)}`
+        };
+      });
+      const previousUrl = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes.watching)?.url;
+      const source = chooseDiscordOnlinerActivity([youtubeItems, twitchItems].filter((items) => items.length), null) ?? [];
+      const item = chooseDiscordOnlinerActivity(source.filter((candidate) => candidate.url !== previousUrl), null)
+        ?? chooseDiscordOnlinerActivity(source, null);
+      if (item) {
         activities.push({
-          name: video.title,
+          name: item.name,
           type: discordOnlinerActivityCodes.watching,
-          state: ["YouTube", video.channel].filter(Boolean).join(" · ").slice(0, 128),
-          url: video.url
+          state: item.state,
+          url: item.url
         });
       } else if (config.youtubePlaylistId) {
         activities.push({
