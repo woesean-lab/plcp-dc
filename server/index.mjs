@@ -527,14 +527,18 @@ async function getDiscordOnlinerSpotifyTracks(playlistId) {
     const html = await response.text();
     const nextData = html.match(/<script\b[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)?.[1];
     let tracks = [];
+    let playlistCoverUrl = "";
     if (nextData) {
       try {
-        const entityTracks = JSON.parse(nextData)?.props?.pageProps?.state?.data?.entity?.trackList;
+        const entity = JSON.parse(nextData)?.props?.pageProps?.state?.data?.entity;
+        const entityTracks = entity?.trackList;
+        playlistCoverUrl = String(entity?.coverArt?.sources?.[0]?.url ?? "").trim();
         tracks = (Array.isArray(entityTracks) ? entityTracks : []).map((track) => ({
           title: String(track?.title ?? "").trim().slice(0, 128),
           artist: String(track?.subtitle ?? "").replace(/\u00a0/g, " ").trim().slice(0, 128),
           trackId: String(track?.uri ?? "").match(/^spotify:track:([a-z\d]+)$/i)?.[1] ?? "",
-          duration: Math.max(0, Number(track?.duration) || 0)
+          duration: Math.max(0, Number(track?.duration) || 0),
+          coverUrl: playlistCoverUrl
         })).filter((track) => track.title).slice(0, 100);
       } catch {
         // Fall through to the rendered track rows when Spotify changes its state payload.
@@ -546,9 +550,23 @@ async function getDiscordOnlinerSpotifyTracks(playlistId) {
         const title = decodeDiscordOnlinerHtmlText(row.match(/<h3\b[^>]*TracklistRow_title[^>]*>([\s\S]*?)<\/h3>/i)?.[1]);
         const artistHtml = row.match(/<h4\b[^>]*TracklistRow_subtitle[^>]*>([\s\S]*?)<\/h4>/i)?.[1] ?? "";
         const artist = decodeDiscordOnlinerHtmlText(artistHtml.replace(/<span\b[^>]*data-testid="tag"[^>]*>[\s\S]*?<\/span>/gi, ""));
-        return { title, artist, trackId: "", duration: 0 };
+        return { title, artist, trackId: "", duration: 0, coverUrl: playlistCoverUrl };
       }).filter((track) => track.title).slice(0, 100);
     }
+    await forEachWithConcurrency(tracks.filter((track) => track.trackId), 8, async (track) => {
+      try {
+        const response = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(`https://open.spotify.com/track/${track.trackId}`)}`, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PLCP-Onliner/1.0)" },
+          signal: AbortSignal.timeout(5_000)
+        });
+        if (!response.ok) return;
+        const metadata = await response.json().catch(() => null);
+        const coverUrl = String(metadata?.thumbnail_url ?? "").trim();
+        if (coverUrl) track.coverUrl = coverUrl;
+      } catch {
+        // Keep the playlist artwork as a fallback if Spotify's track metadata is unavailable.
+      }
+    });
     discordOnlinerSpotifyPlaylistCache.set(playlistId, { tracks, expiresAt: Date.now() + 30 * 60_000 });
     appendDiscordOnlinerLog(tracks.length ? "success" : "warn", tracks.length
       ? `Spotify playlist loaded: ${tracks.length} tracks are available for Listening.`
@@ -848,6 +866,35 @@ function chooseDiscordOnlinerVariant(values, currentValue) {
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? values[0];
 }
 
+function getDiscordOnlinerSpotifyImageKey(value) {
+  const imageId = String(value ?? "").match(/\/image\/([a-z\d]+)(?:[/?#]|$)/i)?.[1];
+  return imageId ? `spotify:${imageId}` : undefined;
+}
+
+function buildDiscordOnlinerSpotifyActivity(track, runtime) {
+  const now = Date.now();
+  const duration = Math.max(0, Number(track.duration) || 0);
+  const elapsed = duration > 30_000
+    ? Math.min(duration - 10_000, Math.max(10_000, Math.round(duration * (0.08 + Math.random() * 0.42))))
+    : 0;
+  const spotifyUserId = String(runtime.bot?.id ?? runtime.accountId ?? "").replace(/[^a-z\d_-]/gi, "");
+  const largeImage = getDiscordOnlinerSpotifyImageKey(track.coverUrl);
+  return {
+    name: "Spotify",
+    type: discordOnlinerActivityCodes.listening,
+    details: String(track.title ?? "").trim().slice(0, 128) || "Unknown track",
+    state: String(track.artist ?? "").trim().slice(0, 128) || "Unknown artist",
+    ...(duration ? { timestamps: { start: now - elapsed, end: now - elapsed + duration } } : {}),
+    ...(track.trackId ? { sync_id: track.trackId } : {}),
+    ...(spotifyUserId ? {
+      session_id: `spotify:${spotifyUserId}`,
+      party: { id: `spotify:${spotifyUserId}` }
+    } : {}),
+    ...(largeImage ? { assets: { large_image: largeImage, large_text: String(track.title ?? "Spotify").slice(0, 128) } } : {}),
+    flags: 48
+  };
+}
+
 function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
   if (chooseNext || !runtime.currentStatus) {
     runtime.currentStatus = chooseDiscordOnlinerVariant(config.statuses, runtime.currentStatus);
@@ -887,21 +934,22 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
     }
     if (Math.random() * 100 < config.activityChances.listening) {
       const spotifyTracks = discordOnlinerSpotifyPlaylistCache.get(config.spotifyPlaylistId)?.tracks ?? [];
-      const previousTrackName = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes.listening)?.name;
-      const track = chooseDiscordOnlinerActivity(spotifyTracks.filter((item) => [item.title, item.artist].filter(Boolean).join(" — ") !== previousTrackName), null)
+      const previousListeningActivity = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes.listening);
+      const previousTrackId = previousListeningActivity?.sync_id;
+      const previousTrackName = [previousListeningActivity?.details, previousListeningActivity?.state].filter(Boolean).join(" — ");
+      const track = chooseDiscordOnlinerActivity(spotifyTracks.filter((item) => item.trackId
+        ? item.trackId !== previousTrackId
+        : [item.title, item.artist].filter(Boolean).join(" — ") !== previousTrackName), null)
         ?? chooseDiscordOnlinerActivity(spotifyTracks, null);
       if (track) {
-        activities.push({
-          name: [track.title, track.artist].filter(Boolean).join(" — ").slice(0, 128),
-          type: discordOnlinerActivityCodes.listening,
-          state: "Spotify"
-        });
+        activities.push(buildDiscordOnlinerSpotifyActivity(track, runtime));
       } else {
         const fallback = chooseDiscordOnlinerActivity(config.music);
         if (fallback) {
           activities.push({
-            name: fallback,
+            name: "Spotify",
             type: discordOnlinerActivityCodes.listening,
+            details: fallback.slice(0, 128),
             state: "Spotify"
           });
         }
@@ -948,7 +996,9 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
         ? [activity.name, activity.state].filter(Boolean).join(" — ")
         : activity.type === discordOnlinerActivityCodes.streaming
           ? [activity.name, activity.details, activity.state].filter(Boolean).join(" — ")
-        : activity.name).join(" · ") || null;
+        : activity.type === discordOnlinerActivityCodes.listening
+          ? [activity.details, activity.state].filter(Boolean).join(" — ")
+          : activity.name).join(" · ") || null;
     runtime.currentActivityType = activities.map((activity) => discordOnlinerActivityTypeValues.find((type) => discordOnlinerActivityCodes[type] === activity.type)).filter(Boolean).join(", ") || "none";
   }
   return { since: null, activities: runtime.currentActivities, status: runtime.currentStatus, afk: false };
