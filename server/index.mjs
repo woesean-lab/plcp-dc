@@ -230,10 +230,10 @@ async function forEachWithConcurrency(values, concurrency, task) {
 
 const discordOnlinerSettingKey = "discord_onliner_config";
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
-const discordOnlinerActivityTypeValues = ["playing", "listening", "watching"];
+const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
-const discordOnlinerActivityCodes = { playing: 0, listening: 2, watching: 3 };
+const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
 const defaultDiscordOnlinerGames = [
   "Minecraft",
@@ -270,6 +270,7 @@ function createDiscordOnlinerRuntime(accountId) {
     lastError: null,
     reconnectAttempt: 0,
     currentActivity: null,
+    currentActivities: null,
     currentStatus: null,
     currentActivityType: null
   };
@@ -340,8 +341,25 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   const rotationItems = [...new Set((Array.isArray(value.rotationItems) ? value.rotationItems : defaultDiscordOnlinerGames)
     .map((item) => String(item ?? "").trim().slice(0, 128))
     .filter(Boolean))].slice(0, 100);
-  const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "10", 10) || 10, 1), 1440);
-  const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "30", 10) || 30, rotationMinMinutes), 1440);
+  const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "30", 10) || 30, 1), 1440);
+  const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "1440", 10) || 1440, rotationMinMinutes), 1440);
+  const statuses = [...new Set((Array.isArray(value.statuses)
+    ? value.statuses
+    : status === "mixed" ? discordOnlinerStatusValues : [status])
+    .map((item) => String(item ?? "").toLowerCase())
+    .filter((item) => discordOnlinerStatusValues.includes(item)))];
+  const normalizePresenceItems = (items, fallback = []) => [...new Set((Array.isArray(items) ? items : fallback)
+    .map((item) => String(item ?? "").trim().slice(0, 128))
+    .filter(Boolean))].slice(0, 100);
+  const hasLegacyPresence = value.activityType != null || value.rotationItems != null || value.rotationEnabled != null;
+  const legacyActivityChances = Object.fromEntries(discordOnlinerActivityTypeValues.map((type) => [type, (activityType === "mixed" && type !== "streaming") || activityType === type ? 100 : 0]));
+  const requestedChances = value.activityChances && typeof value.activityChances === "object"
+    ? value.activityChances
+    : hasLegacyPresence ? legacyActivityChances : { playing: 75, streaming: 50, listening: 50, watching: 50 };
+  const activityChances = Object.fromEntries(discordOnlinerActivityTypeValues.map((type) => [
+    type,
+    Math.min(100, Math.max(0, Number.parseInt(requestedChances[type] ?? "0", 10) || 0))
+  ]));
   return {
     accounts,
     enabled: value.enabled !== false,
@@ -351,7 +369,16 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     rotationEnabled: value.rotationEnabled !== false,
     rotationItems,
     rotationMinMinutes,
-    rotationMaxMinutes
+    rotationMaxMinutes,
+    statuses: statuses.length ? statuses : ["online"],
+    activityChances,
+    randomizeEnabled: value.randomizeEnabled ?? (value.rotationEnabled == null ? false : value.rotationEnabled !== false),
+    games: normalizePresenceItems(value.games, rotationItems.length ? rotationItems : defaultDiscordOnlinerGames),
+    music: normalizePresenceItems(value.music, [hasLegacyPresence ? value.activityText || "Spotify" : "Spotify"]),
+    streamingUsers: normalizePresenceItems(value.streamingUsers),
+    streamingCategories: normalizePresenceItems(value.streamingCategories),
+    streamingTitles: normalizePresenceItems(value.streamingTitles),
+    watch: normalizePresenceItems(value.watch, ["YouTube", "Twitch", "Kick"])
   };
 }
 
@@ -454,6 +481,15 @@ function getDiscordOnlinerSnapshot(config) {
     rotationItems: config.rotationItems,
     rotationMinMinutes: config.rotationMinMinutes,
     rotationMaxMinutes: config.rotationMaxMinutes,
+    statuses: config.statuses,
+    activityChances: config.activityChances,
+    randomizeEnabled: config.randomizeEnabled,
+    games: config.games,
+    music: config.music,
+    streamingUsers: config.streamingUsers,
+    streamingCategories: config.streamingCategories,
+    streamingTitles: config.streamingTitles,
+    watch: config.watch,
     currentActivity: firstAccount?.currentActivity ?? null,
     connectionState: aggregateState,
     bot: firstAccount?.bot ?? null,
@@ -487,6 +523,7 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.reconnectAttempt = 0;
   runtime.guildIds = new Set();
   runtime.currentActivity = null;
+  runtime.currentActivities = null;
   runtime.currentStatus = null;
   runtime.currentActivityType = null;
   if (resetIdentity) runtime.bot = null;
@@ -517,13 +554,10 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
   runtime.reconnectTimer.unref?.();
 }
 
-function chooseDiscordOnlinerActivity(config, runtime) {
-  const candidates = config.rotationEnabled && config.rotationItems.length
-    ? config.rotationItems
-    : [config.activityText].filter(Boolean);
+function chooseDiscordOnlinerActivity(candidates, currentValue = null) {
   if (!candidates.length) return null;
   const alternatives = candidates.length > 1
-    ? candidates.filter((item) => item !== runtime.currentActivity)
+    ? candidates.filter((item) => item !== currentValue)
     : candidates;
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? candidates[0];
 }
@@ -535,32 +569,38 @@ function chooseDiscordOnlinerVariant(values, currentValue) {
 
 function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
   if (chooseNext || !runtime.currentStatus) {
-    runtime.currentStatus = config.status === "mixed"
-      ? chooseDiscordOnlinerVariant(discordOnlinerStatusValues, runtime.currentStatus)
-      : config.status;
+    runtime.currentStatus = chooseDiscordOnlinerVariant(config.statuses, runtime.currentStatus);
   }
-  if (chooseNext || !runtime.currentActivityType) {
-    runtime.currentActivityType = config.activityType === "mixed"
-      ? chooseDiscordOnlinerVariant(discordOnlinerActivityTypeValues, runtime.currentActivityType)
-      : config.activityType;
+  if (chooseNext || !runtime.currentActivities) {
+    const activities = [];
+    const addActivity = (type, values, extras = {}) => {
+      if (!values.length || Math.random() * 100 >= config.activityChances[type]) return;
+      const previous = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes[type])?.name;
+      const name = chooseDiscordOnlinerActivity(values, previous);
+      if (name) activities.push({ name, type: discordOnlinerActivityCodes[type], ...extras });
+    };
+    addActivity("playing", config.games);
+    if (config.streamingUsers.length) {
+      const user = chooseDiscordOnlinerActivity(config.streamingUsers);
+      const title = chooseDiscordOnlinerActivity(config.streamingTitles.length ? config.streamingTitles : ["Live on Twitch"], runtime.currentActivity);
+      const category = chooseDiscordOnlinerActivity(config.streamingCategories);
+      if (user && title && Math.random() * 100 < config.activityChances.streaming) {
+        activities.push({ name: title, type: discordOnlinerActivityCodes.streaming, url: `https://www.twitch.tv/${encodeURIComponent(user)}`, ...(category ? { state: category } : {}) });
+      }
+    }
+    addActivity("listening", config.music);
+    addActivity("watching", config.watch);
+    runtime.currentActivities = activities;
+    runtime.currentActivity = activities.map((activity) => activity.name).join(" · ") || null;
+    runtime.currentActivityType = activities.map((activity) => discordOnlinerActivityTypeValues.find((type) => discordOnlinerActivityCodes[type] === activity.type)).filter(Boolean).join(", ") || "none";
   }
-  if (runtime.currentActivityType === "none") {
-    runtime.currentActivity = null;
-  } else if (chooseNext || !runtime.currentActivity) {
-    runtime.currentActivity = chooseDiscordOnlinerActivity(config, runtime);
-  }
-  const activities = runtime.currentActivity && runtime.currentActivityType !== "none"
-    ? [{ name: runtime.currentActivity, type: discordOnlinerActivityCodes[runtime.currentActivityType] }]
-    : [];
-  return { since: null, activities, status: runtime.currentStatus, afk: false };
+  return { since: null, activities: runtime.currentActivities, status: runtime.currentStatus, afk: false };
 }
 
 function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
   runtime.activityTimer = null;
-  const variablePresence = config.status === "mixed" || config.activityType === "mixed";
-  const rotatingText = config.activityType !== "none" && config.rotationEnabled && config.rotationItems.length > 1;
-  if (generation !== runtime.generation || (!variablePresence && !rotatingText)) return;
+  if (generation !== runtime.generation || !config.randomizeEnabled) return;
   const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
   runtime.activityTimer = setTimeout(() => {
     if (generation !== runtime.generation || runtime.socket?.readyState !== WebSocket.OPEN) return;

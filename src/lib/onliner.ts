@@ -2,6 +2,7 @@ export type DiscordOnlinerStatus = "online" | "idle" | "dnd" | "mixed";
 export type DiscordOnlinerActivityType = "playing" | "listening" | "watching" | "none" | "mixed";
 export type DiscordOnlinerConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 export type DiscordOnlinerLogLevel = "info" | "success" | "warn" | "error";
+export type DiscordOnlinerActivityChances = { playing: number; streaming: number; listening: number; watching: number };
 
 export type DiscordOnlinerLogEntry = {
   id: number;
@@ -39,6 +40,15 @@ export type DiscordOnlinerSnapshot = {
   rotationItems: string[];
   rotationMinMinutes: number;
   rotationMaxMinutes: number;
+  statuses: Array<"online" | "idle" | "dnd">;
+  activityChances: DiscordOnlinerActivityChances;
+  randomizeEnabled: boolean;
+  games: string[];
+  music: string[];
+  streamingUsers: string[];
+  streamingCategories: string[];
+  streamingTitles: string[];
+  watch: string[];
   currentActivity: string | null;
   connectionState: DiscordOnlinerConnectionState;
   bot: { id: string; username: string; tag: string; avatarUrl: string | null } | null;
@@ -52,11 +62,15 @@ export type DiscordOnlinerSnapshot = {
 
 export type DiscordOnlinerInput = {
   enabled: boolean;
-  status: DiscordOnlinerStatus;
-  activityType: DiscordOnlinerActivityType;
-  activityText: string;
-  rotationEnabled: boolean;
-  rotationItems: string[];
+  statuses: Array<"online" | "idle" | "dnd">;
+  activityChances: DiscordOnlinerActivityChances;
+  randomizeEnabled: boolean;
+  games: string[];
+  music: string[];
+  streamingUsers: string[];
+  streamingCategories: string[];
+  streamingTitles: string[];
+  watch: string[];
   rotationMinMinutes: number;
   rotationMaxMinutes: number;
 };

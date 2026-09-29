@@ -97,10 +97,8 @@ import {
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
   updateDiscordOnlinerAccount,
-  type DiscordOnlinerActivityType,
   type DiscordOnlinerLogEntry,
-  type DiscordOnlinerSnapshot,
-  type DiscordOnlinerStatus
+  type DiscordOnlinerSnapshot
 } from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
 import {
@@ -148,13 +146,17 @@ const EMPTY_FORM = {
 
 const EMPTY_ONLINER_DRAFT = {
   enabled: true,
-  status: "online" as DiscordOnlinerStatus,
-  activityType: "playing" as DiscordOnlinerActivityType,
-  activityText: "Pulcip Members",
-  rotationEnabled: true,
-  rotationItems: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
-  rotationMinMinutes: 10,
-  rotationMaxMinutes: 30
+  statuses: ["online", "idle", "dnd"] as Array<"online" | "idle" | "dnd">,
+  activityChances: { playing: 75, streaming: 50, listening: 50, watching: 50 },
+  randomizeEnabled: false,
+  games: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
+  music: "Spotify",
+  streamingUsers: "dazznovanation",
+  streamingCategories: ["Just Chatting", "Software and Game Development", "Music", "VALORANT", "Minecraft"].join("\n"),
+  streamingTitles: ["Chill vibes only | !discord", "Late night community games!", "Just hanging out and talking"].join("\n"),
+  watch: ["YouTube", "Twitch", "Kick"].join("\n"),
+  rotationMinMinutes: 30,
+  rotationMaxMinutes: 1440
 };
 
 const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "" };
@@ -1015,11 +1017,15 @@ export default function HomePage() {
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft({
         enabled: snapshot.enabled,
-        status: snapshot.status,
-        activityType: snapshot.activityType,
-        activityText: snapshot.activityText,
-        rotationEnabled: snapshot.rotationEnabled,
-        rotationItems: snapshot.rotationItems.join("\n"),
+        statuses: snapshot.statuses,
+        activityChances: snapshot.activityChances,
+        randomizeEnabled: snapshot.randomizeEnabled,
+        games: snapshot.games.join("\n"),
+        music: snapshot.music.join("\n"),
+        streamingUsers: snapshot.streamingUsers.join("\n"),
+        streamingCategories: snapshot.streamingCategories.join("\n"),
+        streamingTitles: snapshot.streamingTitles.join("\n"),
+        watch: snapshot.watch.join("\n"),
         rotationMinMinutes: snapshot.rotationMinMinutes,
         rotationMaxMinutes: snapshot.rotationMaxMinutes
       });
@@ -1390,8 +1396,16 @@ export default function HomePage() {
     try {
       setSavingOnliner(true);
       const snapshot = await saveDiscordOnliner({
-        ...onlinerDraft,
-        rotationItems: onlinerDraft.rotationItems.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
+        enabled: onlinerDraft.enabled,
+        statuses: onlinerDraft.statuses,
+        activityChances: onlinerDraft.activityChances,
+        randomizeEnabled: onlinerDraft.randomizeEnabled,
+        games: parseOnlinerBulkLines(onlinerDraft.games),
+        music: parseOnlinerBulkLines(onlinerDraft.music),
+        streamingUsers: parseOnlinerBulkLines(onlinerDraft.streamingUsers),
+        streamingCategories: parseOnlinerBulkLines(onlinerDraft.streamingCategories),
+        streamingTitles: parseOnlinerBulkLines(onlinerDraft.streamingTitles),
+        watch: parseOnlinerBulkLines(onlinerDraft.watch),
         rotationMinMinutes: Math.max(1, Number(onlinerDraft.rotationMinMinutes) || 10),
         rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
       });
@@ -3874,80 +3888,55 @@ export default function HomePage() {
                     <span><strong>Keep bot online</strong><small>Connect automatically when the backend starts and reconnect after interruptions.</small></span>
                   </label>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <FilterDropdown
-                      label="Bot status"
-                      value={onlinerDraft.status}
-                      options={[
-                        { value: "mixed", label: "Mixed · random" },
-                        { value: "online", label: "Online" },
-                        { value: "idle", label: "Idle" },
-                        { value: "dnd", label: "Do not disturb" }
-                      ]}
-                      onChange={(value) => setOnlinerDraft((current) => ({ ...current, status: value as DiscordOnlinerStatus }))}
-                    />
-                    <FilterDropdown
-                      label="Activity type"
-                      value={onlinerDraft.activityType}
-                      options={[
-                        { value: "mixed", label: "Mixed · random" },
-                        { value: "playing", label: "Playing" },
-                        { value: "listening", label: "Listening" },
-                        { value: "watching", label: "Watching" },
-                        { value: "none", label: "No activity" }
-                      ]}
-                      onChange={(value) => setOnlinerDraft((current) => ({ ...current, activityType: value as DiscordOnlinerActivityType }))}
-                    />
+                  <div className="onliner-presence-panel">
+                    <div className="onliner-presence-heading"><span><strong>Status pool</strong><small>A status is selected independently for every bot.</small></span></div>
+                    <div className="onliner-status-options">
+                      {(["online", "idle", "dnd"] as const).map((status) => (
+                        <label key={status} data-status={status}>
+                          <input type="checkbox" checked={onlinerDraft.statuses.includes(status)} onChange={(event) => setOnlinerDraft((current) => ({
+                            ...current,
+                            statuses: event.target.checked ? [...new Set([...current.statuses, status])] : current.statuses.length > 1 ? current.statuses.filter((item) => item !== status) : current.statuses
+                          }))} />
+                          <i /> <span>{status === "dnd" ? "Do not disturb" : status}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
 
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>{["playing", "mixed"].includes(onlinerDraft.activityType) && onlinerDraft.rotationEnabled ? "Fallback activity text" : "Activity text"}</span>
-                    <Input
-                      value={onlinerDraft.activityText}
-                      maxLength={128}
-                      disabled={onlinerDraft.activityType === "none"}
-                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, activityText: event.target.value }))}
-                      placeholder="Pulcip Members"
-                    />
-                  </label>
-
-                  {onlinerDraft.activityType === "playing" || onlinerDraft.activityType === "mixed" || onlinerDraft.status === "mixed" ? (
-                    <div className="onliner-rotation-panel">
-                      {onlinerDraft.activityType !== "none" ? (
-                        <label className="onliner-rotation-toggle">
-                          <input
-                            type="checkbox"
-                            checked={onlinerDraft.rotationEnabled}
-                            onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationEnabled: event.target.checked }))}
-                          />
-                          <span><strong>Rotate activity text</strong><small>Choose another text from the list whenever the presence changes.</small></span>
+                  <div className="onliner-presence-panel">
+                    <div className="onliner-presence-heading"><span><strong>Activity chances</strong><small>Each type rolls separately from 0–100% whenever presence is generated.</small></span></div>
+                    <div className="onliner-chance-grid">
+                      {(["playing", "streaming", "listening", "watching"] as const).map((type) => (
+                        <label key={type}>
+                          <span>{type}</span>
+                          <span><Input type="number" min={0} max={100} value={onlinerDraft.activityChances[type]} onChange={(event) => setOnlinerDraft((current) => ({ ...current, activityChances: { ...current.activityChances, [type]: Math.min(100, Math.max(0, Number(event.target.value) || 0)) } }))} /><b>%</b></span>
                         </label>
-                      ) : null}
-                      {onlinerDraft.rotationEnabled && onlinerDraft.activityType !== "none" ? (
-                          <label className="grid gap-2">
-                            <span className={fieldLabelClass}>Activity list · one per line</span>
-                            <textarea
-                              className="onliner-game-textarea"
-                              value={onlinerDraft.rotationItems}
-                              onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationItems: event.target.value }))}
-                              placeholder={"Minecraft\nVALORANT\nCounter-Strike 2"}
-                            />
-                          </label>
-                      ) : null}
-                      {onlinerDraft.status === "mixed" || onlinerDraft.activityType === "mixed" || onlinerDraft.rotationEnabled ? (
-                          <div className="grid gap-4 sm:grid-cols-2">
-                            <label className="grid gap-2">
-                              <span className={fieldLabelClass}>Minimum interval · minutes</span>
-                              <Input type="number" min={1} max={1440} value={onlinerDraft.rotationMinMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMinMinutes: Number(event.target.value) }))} />
-                            </label>
-                            <label className="grid gap-2">
-                              <span className={fieldLabelClass}>Maximum interval · minutes</span>
-                              <Input type="number" min={1} max={1440} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} />
-                            </label>
-                          </div>
-                      ) : null}
+                      ))}
                     </div>
-                  ) : null}
+                  </div>
+
+                  <div className="onliner-source-grid">
+                    <label className="onliner-source-card"><span><strong>Playing · games</strong><small>One game per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Minecraft\nVALORANT\nCounter-Strike 2"} /></label>
+                    <label className="onliner-source-card"><span><strong>Listening · music</strong><small>Track, artist or playlist labels</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Spotify\nLo-fi Beats\nDiscover Weekly"} /></label>
+                    <label className="onliner-source-card"><span><strong>Watching</strong><small>One platform or title per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.watch} onChange={(event) => setOnlinerDraft((current) => ({ ...current, watch: event.target.value }))} placeholder={"YouTube\nTwitch\nKick"} /></label>
+                  </div>
+
+                  <div className="onliner-presence-panel">
+                    <div className="onliner-presence-heading"><span><strong>Streaming · Twitch</strong><small>A user supplies the Twitch URL; titles and categories never use the game/watch lists.</small></span></div>
+                    <div className="onliner-stream-grid">
+                      <label><span className={fieldLabelClass}>Users · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder="dazznovanation" /></label>
+                      <label><span className={fieldLabelClass}>Categories · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingCategories} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingCategories: event.target.value }))} placeholder={"Just Chatting\nVALORANT\nMusic"} /></label>
+                      <label><span className={fieldLabelClass}>Titles · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingTitles} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingTitles: event.target.value }))} placeholder={"Chill vibes only\nLate night stream"} /></label>
+                    </div>
+                  </div>
+
+                  <div className="onliner-rotation-panel">
+                    <label className="onliner-rotation-toggle"><input type="checkbox" checked={onlinerDraft.randomizeEnabled} onChange={(event) => setOnlinerDraft((current) => ({ ...current, randomizeEnabled: event.target.checked }))} /><span><strong>Randomize entire presence</strong><small>Re-roll status and every activity type at a random interval.</small></span></label>
+                    {onlinerDraft.randomizeEnabled ? <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="grid gap-2"><span className={fieldLabelClass}>Minimum interval · minutes</span><Input type="number" min={1} max={1440} value={onlinerDraft.rotationMinMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMinMinutes: Number(event.target.value) }))} /></label>
+                      <label className="grid gap-2"><span className={fieldLabelClass}>Maximum interval · minutes</span><Input type="number" min={1} max={1440} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} /></label>
+                    </div> : null}
+                  </div>
 
                   <div className="flex flex-wrap gap-3">
                     <Button type="submit" disabled={savingOnliner || loadingOnliner}>
