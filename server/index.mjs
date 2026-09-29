@@ -577,9 +577,13 @@ async function getDiscordOnlinerSpotifyTracks(playlistId) {
       }
     });
     discordOnlinerSpotifyPlaylistCache.set(playlistId, { tracks, expiresAt: Date.now() + 30 * 60_000 });
+    appendDiscordOnlinerLog(tracks.length ? "success" : "warn", tracks.length
+      ? `Spotify playlist loaded: ${tracks.length} tracks are available for Listening.`
+      : "Spotify playlist loaded but did not contain any usable tracks.");
     return tracks;
-  } catch {
+  } catch (error) {
     discordOnlinerSpotifyPlaylistCache.set(playlistId, { tracks: [], expiresAt: Date.now() + 5 * 60_000 });
+    appendDiscordOnlinerLog("warn", `Spotify playlist could not be loaded: ${error instanceof Error ? error.message : "unknown error"}.`);
     return [];
   }
 }
@@ -911,12 +915,9 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
           timestamps: track.duration ? { start: startedAt, end: startedAt + track.duration } : undefined,
           assets: track.imageHash ? {
             large_image: `spotify:${track.imageHash}`,
-            large_text: track.album || track.title,
-            large_url: trackUrl
+            large_text: track.album || track.title
           } : undefined,
-          details_url: trackUrl,
-          buttons: ["Play on Spotify"],
-          metadata: { button_urls: [trackUrl] },
+          url: trackUrl,
           flags: 48
         });
       } else {
@@ -929,8 +930,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
             application_id: discordOnlinerSpotifyApplicationId,
             details: title || fallback,
             state: artistParts.join(" — ") || undefined,
-            buttons: ["Open Spotify"],
-            metadata: { button_urls: ["https://open.spotify.com/"] }
+            url: "https://open.spotify.com/"
           });
         }
       }
