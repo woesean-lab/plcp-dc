@@ -235,6 +235,8 @@ const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"])
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
+const defaultDiscordOnlinerSpotifyPlaylistId = "37i9dQZF1DX0XUsuxWHRQd";
+const discordOnlinerSpotifyPlaylistCache = new Map();
 const defaultDiscordOnlinerGames = [
   "Minecraft",
   "VALORANT",
@@ -463,6 +465,9 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     statuses: statuses.length ? statuses : ["online"],
     activityChances,
     randomizeEnabled: value.randomizeEnabled ?? (value.rotationEnabled == null ? false : value.rotationEnabled !== false),
+    spotifyPlaylistId: /^[a-z\d]{22}$/i.test(String(value.spotifyPlaylistId ?? defaultDiscordOnlinerSpotifyPlaylistId).trim())
+      ? String(value.spotifyPlaylistId ?? defaultDiscordOnlinerSpotifyPlaylistId).trim()
+      : "",
     games: normalizePresenceItems(
       Array.isArray(value.games) && value.games.some((item) => String(item ?? "").trim()) ? value.games : null,
       !hasGamesSetting && hasLegacyPresence && rotationItems.length ? rotationItems : defaultDiscordOnlinerGames
@@ -473,6 +478,49 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     streamingTitles: normalizePresenceItems(value.streamingTitles),
     watch: normalizePresenceItems(value.watch, ["YouTube", "Twitch", "Kick"])
   };
+}
+
+function decodeDiscordOnlinerHtmlText(value) {
+  const namedEntities = { amp: "&", quot: '"', apos: "'", lt: "<", gt: ">", nbsp: " " };
+  return String(value ?? "")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&#x([\da-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number.parseInt(code, 10)))
+    .replace(/&([a-z]+);/gi, (match, name) => namedEntities[name.toLowerCase()] ?? match)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function getDiscordOnlinerSpotifyTracks(playlistId) {
+  if (!playlistId) return [];
+  const cached = discordOnlinerSpotifyPlaylistCache.get(playlistId);
+  if (cached && cached.expiresAt > Date.now()) return cached.tracks;
+  try {
+    const response = await fetch(`https://open.spotify.com/embed/playlist/${encodeURIComponent(playlistId)}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; PLCP-Onliner/1.0)" },
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) throw new Error(`Spotify embed returned ${response.status}`);
+    const html = await response.text();
+    const rows = html.match(/<li\b[^>]*data-testid="tracklist-row-[^"]+"[\s\S]*?<\/li>/gi) ?? [];
+    const tracks = rows.map((row) => {
+      const title = decodeDiscordOnlinerHtmlText(row.match(/<h3\b[^>]*TracklistRow_title[^>]*>([\s\S]*?)<\/h3>/i)?.[1]);
+      const artistHtml = row.match(/<h4\b[^>]*TracklistRow_subtitle[^>]*>([\s\S]*?)<\/h4>/i)?.[1] ?? "";
+      const artist = decodeDiscordOnlinerHtmlText(artistHtml.replace(/<span\b[^>]*data-testid="tag"[^>]*>[\s\S]*?<\/span>/gi, ""));
+      return [title, artist].filter(Boolean).join(" — ").slice(0, 128);
+    }).filter(Boolean).slice(0, 100);
+    discordOnlinerSpotifyPlaylistCache.set(playlistId, { tracks, expiresAt: Date.now() + 30 * 60_000 });
+    return tracks;
+  } catch {
+    discordOnlinerSpotifyPlaylistCache.set(playlistId, { tracks: [], expiresAt: Date.now() + 5 * 60_000 });
+    return [];
+  }
+}
+
+async function hydrateDiscordOnlinerSpotifyPlaylist(config) {
+  if (!config.spotifyPlaylistId) return config;
+  const tracks = await getDiscordOnlinerSpotifyTracks(config.spotifyPlaylistId);
+  return tracks.length ? { ...config, music: tracks } : config;
 }
 
 function normalizeDiscordOnlinerProxyUrl(value) {
@@ -524,11 +572,11 @@ function formatDiscordOnlinerSocketAddress(address, port) {
 
 async function getDiscordOnlinerConfig() {
   const raw = await loadEncryptedSetting(discordOnlinerSettingKey);
-  if (!raw) return normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
+  if (!raw) return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" }));
   try {
-    return normalizeDiscordOnlinerConfig(JSON.parse(raw));
+    return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig(JSON.parse(raw)));
   } catch {
-    return normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
+    return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" }));
   }
 }
 
@@ -577,6 +625,7 @@ function getDiscordOnlinerSnapshot(config) {
     statuses: config.statuses,
     activityChances: config.activityChances,
     randomizeEnabled: config.randomizeEnabled,
+    spotifyPlaylistId: config.spotifyPlaylistId,
     games: config.games,
     music: config.music,
     streamingUsers: config.streamingUsers,
@@ -5109,11 +5158,11 @@ app.get("/api/onliner/logs/stream", requireSession, (req, res) => {
 app.put("/api/onliner", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();
-    const candidate = normalizeDiscordOnlinerConfig({
+    const candidate = await hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig({
       ...current,
       ...req.body,
       accounts: current.accounts
-    });
+    }));
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
     startDiscordOnliner(candidate);
     res.json(getDiscordOnlinerSnapshot(candidate));

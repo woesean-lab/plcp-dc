@@ -43,6 +43,7 @@ export type DiscordOnlinerSnapshot = {
   statuses: Array<"online" | "idle" | "dnd">;
   activityChances: DiscordOnlinerActivityChances;
   randomizeEnabled: boolean;
+  spotifyPlaylistId: string;
   games: string[];
   music: string[];
   streamingUsers: string[];
@@ -65,6 +66,7 @@ export type DiscordOnlinerInput = {
   statuses: Array<"online" | "idle" | "dnd">;
   activityChances: DiscordOnlinerActivityChances;
   randomizeEnabled: boolean;
+  spotifyPlaylistId: string;
   games: string[];
   music: string[];
   streamingUsers: string[];

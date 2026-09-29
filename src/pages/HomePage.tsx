@@ -149,6 +149,7 @@ const EMPTY_ONLINER_DRAFT = {
   statuses: ["online", "idle", "dnd"] as Array<"online" | "idle" | "dnd">,
   activityChances: { playing: 75, streaming: 50, listening: 50, watching: 50 },
   randomizeEnabled: false,
+  spotifyPlaylistId: "37i9dQZF1DX0XUsuxWHRQd",
   games: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
   music: "Spotify",
   streamingUsers: "dazznovanation",
@@ -1020,6 +1021,7 @@ export default function HomePage() {
         statuses: snapshot.statuses,
         activityChances: snapshot.activityChances,
         randomizeEnabled: snapshot.randomizeEnabled,
+        spotifyPlaylistId: snapshot.spotifyPlaylistId,
         games: snapshot.games.join("\n"),
         music: snapshot.music.join("\n"),
         streamingUsers: snapshot.streamingUsers.join("\n"),
@@ -1400,6 +1402,7 @@ export default function HomePage() {
         statuses: onlinerDraft.statuses,
         activityChances: onlinerDraft.activityChances,
         randomizeEnabled: onlinerDraft.randomizeEnabled,
+        spotifyPlaylistId: onlinerDraft.spotifyPlaylistId.trim(),
         games: parseOnlinerBulkLines(onlinerDraft.games),
         music: parseOnlinerBulkLines(onlinerDraft.music),
         streamingUsers: parseOnlinerBulkLines(onlinerDraft.streamingUsers),
@@ -3917,7 +3920,7 @@ export default function HomePage() {
 
                   <div className="onliner-source-grid">
                     <label className="onliner-source-card"><span><strong>Playing · games</strong><small>One per line · leave empty to load the built-in game catalog</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Leave empty for automatic game catalog\n—or enter custom games here"} /></label>
-                    <label className="onliner-source-card"><span><strong>Listening · music</strong><small>Track, artist or playlist labels</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Spotify\nLo-fi Beats\nDiscover Weekly"} /></label>
+                    <label className="onliner-source-card"><span><strong>Listening · Spotify</strong><small>Playlist tracks load on apply and are cached for 30 minutes</small></span><Input value={onlinerDraft.spotifyPlaylistId} maxLength={22} onChange={(event) => setOnlinerDraft((current) => ({ ...current, spotifyPlaylistId: event.target.value.trim() }))} placeholder="Spotify playlist ID" /><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Fallback tracks · one per line"} /></label>
                     <label className="onliner-source-card"><span><strong>Watching</strong><small>One platform or title per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.watch} onChange={(event) => setOnlinerDraft((current) => ({ ...current, watch: event.target.value }))} placeholder={"YouTube\nTwitch\nKick"} /></label>
                   </div>
 
