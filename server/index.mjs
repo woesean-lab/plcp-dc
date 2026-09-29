@@ -1626,6 +1626,11 @@ async function processDiscordOnlinerWorkerCommands() {
         await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
         continueDiscordOnlinerConnections(config);
         discordOnlinerWorkerCurrentConfig = config;
+      } else if (command.command_type === "stop_all") {
+        discordOnlinerConnectionsPaused = true;
+        stopDiscordOnliner();
+        await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = TRUE WHERE singleton = TRUE");
+        appendDiscordOnlinerLog("info", "All Gateway connections stopped by a panel command.");
       }
       await pool.query("UPDATE discord_onliner_commands SET status = 'complete', completed_at = NOW(), error = NULL WHERE id = $1", [command.id]);
     } catch (error) {
@@ -6211,6 +6216,24 @@ app.post("/api/onliner/continue", requireSession, async (_req, res, next) => {
     await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
     if (serviceRunsOnliner) continueDiscordOnlinerConnections(config);
     else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('continue_connections')");
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/disconnect", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
+    await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = TRUE WHERE singleton = TRUE");
+    if (serviceRunsOnliner) {
+      discordOnlinerConnectionsPaused = true;
+      stopDiscordOnliner();
+      appendDiscordOnlinerLog("info", "All Gateway connections stopped from the panel.");
+    } else {
+      await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('stop_all')");
+    }
     res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);

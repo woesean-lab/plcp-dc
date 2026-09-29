@@ -5192,6 +5192,13 @@
 .onliner-account-copy { display: grid; min-width: 0; gap: 3px; }
 .onliner-account-manager-head strong { color: var(--app-text); font-size: 13px; }
 .onliner-account-manager-head small { color: var(--app-muted); font-size: 11px; }
+.onliner-account-controls {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.onliner-account-controls > button { width: 100%; }
 .onliner-account-list {
   display: grid;
   max-height: 274px;
@@ -5324,6 +5331,7 @@
 .onliner-edit-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--app-accent-bright); }
 
 @media (max-width: 520px) {
+  .onliner-account-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .onliner-account-status { grid-column: 2; justify-self: start; }
   .onliner-account-actions { grid-column: 3; grid-row: 1 / span 2; }

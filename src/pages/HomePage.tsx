@@ -45,6 +45,7 @@ import {
   Settings2,
   Shield,
   ShieldCheck,
+  Square,
   Star,
   Terminal,
   Timer,
@@ -96,6 +97,7 @@ import {
   getDiscordOnliner,
   getDiscordOnlinerAccountCredentials,
   getDiscordOnlinerLogs,
+  pauseDiscordOnlinerConnections,
   reconnectDiscordOnliner,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
@@ -699,7 +701,7 @@ export default function HomePage() {
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
   const [showOnlinerEditProxy, setShowOnlinerEditProxy] = useState(false);
   const onlinerCredentialRequestRef = useRef(0);
-  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "stop" | "continue" | null>(null);
+  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "continue" | "pause" | "stop" | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
@@ -1569,20 +1571,24 @@ export default function HomePage() {
     }
   }
 
-  async function handleOnlinerControl(action: "start" | "stop" | "continue") {
+  async function handleOnlinerControl(action: "start" | "continue" | "pause" | "stop") {
     try {
       setOnlinerControlAction(action);
       const snapshot = action === "start"
         ? await reconnectDiscordOnliner()
-        : action === "stop"
-          ? await stopDiscordOnlinerConnections()
-          : await continueDiscordOnlinerConnections();
+        : action === "continue"
+          ? await continueDiscordOnlinerConnections()
+          : action === "pause"
+            ? await pauseDiscordOnlinerConnections()
+            : await stopDiscordOnlinerConnections();
       setOnlinerSnapshot(snapshot);
       notifySuccess(action === "start"
         ? "Gateway connection process started from the beginning."
-        : action === "stop"
+        : action === "continue"
+          ? "Gateway connection process continued with the remaining bots."
+          : action === "pause"
           ? "New Gateway connections paused; connected bots were kept online."
-          : "Gateway connection process continued with the remaining bots.");
+          : "All Gateway connections stopped.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : `Onliner could not ${action} connections.`);
     } finally {
@@ -3871,6 +3877,26 @@ export default function HomePage() {
                         {onlinerSnapshot?.connectedCount ?? 0}/{onlinerSnapshot?.accounts.length ?? 0} connected
                       </Badge>
                     </div>
+                    {onlinerSnapshot?.configured && onlinerSnapshot.enabled ? (
+                      <div className="onliner-account-controls" aria-label="Bot profile connection controls">
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null} onClick={() => void handleOnlinerControl("start")} title="Restart the connection process for every bot">
+                          {onlinerControlAction === "start" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                          Start
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true} onClick={() => void handleOnlinerControl("continue")} title="Continue connecting bots that are not online">
+                          {onlinerControlAction === "continue" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          Continue
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("pause")} title="Pause pending connections without disconnecting bots that are already online">
+                          {onlinerControlAction === "pause" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
+                          Pause
+                        </Button>
+                        <Button type="button" size="sm" variant="destructive" disabled={savingOnliner || onlinerControlAction !== null || (onlinerSnapshot.connectedCount === 0 && onlinerSnapshot.worker?.connectionPaused === true)} onClick={() => void handleOnlinerControl("stop")} title="Disconnect every bot and stop new Gateway connections">
+                          {onlinerControlAction === "stop" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Square className="h-4 w-4" />}
+                          Stop
+                        </Button>
+                      </div>
+                    ) : null}
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
@@ -3988,22 +4014,6 @@ export default function HomePage() {
                       {savingOnliner ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       {savingOnliner ? "Saving..." : "Save & apply"}
                     </Button>
-                    {onlinerSnapshot?.configured && onlinerSnapshot.enabled ? (
-                      <>
-                        <Button type="button" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null} onClick={() => void handleOnlinerControl("start")} title="Restart the connection process for every bot">
-                          {onlinerControlAction === "start" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                          Start
-                        </Button>
-                        <Button type="button" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("stop")} title="Pause pending connections without disconnecting bots that are already online">
-                          {onlinerControlAction === "stop" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
-                          Stop
-                        </Button>
-                        <Button type="button" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true} onClick={() => void handleOnlinerControl("continue")} title="Continue connecting the remaining bots">
-                          {onlinerControlAction === "continue" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                          Continue
-                        </Button>
-                      </>
-                    ) : null}
                     {onlinerSnapshot?.configured ? (
                       <Button type="button" variant="destructive" disabled={savingOnliner} onClick={() => void handleClearOnliner()}>
                         <Trash2 className="h-4 w-4" /> Remove all

@@ -172,12 +172,16 @@ export function reconnectDiscordOnliner() {
   return fetch("/api/onliner/start", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }
 
-export function stopDiscordOnlinerConnections() {
+export function pauseDiscordOnlinerConnections() {
   return fetch("/api/onliner/stop", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }
 
 export function continueDiscordOnlinerConnections() {
   return fetch("/api/onliner/continue", { method: "POST", credentials: "same-origin" }).then(parseResponse);
+}
+
+export function stopDiscordOnlinerConnections() {
+  return fetch("/api/onliner/disconnect", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }
 
 export function clearDiscordOnliner() {
