@@ -61,6 +61,12 @@ export type DiscordOnlinerInput = {
   rotationMaxMinutes: number;
 };
 
+export type DiscordOnlinerAccountCredentials = {
+  accountId: string;
+  botToken: string;
+  proxyUrl: string;
+};
+
 async function parseResponse(response: Response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
@@ -102,6 +108,25 @@ export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accounts })
+  }).then(parseResponse);
+}
+
+export async function getDiscordOnlinerAccountCredentials(accountId: string) {
+  const response = await fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}/credentials`, {
+    cache: "no-store",
+    credentials: "same-origin"
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as DiscordOnlinerAccountCredentials;
+}
+
+export function updateDiscordOnlinerAccount(accountId: string, input: { botToken: string; proxyUrl: string }) {
+  return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}`, {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
   }).then(parseResponse);
 }
 

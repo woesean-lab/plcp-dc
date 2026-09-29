@@ -32,6 +32,7 @@ import {
   LoaderCircle,
   LogOut,
   Minus,
+  Pencil,
   Plus,
   Power,
   RadioTower,
@@ -90,10 +91,12 @@ import {
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
   getDiscordOnliner,
+  getDiscordOnlinerAccountCredentials,
   getDiscordOnlinerLogs,
   reconnectDiscordOnliner,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
+  updateDiscordOnlinerAccount,
   type DiscordOnlinerActivityType,
   type DiscordOnlinerLogEntry,
   type DiscordOnlinerSnapshot,
@@ -669,6 +672,13 @@ export default function HomePage() {
   const [onlinerBulkProxyDraft, setOnlinerBulkProxyDraft] = useState("");
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
+  const [editingOnlinerAccountId, setEditingOnlinerAccountId] = useState<string | null>(null);
+  const [onlinerEditDraft, setOnlinerEditDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
+  const [loadingOnlinerCredentials, setLoadingOnlinerCredentials] = useState(false);
+  const [savingOnlinerAccount, setSavingOnlinerAccount] = useState(false);
+  const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
+  const [showOnlinerEditProxy, setShowOnlinerEditProxy] = useState(false);
+  const onlinerCredentialRequestRef = useRef(0);
   const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
@@ -947,6 +957,27 @@ export default function HomePage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [showOnlinerBulkModal, addingOnlinerBulk]);
+
+  useEffect(() => {
+    if (!editingOnlinerAccountId) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !savingOnlinerAccount) {
+        onlinerCredentialRequestRef.current += 1;
+        setEditingOnlinerAccountId(null);
+        setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+        setLoadingOnlinerCredentials(false);
+        setShowOnlinerEditToken(false);
+        setShowOnlinerEditProxy(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [editingOnlinerAccountId, savingOnlinerAccount]);
 
   useEffect(() => {
     void loadIntegrationConnection();
@@ -1422,6 +1453,63 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Bot profiles could not be added.");
     } finally {
       setAddingOnlinerBulk(false);
+    }
+  }
+
+  function closeOnlinerAccountEditor() {
+    if (savingOnlinerAccount) return;
+    onlinerCredentialRequestRef.current += 1;
+    setEditingOnlinerAccountId(null);
+    setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+    setLoadingOnlinerCredentials(false);
+    setShowOnlinerEditToken(false);
+    setShowOnlinerEditProxy(false);
+  }
+
+  async function handleOpenOnlinerAccountEditor(accountId: string) {
+    const requestId = onlinerCredentialRequestRef.current + 1;
+    onlinerCredentialRequestRef.current = requestId;
+    try {
+      setEditingOnlinerAccountId(accountId);
+      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      setShowOnlinerEditToken(false);
+      setShowOnlinerEditProxy(false);
+      setLoadingOnlinerCredentials(true);
+      const credentials = await getDiscordOnlinerAccountCredentials(accountId);
+      if (requestId !== onlinerCredentialRequestRef.current) return;
+      setOnlinerEditDraft({ botToken: credentials.botToken, proxyUrl: credentials.proxyUrl });
+    } catch (error) {
+      if (requestId !== onlinerCredentialRequestRef.current) return;
+      setEditingOnlinerAccountId(null);
+      notifyError(error instanceof Error ? error.message : "Bot profile credentials could not be loaded.");
+    } finally {
+      if (requestId === onlinerCredentialRequestRef.current) setLoadingOnlinerCredentials(false);
+    }
+  }
+
+  async function handleUpdateOnlinerAccount(event: FormEvent) {
+    event.preventDefault();
+    if (!editingOnlinerAccountId) return;
+    const botToken = onlinerEditDraft.botToken.trim();
+    const proxyUrl = onlinerEditDraft.proxyUrl.trim();
+    if (!botToken || !proxyUrl) {
+      notifyError("Both the bot token and dedicated proxy are required.");
+      return;
+    }
+    try {
+      setSavingOnlinerAccount(true);
+      const snapshot = await updateDiscordOnlinerAccount(editingOnlinerAccountId, { botToken, proxyUrl });
+      onlinerCredentialRequestRef.current += 1;
+      setOnlinerSnapshot(snapshot);
+      setEditingOnlinerAccountId(null);
+      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      setShowOnlinerEditToken(false);
+      setShowOnlinerEditProxy(false);
+      notifySuccess("Bot profile updated; only this Gateway connection was restarted.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bot profile could not be updated.");
+    } finally {
+      setSavingOnlinerAccount(false);
     }
   }
 
@@ -3741,9 +3829,14 @@ export default function HomePage() {
                             <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
                               {account.connectionState}
                             </Badge>
-                            <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
-                              {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </Button>
+                            <div className="onliner-account-actions">
+                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token and proxy" disabled={loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
+                                {loadingOnlinerCredentials && editingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={removingOnlinerAccountId !== null || savingOnlinerAccount} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
+                                {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </Button>
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -4488,6 +4581,69 @@ export default function HomePage() {
                 {creating ? "Creating..." : "Continue anyway"}
               </Button>
             </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editingOnlinerAccountId ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeOnlinerAccountEditor();
+          }}
+        >
+          <div className="confirm-modal onliner-account-edit-modal w-[min(620px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="onliner-account-edit-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Pencil className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Bot profile</p>
+            <h2 id="onliner-account-edit-title">Edit token and proxy</h2>
+            <p>Credentials remain hidden by default. Updating this profile restarts only its own Gateway connection.</p>
+
+            <form onSubmit={handleUpdateOnlinerAccount} className="mt-5 grid gap-4">
+              <label className="grid gap-2">
+                <span className={fieldLabelClass}>Bot token</span>
+                <span className="onliner-secret-field">
+                  <Input
+                    type={showOnlinerEditToken ? "text" : "password"}
+                    value={onlinerEditDraft.botToken}
+                    onChange={(event) => setOnlinerEditDraft((current) => ({ ...current, botToken: event.target.value }))}
+                    placeholder={loadingOnlinerCredentials ? "Loading encrypted token..." : "Discord bot token"}
+                    autoComplete="new-password"
+                    disabled={loadingOnlinerCredentials || savingOnlinerAccount}
+                    autoFocus
+                  />
+                  <button type="button" aria-label={showOnlinerEditToken ? "Hide bot token" : "Show bot token"} title={showOnlinerEditToken ? "Hide token" : "Show token"} disabled={loadingOnlinerCredentials} onClick={() => setShowOnlinerEditToken((current) => !current)}>
+                    {showOnlinerEditToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </span>
+              </label>
+              <label className="grid gap-2">
+                <span className={fieldLabelClass}>Dedicated proxy</span>
+                <span className="onliner-secret-field">
+                  <Input
+                    type={showOnlinerEditProxy ? "text" : "password"}
+                    value={onlinerEditDraft.proxyUrl}
+                    onChange={(event) => setOnlinerEditDraft((current) => ({ ...current, proxyUrl: event.target.value }))}
+                    placeholder={loadingOnlinerCredentials ? "Loading encrypted proxy..." : "http://user:pass@host:port"}
+                    autoComplete="new-password"
+                    disabled={loadingOnlinerCredentials || savingOnlinerAccount}
+                  />
+                  <button type="button" aria-label={showOnlinerEditProxy ? "Hide proxy" : "Show proxy"} title={showOnlinerEditProxy ? "Hide proxy" : "Show proxy"} disabled={loadingOnlinerCredentials} onClick={() => setShowOnlinerEditProxy((current) => !current)}>
+                    {showOnlinerEditProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </span>
+              </label>
+              <div className="onliner-edit-note">
+                <KeyRound className="h-4 w-4" aria-hidden="true" />
+                <span>Token and proxy are loaded only for this edit session and cleared when the modal closes.</span>
+              </div>
+              <div className="confirm-modal-actions">
+                <Button type="button" variant="secondary" disabled={savingOnlinerAccount} onClick={closeOnlinerAccountEditor}>Cancel</Button>
+                <Button type="submit" disabled={loadingOnlinerCredentials || savingOnlinerAccount || !onlinerEditDraft.botToken.trim() || !onlinerEditDraft.proxyUrl.trim()}>
+                  {savingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                  {savingOnlinerAccount ? "Saving..." : "Save profile"}
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

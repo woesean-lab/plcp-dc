@@ -5246,6 +5246,13 @@
   line-height: 1;
 }
 
+.onliner-account-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.onliner-account-edit,
 .onliner-account-remove {
   width: 28px;
   min-width: 28px;
@@ -5255,13 +5262,62 @@
   opacity: .66;
 }
 
+.onliner-account-edit:hover,
+.onliner-account-edit:focus-visible,
 .onliner-account-remove:hover,
 .onliner-account-remove:focus-visible { opacity: 1; }
+
+.onliner-secret-field {
+  position: relative;
+  display: block;
+}
+
+.onliner-secret-field .ui-input { width: 100%; padding-right: 46px; }
+
+.onliner-secret-field > button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--app-muted);
+  transform: translateY(-50%);
+  transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+}
+
+.onliner-secret-field > button:hover,
+.onliner-secret-field > button:focus-visible {
+  border-color: var(--app-border);
+  color: var(--app-accent-bright);
+  background: var(--app-accent-soft);
+  outline: none;
+}
+
+.onliner-secret-field > button:disabled { cursor: wait; opacity: .45; }
+
+.onliner-edit-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 10px;
+  color: var(--app-muted);
+  background: var(--app-surface-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.onliner-edit-note svg { flex: 0 0 auto; margin-top: 1px; color: var(--app-accent-bright); }
 
 @media (max-width: 520px) {
   .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .onliner-account-status { grid-column: 2; justify-self: start; }
-  .onliner-account-remove { grid-column: 3; grid-row: 1 / span 2; }
+  .onliner-account-actions { grid-column: 3; grid-row: 1 / span 2; }
 }
 
 .onliner-rotation-panel {

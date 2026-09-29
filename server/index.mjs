@@ -5012,6 +5012,57 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
   }
 });
 
+app.get("/api/onliner/accounts/:accountId/credentials", requireSession, async (req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    const accountId = String(req.params.accountId ?? "");
+    const account = config.accounts.find((item) => item.id === accountId);
+    if (!account) return res.status(404).json({ message: "Bot profile not found." });
+    res.set("Cache-Control", "no-store").json({
+      accountId: account.id,
+      botToken: account.botToken,
+      proxyUrl: account.proxyUrl
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    const accountId = String(req.params.accountId ?? "");
+    const accountIndex = current.accounts.findIndex((account) => account.id === accountId);
+    if (accountIndex < 0) return res.status(404).json({ message: "Bot profile not found." });
+
+    const botToken = String(req.body?.botToken ?? "").trim();
+    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
+    if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
+    if (current.accounts.some((account) => account.id !== accountId && account.botToken === botToken)) {
+      return res.status(409).json({ message: "This bot token is already saved in another profile." });
+    }
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
+    if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+
+    const updatedAccount = { id: accountId, botToken, proxyUrl };
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: current.accounts.map((account) => account.id === accountId ? updatedAccount : account)
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+
+    const runtime = discordOnlinerRuntimes.get(accountId);
+    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+    const savedAccount = candidate.accounts.find((account) => account.id === accountId);
+    if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
+    appendDiscordOnlinerLog("info", "Bot token or proxy updated; restarting this Gateway connection.", accountId);
+    res.json(getDiscordOnlinerSnapshot(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();
