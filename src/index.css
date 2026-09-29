@@ -5221,17 +5221,12 @@
   min-height: 52px;
   gap: 11px;
   border-bottom: 1px solid var(--app-divider);
-  border-radius: 7px;
+  border-radius: 0;
   padding: 7px 8px;
   background: transparent;
-  transition: background-color 150ms ease, box-shadow 150ms ease;
 }
 
 .onliner-account-row:last-child { border-bottom-color: transparent; }
-.onliner-account-row:hover {
-  background: color-mix(in srgb, var(--app-accent) 7%, rgba(255, 255, 255, .018));
-  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--app-accent-bright) 52%, transparent);
-}
 
 .onliner-account-row .onliner-bot-avatar {
   width: 34px;
@@ -5260,7 +5255,7 @@
   opacity: .66;
 }
 
-.onliner-account-row:hover .onliner-account-remove,
+.onliner-account-remove:hover,
 .onliner-account-remove:focus-visible { opacity: 1; }
 
 @media (max-width: 520px) {
