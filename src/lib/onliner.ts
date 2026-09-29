@@ -1,5 +1,5 @@
-export type DiscordOnlinerStatus = "online" | "idle" | "dnd";
-export type DiscordOnlinerActivityType = "playing" | "listening" | "watching" | "none";
+export type DiscordOnlinerStatus = "online" | "idle" | "dnd" | "mixed";
+export type DiscordOnlinerActivityType = "playing" | "listening" | "watching" | "none" | "mixed";
 export type DiscordOnlinerConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting" | "error";
 export type DiscordOnlinerLogLevel = "info" | "success" | "warn" | "error";
 

@@ -3781,6 +3781,7 @@ export default function HomePage() {
                       label="Bot status"
                       value={onlinerDraft.status}
                       options={[
+                        { value: "mixed", label: "Mixed · random" },
                         { value: "online", label: "Online" },
                         { value: "idle", label: "Idle" },
                         { value: "dnd", label: "Do not disturb" }
@@ -3791,6 +3792,7 @@ export default function HomePage() {
                       label="Activity type"
                       value={onlinerDraft.activityType}
                       options={[
+                        { value: "mixed", label: "Mixed · random" },
                         { value: "playing", label: "Playing" },
                         { value: "listening", label: "Listening" },
                         { value: "watching", label: "Watching" },
@@ -3801,7 +3803,7 @@ export default function HomePage() {
                   </div>
 
                   <label className="grid gap-2">
-                    <span className={fieldLabelClass}>{onlinerDraft.activityType === "playing" && onlinerDraft.rotationEnabled ? "Fallback activity text" : "Activity text"}</span>
+                    <span className={fieldLabelClass}>{["playing", "mixed"].includes(onlinerDraft.activityType) && onlinerDraft.rotationEnabled ? "Fallback activity text" : "Activity text"}</span>
                     <Input
                       value={onlinerDraft.activityText}
                       maxLength={128}
@@ -3811,20 +3813,21 @@ export default function HomePage() {
                     />
                   </label>
 
-                  {onlinerDraft.activityType === "playing" ? (
+                  {onlinerDraft.activityType === "playing" || onlinerDraft.activityType === "mixed" || onlinerDraft.status === "mixed" ? (
                     <div className="onliner-rotation-panel">
-                      <label className="onliner-rotation-toggle">
-                        <input
-                          type="checkbox"
-                          checked={onlinerDraft.rotationEnabled}
-                          onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationEnabled: event.target.checked }))}
-                        />
-                        <span><strong>Rotate playing activity</strong><small>Choose another game from the list at a random interval without disconnecting the bot.</small></span>
-                      </label>
-                      {onlinerDraft.rotationEnabled ? (
-                        <>
+                      {onlinerDraft.activityType !== "none" ? (
+                        <label className="onliner-rotation-toggle">
+                          <input
+                            type="checkbox"
+                            checked={onlinerDraft.rotationEnabled}
+                            onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationEnabled: event.target.checked }))}
+                          />
+                          <span><strong>Rotate activity text</strong><small>Choose another text from the list whenever the presence changes.</small></span>
+                        </label>
+                      ) : null}
+                      {onlinerDraft.rotationEnabled && onlinerDraft.activityType !== "none" ? (
                           <label className="grid gap-2">
-                            <span className={fieldLabelClass}>Game list · one per line</span>
+                            <span className={fieldLabelClass}>Activity list · one per line</span>
                             <textarea
                               className="onliner-game-textarea"
                               value={onlinerDraft.rotationItems}
@@ -3832,6 +3835,8 @@ export default function HomePage() {
                               placeholder={"Minecraft\nVALORANT\nCounter-Strike 2"}
                             />
                           </label>
+                      ) : null}
+                      {onlinerDraft.status === "mixed" || onlinerDraft.activityType === "mixed" || onlinerDraft.rotationEnabled ? (
                           <div className="grid gap-4 sm:grid-cols-2">
                             <label className="grid gap-2">
                               <span className={fieldLabelClass}>Minimum interval · minutes</span>
@@ -3842,7 +3847,6 @@ export default function HomePage() {
                               <Input type="number" min={1} max={1440} value={onlinerDraft.rotationMaxMinutes} onChange={(event) => setOnlinerDraft((current) => ({ ...current, rotationMaxMinutes: Number(event.target.value) }))} />
                             </label>
                           </div>
-                        </>
                       ) : null}
                     </div>
                   ) : null}

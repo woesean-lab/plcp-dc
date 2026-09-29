@@ -229,8 +229,10 @@ async function forEachWithConcurrency(values, concurrency, task) {
 }
 
 const discordOnlinerSettingKey = "discord_onliner_config";
-const discordOnlinerStatuses = new Set(["online", "idle", "dnd"]);
-const discordOnlinerActivityTypes = new Set(["playing", "listening", "watching", "none"]);
+const discordOnlinerStatusValues = ["online", "idle", "dnd"];
+const discordOnlinerActivityTypeValues = ["playing", "listening", "watching"];
+const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
+const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, listening: 2, watching: 3 };
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
 const defaultDiscordOnlinerGames = [
@@ -266,7 +268,9 @@ function createDiscordOnlinerRuntime(accountId) {
     lastDisconnectedAt: null,
     lastError: null,
     reconnectAttempt: 0,
-    currentActivity: null
+    currentActivity: null,
+    currentStatus: null,
+    currentActivityType: null
   };
 }
 
@@ -480,6 +484,8 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.reconnectAttempt = 0;
   runtime.guildIds = new Set();
   runtime.currentActivity = null;
+  runtime.currentStatus = null;
+  runtime.currentActivityType = null;
   if (resetIdentity) runtime.bot = null;
   try {
     if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
@@ -509,7 +515,7 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
 }
 
 function chooseDiscordOnlinerActivity(config, runtime) {
-  const candidates = config.activityType === "playing" && config.rotationEnabled && config.rotationItems.length
+  const candidates = config.rotationEnabled && config.rotationItems.length
     ? config.rotationItems
     : [config.activityText].filter(Boolean);
   if (!candidates.length) return null;
@@ -519,36 +525,47 @@ function chooseDiscordOnlinerActivity(config, runtime) {
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? candidates[0];
 }
 
-function buildDiscordOnlinerActivities(config, runtime, chooseNext = false) {
-  if (config.activityType === "none") {
-    runtime.currentActivity = null;
-    return [];
+function chooseDiscordOnlinerVariant(values, currentValue) {
+  const alternatives = values.length > 1 ? values.filter((value) => value !== currentValue) : values;
+  return alternatives[Math.floor(Math.random() * alternatives.length)] ?? values[0];
+}
+
+function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
+  if (chooseNext || !runtime.currentStatus) {
+    runtime.currentStatus = config.status === "mixed"
+      ? chooseDiscordOnlinerVariant(discordOnlinerStatusValues, runtime.currentStatus)
+      : config.status;
   }
-  if (chooseNext || !runtime.currentActivity) {
+  if (chooseNext || !runtime.currentActivityType) {
+    runtime.currentActivityType = config.activityType === "mixed"
+      ? chooseDiscordOnlinerVariant(discordOnlinerActivityTypeValues, runtime.currentActivityType)
+      : config.activityType;
+  }
+  if (runtime.currentActivityType === "none") {
+    runtime.currentActivity = null;
+  } else if (chooseNext || !runtime.currentActivity) {
     runtime.currentActivity = chooseDiscordOnlinerActivity(config, runtime);
   }
-  return runtime.currentActivity
-    ? [{ name: runtime.currentActivity, type: discordOnlinerActivityCodes[config.activityType] }]
+  const activities = runtime.currentActivity && runtime.currentActivityType !== "none"
+    ? [{ name: runtime.currentActivity, type: discordOnlinerActivityCodes[runtime.currentActivityType] }]
     : [];
+  return { since: null, activities, status: runtime.currentStatus, afk: false };
 }
 
 function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
   runtime.activityTimer = null;
-  if (generation !== runtime.generation || config.activityType !== "playing" || !config.rotationEnabled || config.rotationItems.length < 2) return;
+  const variablePresence = config.status === "mixed" || config.activityType === "mixed";
+  const rotatingText = config.activityType !== "none" && config.rotationEnabled && config.rotationItems.length > 1;
+  if (generation !== runtime.generation || (!variablePresence && !rotatingText)) return;
   const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
   runtime.activityTimer = setTimeout(() => {
     if (generation !== runtime.generation || runtime.socket?.readyState !== WebSocket.OPEN) return;
     runtime.socket.send(JSON.stringify({
       op: 3,
-      d: {
-        since: null,
-        activities: buildDiscordOnlinerActivities(config, runtime, true),
-        status: config.status,
-        afk: false
-      }
+      d: buildDiscordOnlinerPresence(config, runtime, true)
     }));
-    appendDiscordOnlinerLog("info", `Presence rotated to ${runtime.currentActivity ?? "no activity"}.`, runtime.accountId);
+    appendDiscordOnlinerLog("info", `Presence changed: ${runtime.currentStatus}, ${runtime.currentActivityType}${runtime.currentActivity ? ` · ${runtime.currentActivity}` : ""}.`, runtime.accountId);
     scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
   }, Math.round(intervalMinutes * 60_000));
   runtime.activityTimer.unref?.();
@@ -617,14 +634,14 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
       runtime.heartbeatTimer.unref?.();
-      const activities = buildDiscordOnlinerActivities(config, runtime, true);
+      const presence = buildDiscordOnlinerPresence(config, runtime, true);
       socket.send(JSON.stringify({
         op: 2,
         d: {
           token: account.botToken,
           intents: 1,
           properties: { os: process.platform, browser: "plcp-onliner", device: "plcp-onliner" },
-          presence: { since: null, activities, status: config.status, afk: false }
+          presence
         }
       }));
       appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
