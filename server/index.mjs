@@ -229,6 +229,7 @@ async function forEachWithConcurrency(values, concurrency, task) {
 }
 
 const discordOnlinerSettingKey = "discord_onliner_config";
+const discordOnlinerAccountLimit = 3000;
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
 const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
@@ -433,7 +434,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl)
     };
-  }).filter((account) => account.botToken).slice(0, 100);
+  }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
     ? String(value.status).toLowerCase()
     : "online";
@@ -871,6 +872,12 @@ function chooseDiscordOnlinerVariant(values, currentValue) {
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? values[0];
 }
 
+function getDiscordOnlinerRandomPlayingStart() {
+  const minimumElapsedMs = 3 * 60_000;
+  const maximumElapsedMs = 6 * 60 * 60_000;
+  return Date.now() - Math.round(minimumElapsedMs + Math.random() * (maximumElapsedMs - minimumElapsedMs));
+}
+
 function getDiscordOnlinerSpotifyImageKey(value) {
   const imageId = String(value ?? "").match(/\/image\/([a-z\d]+)(?:[/?#]|$)/i)?.[1];
   return imageId ? `spotify:${imageId}` : undefined;
@@ -918,7 +925,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
         ...extras
       });
     };
-    addActivity("playing", config.games);
+    addActivity("playing", config.games, { timestamps: { start: getDiscordOnlinerRandomPlayingStart() } });
     if (config.streamingUsers.length) {
       const user = chooseDiscordOnlinerActivity(config.streamingUsers);
       const title = chooseDiscordOnlinerActivity(config.streamingTitles.length ? config.streamingTitles : ["Live on Twitch"], runtime.currentActivity);
@@ -5496,7 +5503,7 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
 app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();
-    if (current.accounts.length >= 100) return res.status(409).json({ message: "The Onliner supports up to 100 bot profiles." });
+    if (current.accounts.length >= discordOnlinerAccountLimit) return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} bot profiles.` });
     const botToken = String(req.body?.botToken ?? "").trim();
     const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
@@ -5572,8 +5579,8 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
     const current = await getDiscordOnlinerConfig();
     const requestedAccounts = Array.isArray(req.body?.accounts) ? req.body.accounts : [];
     if (!requestedAccounts.length) return res.status(400).json({ message: "Add at least one bot profile." });
-    if (requestedAccounts.length > 100 || current.accounts.length + requestedAccounts.length > 100) {
-      return res.status(409).json({ message: `You can add at most ${Math.max(0, 100 - current.accounts.length)} more bot profiles.` });
+    if (requestedAccounts.length > discordOnlinerAccountLimit || current.accounts.length + requestedAccounts.length > discordOnlinerAccountLimit) {
+      return res.status(409).json({ message: `You can add at most ${Math.max(0, discordOnlinerAccountLimit - current.accounts.length)} more bot profiles.` });
     }
 
     const knownTokens = new Set(current.accounts.map((account) => account.botToken));

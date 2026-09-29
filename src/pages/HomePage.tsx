@@ -147,6 +147,7 @@ const EMPTY_FORM = {
 const DEFAULT_ONLINER_TWITCH_USERS = ["tarik", "shroud", "xqc", "pokimane", "summit1g", "sodapoppin", "hasanabi", "kaicenat", "ibai", "rubius", "auronplay", "gaules", "fps_shaka", "loltyler1", "ninja", "timthetatman", "zackrawrr", "caseoh_", "jynxzi", "moistcr1tikal"];
 const DEFAULT_ONLINER_STREAMING_CATEGORIES = ["Just Chatting", "VALORANT", "Minecraft", "Grand Theft Auto V", "Counter-Strike 2", "League of Legends", "Fortnite", "Call of Duty: Warzone", "Apex Legends", "EA Sports FC 26", "Tom Clancy's Rainbow Six Siege", "Dota 2", "World of Warcraft", "Escape from Tarkov", "Rust", "Dead by Daylight", "IRL", "Music", "Software and Game Development", "Sports"];
 const DEFAULT_ONLINER_STREAMING_TITLES = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
+const DISCORD_ONLINER_ACCOUNT_LIMIT = 3000;
 
 const EMPTY_ONLINER_DRAFT = {
   enabled: true,
@@ -4704,12 +4705,12 @@ export default function HomePage() {
               <div className="onliner-bulk-help">
                 <span><strong>Pairing</strong><code>Token 1 ↔ Proxy 1</code></span>
                 <span><strong>Requirement</strong><code>Counts must match</code></span>
-                <span><strong>Remaining capacity</strong><code>{Math.max(0, 100 - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
+                <span><strong>Remaining capacity</strong><code>{Math.max(0, DISCORD_ONLINER_ACCOUNT_LIMIT - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
               </div>
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk || (!onlinerBulkTokenDraft && !onlinerBulkProxyDraft)} onClick={() => { setOnlinerBulkTokenDraft(""); setOnlinerBulkProxyDraft(""); }}>Clear input</Button>
-                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
+                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= DISCORD_ONLINER_ACCOUNT_LIMIT}>
                   {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {addingOnlinerBulk ? "Adding..." : "Add profiles"}
                 </Button>
