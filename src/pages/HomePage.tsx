@@ -3667,7 +3667,6 @@ export default function HomePage() {
                               <small>{account.hasProxy ? "Dedicated proxy" : "Direct connection"} · {account.connectionState}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </span>
-                            <Badge className="onliner-account-badge" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>{account.guildCount} servers</Badge>
                             <Button type="button" size="xs" variant="dangerGhost" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
                               {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                             </Button>
@@ -3813,10 +3812,6 @@ export default function HomePage() {
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
                     <span><span className="settings-status-label">Connected bots</span><strong>{onlinerSnapshot?.connectedCount ?? 0} / {onlinerSnapshot?.accounts.length ?? 0}</strong></span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Total active servers</span><strong>{onlinerSnapshot?.guildCount ?? 0}</strong></span>
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span>

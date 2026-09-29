@@ -613,7 +613,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.connectedAt = new Date().toISOString();
       runtime.lastError = null;
       runtime.reconnectAttempt = 0;
-      appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}; ${runtime.guildIds.size} active server(s).`, account.id);
+      appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
       return;
     }

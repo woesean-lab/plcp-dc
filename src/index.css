@@ -5175,7 +5175,7 @@
 
 .onliner-account-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   border: 1px solid var(--app-border);
@@ -5308,8 +5308,6 @@
 .onliner-console-empty { padding: 56px 18px; text-align: center; color: var(--app-subtle); }
 
 @media (max-width: 640px) {
-  .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .onliner-account-badge { display: none; }
   .onliner-console-line { grid-template-columns: 76px 50px minmax(0, 1fr); gap: 7px; padding-inline: 12px; font-size: 10px; }
 }
 
