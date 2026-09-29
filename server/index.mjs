@@ -239,6 +239,8 @@ const defaultDiscordOnlinerSpotifyPlaylistId = "37i9dQZF1DX0XUsuxWHRQd";
 const discordOnlinerSpotifyPlaylistCache = new Map();
 const discordOnlinerSpotifyTrackCache = new Map();
 const discordOnlinerSpotifyApplicationId = "367827983903490050";
+const discordOnlinerYouTubePlaylistCache = new Map();
+const discordOnlinerYouTubeVideoCache = new Map();
 const discordOnlinerApplicationAliases = new Map([
   ["overwatch 2", "overwatch"],
   ["skyrim special edition", "the elder scrolls v skyrim special edition"],
@@ -354,6 +356,7 @@ const discordOnlinerLogClients = new Set();
 function createDiscordOnlinerRuntime(accountId) {
   return {
     accountId,
+    applicationId: null,
     generation: 0,
     socket: null,
     startupTimer: null,
@@ -373,6 +376,15 @@ function createDiscordOnlinerRuntime(accountId) {
     currentStatus: null,
     currentActivityType: null
   };
+}
+
+function getDiscordOnlinerApplicationIdFromToken(token) {
+  try {
+    const applicationId = Buffer.from(String(token ?? "").split(".")[0], "base64url").toString("utf8");
+    return /^\d{17,20}$/.test(applicationId) ? applicationId : null;
+  } catch {
+    return null;
+  }
 }
 
 function getDiscordOnlinerRuntime(accountId) {
@@ -476,6 +488,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     spotifyPlaylistId: /^[a-z\d]{22}$/i.test(String(value.spotifyPlaylistId ?? defaultDiscordOnlinerSpotifyPlaylistId).trim())
       ? String(value.spotifyPlaylistId ?? defaultDiscordOnlinerSpotifyPlaylistId).trim()
       : "",
+    youtubePlaylistId: normalizeDiscordOnlinerYouTubePlaylistId(value.youtubePlaylistId),
     games: normalizePresenceItems(
       Array.isArray(value.games) && value.games.some((item) => String(item ?? "").trim()) ? value.games : null,
       !hasGamesSetting && hasLegacyPresence && rotationItems.length ? rotationItems : defaultDiscordOnlinerGames
@@ -484,8 +497,20 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     streamingUsers: normalizePresenceItems(value.streamingUsers),
     streamingCategories: normalizePresenceItems(value.streamingCategories),
     streamingTitles: normalizePresenceItems(value.streamingTitles),
-    watch: normalizePresenceItems(value.watch, ["YouTube", "Twitch", "Kick"])
+    watch: normalizePresenceItems(value.watch).filter((item) => !["youtube", "twitch", "kick"].includes(item.toLowerCase()))
   };
+}
+
+function normalizeDiscordOnlinerYouTubePlaylistId(value) {
+  const input = String(value ?? "").trim();
+  if (!input) return "";
+  try {
+    const parsed = new URL(input.startsWith("http") ? input : `https://www.youtube.com/playlist?list=${encodeURIComponent(input)}`);
+    const playlistId = String(parsed.searchParams.get("list") ?? "");
+    return /^[a-z\d_-]{10,80}$/i.test(playlistId) ? playlistId : "";
+  } catch {
+    return "";
+  }
 }
 
 function decodeDiscordOnlinerHtmlText(value) {
@@ -570,9 +595,63 @@ async function getDiscordOnlinerSpotifyTracks(playlistId) {
   }
 }
 
+async function getDiscordOnlinerYouTubeVideos(playlistId) {
+  if (!playlistId) return [];
+  const cached = discordOnlinerYouTubePlaylistCache.get(playlistId);
+  if (cached && cached.expiresAt > Date.now()) return cached.videos;
+  try {
+    const response = await fetch(`https://www.youtube.com/feeds/videos.xml?playlist_id=${encodeURIComponent(playlistId)}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; PLCP-Onliner/1.0)" },
+      signal: AbortSignal.timeout(10_000)
+    });
+    if (!response.ok) throw new Error(`YouTube playlist feed returned ${response.status}`);
+    const xml = await response.text();
+    const videos = (xml.match(/<entry>[\s\S]*?<\/entry>/gi) ?? []).map((entry) => {
+      const videoId = decodeDiscordOnlinerHtmlText(entry.match(/<yt:videoId>([\s\S]*?)<\/yt:videoId>/i)?.[1]);
+      const title = decodeDiscordOnlinerHtmlText(entry.match(/<title>([\s\S]*?)<\/title>/i)?.[1]).slice(0, 128);
+      const channel = decodeDiscordOnlinerHtmlText(entry.match(/<author>[\s\S]*?<name>([\s\S]*?)<\/name>[\s\S]*?<\/author>/i)?.[1]).slice(0, 128);
+      const thumbnailUrl = decodeDiscordOnlinerHtmlText(entry.match(/<media:thumbnail\b[^>]*url="([^"]+)"/i)?.[1]);
+      return {
+        videoId,
+        title,
+        channel,
+        thumbnailUrl,
+        url: videoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}` : "",
+        duration: 0
+      };
+    }).filter((video) => /^[a-z\d_-]{11}$/i.test(video.videoId) && video.title).slice(0, 50);
+    await mapWithConcurrency(videos, 6, async (video) => {
+      const cachedVideo = discordOnlinerYouTubeVideoCache.get(video.videoId);
+      if (cachedVideo?.expiresAt > Date.now()) {
+        video.duration = cachedVideo.duration;
+        return;
+      }
+      try {
+        const videoResponse = await fetch(video.url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; PLCP-Onliner/1.0)" },
+          signal: AbortSignal.timeout(8_000)
+        });
+        if (!videoResponse.ok) return;
+        const videoHtml = await videoResponse.text();
+        const duration = Math.max(0, Number(videoHtml.match(/"lengthSeconds":"(\d+)"/)?.[1]) * 1000 || 0);
+        video.duration = duration;
+        discordOnlinerYouTubeVideoCache.set(video.videoId, { duration, expiresAt: Date.now() + 6 * 60 * 60_000 });
+      } catch {
+        // The video remains usable when YouTube does not expose a duration.
+      }
+    });
+    discordOnlinerYouTubePlaylistCache.set(playlistId, { videos, expiresAt: Date.now() + 30 * 60_000 });
+    return videos;
+  } catch {
+    discordOnlinerYouTubePlaylistCache.set(playlistId, { videos: [], expiresAt: Date.now() + 5 * 60_000 });
+    return [];
+  }
+}
+
 async function hydrateDiscordOnlinerSpotifyPlaylist(config) {
   const [tracks] = await Promise.all([
     config.spotifyPlaylistId ? getDiscordOnlinerSpotifyTracks(config.spotifyPlaylistId) : Promise.resolve([]),
+    config.youtubePlaylistId ? getDiscordOnlinerYouTubeVideos(config.youtubePlaylistId) : Promise.resolve([]),
     getDiscordOnlinerApplicationCatalog()
   ]);
   return tracks.length
@@ -730,6 +809,7 @@ function getDiscordOnlinerSnapshot(config) {
     activityChances: config.activityChances,
     randomizeEnabled: config.randomizeEnabled,
     spotifyPlaylistId: config.spotifyPlaylistId,
+    youtubePlaylistId: config.youtubePlaylistId,
     games: config.games,
     music: config.music,
     streamingUsers: config.streamingUsers,
@@ -847,6 +927,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
         ?? chooseDiscordOnlinerActivity(spotifyTracks, null);
       if (track) {
         const startedAt = Date.now();
+        const trackUrl = track.trackId ? `https://open.spotify.com/track/${encodeURIComponent(track.trackId)}` : "https://open.spotify.com/";
         activities.push({
           name: "Spotify",
           type: discordOnlinerActivityCodes.listening,
@@ -858,8 +939,12 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
           timestamps: track.duration ? { start: startedAt, end: startedAt + track.duration } : undefined,
           assets: track.imageHash ? {
             large_image: `spotify:${track.imageHash}`,
-            large_text: track.album || track.title
+            large_text: track.album || track.title,
+            large_url: trackUrl
           } : undefined,
+          details_url: trackUrl,
+          buttons: ["Play on Spotify"],
+          metadata: { button_urls: [trackUrl] },
           flags: 48
         });
       } else {
@@ -871,14 +956,41 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
             type: discordOnlinerActivityCodes.listening,
             application_id: discordOnlinerSpotifyApplicationId,
             details: title || fallback,
-            state: artistParts.join(" — ") || undefined
+            state: artistParts.join(" — ") || undefined,
+            buttons: ["Open Spotify"],
+            metadata: { button_urls: ["https://open.spotify.com/"] }
           });
         }
       }
     }
-    addActivity("watching", config.watch);
+    if (Math.random() * 100 < config.activityChances.watching) {
+      const youtubeVideos = discordOnlinerYouTubePlaylistCache.get(config.youtubePlaylistId)?.videos ?? [];
+      const previousVideoId = runtime.currentActivities?.find((activity) => activity.type === discordOnlinerActivityCodes.watching)?.sync_id;
+      const video = chooseDiscordOnlinerActivity(youtubeVideos.filter((item) => item.videoId !== previousVideoId), null)
+        ?? chooseDiscordOnlinerActivity(youtubeVideos, null);
+      if (video) {
+        const startedAt = Date.now();
+        activities.push({
+          name: "YouTube",
+          type: discordOnlinerActivityCodes.watching,
+          ...(runtime.applicationId ? { application_id: runtime.applicationId } : {}),
+          details: video.title,
+          state: video.channel || undefined,
+          sync_id: video.videoId,
+          timestamps: video.duration ? { start: startedAt, end: startedAt + video.duration } : { start: startedAt },
+          assets: video.thumbnailUrl ? {
+            large_image: video.thumbnailUrl,
+            large_text: video.title,
+            large_url: video.url
+          } : undefined,
+          details_url: video.url,
+          buttons: ["Watch on YouTube"],
+          metadata: { button_urls: [video.url] }
+        });
+      }
+    }
     runtime.currentActivities = activities;
-    runtime.currentActivity = activities.map((activity) => activity.type === discordOnlinerActivityCodes.listening
+    runtime.currentActivity = activities.map((activity) => [discordOnlinerActivityCodes.listening, discordOnlinerActivityCodes.watching].includes(activity.type)
       ? [activity.details, activity.state].filter(Boolean).join(" — ") || activity.name
       : activity.name).join(" · ") || null;
     runtime.currentActivityType = activities.map((activity) => discordOnlinerActivityTypeValues.find((type) => discordOnlinerActivityCodes[type] === activity.type)).filter(Boolean).join(", ") || "none";
@@ -906,6 +1018,7 @@ function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
+  runtime.applicationId = getDiscordOnlinerApplicationIdFromToken(account.botToken);
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   const gatewayEndpoint = "wss://gateway.discord.gg:443";
   const proxyEndpoint = account.proxyUrl ? getDiscordOnlinerProxyEndpoint(account.proxyUrl) : null;

@@ -44,6 +44,7 @@ export type DiscordOnlinerSnapshot = {
   activityChances: DiscordOnlinerActivityChances;
   randomizeEnabled: boolean;
   spotifyPlaylistId: string;
+  youtubePlaylistId: string;
   games: string[];
   music: string[];
   streamingUsers: string[];
@@ -67,6 +68,7 @@ export type DiscordOnlinerInput = {
   activityChances: DiscordOnlinerActivityChances;
   randomizeEnabled: boolean;
   spotifyPlaylistId: string;
+  youtubePlaylistId: string;
   games: string[];
   music: string[];
   streamingUsers: string[];

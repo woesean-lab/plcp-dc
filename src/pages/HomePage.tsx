@@ -150,12 +150,13 @@ const EMPTY_ONLINER_DRAFT = {
   activityChances: { playing: 75, streaming: 50, listening: 50, watching: 50 },
   randomizeEnabled: false,
   spotifyPlaylistId: "37i9dQZF1DX0XUsuxWHRQd",
+  youtubePlaylistId: "",
   games: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
   music: "Spotify",
   streamingUsers: "dazznovanation",
   streamingCategories: ["Just Chatting", "Software and Game Development", "Music", "VALORANT", "Minecraft"].join("\n"),
   streamingTitles: ["Chill vibes only | !discord", "Late night community games!", "Just hanging out and talking"].join("\n"),
-  watch: ["YouTube", "Twitch", "Kick"].join("\n"),
+  watch: "",
   rotationMinMinutes: 30,
   rotationMaxMinutes: 1440
 };
@@ -1022,6 +1023,7 @@ export default function HomePage() {
         activityChances: snapshot.activityChances,
         randomizeEnabled: snapshot.randomizeEnabled,
         spotifyPlaylistId: snapshot.spotifyPlaylistId,
+        youtubePlaylistId: snapshot.youtubePlaylistId,
         games: snapshot.games.join("\n"),
         music: snapshot.music.join("\n"),
         streamingUsers: snapshot.streamingUsers.join("\n"),
@@ -1403,6 +1405,7 @@ export default function HomePage() {
         activityChances: onlinerDraft.activityChances,
         randomizeEnabled: onlinerDraft.randomizeEnabled,
         spotifyPlaylistId: onlinerDraft.spotifyPlaylistId.trim(),
+        youtubePlaylistId: onlinerDraft.youtubePlaylistId.trim(),
         games: parseOnlinerBulkLines(onlinerDraft.games),
         music: parseOnlinerBulkLines(onlinerDraft.music),
         streamingUsers: parseOnlinerBulkLines(onlinerDraft.streamingUsers),
@@ -3921,7 +3924,7 @@ export default function HomePage() {
                   <div className="onliner-source-grid">
                     <label className="onliner-source-card"><span><strong>Playing · Discord games</strong><small>Exact game names use Discord's official catalog icon · leave empty for the built-in list</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Leave empty for automatic game catalog\n—or enter custom games here"} /></label>
                     <label className="onliner-source-card"><span><strong>Listening · Spotify</strong><small>Loads real track, artist, duration and album artwork · cached for 30 minutes</small></span><Input value={onlinerDraft.spotifyPlaylistId} maxLength={22} onChange={(event) => setOnlinerDraft((current) => ({ ...current, spotifyPlaylistId: event.target.value.trim() }))} placeholder="Spotify playlist ID" /><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Fallback tracks · one per line"} /></label>
-                    <label className="onliner-source-card"><span><strong>Watching</strong><small>One platform or title per line</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.watch} onChange={(event) => setOnlinerDraft((current) => ({ ...current, watch: event.target.value }))} placeholder={"YouTube\nTwitch\nKick"} /></label>
+                    <label className="onliner-source-card"><span><strong>Watching · YouTube</strong><small>Random real videos with title, channel, duration, thumbnail and watch button</small></span><Input value={onlinerDraft.youtubePlaylistId} maxLength={100} onChange={(event) => setOnlinerDraft((current) => ({ ...current, youtubePlaylistId: event.target.value.trim() }))} placeholder="YouTube playlist ID or URL" /></label>
                   </div>
 
                   <div className="onliner-presence-panel">
