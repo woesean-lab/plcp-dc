@@ -244,6 +244,9 @@ const discordOnlinerApplicationAliases = new Map([
   ["alan wake 2", "alan wake ii"]
 ]);
 let discordOnlinerApplicationCatalogCache = { expiresAt: 0, index: new Map(), pending: null };
+const defaultDiscordOnlinerTwitchUsers = ["tarik", "shroud", "xqc", "pokimane", "summit1g", "sodapoppin", "hasanabi", "kaicenat", "ibai", "rubius", "auronplay", "gaules", "fps_shaka", "loltyler1", "ninja", "timthetatman", "zackrawrr", "caseoh_", "jynxzi", "moistcr1tikal"];
+const defaultDiscordOnlinerStreamingCategories = ["Just Chatting", "VALORANT", "Minecraft", "Grand Theft Auto V", "Counter-Strike 2", "League of Legends", "Fortnite", "Call of Duty: Warzone", "Apex Legends", "EA Sports FC 26", "Tom Clancy's Rainbow Six Siege", "Dota 2", "World of Warcraft", "Escape from Tarkov", "Rust", "Dead by Daylight", "IRL", "Music", "Software and Game Development", "Sports"];
+const defaultDiscordOnlinerStreamingTitles = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
 const defaultDiscordOnlinerGames = [
   "Minecraft",
   "VALORANT",
@@ -481,9 +484,9 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       !hasGamesSetting && hasLegacyPresence && rotationItems.length ? rotationItems : defaultDiscordOnlinerGames
     ),
     music: normalizePresenceItems(value.music, [hasLegacyPresence ? value.activityText || "Spotify" : "Spotify"]),
-    streamingUsers: normalizePresenceItems(value.streamingUsers),
-    streamingCategories: normalizePresenceItems(value.streamingCategories),
-    streamingTitles: normalizePresenceItems(value.streamingTitles),
+    streamingUsers: normalizePresenceItems(value.streamingUsers, defaultDiscordOnlinerTwitchUsers),
+    streamingCategories: normalizePresenceItems(value.streamingCategories, defaultDiscordOnlinerStreamingCategories),
+    streamingTitles: normalizePresenceItems(value.streamingTitles, defaultDiscordOnlinerStreamingTitles),
     watch: normalizePresenceItems(value.watch).filter((item) => !["youtube", "twitch", "kick"].includes(item.toLowerCase()))
   };
 }

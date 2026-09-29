@@ -144,6 +144,10 @@ const EMPTY_FORM = {
   isEldoradoSale: true
 };
 
+const DEFAULT_ONLINER_TWITCH_USERS = ["tarik", "shroud", "xqc", "pokimane", "summit1g", "sodapoppin", "hasanabi", "kaicenat", "ibai", "rubius", "auronplay", "gaules", "fps_shaka", "loltyler1", "ninja", "timthetatman", "zackrawrr", "caseoh_", "jynxzi", "moistcr1tikal"];
+const DEFAULT_ONLINER_STREAMING_CATEGORIES = ["Just Chatting", "VALORANT", "Minecraft", "Grand Theft Auto V", "Counter-Strike 2", "League of Legends", "Fortnite", "Call of Duty: Warzone", "Apex Legends", "EA Sports FC 26", "Tom Clancy's Rainbow Six Siege", "Dota 2", "World of Warcraft", "Escape from Tarkov", "Rust", "Dead by Daylight", "IRL", "Music", "Software and Game Development", "Sports"];
+const DEFAULT_ONLINER_STREAMING_TITLES = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
+
 const EMPTY_ONLINER_DRAFT = {
   enabled: true,
   statuses: ["online", "idle", "dnd"] as Array<"online" | "idle" | "dnd">,
@@ -153,9 +157,9 @@ const EMPTY_ONLINER_DRAFT = {
   youtubePlaylistId: "",
   games: ["Minecraft", "VALORANT", "Counter-Strike 2", "League of Legends", "Grand Theft Auto V", "Elden Ring", "Apex Legends", "Fortnite", "World of Warcraft", "Euro Truck Simulator 2"].join("\n"),
   music: "Spotify",
-  streamingUsers: "dazznovanation",
-  streamingCategories: ["Just Chatting", "Software and Game Development", "Music", "VALORANT", "Minecraft"].join("\n"),
-  streamingTitles: ["Chill vibes only | !discord", "Late night community games!", "Just hanging out and talking"].join("\n"),
+  streamingUsers: DEFAULT_ONLINER_TWITCH_USERS.join("\n"),
+  streamingCategories: DEFAULT_ONLINER_STREAMING_CATEGORIES.join("\n"),
+  streamingTitles: DEFAULT_ONLINER_STREAMING_TITLES.join("\n"),
   watch: "",
   rotationMinMinutes: 30,
   rotationMaxMinutes: 1440
@@ -3928,7 +3932,15 @@ export default function HomePage() {
                   </div>
 
                   <div className="onliner-presence-panel">
-                    <div className="onliner-presence-heading"><span><strong>Streaming · Twitch</strong><small>A user supplies the Twitch URL; titles and categories never use the game/watch lists.</small></span></div>
+                    <div className="onliner-presence-heading">
+                      <span><strong>Streaming · Twitch</strong><small>Each bot randomly combines one Twitch user, category and title from these pools.</small></span>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => setOnlinerDraft((current) => ({
+                        ...current,
+                        streamingUsers: DEFAULT_ONLINER_TWITCH_USERS.join("\n"),
+                        streamingCategories: DEFAULT_ONLINER_STREAMING_CATEGORIES.join("\n"),
+                        streamingTitles: DEFAULT_ONLINER_STREAMING_TITLES.join("\n")
+                      }))}>Load random pool</Button>
+                    </div>
                     <div className="onliner-stream-grid">
                       <label><span className={fieldLabelClass}>Users · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder="dazznovanation" /></label>
                       <label><span className={fieldLabelClass}>Categories · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingCategories} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingCategories: event.target.value }))} placeholder={"Just Chatting\nVALORANT\nMusic"} /></label>
