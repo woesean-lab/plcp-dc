@@ -5267,6 +5267,15 @@
 .onliner-account-remove:hover,
 .onliner-account-remove:focus-visible { opacity: 1; }
 
+.onliner-account-edit:not(:disabled):hover,
+.onliner-account-edit:not(:disabled):focus-visible {
+  border-color: var(--app-accent-border);
+  color: var(--app-accent-bright);
+  background: var(--app-accent-soft);
+  box-shadow: none;
+  transform: none;
+}
+
 .onliner-secret-field {
   position: relative;
   display: block;
