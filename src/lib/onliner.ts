@@ -7,13 +7,30 @@ export type DiscordOnlinerLogEntry = {
   id: number;
   timestamp: string;
   level: DiscordOnlinerLogLevel;
+  accountId: string | null;
   message: string;
+};
+
+export type DiscordOnlinerAccount = {
+  id: string;
+  hasBotToken: boolean;
+  hasProxy: boolean;
+  currentActivity: string | null;
+  connectionState: DiscordOnlinerConnectionState;
+  bot: { id: string; username: string; tag: string; avatarUrl: string | null } | null;
+  guildCount: number;
+  connectedAt: string | null;
+  lastDisconnectedAt: string | null;
+  lastError: string | null;
+  reconnectAttempt: number;
 };
 
 export type DiscordOnlinerSnapshot = {
   configured: boolean;
   hasBotToken: boolean;
   hasProxy: boolean;
+  accounts: DiscordOnlinerAccount[];
+  connectedCount: number;
   enabled: boolean;
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;
@@ -34,8 +51,6 @@ export type DiscordOnlinerSnapshot = {
 };
 
 export type DiscordOnlinerInput = {
-  botToken?: string;
-  proxyUrl?: string | null;
   enabled: boolean;
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;
@@ -62,6 +77,22 @@ export function saveDiscordOnliner(input: DiscordOnlinerInput) {
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input)
+  }).then(parseResponse);
+}
+
+export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl?: string }) {
+  return fetch("/api/onliner/accounts", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  }).then(parseResponse);
+}
+
+export function removeDiscordOnlinerAccount(accountId: string) {
+  return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}`, {
+    method: "DELETE",
+    credentials: "same-origin"
   }).then(parseResponse);
 }
 

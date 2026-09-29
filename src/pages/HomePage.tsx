@@ -85,10 +85,12 @@ import {
 } from "../lib/community";
 import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import {
+  addDiscordOnlinerAccount,
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
   getDiscordOnliner,
   reconnectDiscordOnliner,
+  removeDiscordOnlinerAccount,
   saveDiscordOnliner,
   type DiscordOnlinerActivityType,
   type DiscordOnlinerLogEntry,
@@ -140,9 +142,6 @@ const EMPTY_FORM = {
 };
 
 const EMPTY_ONLINER_DRAFT = {
-  botToken: "",
-  useProxy: false,
-  proxyUrl: "",
   enabled: true,
   status: "online" as DiscordOnlinerStatus,
   activityType: "playing" as DiscordOnlinerActivityType,
@@ -152,6 +151,8 @@ const EMPTY_ONLINER_DRAFT = {
   rotationMinMinutes: 10,
   rotationMaxMinutes: 30
 };
+
+const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", useProxy: false, proxyUrl: "" };
 
 const COMMUNITY_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -651,8 +652,11 @@ export default function HomePage() {
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
+  const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
   const [savingOnliner, setSavingOnliner] = useState(false);
+  const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
+  const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
@@ -952,9 +956,6 @@ export default function HomePage() {
       if (cancelled) return;
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft({
-        botToken: "",
-        useProxy: snapshot.hasProxy,
-        proxyUrl: "",
         enabled: snapshot.enabled,
         status: snapshot.status,
         activityType: snapshot.activityType,
@@ -1314,31 +1315,56 @@ export default function HomePage() {
 
   async function handleSaveOnliner(event: FormEvent) {
     event.preventDefault();
-    if (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken) {
-      notifyError("Enter the Discord bot token.");
-      return;
-    }
-    if (onlinerDraft.useProxy && !onlinerDraft.proxyUrl.trim() && !onlinerSnapshot?.hasProxy) {
-      notifyError("Enter the Gateway proxy address.");
-      return;
-    }
     try {
       setSavingOnliner(true);
       const snapshot = await saveDiscordOnliner({
         ...onlinerDraft,
-        botToken: onlinerDraft.botToken.trim() || undefined,
-        proxyUrl: onlinerDraft.useProxy ? (onlinerDraft.proxyUrl.trim() || undefined) : null,
         rotationItems: onlinerDraft.rotationItems.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
         rotationMinMinutes: Math.max(1, Number(onlinerDraft.rotationMinMinutes) || 10),
         rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
       });
       setOnlinerSnapshot(snapshot);
-      setOnlinerDraft((current) => ({ ...current, botToken: "", proxyUrl: "", useProxy: snapshot.hasProxy }));
-      notifySuccess(snapshot.enabled ? "Onliner saved and bot connection started." : "Onliner saved in disabled state.");
+      notifySuccess(snapshot.enabled ? "Onliner settings saved and bot connections restarted." : "Onliner saved in disabled state.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner settings could not be saved.");
     } finally {
       setSavingOnliner(false);
+    }
+  }
+
+  async function handleAddOnlinerAccount() {
+    const botToken = onlinerAccountDraft.botToken.trim();
+    const proxyUrl = onlinerAccountDraft.proxyUrl.trim();
+    if (!botToken) {
+      notifyError("Enter the Discord bot token.");
+      return;
+    }
+    if (onlinerAccountDraft.useProxy && !proxyUrl) {
+      notifyError("Enter the Gateway proxy address.");
+      return;
+    }
+    try {
+      setAddingOnlinerAccount(true);
+      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl: onlinerAccountDraft.useProxy ? proxyUrl : undefined });
+      setOnlinerSnapshot(snapshot);
+      setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      notifySuccess("Bot profile added and Gateway connections restarted.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bot profile could not be added.");
+    } finally {
+      setAddingOnlinerAccount(false);
+    }
+  }
+
+  async function handleRemoveOnlinerAccount(accountId: string) {
+    try {
+      setRemovingOnlinerAccountId(accountId);
+      setOnlinerSnapshot(await removeDiscordOnlinerAccount(accountId));
+      notifySuccess("Bot profile removed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bot profile could not be removed.");
+    } finally {
+      setRemovingOnlinerAccountId(null);
     }
   }
 
@@ -1360,7 +1386,8 @@ export default function HomePage() {
       const snapshot = await clearDiscordOnliner();
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft(EMPTY_ONLINER_DRAFT);
-      notifySuccess("Onliner bot token and settings removed.");
+      setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      notifySuccess("All Onliner bot profiles and settings removed.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner settings could not be removed.");
     } finally {
@@ -3603,11 +3630,11 @@ export default function HomePage() {
               <div>
                 <p className={labelClass}>Onliner</p>
                 <h1 className="page-title">Discord bot presence</h1>
-                <p className="app-copy page-copy">Keep a dedicated Discord bot connected to Gateway v10 with automatic reconnect.</p>
+                <p className="app-copy page-copy">Keep multiple Discord bots connected to Gateway v10, each with its own proxy and reconnect loop.</p>
               </div>
               <div className="page-heading-meta">
                 <Badge variant={onlinerBadgeVariant}>{onlinerConnectionLabel}</Badge>
-                <Badge variant={onlinerSnapshot?.configured ? "success" : "destructive"}>{onlinerSnapshot?.configured ? "Token saved" : "Token missing"}</Badge>
+                <Badge variant={onlinerSnapshot?.configured ? "success" : "destructive"}>{onlinerSnapshot?.accounts.length ? `${onlinerSnapshot.accounts.length} bot${onlinerSnapshot.accounts.length === 1 ? "" : "s"} saved` : "No bots"}</Badge>
               </div>
             </header>
 
@@ -3620,19 +3647,51 @@ export default function HomePage() {
                     <h2 className="app-title mt-1 text-lg font-semibold">Onliner configuration</h2>
                   </div>
                 </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">This connection is independent from the Members bot. The token is encrypted in PostgreSQL and is never returned after saving.</p>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">Each token and its proxy are encrypted in PostgreSQL, run in an isolated Gateway connection, and are never returned after saving.</p>
 
                 <form className="mt-6 grid gap-5" onSubmit={handleSaveOnliner}>
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>{onlinerSnapshot?.hasBotToken ? "Replace bot token" : "Discord bot token"}</span>
-                    <Input
-                      type="password"
-                      value={onlinerDraft.botToken}
-                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, botToken: event.target.value }))}
-                      placeholder={onlinerSnapshot?.hasBotToken ? "Saved — leave blank to keep" : "Paste the test bot token"}
-                      autoComplete="new-password"
-                    />
-                  </label>
+                  <div className="onliner-account-manager">
+                    <div className="onliner-account-manager-head">
+                      <span><strong>Bot profiles</strong><small>Each bot can use a different proxy.</small></span>
+                      <Badge variant="secondary">{onlinerSnapshot?.connectedCount ?? 0}/{onlinerSnapshot?.accounts.length ?? 0} connected</Badge>
+                    </div>
+                    {onlinerSnapshot?.accounts.length ? (
+                      <div className="onliner-account-list">
+                        {onlinerSnapshot.accounts.map((account, index) => (
+                          <div key={account.id} className="onliner-account-row">
+                            <span className="onliner-bot-avatar" aria-hidden="true">
+                              {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
+                            </span>
+                            <span className="onliner-account-copy">
+                              <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
+                              <small>{account.hasProxy ? "Dedicated proxy" : "Direct connection"} · {account.connectionState}</small>
+                              {account.lastError ? <em>{account.lastError}</em> : null}
+                            </span>
+                            <Badge className="onliner-account-badge" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>{account.guildCount} servers</Badge>
+                            <Button type="button" size="xs" variant="dangerGhost" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
+                              {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <label className="grid gap-2">
+                        <span className={fieldLabelClass}>New bot token</span>
+                        <Input type="password" value={onlinerAccountDraft.botToken} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder="Discord bot token" autoComplete="new-password" />
+                      </label>
+                      <label className="grid gap-2">
+                        <span className={fieldLabelClass}>Dedicated proxy · optional</span>
+                        <Input type="password" value={onlinerAccountDraft.proxyUrl} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, proxyUrl: event.target.value, useProxy: Boolean(event.target.value) }))} placeholder="http://user:pass@host:port" autoComplete="new-password" />
+                      </label>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="app-copy text-xs">HTTP(S), SOCKS4/5 and host:port:user:pass are supported.</span>
+                      <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || !onlinerAccountDraft.botToken.trim()} onClick={() => void handleAddOnlinerAccount()}>
+                        {addingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add bot
+                      </Button>
+                    </div>
+                  </div>
 
                   <label className="onliner-enabled-card">
                     <input
@@ -3643,30 +3702,6 @@ export default function HomePage() {
                     <span className="stat-icon" aria-hidden="true"><Power className="h-4 w-4" /></span>
                     <span><strong>Keep bot online</strong><small>Connect automatically when the backend starts and reconnect after interruptions.</small></span>
                   </label>
-
-                  <label className="onliner-enabled-card">
-                    <input
-                      type="checkbox"
-                      checked={onlinerDraft.useProxy}
-                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, useProxy: event.target.checked }))}
-                    />
-                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
-                    <span><strong>Connect through proxy</strong><small>Route the Discord Gateway WebSocket and reconnects through this proxy.</small></span>
-                  </label>
-
-                  {onlinerDraft.useProxy ? (
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>{onlinerSnapshot?.hasProxy ? "Replace Gateway proxy" : "Gateway proxy"}</span>
-                      <Input
-                        type="password"
-                        value={onlinerDraft.proxyUrl}
-                        onChange={(event) => setOnlinerDraft((current) => ({ ...current, proxyUrl: event.target.value }))}
-                        placeholder={onlinerSnapshot?.hasProxy ? "Saved — leave blank to keep" : "http://user:pass@host:port"}
-                        autoComplete="new-password"
-                      />
-                      <span className="app-copy text-xs">HTTP(S), SOCKS4 and SOCKS5 are supported. You can also use host:port:user:pass.</span>
-                    </label>
-                  ) : null}
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FilterDropdown
@@ -3740,19 +3775,19 @@ export default function HomePage() {
                   ) : null}
 
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" disabled={savingOnliner || loadingOnliner || (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken) || (onlinerDraft.useProxy && !onlinerDraft.proxyUrl.trim() && !onlinerSnapshot?.hasProxy)}>
+                    <Button type="submit" disabled={savingOnliner || loadingOnliner}>
                       {savingOnliner ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       {savingOnliner ? "Saving..." : "Save & apply"}
                     </Button>
                     {onlinerSnapshot?.configured && onlinerSnapshot.enabled ? (
                       <Button type="button" variant="secondary" disabled={savingOnliner || reconnectingOnliner} onClick={() => void handleReconnectOnliner()}>
                         <RefreshCw className={`h-4 w-4 ${reconnectingOnliner ? "animate-spin" : ""}`} />
-                        Reconnect
+                        Reconnect all
                       </Button>
                     ) : null}
                     {onlinerSnapshot?.configured ? (
                       <Button type="button" variant="destructive" disabled={savingOnliner} onClick={() => void handleClearOnliner()}>
-                        <Trash2 className="h-4 w-4" /> Remove settings
+                        <Trash2 className="h-4 w-4" /> Remove all
                       </Button>
                     ) : null}
                   </div>
@@ -3766,7 +3801,7 @@ export default function HomePage() {
                   </span>
                   <div className="min-w-0">
                     <p className={labelClass}>Connection</p>
-                    <h2 className="app-title mt-1 truncate text-lg font-semibold">{onlinerSnapshot?.bot?.username ?? "Test bot"}</h2>
+                    <h2 className="app-title mt-1 truncate text-lg font-semibold">Bot fleet</h2>
                   </div>
                 </div>
 
@@ -3777,7 +3812,11 @@ export default function HomePage() {
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
-                    <span><span className="settings-status-label">Active servers</span><strong>{onlinerSnapshot?.guildCount ?? 0}</strong></span>
+                    <span><span className="settings-status-label">Connected bots</span><strong>{onlinerSnapshot?.connectedCount ?? 0} / {onlinerSnapshot?.accounts.length ?? 0}</strong></span>
+                  </div>
+                  <div className="settings-status-row">
+                    <span className="stat-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+                    <span><span className="settings-status-label">Total active servers</span><strong>{onlinerSnapshot?.guildCount ?? 0}</strong></span>
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span>
@@ -3808,13 +3847,18 @@ export default function HomePage() {
                 </Button>
               </div>
               <div className="onliner-console" role="log" aria-live="polite">
-                {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => (
-                  <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
-                    <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
-                    <span className="onliner-console-level">{entry.level}</span>
-                    <span className="onliner-console-message">{entry.message}</span>
-                  </div>
-                )) : (
+                {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => {
+                  const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
+                  const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
+                  const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
+                  return (
+                    <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
+                      <time dateTime={entry.timestamp}>{new Date(entry.timestamp).toLocaleTimeString()}</time>
+                      <span className="onliner-console-level">{entry.level}</span>
+                      <span className="onliner-console-message"><b>[{accountLabel}]</b> {entry.message}</span>
+                    </div>
+                  );
+                }) : (
                   <div className="onliner-console-empty">Gateway events will appear here when the Onliner starts.</div>
                 )}
               </div>

@@ -5151,6 +5151,44 @@
 .onliner-enabled-card strong { color: var(--app-text); font-size: 13px; }
 .onliner-enabled-card small { color: var(--app-muted); font-size: 11px; line-height: 1.45; }
 
+.onliner-account-manager {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--app-surface-soft);
+}
+
+.onliner-account-manager-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.onliner-account-manager-head > span:first-child,
+.onliner-account-copy { display: grid; min-width: 0; gap: 3px; }
+.onliner-account-manager-head strong { color: var(--app-text); font-size: 13px; }
+.onliner-account-manager-head small { color: var(--app-muted); font-size: 11px; }
+.onliner-account-list { display: grid; gap: 8px; }
+
+.onliner-account-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255,255,255,.018);
+}
+
+.onliner-account-row .onliner-bot-avatar { width: 36px; height: 36px; border-radius: 11px; }
+.onliner-account-copy strong { overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.onliner-account-copy small { color: var(--app-muted); font-size: 10px; text-transform: capitalize; }
+.onliner-account-copy em { overflow: hidden; color: var(--app-danger); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+
 .onliner-rotation-panel {
   display: grid;
   gap: 16px;
@@ -5266,9 +5304,12 @@
 .onliner-console-line[data-level="warn"] .onliner-console-level { color: #f5b942; }
 .onliner-console-line[data-level="error"] .onliner-console-level { color: var(--app-danger); }
 .onliner-console-message { min-width: 0; overflow-wrap: anywhere; color: var(--app-text); }
+.onliner-console-message b { color: var(--app-accent-bright); font-weight: 600; }
 .onliner-console-empty { padding: 56px 18px; text-align: center; color: var(--app-subtle); }
 
 @media (max-width: 640px) {
+  .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .onliner-account-badge { display: none; }
   .onliner-console-line { grid-template-columns: 76px 50px minmax(0, 1fr); gap: 7px; padding-inline: 12px; font-size: 10px; }
 }
 

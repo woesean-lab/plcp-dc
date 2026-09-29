@@ -245,27 +245,41 @@ const defaultDiscordOnlinerGames = [
   "World of Warcraft",
   "Euro Truck Simulator 2"
 ];
-const discordOnlinerRuntime = {
-  generation: 0,
-  socket: null,
-  heartbeatTimer: null,
-  reconnectTimer: null,
-  activityTimer: null,
-  heartbeatAcknowledged: true,
-  state: "disconnected",
-  bot: null,
-  guildIds: new Set(),
-  connectedAt: null,
-  lastDisconnectedAt: null,
-  lastError: null,
-  reconnectAttempt: 0,
-  currentActivity: null,
-  nextLogId: 1,
-  logs: []
-};
+const discordOnlinerRuntimes = new Map();
+const discordOnlinerLogs = [];
+let discordOnlinerNextLogId = 1;
 const discordOnlinerLogClients = new Set();
 
-function appendDiscordOnlinerLog(level, message) {
+function createDiscordOnlinerRuntime(accountId) {
+  return {
+    accountId,
+    generation: 0,
+    socket: null,
+    heartbeatTimer: null,
+    reconnectTimer: null,
+    activityTimer: null,
+    heartbeatAcknowledged: true,
+    state: "disconnected",
+    bot: null,
+    guildIds: new Set(),
+    connectedAt: null,
+    lastDisconnectedAt: null,
+    lastError: null,
+    reconnectAttempt: 0,
+    currentActivity: null
+  };
+}
+
+function getDiscordOnlinerRuntime(accountId) {
+  let runtime = discordOnlinerRuntimes.get(accountId);
+  if (!runtime) {
+    runtime = createDiscordOnlinerRuntime(accountId);
+    discordOnlinerRuntimes.set(accountId, runtime);
+  }
+  return runtime;
+}
+
+function appendDiscordOnlinerLog(level, message, accountId = null) {
   const safeMessage = String(message ?? "")
     .replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, "$1***@")
     .replace(/[a-z\d_-]{20,}\.[a-z\d_-]{6,}\.[a-z\d_-]{20,}/gi, "[redacted token]")
@@ -274,13 +288,14 @@ function appendDiscordOnlinerLog(level, message) {
     .slice(0, 500);
   if (!safeMessage) return;
   const entry = {
-    id: discordOnlinerRuntime.nextLogId++,
+    id: discordOnlinerNextLogId++,
     timestamp: new Date().toISOString(),
     level: ["info", "success", "warn", "error"].includes(level) ? level : "info",
+    accountId,
     message: safeMessage
   };
-  discordOnlinerRuntime.logs.push(entry);
-  if (discordOnlinerRuntime.logs.length > 150) discordOnlinerRuntime.logs.splice(0, discordOnlinerRuntime.logs.length - 150);
+  discordOnlinerLogs.push(entry);
+  if (discordOnlinerLogs.length > 300) discordOnlinerLogs.splice(0, discordOnlinerLogs.length - 300);
   const event = `data: ${JSON.stringify(entry)}\n\n`;
   for (const client of discordOnlinerLogClients) {
     try {
@@ -292,8 +307,24 @@ function appendDiscordOnlinerLog(level, message) {
 }
 
 function normalizeDiscordOnlinerConfig(value = {}) {
-  const botToken = String(value.botToken ?? "").trim();
-  const proxyUrl = normalizeDiscordOnlinerProxyUrl(value.proxyUrl);
+  const sourceAccounts = Array.isArray(value.accounts)
+    ? value.accounts
+    : String(value.botToken ?? "").trim()
+      ? [{ id: "legacy", botToken: value.botToken, proxyUrl: value.proxyUrl }]
+      : [];
+  const seenAccountIds = new Set();
+  const accounts = sourceAccounts.map((account) => {
+    const requestedId = String(account?.id ?? "").trim();
+    const id = /^[a-z\d_-]{1,80}$/i.test(requestedId) && !seenAccountIds.has(requestedId)
+      ? requestedId
+      : crypto.randomUUID();
+    seenAccountIds.add(id);
+    return {
+      id,
+      botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
+      proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl)
+    };
+  }).filter((account) => account.botToken).slice(0, 100);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
     ? String(value.status).toLowerCase()
     : "online";
@@ -306,8 +337,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "10", 10) || 10, 1), 1440);
   const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "30", 10) || 30, rotationMinMinutes), 1440);
   return {
-    botToken,
-    proxyUrl,
+    accounts,
     enabled: value.enabled !== false,
     status,
     activityType,
@@ -359,10 +389,39 @@ async function getDiscordOnlinerConfig() {
 }
 
 function getDiscordOnlinerSnapshot(config) {
+  const accounts = config.accounts.map((account) => {
+    const runtime = discordOnlinerRuntimes.get(account.id) ?? createDiscordOnlinerRuntime(account.id);
+    return {
+      id: account.id,
+      hasBotToken: Boolean(account.botToken),
+      hasProxy: Boolean(account.proxyUrl),
+      currentActivity: runtime.currentActivity,
+      connectionState: runtime.state,
+      bot: runtime.bot,
+      guildCount: runtime.guildIds.size,
+      connectedAt: runtime.connectedAt,
+      lastDisconnectedAt: runtime.lastDisconnectedAt,
+      lastError: runtime.lastError,
+      reconnectAttempt: runtime.reconnectAttempt
+    };
+  });
+  const connectedAccounts = accounts.filter((account) => account.connectionState === "connected");
+  const firstAccount = accounts[0] ?? null;
+  const aggregateState = !accounts.length
+    ? "disconnected"
+    : connectedAccounts.length === accounts.length
+      ? "connected"
+      : accounts.some((account) => account.connectionState === "connecting")
+        ? "connecting"
+        : accounts.some((account) => account.connectionState === "reconnecting")
+          ? "reconnecting"
+          : accounts.some((account) => account.connectionState === "error") ? "error" : "disconnected";
   return {
-    configured: Boolean(config.botToken),
-    hasBotToken: Boolean(config.botToken),
-    hasProxy: Boolean(config.proxyUrl),
+    configured: accounts.length > 0,
+    hasBotToken: accounts.length > 0,
+    hasProxy: accounts.some((account) => account.hasProxy),
+    accounts,
+    connectedCount: connectedAccounts.length,
     enabled: Boolean(config.enabled),
     status: config.status,
     activityType: config.activityType,
@@ -371,41 +430,41 @@ function getDiscordOnlinerSnapshot(config) {
     rotationItems: config.rotationItems,
     rotationMinMinutes: config.rotationMinMinutes,
     rotationMaxMinutes: config.rotationMaxMinutes,
-    currentActivity: discordOnlinerRuntime.currentActivity,
-    connectionState: discordOnlinerRuntime.state,
-    bot: discordOnlinerRuntime.bot,
-    guildCount: discordOnlinerRuntime.guildIds.size,
-    connectedAt: discordOnlinerRuntime.connectedAt,
-    lastDisconnectedAt: discordOnlinerRuntime.lastDisconnectedAt,
-    lastError: discordOnlinerRuntime.lastError,
-    reconnectAttempt: discordOnlinerRuntime.reconnectAttempt,
-    logs: discordOnlinerRuntime.logs.slice(-100)
+    currentActivity: firstAccount?.currentActivity ?? null,
+    connectionState: aggregateState,
+    bot: firstAccount?.bot ?? null,
+    guildCount: accounts.reduce((total, account) => total + account.guildCount, 0),
+    connectedAt: firstAccount?.connectedAt ?? null,
+    lastDisconnectedAt: firstAccount?.lastDisconnectedAt ?? null,
+    lastError: accounts.find((account) => account.lastError)?.lastError ?? null,
+    reconnectAttempt: accounts.reduce((total, account) => total + account.reconnectAttempt, 0),
+    logs: discordOnlinerLogs.slice(-100)
   };
 }
 
-function clearDiscordOnlinerTimers() {
-  if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
-  if (discordOnlinerRuntime.reconnectTimer) clearTimeout(discordOnlinerRuntime.reconnectTimer);
-  if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
-  discordOnlinerRuntime.heartbeatTimer = null;
-  discordOnlinerRuntime.reconnectTimer = null;
-  discordOnlinerRuntime.activityTimer = null;
+function clearDiscordOnlinerTimers(runtime) {
+  if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
+  if (runtime.reconnectTimer) clearTimeout(runtime.reconnectTimer);
+  if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
+  runtime.heartbeatTimer = null;
+  runtime.reconnectTimer = null;
+  runtime.activityTimer = null;
 }
 
-function stopDiscordOnliner({ resetIdentity = false } = {}) {
-  discordOnlinerRuntime.generation += 1;
-  clearDiscordOnlinerTimers();
-  const socket = discordOnlinerRuntime.socket;
-  discordOnlinerRuntime.socket = null;
-  discordOnlinerRuntime.state = "disconnected";
-  discordOnlinerRuntime.connectedAt = null;
-  discordOnlinerRuntime.reconnectAttempt = 0;
-  discordOnlinerRuntime.guildIds = new Set();
-  discordOnlinerRuntime.currentActivity = null;
-  if (resetIdentity) discordOnlinerRuntime.bot = null;
+function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
+  runtime.generation += 1;
+  clearDiscordOnlinerTimers(runtime);
+  const socket = runtime.socket;
+  runtime.socket = null;
+  runtime.state = "disconnected";
+  runtime.connectedAt = null;
+  runtime.reconnectAttempt = 0;
+  runtime.guildIds = new Set();
+  runtime.currentActivity = null;
+  if (resetIdentity) runtime.bot = null;
   try {
     if (socket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(socket.readyState)) {
-      appendDiscordOnlinerLog("info", "Stopping the active Gateway connection.");
+      appendDiscordOnlinerLog("info", "Stopping the active Gateway connection.", runtime.accountId);
       socket.close(1000, "Onliner stopped");
     }
   } catch {
@@ -413,77 +472,81 @@ function stopDiscordOnliner({ resetIdentity = false } = {}) {
   }
 }
 
-function scheduleDiscordOnlinerReconnect(config, generation) {
-  if (generation !== discordOnlinerRuntime.generation || !config.enabled || !config.botToken) return;
-  discordOnlinerRuntime.reconnectAttempt += 1;
-  discordOnlinerRuntime.state = "reconnecting";
-  const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, discordOnlinerRuntime.reconnectAttempt - 1)));
-  appendDiscordOnlinerLog("warn", `Reconnect attempt ${discordOnlinerRuntime.reconnectAttempt} scheduled in ${Math.round(delay / 1000)}s.`);
-  discordOnlinerRuntime.reconnectTimer = setTimeout(() => {
-    discordOnlinerRuntime.reconnectTimer = null;
-    connectDiscordOnliner(config, generation);
-  }, delay);
-  discordOnlinerRuntime.reconnectTimer.unref?.();
+function stopDiscordOnliner({ resetIdentity = false } = {}) {
+  for (const runtime of discordOnlinerRuntimes.values()) stopDiscordOnlinerRuntime(runtime, { resetIdentity });
 }
 
-function chooseDiscordOnlinerActivity(config) {
+function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
+  if (generation !== runtime.generation || !config.enabled || !account.botToken) return;
+  runtime.reconnectAttempt += 1;
+  runtime.state = "reconnecting";
+  const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, runtime.reconnectAttempt - 1)));
+  appendDiscordOnlinerLog("warn", `Reconnect attempt ${runtime.reconnectAttempt} scheduled in ${Math.round(delay / 1000)}s.`, account.id);
+  runtime.reconnectTimer = setTimeout(() => {
+    runtime.reconnectTimer = null;
+    connectDiscordOnliner(config, account, runtime, generation);
+  }, delay);
+  runtime.reconnectTimer.unref?.();
+}
+
+function chooseDiscordOnlinerActivity(config, runtime) {
   const candidates = config.activityType === "playing" && config.rotationEnabled && config.rotationItems.length
     ? config.rotationItems
     : [config.activityText].filter(Boolean);
   if (!candidates.length) return null;
   const alternatives = candidates.length > 1
-    ? candidates.filter((item) => item !== discordOnlinerRuntime.currentActivity)
+    ? candidates.filter((item) => item !== runtime.currentActivity)
     : candidates;
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? candidates[0];
 }
 
-function buildDiscordOnlinerActivities(config, chooseNext = false) {
+function buildDiscordOnlinerActivities(config, runtime, chooseNext = false) {
   if (config.activityType === "none") {
-    discordOnlinerRuntime.currentActivity = null;
+    runtime.currentActivity = null;
     return [];
   }
-  if (chooseNext || !discordOnlinerRuntime.currentActivity) {
-    discordOnlinerRuntime.currentActivity = chooseDiscordOnlinerActivity(config);
+  if (chooseNext || !runtime.currentActivity) {
+    runtime.currentActivity = chooseDiscordOnlinerActivity(config, runtime);
   }
-  return discordOnlinerRuntime.currentActivity
-    ? [{ name: discordOnlinerRuntime.currentActivity, type: discordOnlinerActivityCodes[config.activityType] }]
+  return runtime.currentActivity
+    ? [{ name: runtime.currentActivity, type: discordOnlinerActivityCodes[config.activityType] }]
     : [];
 }
 
-function scheduleDiscordOnlinerActivityRotation(config, generation) {
-  if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
-  discordOnlinerRuntime.activityTimer = null;
-  if (generation !== discordOnlinerRuntime.generation || config.activityType !== "playing" || !config.rotationEnabled || config.rotationItems.length < 2) return;
+function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
+  if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
+  runtime.activityTimer = null;
+  if (generation !== runtime.generation || config.activityType !== "playing" || !config.rotationEnabled || config.rotationItems.length < 2) return;
   const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
-  discordOnlinerRuntime.activityTimer = setTimeout(() => {
-    if (generation !== discordOnlinerRuntime.generation || discordOnlinerRuntime.socket?.readyState !== WebSocket.OPEN) return;
-    discordOnlinerRuntime.socket.send(JSON.stringify({
+  runtime.activityTimer = setTimeout(() => {
+    if (generation !== runtime.generation || runtime.socket?.readyState !== WebSocket.OPEN) return;
+    runtime.socket.send(JSON.stringify({
       op: 3,
       d: {
         since: null,
-        activities: buildDiscordOnlinerActivities(config, true),
+        activities: buildDiscordOnlinerActivities(config, runtime, true),
         status: config.status,
         afk: false
       }
     }));
-    appendDiscordOnlinerLog("info", `Presence rotated to ${discordOnlinerRuntime.currentActivity ?? "no activity"}.`);
-    scheduleDiscordOnlinerActivityRotation(config, generation);
+    appendDiscordOnlinerLog("info", `Presence rotated to ${runtime.currentActivity ?? "no activity"}.`, runtime.accountId);
+    scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
   }, Math.round(intervalMinutes * 60_000));
-  discordOnlinerRuntime.activityTimer.unref?.();
+  runtime.activityTimer.unref?.();
 }
 
-function connectDiscordOnliner(config, generation) {
-  if (generation !== discordOnlinerRuntime.generation || !config.enabled || !config.botToken) return;
-  discordOnlinerRuntime.state = discordOnlinerRuntime.reconnectAttempt ? "reconnecting" : "connecting";
-  appendDiscordOnlinerLog("info", `Connecting to Discord Gateway${config.proxyUrl ? " through the saved proxy" : " directly"}.`);
+function connectDiscordOnliner(config, account, runtime, generation) {
+  if (generation !== runtime.generation || !config.enabled || !account.botToken) return;
+  runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
+  appendDiscordOnlinerLog("info", `Connecting to Discord Gateway${account.proxyUrl ? " through the saved proxy" : " directly"}.`, account.id);
   const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
-    agent: config.proxyUrl ? createDiscordOnlinerProxyAgent(config.proxyUrl) : undefined
+    agent: account.proxyUrl ? createDiscordOnlinerProxyAgent(account.proxyUrl) : undefined
   });
-  discordOnlinerRuntime.socket = socket;
+  runtime.socket = socket;
   let sequence = null;
 
   socket.on("message", (raw) => {
-    if (generation !== discordOnlinerRuntime.generation) return;
+    if (generation !== runtime.generation) return;
     let payload;
     try {
       payload = JSON.parse(raw.toString());
@@ -493,45 +556,45 @@ function connectDiscordOnliner(config, generation) {
     if (Number.isInteger(payload?.s)) sequence = payload.s;
     if (payload?.op === 10) {
       const interval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
-      appendDiscordOnlinerLog("info", `Gateway HELLO received; heartbeat interval is ${Math.round(interval / 1000)}s.`);
+      appendDiscordOnlinerLog("info", `Gateway HELLO received; heartbeat interval is ${Math.round(interval / 1000)}s.`, account.id);
       const heartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
-        if (!discordOnlinerRuntime.heartbeatAcknowledged) {
-          discordOnlinerRuntime.lastError = "Discord stopped acknowledging heartbeats.";
-          appendDiscordOnlinerLog("error", discordOnlinerRuntime.lastError);
+        if (!runtime.heartbeatAcknowledged) {
+          runtime.lastError = "Discord stopped acknowledging heartbeats.";
+          appendDiscordOnlinerLog("error", runtime.lastError, account.id);
           socket.terminate();
           return;
         }
-        discordOnlinerRuntime.heartbeatAcknowledged = false;
+        runtime.heartbeatAcknowledged = false;
         socket.send(JSON.stringify({ op: 1, d: sequence }));
       };
-      discordOnlinerRuntime.heartbeatAcknowledged = true;
-      discordOnlinerRuntime.heartbeatTimer = setInterval(heartbeat, interval);
-      discordOnlinerRuntime.heartbeatTimer.unref?.();
-      const activities = buildDiscordOnlinerActivities(config, true);
+      runtime.heartbeatAcknowledged = true;
+      runtime.heartbeatTimer = setInterval(heartbeat, interval);
+      runtime.heartbeatTimer.unref?.();
+      const activities = buildDiscordOnlinerActivities(config, runtime, true);
       socket.send(JSON.stringify({
         op: 2,
         d: {
-          token: config.botToken,
+          token: account.botToken,
           intents: 1,
           properties: { os: process.platform, browser: "plcp-onliner", device: "plcp-onliner" },
           presence: { since: null, activities, status: config.status, afk: false }
         }
       }));
-      appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.");
+      appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
       return;
     }
     if (payload?.op === 11) {
-      discordOnlinerRuntime.heartbeatAcknowledged = true;
+      runtime.heartbeatAcknowledged = true;
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
-      discordOnlinerRuntime.heartbeatAcknowledged = false;
+      runtime.heartbeatAcknowledged = false;
       socket.send(JSON.stringify({ op: 1, d: sequence }));
       return;
     }
     if (payload?.op === 7 || payload?.op === 9) {
-      appendDiscordOnlinerLog("warn", `Discord requested a reconnect (opcode ${payload.op}).`);
+      appendDiscordOnlinerLog("warn", `Discord requested a reconnect (opcode ${payload.op}).`, account.id);
       socket.close(4000, "Discord requested reconnect");
       return;
     }
@@ -539,65 +602,67 @@ function connectDiscordOnliner(config, generation) {
     if (payload.t === "READY") {
       const user = payload.d?.user ?? {};
       const userId = String(user.id ?? "");
-      discordOnlinerRuntime.bot = {
+      runtime.bot = {
         id: userId,
         username: String(user.global_name ?? user.username ?? "Discord Bot"),
         tag: String(user.discriminator ?? "0") === "0" ? String(user.username ?? "") : `${user.username}#${user.discriminator}`,
         avatarUrl: user.avatar && userId ? `https://cdn.discordapp.com/avatars/${userId}/${user.avatar}.png?size=128` : null
       };
-      discordOnlinerRuntime.guildIds = new Set((Array.isArray(payload.d?.guilds) ? payload.d.guilds : []).map((guild) => String(guild?.id ?? "")).filter(isDiscordGuildId));
-      discordOnlinerRuntime.state = "connected";
-      discordOnlinerRuntime.connectedAt = new Date().toISOString();
-      discordOnlinerRuntime.lastError = null;
-      discordOnlinerRuntime.reconnectAttempt = 0;
-      appendDiscordOnlinerLog("success", `READY as ${discordOnlinerRuntime.bot.tag || discordOnlinerRuntime.bot.username}; ${discordOnlinerRuntime.guildIds.size} active server(s).`);
-      scheduleDiscordOnlinerActivityRotation(config, generation);
+      runtime.guildIds = new Set((Array.isArray(payload.d?.guilds) ? payload.d.guilds : []).map((guild) => String(guild?.id ?? "")).filter(isDiscordGuildId));
+      runtime.state = "connected";
+      runtime.connectedAt = new Date().toISOString();
+      runtime.lastError = null;
+      runtime.reconnectAttempt = 0;
+      appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}; ${runtime.guildIds.size} active server(s).`, account.id);
+      scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
       return;
     }
     if (payload.t === "GUILD_CREATE") {
       const guildId = String(payload.d?.id ?? "");
-      if (isDiscordGuildId(guildId)) discordOnlinerRuntime.guildIds.add(guildId);
+      if (isDiscordGuildId(guildId)) runtime.guildIds.add(guildId);
     }
     if (payload.t === "GUILD_DELETE" && payload.d?.unavailable !== true) {
-      discordOnlinerRuntime.guildIds.delete(String(payload.d?.id ?? ""));
+      runtime.guildIds.delete(String(payload.d?.id ?? ""));
     }
   });
   socket.on("error", (error) => {
-    if (generation === discordOnlinerRuntime.generation) {
-      discordOnlinerRuntime.lastError = error instanceof Error ? error.message : "Discord Gateway connection failed.";
-      appendDiscordOnlinerLog("error", `Gateway error: ${discordOnlinerRuntime.lastError}`);
+    if (generation === runtime.generation) {
+      runtime.lastError = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+      appendDiscordOnlinerLog("error", `Gateway error: ${runtime.lastError}`, account.id);
     }
   });
   socket.on("close", (code, reason) => {
-    if (generation !== discordOnlinerRuntime.generation) return;
-    if (discordOnlinerRuntime.heartbeatTimer) clearInterval(discordOnlinerRuntime.heartbeatTimer);
-    if (discordOnlinerRuntime.activityTimer) clearTimeout(discordOnlinerRuntime.activityTimer);
-    discordOnlinerRuntime.heartbeatTimer = null;
-    discordOnlinerRuntime.activityTimer = null;
-    discordOnlinerRuntime.socket = null;
-    discordOnlinerRuntime.connectedAt = null;
-    discordOnlinerRuntime.lastDisconnectedAt = new Date().toISOString();
+    if (generation !== runtime.generation) return;
+    if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
+    if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
+    runtime.heartbeatTimer = null;
+    runtime.activityTimer = null;
+    runtime.socket = null;
+    runtime.connectedAt = null;
+    runtime.lastDisconnectedAt = new Date().toISOString();
     const closeReason = reason?.toString().trim();
-    appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", `Gateway closed with code ${code}${closeReason ? ` (${closeReason})` : ""}.`);
+    appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", `Gateway closed with code ${code}${closeReason ? ` (${closeReason})` : ""}.`, account.id);
     if (code === 4004) {
-      discordOnlinerRuntime.state = "error";
-      discordOnlinerRuntime.lastError = "Discord rejected the saved bot token.";
-      appendDiscordOnlinerLog("error", discordOnlinerRuntime.lastError);
+      runtime.state = "error";
+      runtime.lastError = "Discord rejected the saved bot token.";
+      appendDiscordOnlinerLog("error", runtime.lastError, account.id);
       return;
     }
-    scheduleDiscordOnlinerReconnect(config, generation);
+    scheduleDiscordOnlinerReconnect(config, account, runtime, generation);
   });
 }
 
 function startDiscordOnliner(config) {
   stopDiscordOnliner({ resetIdentity: true });
-  if (!config.enabled || !config.botToken) {
-    appendDiscordOnlinerLog("info", config.botToken ? "Onliner is disabled; Gateway connection was not started." : "No bot token is saved; Gateway connection was not started.");
+  discordOnlinerRuntimes.clear();
+  if (!config.enabled || !config.accounts.length) {
+    appendDiscordOnlinerLog("info", config.accounts.length ? "Onliner is disabled; Gateway connections were not started." : "No bot token is saved; Gateway connections were not started.");
     return;
   }
-  const generation = discordOnlinerRuntime.generation;
-  discordOnlinerRuntime.lastError = null;
-  connectDiscordOnliner(config, generation);
+  for (const account of config.accounts) {
+    const runtime = getDiscordOnlinerRuntime(account.id);
+    connectDiscordOnliner(config, account, runtime, runtime.generation);
+  }
 }
 
 let communityGuildCache = null;
@@ -4760,7 +4825,7 @@ app.get("/api/onliner", requireSession, async (_req, res, next) => {
 
 app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
   try {
-    discordOnlinerRuntime.logs = [];
+    discordOnlinerLogs.length = 0;
     res.status(204).end();
   } catch (error) {
     next(error);
@@ -4788,22 +4853,53 @@ app.get("/api/onliner/logs/stream", requireSession, (req, res) => {
 app.put("/api/onliner", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();
-    const suppliedToken = String(req.body?.botToken ?? "").trim();
-    const suppliedProxyUrl = req.body?.proxyUrl;
-    if (suppliedProxyUrl != null && String(suppliedProxyUrl).trim() && !normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl)) {
-      return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
-    }
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       ...req.body,
-      botToken: suppliedToken || current.botToken,
-      proxyUrl: suppliedProxyUrl === undefined ? current.proxyUrl : suppliedProxyUrl
+      accounts: current.accounts
     });
-    if (!candidate.botToken || candidate.botToken.length > 2000) {
-      return res.status(400).json({ message: "A valid Discord bot token is required." });
-    }
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
     startDiscordOnliner(candidate);
+    res.json(getDiscordOnlinerSnapshot(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    if (current.accounts.length >= 100) return res.status(409).json({ message: "The Onliner supports up to 100 bot profiles." });
+    const botToken = String(req.body?.botToken ?? "").trim();
+    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
+    if (current.accounts.some((account) => account.botToken === botToken)) return res.status(409).json({ message: "This bot token is already saved." });
+    const proxyUrl = suppliedProxyUrl ? normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl) : "";
+    if (suppliedProxyUrl && !proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl }]
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    startDiscordOnliner(candidate);
+    res.status(201).json(getDiscordOnlinerSnapshot(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    const accountId = String(req.params.accountId ?? "");
+    if (!current.accounts.some((account) => account.id === accountId)) return res.status(404).json({ message: "Bot profile not found." });
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: current.accounts.filter((account) => account.id !== accountId)
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    startDiscordOnliner(candidate);
+    appendDiscordOnlinerLog("info", "Bot profile removed.", accountId);
     res.json(getDiscordOnlinerSnapshot(candidate));
   } catch (error) {
     next(error);
@@ -4813,7 +4909,7 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
 app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
-    if (!config.botToken) return res.status(409).json({ message: "Save a Discord bot token first." });
+    if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
     if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting." });
     startDiscordOnliner(config);
     res.json(getDiscordOnlinerSnapshot(config));
@@ -4825,7 +4921,7 @@ app.post("/api/onliner/reconnect", requireSession, async (_req, res, next) => {
 app.delete("/api/onliner", requireSession, async (_req, res, next) => {
   try {
     stopDiscordOnliner({ resetIdentity: true });
-    discordOnlinerRuntime.lastError = null;
+    discordOnlinerRuntimes.clear();
     await pool.query("DELETE FROM app_settings WHERE setting_key = $1", [discordOnlinerSettingKey]);
     appendDiscordOnlinerLog("info", "Onliner settings were removed.");
     const config = normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" });
@@ -8579,7 +8675,7 @@ app.use((error, _req, res, _next) => {
 
 await initializeDatabase();
 const initialDiscordOnlinerConfig = await getDiscordOnlinerConfig();
-if (initialDiscordOnlinerConfig.enabled && initialDiscordOnlinerConfig.botToken) {
+if (initialDiscordOnlinerConfig.enabled && initialDiscordOnlinerConfig.accounts.length) {
   startDiscordOnliner(initialDiscordOnlinerConfig);
 }
 app.listen(port, "0.0.0.0", () => {
