@@ -5191,20 +5191,38 @@
 .onliner-account-copy { display: grid; min-width: 0; gap: 3px; }
 .onliner-account-manager-head strong { color: var(--app-text); font-size: 13px; }
 .onliner-account-manager-head small { color: var(--app-muted); font-size: 11px; }
-.onliner-account-list { display: grid; gap: 8px; }
+.onliner-account-list {
+  display: grid;
+  max-height: 274px;
+  min-height: 0;
+  gap: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 5px 2px 0;
+  scrollbar-color: color-mix(in srgb, var(--app-accent-bright) 30%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.onliner-account-list::-webkit-scrollbar { width: 5px; }
+.onliner-account-list::-webkit-scrollbar-track { background: transparent; }
+.onliner-account-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-accent-bright) 30%, transparent);
+}
 
 .onliner-account-row {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
+  min-height: 48px;
+  gap: 9px;
   border: 1px solid var(--app-border);
-  border-radius: 12px;
-  padding: 10px;
+  border-radius: 8px;
+  padding: 7px 9px;
   background: rgba(255,255,255,.018);
 }
 
-.onliner-account-row .onliner-bot-avatar { width: 36px; height: 36px; border-radius: 11px; }
+.onliner-account-row .onliner-bot-avatar { width: 32px; height: 32px; border-radius: 8px; }
 .onliner-account-copy strong { overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .onliner-account-copy small { color: var(--app-muted); font-size: 10px; text-transform: capitalize; }
 .onliner-account-copy em { overflow: hidden; color: var(--app-danger); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
