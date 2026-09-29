@@ -4,7 +4,9 @@ import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import { HttpsProxyAgent } from "https-proxy-agent";
 import pg from "pg";
+import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "ws";
 
 const { Pool } = pg;
@@ -230,6 +232,7 @@ const discordOnlinerSettingKey = "discord_onliner_config";
 const discordOnlinerStatuses = new Set(["online", "idle", "dnd"]);
 const discordOnlinerActivityTypes = new Set(["playing", "listening", "watching", "none"]);
 const discordOnlinerActivityCodes = { playing: 0, listening: 2, watching: 3 };
+const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
 const defaultDiscordOnlinerGames = [
   "Minecraft",
   "VALORANT",
@@ -261,6 +264,7 @@ const discordOnlinerRuntime = {
 
 function normalizeDiscordOnlinerConfig(value = {}) {
   const botToken = String(value.botToken ?? "").trim();
+  const proxyUrl = normalizeDiscordOnlinerProxyUrl(value.proxyUrl);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
     ? String(value.status).toLowerCase()
     : "online";
@@ -274,6 +278,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "30", 10) || 30, rotationMinMinutes), 1440);
   return {
     botToken,
+    proxyUrl,
     enabled: value.enabled !== false,
     status,
     activityType,
@@ -283,6 +288,35 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     rotationMinMinutes,
     rotationMaxMinutes
   };
+}
+
+function normalizeDiscordOnlinerProxyUrl(value) {
+  let proxyUrl = String(value ?? "").trim();
+  if (!proxyUrl || proxyUrl.length > 2000) return "";
+
+  if (!/^[a-z][a-z\d+.-]*:\/\//i.test(proxyUrl)) {
+    const parts = proxyUrl.split(":");
+    if (parts.length === 4 && parts.every(Boolean)) {
+      const [host, port, username, password] = parts;
+      proxyUrl = `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+    } else {
+      proxyUrl = `http://${proxyUrl}`;
+    }
+  }
+
+  try {
+    const parsed = new URL(proxyUrl);
+    if (!discordOnlinerProxyProtocols.has(parsed.protocol) || !parsed.hostname) return "";
+    return parsed.toString();
+  } catch {
+    return "";
+  }
+}
+
+function createDiscordOnlinerProxyAgent(proxyUrl) {
+  return proxyUrl.startsWith("socks")
+    ? new SocksProxyAgent(proxyUrl)
+    : new HttpsProxyAgent(proxyUrl);
 }
 
 async function getDiscordOnlinerConfig() {
@@ -299,6 +333,7 @@ function getDiscordOnlinerSnapshot(config) {
   return {
     configured: Boolean(config.botToken),
     hasBotToken: Boolean(config.botToken),
+    hasProxy: Boolean(config.proxyUrl),
     enabled: Boolean(config.enabled),
     status: config.status,
     activityType: config.activityType,
@@ -405,7 +440,9 @@ function scheduleDiscordOnlinerActivityRotation(config, generation) {
 function connectDiscordOnliner(config, generation) {
   if (generation !== discordOnlinerRuntime.generation || !config.enabled || !config.botToken) return;
   discordOnlinerRuntime.state = discordOnlinerRuntime.reconnectAttempt ? "reconnecting" : "connecting";
-  const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json");
+  const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
+    agent: config.proxyUrl ? createDiscordOnlinerProxyAgent(config.proxyUrl) : undefined
+  });
   discordOnlinerRuntime.socket = socket;
   let sequence = null;
 
@@ -4675,10 +4712,15 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
   try {
     const current = await getDiscordOnlinerConfig();
     const suppliedToken = String(req.body?.botToken ?? "").trim();
+    const suppliedProxyUrl = req.body?.proxyUrl;
+    if (suppliedProxyUrl != null && String(suppliedProxyUrl).trim() && !normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl)) {
+      return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+    }
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       ...req.body,
-      botToken: suppliedToken || current.botToken
+      botToken: suppliedToken || current.botToken,
+      proxyUrl: suppliedProxyUrl === undefined ? current.proxyUrl : suppliedProxyUrl
     });
     if (!candidate.botToken || candidate.botToken.length > 2000) {
       return res.status(400).json({ message: "A valid Discord bot token is required." });

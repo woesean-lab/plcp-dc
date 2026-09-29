@@ -5,6 +5,7 @@ export type DiscordOnlinerConnectionState = "disconnected" | "connecting" | "con
 export type DiscordOnlinerSnapshot = {
   configured: boolean;
   hasBotToken: boolean;
+  hasProxy: boolean;
   enabled: boolean;
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;
@@ -25,6 +26,7 @@ export type DiscordOnlinerSnapshot = {
 
 export type DiscordOnlinerInput = {
   botToken?: string;
+  proxyUrl?: string | null;
   enabled: boolean;
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;

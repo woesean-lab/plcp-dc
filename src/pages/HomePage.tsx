@@ -138,6 +138,8 @@ const EMPTY_FORM = {
 
 const EMPTY_ONLINER_DRAFT = {
   botToken: "",
+  useProxy: false,
+  proxyUrl: "",
   enabled: true,
   status: "online" as DiscordOnlinerStatus,
   activityType: "playing" as DiscordOnlinerActivityType,
@@ -948,6 +950,8 @@ export default function HomePage() {
       setOnlinerSnapshot(snapshot);
       setOnlinerDraft({
         botToken: "",
+        useProxy: snapshot.hasProxy,
+        proxyUrl: "",
         enabled: snapshot.enabled,
         status: snapshot.status,
         activityType: snapshot.activityType,
@@ -1293,17 +1297,22 @@ export default function HomePage() {
       notifyError("Enter the Discord bot token.");
       return;
     }
+    if (onlinerDraft.useProxy && !onlinerDraft.proxyUrl.trim() && !onlinerSnapshot?.hasProxy) {
+      notifyError("Enter the Gateway proxy address.");
+      return;
+    }
     try {
       setSavingOnliner(true);
       const snapshot = await saveDiscordOnliner({
         ...onlinerDraft,
         botToken: onlinerDraft.botToken.trim() || undefined,
+        proxyUrl: onlinerDraft.useProxy ? (onlinerDraft.proxyUrl.trim() || undefined) : null,
         rotationItems: onlinerDraft.rotationItems.split(/\r?\n/).map((item) => item.trim()).filter(Boolean),
         rotationMinMinutes: Math.max(1, Number(onlinerDraft.rotationMinMinutes) || 10),
         rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
       });
       setOnlinerSnapshot(snapshot);
-      setOnlinerDraft((current) => ({ ...current, botToken: "" }));
+      setOnlinerDraft((current) => ({ ...current, botToken: "", proxyUrl: "", useProxy: snapshot.hasProxy }));
       notifySuccess(snapshot.enabled ? "Onliner saved and bot connection started." : "Onliner saved in disabled state.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner settings could not be saved.");
@@ -3605,6 +3614,30 @@ export default function HomePage() {
                     <span><strong>Keep bot online</strong><small>Connect automatically when the backend starts and reconnect after interruptions.</small></span>
                   </label>
 
+                  <label className="onliner-enabled-card">
+                    <input
+                      type="checkbox"
+                      checked={onlinerDraft.useProxy}
+                      onChange={(event) => setOnlinerDraft((current) => ({ ...current, useProxy: event.target.checked }))}
+                    />
+                    <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
+                    <span><strong>Connect through proxy</strong><small>Route the Discord Gateway WebSocket and reconnects through this proxy.</small></span>
+                  </label>
+
+                  {onlinerDraft.useProxy ? (
+                    <label className="grid gap-2">
+                      <span className={fieldLabelClass}>{onlinerSnapshot?.hasProxy ? "Replace Gateway proxy" : "Gateway proxy"}</span>
+                      <Input
+                        type="password"
+                        value={onlinerDraft.proxyUrl}
+                        onChange={(event) => setOnlinerDraft((current) => ({ ...current, proxyUrl: event.target.value }))}
+                        placeholder={onlinerSnapshot?.hasProxy ? "Saved — leave blank to keep" : "http://user:pass@host:port"}
+                        autoComplete="new-password"
+                      />
+                      <span className="app-copy text-xs">HTTP(S), SOCKS4 and SOCKS5 are supported. You can also use host:port:user:pass.</span>
+                    </label>
+                  ) : null}
+
                   <div className="grid gap-4 sm:grid-cols-2">
                     <FilterDropdown
                       label="Bot status"
@@ -3677,7 +3710,7 @@ export default function HomePage() {
                   ) : null}
 
                   <div className="flex flex-wrap gap-3">
-                    <Button type="submit" disabled={savingOnliner || loadingOnliner || (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken)}>
+                    <Button type="submit" disabled={savingOnliner || loadingOnliner || (!onlinerDraft.botToken.trim() && !onlinerSnapshot?.hasBotToken) || (onlinerDraft.useProxy && !onlinerDraft.proxyUrl.trim() && !onlinerSnapshot?.hasProxy)}>
                       {savingOnliner ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                       {savingOnliner ? "Saving..." : "Save & apply"}
                     </Button>
