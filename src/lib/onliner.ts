@@ -87,7 +87,7 @@ export function saveDiscordOnliner(input: DiscordOnlinerInput) {
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl?: string }) {
+export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: string }) {
   return fetch("/api/onliner/accounts", {
     method: "POST",
     credentials: "same-origin",
@@ -96,7 +96,7 @@ export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl?: s
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl?: string; lineNumber: number }>) {
+export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl: string; lineNumber: number }>) {
   return fetch("/api/onliner/accounts/bulk", {
     method: "POST",
     credentials: "same-origin",

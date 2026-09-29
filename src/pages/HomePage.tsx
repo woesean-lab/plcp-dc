@@ -154,7 +154,11 @@ const EMPTY_ONLINER_DRAFT = {
   rotationMaxMinutes: 30
 };
 
-const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", useProxy: false, proxyUrl: "" };
+const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "" };
+
+function parseOnlinerBulkLines(value: string) {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+}
 
 const COMMUNITY_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -661,7 +665,8 @@ export default function HomePage() {
   const onlinerLogCursorRef = useRef(0);
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
   const [showOnlinerBulkModal, setShowOnlinerBulkModal] = useState(false);
-  const [onlinerBulkDraft, setOnlinerBulkDraft] = useState("");
+  const [onlinerBulkTokenDraft, setOnlinerBulkTokenDraft] = useState("");
+  const [onlinerBulkProxyDraft, setOnlinerBulkProxyDraft] = useState("");
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnliner, setReconnectingOnliner] = useState(false);
@@ -1375,13 +1380,13 @@ export default function HomePage() {
       notifyError("Enter the Discord bot token.");
       return;
     }
-    if (onlinerAccountDraft.useProxy && !proxyUrl) {
+    if (!proxyUrl) {
       notifyError("Enter the Gateway proxy address.");
       return;
     }
     try {
       setAddingOnlinerAccount(true);
-      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl: onlinerAccountDraft.useProxy ? proxyUrl : undefined });
+      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl });
       setOnlinerSnapshot(snapshot);
       setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       notifySuccess("Bot profile added and Gateway connections restarted.");
@@ -1394,25 +1399,23 @@ export default function HomePage() {
 
   async function handleAddOnlinerAccountsBulk(event: FormEvent) {
     event.preventDefault();
-    const accounts = onlinerBulkDraft.split(/\r?\n/).map((rawLine, index) => ({ rawLine: rawLine.trim(), lineNumber: index + 1 }))
-      .filter(({ rawLine }) => rawLine && !rawLine.startsWith("#"))
-      .map(({ rawLine, lineNumber }) => {
-        const separatorIndex = rawLine.indexOf("|");
-        return {
-          botToken: (separatorIndex >= 0 ? rawLine.slice(0, separatorIndex) : rawLine).trim(),
-          proxyUrl: separatorIndex >= 0 ? rawLine.slice(separatorIndex + 1).trim() : undefined,
-          lineNumber
-        };
-      });
-    if (!accounts.length) {
-      notifyError("Paste at least one bot token.");
+    const botTokens = parseOnlinerBulkLines(onlinerBulkTokenDraft);
+    const proxyUrls = parseOnlinerBulkLines(onlinerBulkProxyDraft);
+    if (!botTokens.length || !proxyUrls.length) {
+      notifyError("Paste at least one bot token and one proxy.");
       return;
     }
+    if (botTokens.length !== proxyUrls.length) {
+      notifyError(`Token and proxy counts must match (${botTokens.length} tokens, ${proxyUrls.length} proxies).`);
+      return;
+    }
+    const accounts = botTokens.map((botToken, index) => ({ botToken, proxyUrl: proxyUrls[index], lineNumber: index + 1 }));
     try {
       setAddingOnlinerBulk(true);
       const snapshot = await addDiscordOnlinerAccountsBulk(accounts);
       setOnlinerSnapshot(snapshot);
-      setOnlinerBulkDraft("");
+      setOnlinerBulkTokenDraft("");
+      setOnlinerBulkProxyDraft("");
       setShowOnlinerBulkModal(false);
       notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added and Gateway connections restarted.`);
     } catch (error) {
@@ -3730,7 +3733,7 @@ export default function HomePage() {
                             </span>
                             <span className="onliner-account-copy">
                               <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
-                              <small>{account.hasProxy ? "Dedicated proxy" : "Direct connection"} · {account.connectionState}</small>
+                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"} · {account.connectionState}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </span>
                             <Button type="button" size="xs" variant="dangerGhost" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
@@ -3746,8 +3749,8 @@ export default function HomePage() {
                         <Input type="password" value={onlinerAccountDraft.botToken} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder="Discord bot token" autoComplete="new-password" />
                       </label>
                       <label className="grid gap-2">
-                        <span className={fieldLabelClass}>Dedicated proxy · optional</span>
-                        <Input type="password" value={onlinerAccountDraft.proxyUrl} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, proxyUrl: event.target.value, useProxy: Boolean(event.target.value) }))} placeholder="http://user:pass@host:port" autoComplete="new-password" />
+                        <span className={fieldLabelClass}>Dedicated proxy</span>
+                        <Input type="password" value={onlinerAccountDraft.proxyUrl} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, proxyUrl: event.target.value }))} placeholder="http://user:pass@host:port" autoComplete="new-password" />
                       </label>
                     </div>
                     <div className="flex flex-wrap items-center justify-between gap-3">
@@ -3756,7 +3759,7 @@ export default function HomePage() {
                         <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(true)}>
                           <ListChecks className="h-4 w-4" /> Bulk add
                         </Button>
-                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk || !onlinerAccountDraft.botToken.trim()} onClick={() => void handleAddOnlinerAccount()}>
+                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk || !onlinerAccountDraft.botToken.trim() || !onlinerAccountDraft.proxyUrl.trim()} onClick={() => void handleAddOnlinerAccount()}>
                           {addingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add bot
                         </Button>
                       </span>
@@ -4491,28 +4494,41 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Bot className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Onliner</p>
             <h2 id="onliner-bulk-title">Bulk add bot profiles</h2>
-            <p>Paste one bot per line. Add an optional dedicated proxy after a <code>|</code> separator. The batch is validated and saved atomically.</p>
+            <p>Paste tokens on the left and proxies on the right. Lines are paired by position, so both columns must contain the same number of entries.</p>
 
             <form onSubmit={handleAddOnlinerAccountsBulk} className="mt-5 grid gap-4">
-              <label className="grid gap-2">
-                <span className={fieldLabelClass}>Bot token and proxy pairs</span>
-                <textarea
-                  className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
-                  value={onlinerBulkDraft}
-                  onChange={(event) => setOnlinerBulkDraft(event.target.value)}
-                  placeholder={"BOT_TOKEN_1 | http://user:pass@host:port\nBOT_TOKEN_2 | socks5://user:pass@host:port\nBOT_TOKEN_3"}
-                  autoFocus
-                />
-              </label>
+              <div className="grid gap-4 md:grid-cols-2">
+                <label className="grid gap-2">
+                  <span className={fieldLabelClass}>Bot tokens · one per line</span>
+                  <textarea
+                    className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
+                    value={onlinerBulkTokenDraft}
+                    onChange={(event) => setOnlinerBulkTokenDraft(event.target.value)}
+                    placeholder={"BOT_TOKEN_1\nBOT_TOKEN_2\nBOT_TOKEN_3"}
+                    autoFocus
+                  />
+                  <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkLines(onlinerBulkTokenDraft).length} token(s)</span>
+                </label>
+                <label className="grid gap-2">
+                  <span className={fieldLabelClass}>Proxies · one per line</span>
+                  <textarea
+                    className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
+                    value={onlinerBulkProxyDraft}
+                    onChange={(event) => setOnlinerBulkProxyDraft(event.target.value)}
+                    placeholder={"http://user:pass@host:port\nsocks5://user:pass@host:port\nhost:port:user:pass"}
+                  />
+                  <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkLines(onlinerBulkProxyDraft).length} proxy/proxies</span>
+                </label>
+              </div>
               <div className="onliner-bulk-help">
-                <span><strong>Format</strong><code>TOKEN | PROXY</code></span>
-                <span><strong>Proxy optional</strong><code>TOKEN</code></span>
+                <span><strong>Pairing</strong><code>Token 1 ↔ Proxy 1</code></span>
+                <span><strong>Requirement</strong><code>Counts must match</code></span>
                 <span><strong>Remaining capacity</strong><code>{Math.max(0, 100 - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
               </div>
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
-                <Button type="button" variant="secondary" disabled={addingOnlinerBulk || !onlinerBulkDraft} onClick={() => setOnlinerBulkDraft("")}>Clear input</Button>
-                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkDraft.trim() || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
+                <Button type="button" variant="secondary" disabled={addingOnlinerBulk || (!onlinerBulkTokenDraft && !onlinerBulkProxyDraft)} onClick={() => { setOnlinerBulkTokenDraft(""); setOnlinerBulkProxyDraft(""); }}>Clear input</Button>
+                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
                   {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {addingOnlinerBulk ? "Adding..." : "Add profiles"}
                 </Button>

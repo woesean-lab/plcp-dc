@@ -555,7 +555,7 @@ function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
 }
 
 function connectDiscordOnliner(config, account, runtime, generation) {
-  if (generation !== runtime.generation || !config.enabled || !account.botToken) return;
+  if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   const gatewayEndpoint = "wss://gateway.discord.gg:443";
   const proxyEndpoint = account.proxyUrl ? getDiscordOnlinerProxyEndpoint(account.proxyUrl) : null;
@@ -719,6 +719,12 @@ function startDiscordOnliner(config) {
   }
   for (const account of config.accounts) {
     const runtime = getDiscordOnlinerRuntime(account.id);
+    if (!account.proxyUrl) {
+      runtime.state = "error";
+      runtime.lastError = "A dedicated proxy is required before this bot can connect.";
+      appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+      continue;
+    }
     connectDiscordOnliner(config, account, runtime, runtime.generation);
   }
 }
@@ -4949,9 +4955,10 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
     const botToken = String(req.body?.botToken ?? "").trim();
     const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
+    if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
     if (current.accounts.some((account) => account.botToken === botToken)) return res.status(409).json({ message: "This bot token is already saved." });
-    const proxyUrl = suppliedProxyUrl ? normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl) : "";
-    if (suppliedProxyUrl && !proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
+    if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl }]
@@ -4981,9 +4988,10 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
       const botToken = String(input?.botToken ?? "").trim();
       const suppliedProxyUrl = String(input?.proxyUrl ?? "").trim();
       if (!botToken || botToken.length > 2000) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid Discord bot token.` });
+      if (!suppliedProxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: a dedicated proxy is required.` });
       if (knownTokens.has(botToken)) return res.status(409).json({ message: `Line ${lineNumber}: this bot token is duplicated or already saved.` });
-      const proxyUrl = suppliedProxyUrl ? normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl) : "";
-      if (suppliedProxyUrl && !proxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid HTTP, HTTPS, or SOCKS proxy.` });
+      const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
+      if (!proxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid HTTP, HTTPS, or SOCKS proxy.` });
       knownTokens.add(botToken);
       additions.push({ id: crypto.randomUUID(), botToken, proxyUrl });
     }
