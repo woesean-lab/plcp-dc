@@ -5269,9 +5269,9 @@
 
 .onliner-account-edit:not(:disabled):hover,
 .onliner-account-edit:not(:disabled):focus-visible {
-  border-color: var(--app-accent-border);
-  color: var(--app-accent-bright);
-  background: var(--app-accent-soft);
+  border-color: transparent;
+  color: #69b7ff;
+  background: rgba(74, 158, 255, .13);
   box-shadow: none;
   transform: none;
 }
