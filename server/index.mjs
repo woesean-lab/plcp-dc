@@ -633,7 +633,6 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         }
         runtime.heartbeatAcknowledged = false;
         socket.send(JSON.stringify({ op: 1, d: sequence }));
-        appendDiscordOnlinerLog("info", `HEARTBEAT sent${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
       };
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
@@ -653,7 +652,6 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 11) {
       runtime.heartbeatAcknowledged = true;
-      appendDiscordOnlinerLog("success", `HEARTBEAT ACK received${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
