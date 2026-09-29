@@ -171,6 +171,13 @@ function parseOnlinerBulkLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
+function parseOnlinerBulkTokenLines(value: string) {
+  return parseOnlinerBulkLines(value).map((line) => {
+    const parts = line.split(":");
+    return parts.length >= 3 ? parts.slice(2).join(":").trim() : line;
+  }).filter(Boolean);
+}
+
 const COMMUNITY_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
   { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
@@ -1454,7 +1461,7 @@ export default function HomePage() {
 
   async function handleAddOnlinerAccountsBulk(event: FormEvent) {
     event.preventDefault();
-    const botTokens = parseOnlinerBulkLines(onlinerBulkTokenDraft);
+    const botTokens = parseOnlinerBulkTokenLines(onlinerBulkTokenDraft);
     const proxyUrls = parseOnlinerBulkLines(onlinerBulkProxyDraft);
     if (!botTokens.length || !proxyUrls.length) {
       notifyError("Paste at least one bot token and one proxy.");
@@ -4670,10 +4677,10 @@ export default function HomePage() {
                     className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
                     value={onlinerBulkTokenDraft}
                     onChange={(event) => setOnlinerBulkTokenDraft(event.target.value)}
-                    placeholder={"BOT_TOKEN_1\nBOT_TOKEN_2\nBOT_TOKEN_3"}
+                    placeholder={"BOT_TOKEN_1\na:s:BOT_TOKEN_2\nBOT_TOKEN_3"}
                     autoFocus
                   />
-                  <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkLines(onlinerBulkTokenDraft).length} token(s)</span>
+                  <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length} token(s) · a:s:token supported</span>
                 </label>
                 <label className="grid gap-2">
                   <span className={fieldLabelClass}>Proxies · one per line</span>
@@ -4694,7 +4701,7 @@ export default function HomePage() {
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk || (!onlinerBulkTokenDraft && !onlinerBulkProxyDraft)} onClick={() => { setOnlinerBulkTokenDraft(""); setOnlinerBulkProxyDraft(""); }}>Clear input</Button>
-                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
+                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= 100}>
                   {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {addingOnlinerBulk ? "Adding..." : "Add profiles"}
                 </Button>

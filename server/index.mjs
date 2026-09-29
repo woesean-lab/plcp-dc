@@ -678,6 +678,12 @@ function normalizeDiscordOnlinerProxyUrl(value) {
   }
 }
 
+function normalizeDiscordOnlinerBulkBotToken(value) {
+  const input = String(value ?? "").trim();
+  const parts = input.split(":");
+  return (parts.length >= 3 ? parts.slice(2).join(":") : input).trim();
+}
+
 function createDiscordOnlinerProxyAgent(proxyUrl) {
   return proxyUrl.startsWith("socks")
     ? new SocksProxyAgent(proxyUrl)
@@ -5468,7 +5474,7 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
     for (let index = 0; index < requestedAccounts.length; index += 1) {
       const input = requestedAccounts[index];
       const lineNumber = Number.parseInt(input?.lineNumber, 10) || index + 1;
-      const botToken = String(input?.botToken ?? "").trim();
+      const botToken = normalizeDiscordOnlinerBulkBotToken(input?.botToken);
       const suppliedProxyUrl = String(input?.proxyUrl ?? "").trim();
       if (!botToken || botToken.length > 2000) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid Discord bot token.` });
       if (!suppliedProxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: a dedicated proxy is required.` });
