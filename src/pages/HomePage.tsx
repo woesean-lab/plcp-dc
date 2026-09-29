@@ -3722,7 +3722,9 @@ export default function HomePage() {
                   <div className="onliner-account-manager">
                     <div className="onliner-account-manager-head">
                       <span><strong>Bot profiles</strong><small>Each bot can use a different proxy.</small></span>
-                      <Badge variant="secondary">{onlinerSnapshot?.connectedCount ?? 0}/{onlinerSnapshot?.accounts.length ?? 0} connected</Badge>
+                      <Badge variant={onlinerSnapshot?.accounts.length && onlinerSnapshot.connectedCount === onlinerSnapshot.accounts.length ? "success" : "secondary"}>
+                        {onlinerSnapshot?.connectedCount ?? 0}/{onlinerSnapshot?.accounts.length ?? 0} connected
+                      </Badge>
                     </div>
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
@@ -3731,11 +3733,16 @@ export default function HomePage() {
                             <span className="onliner-bot-avatar" aria-hidden="true">
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
                             </span>
-                            <span className="onliner-account-copy">
+                            <div className="onliner-account-copy">
                               <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
-                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"} · {account.connectionState}</small>
+                              <div className="onliner-account-meta">
+                                <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"}</small>
+                                <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
+                                  {account.connectionState}
+                                </Badge>
+                              </div>
                               {account.lastError ? <em>{account.lastError}</em> : null}
-                            </span>
+                            </div>
                             <Button type="button" size="xs" variant="dangerGhost" disabled={removingOnlinerAccountId !== null} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
                               {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                             </Button>

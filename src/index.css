@@ -5216,16 +5216,31 @@
   align-items: center;
   min-height: 48px;
   gap: 9px;
-  border: 1px solid var(--app-border);
+  border: 1px solid color-mix(in srgb, var(--app-border-strong) 76%, transparent);
   border-radius: 8px;
   padding: 7px 9px;
-  background: rgba(255,255,255,.018);
+  background: rgba(7, 8, 15, .46);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
 }
 
 .onliner-account-row .onliner-bot-avatar { width: 32px; height: 32px; border-radius: 8px; }
 .onliner-account-copy strong { overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .onliner-account-copy small { color: var(--app-muted); font-size: 10px; text-transform: capitalize; }
 .onliner-account-copy em { overflow: hidden; color: var(--app-danger); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+
+.onliner-account-meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.onliner-account-status {
+  min-height: 16px;
+  padding: 1px 6px;
+  font-size: 8px;
+  line-height: 1;
+}
 
 .onliner-rotation-panel {
   display: grid;
