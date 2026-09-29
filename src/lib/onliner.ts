@@ -60,6 +60,11 @@ export type DiscordOnlinerSnapshot = {
   lastError: string | null;
   reconnectAttempt: number;
   logs: DiscordOnlinerLogEntry[];
+  applyResult?: {
+    changed: boolean;
+    presenceUpdated: boolean;
+    connectionsRestarted: boolean;
+  };
 };
 
 export type DiscordOnlinerInput = {

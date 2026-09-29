@@ -1427,7 +1427,15 @@ export default function HomePage() {
         rotationMaxMinutes: Math.max(Number(onlinerDraft.rotationMinMinutes) || 10, Number(onlinerDraft.rotationMaxMinutes) || 30)
       });
       setOnlinerSnapshot(snapshot);
-      notifySuccess(snapshot.enabled ? "Onliner settings saved and bot connections restarted." : "Onliner saved in disabled state.");
+      notifySuccess(!snapshot.enabled
+        ? "Onliner saved in disabled state."
+        : snapshot.applyResult?.connectionsRestarted
+          ? "Onliner enabled and bot connections started."
+          : snapshot.applyResult?.changed === false
+            ? "No settings changed; existing Gateway connections were kept."
+            : snapshot.applyResult?.presenceUpdated
+              ? "Settings saved and presence updated without reconnecting bots."
+              : "Settings saved; existing Gateway connections were kept.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner settings could not be saved.");
     } finally {

@@ -356,6 +356,7 @@ const discordOnlinerLogClients = new Set();
 function createDiscordOnlinerRuntime(accountId) {
   return {
     accountId,
+    config: null,
     generation: 0,
     socket: null,
     startupTimer: null,
@@ -841,14 +842,18 @@ function stopDiscordOnliner({ resetIdentity = false } = {}) {
 }
 
 function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
-  if (generation !== runtime.generation || !config.enabled || !account.botToken) return;
+  const activeConfig = runtime.config ?? config;
+  const activeAccount = activeConfig.accounts.find((item) => item.id === account.id) ?? account;
+  if (generation !== runtime.generation || !activeConfig.enabled || !activeAccount.botToken) return;
   runtime.reconnectAttempt += 1;
   runtime.state = "reconnecting";
   const delay = Math.min(60_000, 1_000 * (2 ** Math.min(6, runtime.reconnectAttempt - 1)));
   appendDiscordOnlinerLog("warn", `Reconnect attempt ${runtime.reconnectAttempt} scheduled in ${Math.round(delay / 1000)}s.`, account.id);
   runtime.reconnectTimer = setTimeout(() => {
     runtime.reconnectTimer = null;
-    connectDiscordOnliner(config, account, runtime, generation);
+    const latestConfig = runtime.config ?? activeConfig;
+    const latestAccount = latestConfig.accounts.find((item) => item.id === activeAccount.id) ?? activeAccount;
+    connectDiscordOnliner(latestConfig, latestAccount, runtime, generation);
   }, delay);
   runtime.reconnectTimer.unref?.();
 }
@@ -1084,7 +1089,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
       runtime.heartbeatTimer.unref?.();
-      const presence = buildDiscordOnlinerPresence(config, runtime, true);
+      const presence = buildDiscordOnlinerPresence(runtime.config ?? config, runtime, true);
       socket.send(JSON.stringify({
         op: 2,
         d: {
@@ -1137,7 +1142,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.lastError = null;
       runtime.reconnectAttempt = 0;
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
-      scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
+      scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, runtime, generation);
       return;
     }
     if (payload.t === "GUILD_CREATE") {
@@ -1172,12 +1177,15 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("error", runtime.lastError, account.id);
       return;
     }
-    scheduleDiscordOnlinerReconnect(config, account, runtime, generation);
+    const latestConfig = runtime.config ?? config;
+    const latestAccount = latestConfig.accounts.find((item) => item.id === account.id) ?? account;
+    scheduleDiscordOnlinerReconnect(latestConfig, latestAccount, runtime, generation);
   });
 }
 
 function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
   const runtime = getDiscordOnlinerRuntime(account.id);
+  runtime.config = config;
   if (!account.proxyUrl) {
     runtime.state = "error";
     runtime.lastError = "A dedicated proxy is required before this bot can connect.";
@@ -1215,6 +1223,55 @@ function startDiscordOnliner(config) {
     return;
   }
   startDiscordOnlinerAccounts(config, config.accounts, { stagger: true });
+}
+
+function getDiscordOnlinerPresenceConfigFingerprint(config) {
+  return JSON.stringify({
+    statuses: config.statuses,
+    activityChances: config.activityChances,
+    spotifyPlaylistId: config.spotifyPlaylistId,
+    youtubePlaylistId: config.youtubePlaylistId,
+    games: config.games,
+    music: config.music,
+    streamingUsers: config.streamingUsers,
+    streamingCategories: config.streamingCategories,
+    streamingTitles: config.streamingTitles,
+    watch: config.watch
+  });
+}
+
+function getDiscordOnlinerRotationConfigFingerprint(config) {
+  return JSON.stringify({
+    randomizeEnabled: config.randomizeEnabled,
+    rotationMinMinutes: config.rotationMinMinutes,
+    rotationMaxMinutes: config.rotationMaxMinutes
+  });
+}
+
+function applyDiscordOnlinerSettings(current, candidate) {
+  if (current.enabled !== candidate.enabled) {
+    if (candidate.enabled) startDiscordOnliner(candidate);
+    else stopDiscordOnliner();
+    return { changed: true, presenceUpdated: false, connectionsRestarted: candidate.enabled };
+  }
+
+  const presenceChanged = getDiscordOnlinerPresenceConfigFingerprint(current) !== getDiscordOnlinerPresenceConfigFingerprint(candidate);
+  const rotationChanged = getDiscordOnlinerRotationConfigFingerprint(current) !== getDiscordOnlinerRotationConfigFingerprint(candidate);
+  if (!presenceChanged && !rotationChanged) return { changed: false, presenceUpdated: false, connectionsRestarted: false };
+
+  let presenceUpdated = false;
+  for (const account of candidate.accounts) {
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    if (!runtime) continue;
+    runtime.config = candidate;
+    if (presenceChanged && runtime.state === "connected" && runtime.socket?.readyState === WebSocket.OPEN) {
+      runtime.socket.send(JSON.stringify({ op: 3, d: buildDiscordOnlinerPresence(candidate, runtime, true) }));
+      appendDiscordOnlinerLog("info", `Presence updated without reconnecting: ${runtime.currentStatus}, ${runtime.currentActivityType}${runtime.currentActivity ? ` · ${runtime.currentActivity}` : ""}.`, account.id);
+      presenceUpdated = true;
+    }
+    scheduleDiscordOnlinerActivityRotation(candidate, runtime, runtime.generation);
+  }
+  return { changed: true, presenceUpdated, connectionsRestarted: false };
 }
 
 let communityGuildCache = null;
@@ -5429,8 +5486,8 @@ app.put("/api/onliner", requireSession, async (req, res, next) => {
       accounts: current.accounts
     }));
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
-    startDiscordOnliner(candidate);
-    res.json(getDiscordOnlinerSnapshot(candidate));
+    const applyResult = applyDiscordOnlinerSettings(current, candidate);
+    res.json({ ...getDiscordOnlinerSnapshot(candidate), applyResult });
   } catch (error) {
     next(error);
   }
