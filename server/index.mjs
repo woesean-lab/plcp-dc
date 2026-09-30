@@ -6188,7 +6188,8 @@ app.get("/api/onliner/accounts/:accountId/credentials", requireSession, async (r
     res.set("Cache-Control", "no-store").json({
       accountId: account.id,
       botToken: account.botToken,
-      proxyUrl: account.proxyUrl
+      proxyUrl: account.proxyUrl,
+      richPresenceEnabled: account.richPresenceEnabled !== false
     });
   } catch (error) {
     next(error);
@@ -6204,6 +6205,7 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
 
     const botToken = String(req.body?.botToken ?? "").trim();
     const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    const richPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
     if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
     if (current.accounts.some((account) => account.id !== accountId && account.botToken === botToken)) {
@@ -6212,20 +6214,22 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
     const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
     if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
 
-    const updatedAccount = { ...current.accounts[accountIndex], id: accountId, botToken, proxyUrl };
+    const updatedAccount = { ...current.accounts[accountIndex], id: accountId, botToken, proxyUrl, richPresenceEnabled };
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       accounts: current.accounts.map((account) => account.id === accountId ? updatedAccount : account)
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
 
-    const credentialsChanged = current.accounts[accountIndex].botToken !== botToken || current.accounts[accountIndex].proxyUrl !== proxyUrl;
-    if (serviceRunsOnliner && credentialsChanged) {
+    const profileChanged = current.accounts[accountIndex].botToken !== botToken
+      || current.accounts[accountIndex].proxyUrl !== proxyUrl
+      || current.accounts[accountIndex].richPresenceEnabled !== richPresenceEnabled;
+    if (serviceRunsOnliner && profileChanged) {
       const runtime = discordOnlinerRuntimes.get(accountId);
       if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
       const savedAccount = candidate.accounts.find((account) => account.id === accountId);
       if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
-      appendDiscordOnlinerLog("info", "Bot token or proxy updated; restarting this Gateway connection.", accountId);
+      appendDiscordOnlinerLog("info", "Bot profile updated; restarting only this Gateway connection.", accountId);
     }
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
     res.json(await getDiscordOnlinerSnapshotForApi(candidate));

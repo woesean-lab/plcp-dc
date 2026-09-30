@@ -1539,7 +1539,11 @@ export default function HomePage() {
       setLoadingOnlinerCredentials(true);
       const credentials = await getDiscordOnlinerAccountCredentials(accountId);
       if (requestId !== onlinerCredentialRequestRef.current) return;
-      setOnlinerEditDraft((current) => ({ ...current, botToken: credentials.botToken, proxyUrl: credentials.proxyUrl }));
+      setOnlinerEditDraft({
+        botToken: credentials.botToken,
+        proxyUrl: credentials.proxyUrl,
+        richPresenceEnabled: credentials.richPresenceEnabled
+      });
     } catch (error) {
       if (requestId !== onlinerCredentialRequestRef.current) return;
       setEditingOnlinerAccountId(null);
@@ -1560,7 +1564,11 @@ export default function HomePage() {
     }
     try {
       setSavingOnlinerAccount(true);
-      const snapshot = await updateDiscordOnlinerAccount(editingOnlinerAccountId, { botToken, proxyUrl });
+      const snapshot = await updateDiscordOnlinerAccount(editingOnlinerAccountId, {
+        botToken,
+        proxyUrl,
+        richPresenceEnabled: onlinerEditDraft.richPresenceEnabled
+      });
       onlinerCredentialRequestRef.current += 1;
       setOnlinerSnapshot(snapshot);
       setEditingOnlinerAccountId(null);
@@ -4736,6 +4744,16 @@ export default function HomePage() {
                     {showOnlinerEditProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </span>
+              </label>
+              <label className="onliner-enabled-card">
+                <input
+                  type="checkbox"
+                  checked={onlinerEditDraft.richPresenceEnabled}
+                  onChange={(event) => setOnlinerEditDraft((current) => ({ ...current, richPresenceEnabled: event.target.checked }))}
+                  disabled={loadingOnlinerCredentials || savingOnlinerAccount}
+                />
+                <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
+                <span><strong>Use Rich Presence</strong><small>Turn it off to keep this bot online without an activity.</small></span>
               </label>
               <div className="onliner-edit-note">
                 <KeyRound className="h-4 w-4" aria-hidden="true" />

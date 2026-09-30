@@ -100,6 +100,7 @@ export type DiscordOnlinerAccountCredentials = {
   accountId: string;
   botToken: string;
   proxyUrl: string;
+  richPresenceEnabled: boolean;
 };
 
 async function parseResponse(response: Response) {
@@ -156,7 +157,7 @@ export async function getDiscordOnlinerAccountCredentials(accountId: string) {
   return payload as DiscordOnlinerAccountCredentials;
 }
 
-export function updateDiscordOnlinerAccount(accountId: string, input: { botToken: string; proxyUrl: string }) {
+export function updateDiscordOnlinerAccount(accountId: string, input: { botToken: string; proxyUrl: string; richPresenceEnabled: boolean }) {
   return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}`, {
     method: "PUT",
     credentials: "same-origin",
