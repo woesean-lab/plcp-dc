@@ -762,6 +762,9 @@ export default function HomePage() {
   const [communityAccountCategory, setCommunityAccountCategory] = useState<CommunityStockCategory | null>(null);
   const [communityAccountToken, setCommunityAccountToken] = useState("");
   const [showCommunityAccountToken, setShowCommunityAccountToken] = useState(false);
+  const [communityConnectToOnliner, setCommunityConnectToOnliner] = useState(false);
+  const [communityOnlinerProxy, setCommunityOnlinerProxy] = useState("");
+  const [showCommunityOnlinerProxy, setShowCommunityOnlinerProxy] = useState(false);
   const [addingCommunityAccount, setAddingCommunityAccount] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
@@ -1805,12 +1808,18 @@ export default function HomePage() {
     setCommunityAccountCategory(category);
     setCommunityAccountToken("");
     setShowCommunityAccountToken(false);
+    setCommunityConnectToOnliner(false);
+    setCommunityOnlinerProxy("");
+    setShowCommunityOnlinerProxy(false);
   }
 
   function closeCommunityAccountModal() {
     setCommunityAccountCategory(null);
     setCommunityAccountToken("");
     setShowCommunityAccountToken(false);
+    setCommunityConnectToOnliner(false);
+    setCommunityOnlinerProxy("");
+    setShowCommunityOnlinerProxy(false);
   }
 
   async function handleAddCommunityAccount(event: FormEvent) {
@@ -1819,13 +1828,17 @@ export default function HomePage() {
     const accountToken = communityAccountToken.trim();
     if (!category || addingCommunityAccount) return;
     if (accountToken.length < 20) return notifyError("Enter a valid Discord account token.");
+    if (communityConnectToOnliner && !communityOnlinerProxy.trim()) return notifyError("A dedicated proxy is required for Onliner.");
     try {
       setAddingCommunityAccount(true);
-      const result = await addCommunityAccount(accountToken, category.id);
+      const result = await addCommunityAccount(accountToken, category.id, {
+        connect: communityConnectToOnliner,
+        proxyUrl: communityOnlinerProxy.trim()
+      });
       setCommunityStockType(category.id);
       await refreshCommunityStatus(category.id);
       closeCommunityAccountModal();
-      notifySuccess(`${result.member.displayName || result.member.username} authorized and added to ${result.categoryName}.`);
+      notifySuccess(`${result.member.displayName || result.member.username} authorized and added to ${result.categoryName}${result.onlinerConnected ? result.onlinerAlreadyConnected ? "; already connected to Onliner" : " and connected to Onliner" : ""}.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Discord account could not be authorized.");
     } finally {
@@ -4558,7 +4571,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord account</h2>
-            <p>The account will authorize the configured bot application. Only the resulting OAuth access and refresh tokens are encrypted and saved; the account token is not stored.</p>
+            <p>The account will authorize the configured bot application. OAuth access and refresh tokens are encrypted and saved.{communityConnectToOnliner ? " The account token and proxy will also be encrypted in Onliner so its Gateway session can reconnect." : " The account token is not stored unless Onliner is enabled below."}</p>
             <label className="mt-5 grid gap-2 text-left">
               <span className={fieldLabelClass}>Account token</span>
               <span className="onliner-secret-field">
@@ -4577,9 +4590,33 @@ export default function HomePage() {
                 </button>
               </span>
             </label>
+            <label className="onliner-enabled-card mt-4 text-left">
+              <input type="checkbox" checked={communityConnectToOnliner} disabled={addingCommunityAccount} onChange={(event) => setCommunityConnectToOnliner(event.target.checked)} />
+              <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+              <span><strong>Connect to Onliner</strong><small>Save this account in Onliner and start its Gateway presence after OAuth succeeds.</small></span>
+            </label>
+            {communityConnectToOnliner ? (
+              <label className="mt-4 grid gap-2 text-left">
+                <span className={fieldLabelClass}>Dedicated Onliner proxy</span>
+                <span className="onliner-secret-field">
+                  <Input
+                    type={showCommunityOnlinerProxy ? "text" : "password"}
+                    value={communityOnlinerProxy}
+                    maxLength={2000}
+                    autoComplete="off"
+                    placeholder="http://user:pass@host:port"
+                    disabled={addingCommunityAccount}
+                    onChange={(event) => setCommunityOnlinerProxy(event.target.value)}
+                  />
+                  <button type="button" aria-label={showCommunityOnlinerProxy ? "Hide Onliner proxy" : "Show Onliner proxy"} title={showCommunityOnlinerProxy ? "Hide proxy" : "Show proxy"} disabled={addingCommunityAccount} onClick={() => setShowCommunityOnlinerProxy((current) => !current)}>
+                    {showCommunityOnlinerProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </span>
+              </label>
+            ) : null}
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={addingCommunityAccount} onClick={closeCommunityAccountModal}>Cancel</Button>
-              <Button type="submit" disabled={addingCommunityAccount || communityAccountToken.trim().length < 20}>
+              <Button type="submit" disabled={addingCommunityAccount || communityAccountToken.trim().length < 20 || (communityConnectToOnliner && !communityOnlinerProxy.trim())}>
                 {addingCommunityAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 {addingCommunityAccount ? "Authorizing..." : "Authorize & add"}
               </Button>

@@ -154,6 +154,8 @@ export type CommunityAccountAuthorizationResult = {
   categoryId: string;
   categoryName: string;
   member: CommunityJoinRecord;
+  onlinerConnected: boolean;
+  onlinerAlreadyConnected?: boolean;
 };
 
 async function parseResponse<T>(response: Response) {
@@ -288,13 +290,17 @@ export function importCommunityOAuthStock(records: unknown[], categoryId: Commun
   }).then(parseResponse<CommunityOAuthImportResult>);
 }
 
-export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType) {
+export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType, onliner?: { connect: boolean; proxyUrl: string }) {
   return fetch(`/api/community/categories/${encodeURIComponent(categoryId)}/accounts`, {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountToken })
+    body: JSON.stringify({
+      accountToken,
+      connectToOnliner: onliner?.connect === true,
+      onlinerProxyUrl: onliner?.proxyUrl ?? ""
+    })
   }).then(parseResponse<CommunityAccountAuthorizationResult>);
 }
 

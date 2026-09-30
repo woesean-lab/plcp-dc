@@ -7960,6 +7960,10 @@
   width: min(600px, calc(100vw - 32px));
 }
 
+.community-account-modal {
+  width: min(560px, calc(100vw - 32px));
+}
+
 .community-category-modal > label {
   margin-top: 18px;
 }

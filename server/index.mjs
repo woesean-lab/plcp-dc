@@ -6901,8 +6901,33 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const requestedCategoryId = String(req.params.categoryId ?? "").trim().toLowerCase();
     const categoryId = parseCommunityCategoryId(requestedCategoryId);
     const accountToken = String(req.body?.accountToken ?? "").trim();
+    const connectToOnliner = req.body?.connectToOnliner === true;
+    const suppliedOnlinerProxyUrl = String(req.body?.onlinerProxyUrl ?? "").trim();
     if (!categoryId || categoryId !== requestedCategoryId) return res.status(400).json({ message: "Choose a valid Members Stock category." });
     if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
+
+    let onlinerCurrent = null;
+    let onlinerCandidate = null;
+    let onlinerAccount = null;
+    let onlinerAlreadyConnected = false;
+    if (connectToOnliner) {
+      onlinerCurrent = await getDiscordOnlinerConfig();
+      onlinerAlreadyConnected = onlinerCurrent.accounts.some((account) => account.botToken === accountToken);
+      if (!onlinerAlreadyConnected) {
+        if (onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
+          return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
+        }
+        const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedOnlinerProxyUrl);
+        if (!suppliedOnlinerProxyUrl || !proxyUrl) {
+          return res.status(400).json({ message: "Enter a valid dedicated HTTP, HTTPS, or SOCKS proxy to connect this account to Onliner." });
+        }
+        onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl, richPresenceEnabled: true };
+        onlinerCandidate = normalizeDiscordOnlinerConfig({
+          ...onlinerCurrent,
+          accounts: [...onlinerCurrent.accounts, onlinerAccount]
+        });
+      }
+    }
 
     const category = await pool.query(
       "SELECT id, name FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
@@ -7002,9 +7027,17 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
       [discordUserId, config.guildId, username, displayName, avatarUrl, encryptCredential(oauth.refreshToken), encryptCredential(oauth.accessToken), oauth.expiresAt, categoryId, details, sortPosition]
     );
     const row = saved.rows[0];
+    if (onlinerCandidate && onlinerAccount) {
+      await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(onlinerCandidate));
+      if (serviceRunsOnliner) startDiscordOnlinerAccounts(onlinerCandidate, [onlinerAccount]);
+      if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = onlinerCandidate;
+      appendDiscordOnlinerLog("success", `Members Stock account ${username} was added to Onliner.`, onlinerAccount.id);
+    }
     res.status(201).set("Cache-Control", "no-store").json({
       categoryId,
       categoryName: category.rows[0].name,
+      onlinerConnected: connectToOnliner,
+      onlinerAlreadyConnected,
       member: {
         id: row.discord_user_id,
         username: row.username,
