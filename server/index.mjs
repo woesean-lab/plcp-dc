@@ -248,9 +248,9 @@ const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 function createDiscordGatewayIdentityProperties() {
   return {
-    os: "Windows",
-    browser: "Discord Client",
-    device: "desktop"
+    os: process.platform,
+    browser: "bot",
+    device: "bot"
   };
 }
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
