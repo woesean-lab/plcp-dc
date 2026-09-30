@@ -255,8 +255,13 @@ function createDiscordGatewayIdentityProperties() {
     browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9156 Chrome/124.0.6367.243 Electron/30.0.6 Safari/537.36",
     browser_version: "1.0.9156",
     os_version: "10",
+    referrer: "",
+    referring_domain: "",
+    referrer_current: "",
+    referring_domain_current: "",
     release_channel: "stable",
-    client_build_number: 280000
+    client_build_number: 280000,
+    client_event_source: null
   };
 }
 function createDiscordGatewayClientState() {
@@ -265,7 +270,9 @@ function createDiscordGatewayClientState() {
     highest_last_message_id: "0",
     read_state_version: 0,
     user_guild_settings_version: -1,
-    private_channels_version: "0"
+    user_settings_version: -1,
+    private_channels_version: "0",
+    api_code_version: 0
   };
 }
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
@@ -1360,7 +1367,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
           return;
         }
         runtime.heartbeatAcknowledged = false;
-        socket.send(JSON.stringify({ op: 1, d: null }));
+        socket.send(JSON.stringify({ op: 1, d: sequence }));
       };
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
@@ -1387,8 +1394,8 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
       runtime.heartbeatAcknowledged = false;
-      socket.send(JSON.stringify({ op: 1, d: null }));
-      appendDiscordOnlinerLog("info", "Discord requested a HEARTBEAT; sent with a null sequence.", account.id);
+      socket.send(JSON.stringify({ op: 1, d: sequence }));
+      appendDiscordOnlinerLog("info", `Discord requested a HEARTBEAT; sent${sequence == null ? " before receiving a sequence" : ` (seq ${sequence})`}.`, account.id);
       return;
     }
     if (payload?.op === 7) {
