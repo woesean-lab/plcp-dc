@@ -5283,6 +5283,8 @@
 .onliner-account-copy strong { overflow: hidden; color: var(--app-text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .onliner-account-copy small { color: var(--app-muted); font-size: 10px; text-transform: capitalize; }
 .onliner-account-copy em { overflow: hidden; color: var(--app-danger); font-size: 10px; font-style: normal; text-overflow: ellipsis; white-space: nowrap; }
+.onliner-account-identity { display: contents; }
+.onliner-account-status-mobile { display: none; }
 
 .onliner-account-status {
   min-height: 18px;
@@ -5378,24 +5380,39 @@
   .onliner-account-delay { align-items: stretch; flex-direction: column; }
   .onliner-account-delay > span:last-child { justify-content: space-between; }
   .onliner-account-row {
-    grid-template:
-      "avatar copy copy" auto
-      "avatar status actions" auto
-      / auto minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-rows: auto;
     width: 100%;
     min-width: 0;
-    min-height: 74px;
+    min-height: 58px;
     column-gap: 8px;
-    row-gap: 6px;
     padding: 8px 6px;
   }
   .onliner-account-row .onliner-bot-avatar {
-    grid-area: avatar;
-    align-self: start;
+    grid-column: 1;
+    grid-row: 1;
+    align-self: center;
   }
   .onliner-account-copy {
-    grid-area: copy;
-    align-self: start;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: center;
+    gap: 4px;
+  }
+  .onliner-account-identity {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 7px;
+  }
+  .onliner-account-identity > strong { min-width: 0; }
+  .onliner-account-status-mobile {
+    display: inline-flex;
+    flex: 0 0 auto;
+    min-height: 17px;
+    padding: 2px 6px;
+    font-size: 7px;
+    line-height: 1;
   }
   .onliner-account-copy em {
     display: -webkit-box;
@@ -5406,13 +5423,12 @@
     -webkit-line-clamp: 2;
   }
   .onliner-account-status {
-    grid-area: status;
-    justify-self: start;
-    align-self: start;
+    display: none;
   }
   .onliner-account-actions {
-    grid-area: actions;
-    align-self: start;
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
     justify-self: end;
   }
   .onliner-account-reconnect,

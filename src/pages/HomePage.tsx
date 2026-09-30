@@ -3944,7 +3944,12 @@ export default function HomePage() {
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
                             </span>
                             <div className="onliner-account-copy">
-                              <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
+                              <span className="onliner-account-identity">
+                                <strong>{account.bot?.username ?? `Bot ${index + 1}`}</strong>
+                                <Badge className="onliner-account-status-mobile" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
+                                  {account.connectionState}
+                                </Badge>
+                              </span>
                               <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </div>
