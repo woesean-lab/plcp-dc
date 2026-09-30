@@ -373,6 +373,7 @@ const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
 const shell = "app-panel";
 const PAGE_SKELETON_DELAY = 300;
+const ONLINER_SKELETON_MAX_DELAY = 5_000;
 const ACTIVE_SYNC_BATCH_SIZE = 3;
 const ACTIVE_SYNC_PAUSE_MS = 1000;
 const ORDER_PAGE_SIZE = 20;
@@ -482,15 +483,22 @@ function getOrderProgress(order: TrackedOrder) {
   };
 }
 
-function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY }: { children: ReactNode; fallback: ReactNode; delay?: number }) {
-  const [ready, setReady] = useState(false);
+function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
+  const [delayElapsed, setDelayElapsed] = useState(false);
+  const [maxDelayElapsed, setMaxDelayElapsed] = useState(false);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setReady(true), delay);
+    const timer = window.setTimeout(() => setDelayElapsed(true), delay);
     return () => window.clearTimeout(timer);
   }, [delay]);
 
-  return ready ? children : fallback;
+  useEffect(() => {
+    if (maxDelay === undefined) return;
+    const timer = window.setTimeout(() => setMaxDelayElapsed(true), maxDelay);
+    return () => window.clearTimeout(timer);
+  }, [maxDelay]);
+
+  return delayElapsed && (!hold || maxDelayElapsed) ? children : fallback;
 }
 
 function SkeletonHeading({ withMeta = true }: { withMeta?: boolean }) {
@@ -2850,13 +2858,22 @@ export default function HomePage() {
   );
 
   const showManageSkeleton = refreshingManage && !orders.length;
+  const waitingForInitialOnlinerData = activeTab === "onliner" && (
+    !onlinerSnapshot ||
+    (onlinerSnapshot.accounts.length === 0 && onlinerSnapshot.worker?.status !== "online")
+  );
   const onlinerNextConnectionSeconds = onlinerSnapshot?.nextConnectionAt
     ? Math.max(0, Math.ceil((new Date(onlinerSnapshot.nextConnectionAt).getTime() - onlinerCountdownNow) / 1_000))
     : null;
 
   return (
     <div className="relative">
-      <TimedReveal key={activeTab} fallback={<HomePageSkeleton tab={activeTab} />}>
+      <TimedReveal
+        key={activeTab}
+        fallback={<HomePageSkeleton tab={activeTab} />}
+        hold={waitingForInitialOnlinerData}
+        maxDelay={activeTab === "onliner" ? ONLINER_SKELETON_MAX_DELAY : undefined}
+      >
         <div className="space-y-5 tab-slide-in">
         {activeTab === "create" ? (
           <>
