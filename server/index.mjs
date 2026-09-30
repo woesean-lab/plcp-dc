@@ -389,6 +389,7 @@ function createDiscordOnlinerRuntime(accountId) {
     activityTimer: null,
     connectionQueueTimer: null,
     connectionQueueContinuation: null,
+    connectionQueueStartNext: null,
     nextQueuedConnectionAt: null,
     heartbeatAcknowledged: true,
     state: "disconnected",
@@ -962,6 +963,7 @@ function clearDiscordOnlinerTimers(runtime) {
   runtime.activityTimer = null;
   runtime.connectionQueueTimer = null;
   runtime.connectionQueueContinuation = null;
+  runtime.connectionQueueStartNext = null;
   runtime.nextQueuedConnectionAt = null;
 }
 
@@ -1000,6 +1002,19 @@ function advanceDiscordOnlinerConnectionQueue(runtime, outcome) {
   const continueConnectionQueue = runtime.connectionQueueContinuation;
   runtime.connectionQueueContinuation = null;
   if (continueConnectionQueue) continueConnectionQueue(outcome);
+}
+
+function triggerNextDiscordOnlinerQueuedConnection(runtime) {
+  const startNext = runtime.connectionQueueStartNext;
+  if (!startNext) return false;
+  runtime.connectionQueueStartNext = null;
+  if (runtime.connectionQueueTimer) clearTimeout(runtime.connectionQueueTimer);
+  runtime.connectionQueueTimer = null;
+  runtime.nextQueuedConnectionAt = null;
+  queueDiscordOnlinerRuntimePersist(runtime);
+  appendDiscordOnlinerLog("info", "Connection delay elapsed; starting the next bot.", runtime.accountId);
+  startNext();
+  return true;
 }
 
 function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
@@ -1476,16 +1491,14 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
       const runtime = getDiscordOnlinerRuntime(account.id);
       const delayMs = config.connectionDelaySeconds * 1_000;
       runtime.nextQueuedConnectionAt = new Date(Date.now() + delayMs).toISOString();
+      runtime.connectionQueueStartNext = startNext;
       appendDiscordOnlinerLog(
         outcome === "connected" ? "info" : "warn",
         `${outcome === "connected" ? "Connection succeeded" : "Connection failed permanently; skipping this bot"}; next bot starts in ${config.connectionDelaySeconds}s.`,
         account.id
       );
       runtime.connectionQueueTimer = setTimeout(() => {
-        runtime.connectionQueueTimer = null;
-        runtime.nextQueuedConnectionAt = null;
-        queueDiscordOnlinerRuntimePersist(runtime);
-        startNext();
+        triggerNextDiscordOnlinerQueuedConnection(runtime);
       }, delayMs);
       runtime.connectionQueueTimer.unref?.();
     } : null;
@@ -1719,6 +1732,10 @@ async function pollDiscordOnlinerWorker() {
       startDiscordOnliner(candidate);
     } else if (JSON.stringify(discordOnlinerWorkerCurrentConfig) !== JSON.stringify(candidate)) {
       await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig, candidate);
+    }
+    for (const runtime of discordOnlinerRuntimes.values()) {
+      const nextAt = runtime.nextQueuedConnectionAt ? new Date(runtime.nextQueuedConnectionAt).getTime() : 0;
+      if (nextAt > 0 && nextAt <= Date.now()) triggerNextDiscordOnlinerQueuedConnection(runtime);
     }
     await processDiscordOnlinerWorkerCommands();
   } catch (error) {
