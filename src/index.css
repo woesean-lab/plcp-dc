@@ -5238,6 +5238,8 @@
 }
 .onliner-account-list {
   display: grid;
+  grid-auto-rows: max-content;
+  align-content: start;
   max-height: 274px;
   min-height: 0;
   gap: 0;
@@ -5272,6 +5274,10 @@
 }
 
 .onliner-account-row:last-child { border-bottom-color: transparent; }
+
+.onliner-account-row:has(.onliner-account-copy em) {
+  min-height: 66px;
+}
 
 .onliner-account-row .onliner-bot-avatar {
   width: 34px;
@@ -5399,6 +5405,7 @@
     padding: 10px;
     background: color-mix(in srgb, var(--app-surface-soft) 72%, transparent);
   }
+  .onliner-account-row:has(.onliner-account-copy em) { min-height: 0; }
   .onliner-account-row:last-child { border-bottom-color: var(--app-divider); }
   .onliner-account-row .onliner-bot-avatar {
     grid-column: 1;
