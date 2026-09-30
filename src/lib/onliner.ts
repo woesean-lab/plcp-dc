@@ -40,6 +40,7 @@ export type DiscordOnlinerSnapshot = {
   rotationItems: string[];
   rotationMinMinutes: number;
   rotationMaxMinutes: number;
+  connectionDelaySeconds: number;
   statuses: Array<"online" | "idle" | "dnd">;
   activityChances: DiscordOnlinerActivityChances;
   randomizeEnabled: boolean;
@@ -90,6 +91,7 @@ export type DiscordOnlinerInput = {
   watch: string[];
   rotationMinMinutes: number;
   rotationMaxMinutes: number;
+  connectionDelaySeconds: number;
 };
 
 export type DiscordOnlinerAccountCredentials = {

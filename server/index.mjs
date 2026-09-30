@@ -387,6 +387,8 @@ function createDiscordOnlinerRuntime(accountId) {
     heartbeatTimer: null,
     reconnectTimer: null,
     activityTimer: null,
+    connectionQueueTimer: null,
+    connectionQueueContinuation: null,
     heartbeatAcknowledged: true,
     state: "disconnected",
     bot: null,
@@ -533,6 +535,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     .filter(Boolean))].slice(0, 100);
   const rotationMinMinutes = Math.min(Math.max(Number.parseInt(value.rotationMinMinutes ?? "30", 10) || 30, 30), 60);
   const rotationMaxMinutes = Math.min(Math.max(Number.parseInt(value.rotationMaxMinutes ?? "60", 10) || 60, rotationMinMinutes), 60);
+  const connectionDelaySeconds = Math.min(Math.max(Number.parseInt(value.connectionDelaySeconds ?? "3", 10) || 3, 1), 300);
   const statuses = [...new Set((Array.isArray(value.statuses)
     ? value.statuses
     : status === "mixed" ? discordOnlinerStatusValues : [status])
@@ -561,6 +564,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     rotationItems,
     rotationMinMinutes,
     rotationMaxMinutes,
+    connectionDelaySeconds,
     statuses: statuses.length ? statuses : ["online"],
     activityChances,
     randomizeEnabled: value.randomizeEnabled ?? (value.rotationEnabled == null ? false : value.rotationEnabled !== false),
@@ -851,6 +855,7 @@ function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
     rotationItems: config.rotationItems,
     rotationMinMinutes: config.rotationMinMinutes,
     rotationMaxMinutes: config.rotationMaxMinutes,
+    connectionDelaySeconds: config.connectionDelaySeconds,
     statuses: config.statuses,
     activityChances: config.activityChances,
     randomizeEnabled: config.randomizeEnabled,
@@ -942,10 +947,13 @@ function clearDiscordOnlinerTimers(runtime) {
   if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
   if (runtime.reconnectTimer) clearTimeout(runtime.reconnectTimer);
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
+  if (runtime.connectionQueueTimer) clearTimeout(runtime.connectionQueueTimer);
   runtime.startupTimer = null;
   runtime.heartbeatTimer = null;
   runtime.reconnectTimer = null;
   runtime.activityTimer = null;
+  runtime.connectionQueueTimer = null;
+  runtime.connectionQueueContinuation = null;
 }
 
 function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
@@ -1337,6 +1345,9 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.reconnectNotBefore = 0;
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, runtime, generation);
+      const continueConnectionQueue = runtime.connectionQueueContinuation;
+      runtime.connectionQueueContinuation = null;
+      if (continueConnectionQueue) continueConnectionQueue();
       return;
     }
     if (payload.t === "GUILD_CREATE") {
@@ -1404,9 +1415,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   });
 }
 
-function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
+function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0, onConnected = null) {
   const runtime = getDiscordOnlinerRuntime(account.id);
   runtime.config = config;
+  runtime.connectionQueueContinuation = typeof onConnected === "function" ? onConnected : null;
   if (discordOnlinerConnectionsPaused) {
     runtime.state = "disconnected";
     queueDiscordOnlinerRuntimePersist(runtime);
@@ -1434,11 +1446,28 @@ function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0) {
 
 function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {}) {
   if (!config.enabled || discordOnlinerConnectionsPaused) return;
-  let delayMs = 0;
-  for (const account of accounts) {
-    scheduleDiscordOnlinerAccountStart(config, account, delayMs);
-    if (stagger) delayMs += 2_000 + Math.floor(Math.random() * 1_001);
+  if (!stagger) {
+    for (const account of accounts) scheduleDiscordOnlinerAccountStart(config, account);
+    return;
   }
+  const queue = [...accounts];
+  const startNext = () => {
+    if (discordOnlinerConnectionsPaused) return;
+    const account = queue.shift();
+    if (!account) return;
+    const continueQueue = queue.length ? () => {
+      const runtime = getDiscordOnlinerRuntime(account.id);
+      const delayMs = config.connectionDelaySeconds * 1_000;
+      appendDiscordOnlinerLog("info", `Connection succeeded; next bot starts in ${config.connectionDelaySeconds}s.`, account.id);
+      runtime.connectionQueueTimer = setTimeout(() => {
+        runtime.connectionQueueTimer = null;
+        startNext();
+      }, delayMs);
+      runtime.connectionQueueTimer.unref?.();
+    } : null;
+    scheduleDiscordOnlinerAccountStart(config, account, 0, continueQueue);
+  };
+  startNext();
 }
 
 function startDiscordOnliner(config) {
@@ -1515,7 +1544,8 @@ function getDiscordOnlinerRotationConfigFingerprint(config) {
   return JSON.stringify({
     randomizeEnabled: config.randomizeEnabled,
     rotationMinMinutes: config.rotationMinMinutes,
-    rotationMaxMinutes: config.rotationMaxMinutes
+    rotationMaxMinutes: config.rotationMaxMinutes,
+    connectionDelaySeconds: config.connectionDelaySeconds
   });
 }
 

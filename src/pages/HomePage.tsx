@@ -170,7 +170,8 @@ const EMPTY_ONLINER_DRAFT = {
   streamingTitles: DEFAULT_ONLINER_STREAMING_TITLES.join("\n"),
   watch: "",
   rotationMinMinutes: 30,
-  rotationMaxMinutes: 60
+  rotationMaxMinutes: 60,
+  connectionDelaySeconds: 3
 };
 
 const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "" };
@@ -1051,7 +1052,8 @@ export default function HomePage() {
         streamingTitles: snapshot.streamingTitles.join("\n"),
         watch: snapshot.watch.join("\n"),
         rotationMinMinutes: snapshot.rotationMinMinutes,
-        rotationMaxMinutes: snapshot.rotationMaxMinutes
+        rotationMaxMinutes: snapshot.rotationMaxMinutes,
+        connectionDelaySeconds: snapshot.connectionDelaySeconds
       });
     }).catch((error) => {
       if (!cancelled) notifyError(error instanceof Error ? error.message : "Onliner status could not be loaded.");
@@ -1433,7 +1435,8 @@ export default function HomePage() {
         streamingTitles: parseOnlinerBulkLines(onlinerDraft.streamingTitles),
         watch: parseOnlinerBulkLines(onlinerDraft.watch),
         rotationMinMinutes: Math.min(60, Math.max(30, Number(onlinerDraft.rotationMinMinutes) || 30)),
-        rotationMaxMinutes: Math.min(60, Math.max(30, Number(onlinerDraft.rotationMinMinutes) || 30, Number(onlinerDraft.rotationMaxMinutes) || 60))
+        rotationMaxMinutes: Math.min(60, Math.max(30, Number(onlinerDraft.rotationMinMinutes) || 30, Number(onlinerDraft.rotationMaxMinutes) || 60)),
+        connectionDelaySeconds: Math.min(300, Math.max(1, Number(onlinerDraft.connectionDelaySeconds) || 3))
       });
       setOnlinerSnapshot(snapshot);
       notifySuccess(!snapshot.enabled
@@ -3911,6 +3914,10 @@ export default function HomePage() {
                         </Button>
                       </div>
                     ) : null}
+                    <label className="onliner-account-delay">
+                      <span><strong>Connection delay</strong><small>Wait after each successful connection before starting the next bot.</small></span>
+                      <span><Input type="number" min={1} max={300} value={onlinerDraft.connectionDelaySeconds} onChange={(event) => setOnlinerDraft((current) => ({ ...current, connectionDelaySeconds: Math.min(300, Math.max(1, Number(event.target.value) || 1)) }))} /><b>seconds</b></span>
+                    </label>
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
