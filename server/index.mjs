@@ -525,7 +525,8 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     return {
       id,
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
-      proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl)
+      proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
+      richPresenceEnabled: account?.richPresenceEnabled !== false
     };
   }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
@@ -896,6 +897,7 @@ function getDiscordOnlinerSnapshot(config) {
       id: account.id,
       hasBotToken: Boolean(account.botToken),
       hasProxy: Boolean(account.proxyUrl),
+      richPresenceEnabled: account.richPresenceEnabled !== false,
       ...serializeDiscordOnlinerRuntime(runtime)
     };
   });
@@ -924,6 +926,7 @@ async function getDiscordOnlinerSnapshotForApi(config) {
       id: account.id,
       hasBotToken: Boolean(account.botToken),
       hasProxy: Boolean(account.proxyUrl),
+      richPresenceEnabled: account.richPresenceEnabled !== false,
       currentActivity: saved.currentActivity ?? null,
       connectionState: workerOnline ? saved.connectionState ?? "disconnected" : "disconnected",
       bot: saved.bot ?? null,
@@ -1215,19 +1218,30 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
   return { since: null, activities: runtime.currentActivities, status: runtime.currentStatus, afk: false };
 }
 
-function scheduleDiscordOnlinerActivityRotation(config, runtime, generation) {
+function buildDiscordOnlinerAccountPresence(config, account, runtime, chooseNext = false) {
+  if (account.richPresenceEnabled !== false) return buildDiscordOnlinerPresence(config, runtime, chooseNext);
+  if (chooseNext || !runtime.currentStatus) {
+    runtime.currentStatus = chooseDiscordOnlinerVariant(config.statuses, runtime.currentStatus);
+  }
+  runtime.currentActivities = [];
+  runtime.currentActivity = null;
+  runtime.currentActivityType = "none";
+  return { since: null, activities: [], status: runtime.currentStatus, afk: false };
+}
+
+function scheduleDiscordOnlinerActivityRotation(config, account, runtime, generation) {
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
   runtime.activityTimer = null;
-  if (generation !== runtime.generation || !config.randomizeEnabled) return;
+  if (generation !== runtime.generation || account.richPresenceEnabled === false || !config.randomizeEnabled) return;
   const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
   runtime.activityTimer = setTimeout(() => {
     if (generation !== runtime.generation || runtime.socket?.readyState !== WebSocket.OPEN) return;
     runtime.socket.send(JSON.stringify({
       op: 3,
-      d: buildDiscordOnlinerPresence(config, runtime, true)
+      d: buildDiscordOnlinerAccountPresence(config, account, runtime, true)
     }));
     appendDiscordOnlinerLog("info", `Presence changed: ${runtime.currentStatus}, ${runtime.currentActivityType}${runtime.currentActivity ? ` · ${runtime.currentActivity}` : ""}.`, runtime.accountId);
-    scheduleDiscordOnlinerActivityRotation(config, runtime, generation);
+    scheduleDiscordOnlinerActivityRotation(config, account, runtime, generation);
   }, Math.round(intervalMinutes * 60_000));
   runtime.activityTimer.unref?.();
 }
@@ -1323,7 +1337,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
       runtime.heartbeatTimer.unref?.();
-      const presence = buildDiscordOnlinerPresence(runtime.config ?? config, runtime, true);
+      const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
       socket.send(JSON.stringify({
         op: 2,
         d: {
@@ -1379,7 +1393,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.automaticReconnectBlocked = false;
       runtime.reconnectNotBefore = 0;
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
-      scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, runtime, generation);
+      scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, account, runtime, generation);
       advanceDiscordOnlinerConnectionQueue(runtime, "connected");
       return;
     }
@@ -1614,11 +1628,11 @@ function applyDiscordOnlinerSettings(current, candidate) {
     if (!runtime) continue;
     runtime.config = candidate;
     if (presenceChanged && runtime.state === "connected" && runtime.socket?.readyState === WebSocket.OPEN) {
-      runtime.socket.send(JSON.stringify({ op: 3, d: buildDiscordOnlinerPresence(candidate, runtime, true) }));
+      runtime.socket.send(JSON.stringify({ op: 3, d: buildDiscordOnlinerAccountPresence(candidate, account, runtime, true) }));
       appendDiscordOnlinerLog("info", `Presence updated without reconnecting: ${runtime.currentStatus}, ${runtime.currentActivityType}${runtime.currentActivity ? ` · ${runtime.currentActivity}` : ""}.`, account.id);
       presenceUpdated = true;
     }
-    scheduleDiscordOnlinerActivityRotation(candidate, runtime, runtime.generation);
+    scheduleDiscordOnlinerActivityRotation(candidate, account, runtime, runtime.generation);
   }
   return { changed: true, presenceUpdated, connectionsRestarted: false };
 }
@@ -1647,7 +1661,9 @@ async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
   const addedAccounts = candidate.accounts.filter((account) => !currentById.has(account.id));
   const changedAccounts = candidate.accounts.filter((account) => {
     const previous = currentById.get(account.id);
-    return previous && (previous.botToken !== account.botToken || previous.proxyUrl !== account.proxyUrl);
+    return previous && (previous.botToken !== account.botToken
+      || previous.proxyUrl !== account.proxyUrl
+      || previous.richPresenceEnabled !== account.richPresenceEnabled);
   });
 
   for (const accountId of removedIds) {
@@ -6144,6 +6160,7 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
     if (current.accounts.length >= discordOnlinerAccountLimit) return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} bot profiles.` });
     const botToken = String(req.body?.botToken ?? "").trim();
     const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    const richPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
     if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
     if (current.accounts.some((account) => account.botToken === botToken)) return res.status(409).json({ message: "This bot token is already saved." });
@@ -6151,7 +6168,7 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
     if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
-      accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl }]
+      accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl, richPresenceEnabled }]
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
     if (serviceRunsOnliner) startDiscordOnlinerAccounts(candidate, [candidate.accounts.at(-1)]);
@@ -6195,7 +6212,7 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
     const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
     if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
 
-    const updatedAccount = { id: accountId, botToken, proxyUrl };
+    const updatedAccount = { ...current.accounts[accountIndex], id: accountId, botToken, proxyUrl };
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       accounts: current.accounts.map((account) => account.id === accountId ? updatedAccount : account)
@@ -6233,13 +6250,14 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
       const lineNumber = Number.parseInt(input?.lineNumber, 10) || index + 1;
       const botToken = normalizeDiscordOnlinerBulkBotToken(input?.botToken);
       const suppliedProxyUrl = String(input?.proxyUrl ?? "").trim();
+      const richPresenceEnabled = input?.richPresenceEnabled !== false;
       if (!botToken || botToken.length > 2000) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid Discord bot token.` });
       if (!suppliedProxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: a dedicated proxy is required.` });
       if (knownTokens.has(botToken)) return res.status(409).json({ message: `Line ${lineNumber}: this bot token is duplicated or already saved.` });
       const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
       if (!proxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid HTTP, HTTPS, or SOCKS proxy.` });
       knownTokens.add(botToken);
-      additions.push({ id: crypto.randomUUID(), botToken, proxyUrl });
+      additions.push({ id: crypto.randomUUID(), botToken, proxyUrl, richPresenceEnabled });
     }
 
     const candidate = normalizeDiscordOnlinerConfig({

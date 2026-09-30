@@ -174,7 +174,7 @@ const EMPTY_ONLINER_DRAFT = {
   connectionDelaySeconds: 3
 };
 
-const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "" };
+const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "", richPresenceEnabled: true };
 
 function parseOnlinerBulkLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -696,6 +696,7 @@ export default function HomePage() {
   const [showOnlinerBulkModal, setShowOnlinerBulkModal] = useState(false);
   const [onlinerBulkTokenDraft, setOnlinerBulkTokenDraft] = useState("");
   const [onlinerBulkProxyDraft, setOnlinerBulkProxyDraft] = useState("");
+  const [onlinerBulkRichPresenceEnabled, setOnlinerBulkRichPresenceEnabled] = useState(true);
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnlinerAccountId, setReconnectingOnlinerAccountId] = useState<string | null>(null);
@@ -1477,7 +1478,7 @@ export default function HomePage() {
     }
     try {
       setAddingOnlinerAccount(true);
-      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl });
+      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl, richPresenceEnabled: onlinerAccountDraft.richPresenceEnabled });
       setOnlinerSnapshot(snapshot);
       setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       notifySuccess("Bot profile added; the Onliner worker will connect it.");
@@ -1500,13 +1501,14 @@ export default function HomePage() {
       notifyError(`Token and proxy counts must match (${botTokens.length} tokens, ${proxyUrls.length} proxies).`);
       return;
     }
-    const accounts = botTokens.map((botToken, index) => ({ botToken, proxyUrl: proxyUrls[index], lineNumber: index + 1 }));
+    const accounts = botTokens.map((botToken, index) => ({ botToken, proxyUrl: proxyUrls[index], richPresenceEnabled: onlinerBulkRichPresenceEnabled, lineNumber: index + 1 }));
     try {
       setAddingOnlinerBulk(true);
       const snapshot = await addDiscordOnlinerAccountsBulk(accounts);
       setOnlinerSnapshot(snapshot);
       setOnlinerBulkTokenDraft("");
       setOnlinerBulkProxyDraft("");
+      setOnlinerBulkRichPresenceEnabled(true);
       setShowOnlinerBulkModal(false);
       notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added; the Onliner worker will connect them.`);
     } catch (error) {
@@ -1537,7 +1539,7 @@ export default function HomePage() {
       setLoadingOnlinerCredentials(true);
       const credentials = await getDiscordOnlinerAccountCredentials(accountId);
       if (requestId !== onlinerCredentialRequestRef.current) return;
-      setOnlinerEditDraft({ botToken: credentials.botToken, proxyUrl: credentials.proxyUrl });
+      setOnlinerEditDraft((current) => ({ ...current, botToken: credentials.botToken, proxyUrl: credentials.proxyUrl }));
     } catch (error) {
       if (requestId !== onlinerCredentialRequestRef.current) return;
       setEditingOnlinerAccountId(null);
@@ -3943,7 +3945,7 @@ export default function HomePage() {
                                   {account.connectionState}
                                 </Badge>
                               </span>
-                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"}</small>
+                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"} · Rich Presence {account.richPresenceEnabled ? "on" : "off"}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </div>
                             <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
@@ -3974,6 +3976,15 @@ export default function HomePage() {
                         <Input type="password" value={onlinerAccountDraft.proxyUrl} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, proxyUrl: event.target.value }))} placeholder="http://user:pass@host:port" autoComplete="new-password" />
                       </label>
                     </div>
+                    <label className="onliner-enabled-card">
+                      <input
+                        type="checkbox"
+                        checked={onlinerAccountDraft.richPresenceEnabled}
+                        onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, richPresenceEnabled: event.target.checked }))}
+                      />
+                      <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
+                      <span><strong>Use Rich Presence</strong><small>Send the configured activities for this bot. Turn it off to keep the bot online without an activity.</small></span>
+                    </label>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <span className="app-copy text-xs">HTTP(S), SOCKS4/5 and host:port:user:pass are supported.</span>
                       <span className="flex flex-wrap gap-2">
@@ -4784,6 +4795,15 @@ export default function HomePage() {
                 <span><strong>Requirement</strong><code>Counts must match</code></span>
                 <span><strong>Remaining capacity</strong><code>{Math.max(0, DISCORD_ONLINER_ACCOUNT_LIMIT - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
               </div>
+              <label className="onliner-enabled-card">
+                <input
+                  type="checkbox"
+                  checked={onlinerBulkRichPresenceEnabled}
+                  onChange={(event) => setOnlinerBulkRichPresenceEnabled(event.target.checked)}
+                />
+                <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
+                <span><strong>Use Rich Presence for these profiles</strong><small>This choice applies to every bot in this bulk import.</small></span>
+              </label>
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk || (!onlinerBulkTokenDraft && !onlinerBulkProxyDraft)} onClick={() => { setOnlinerBulkTokenDraft(""); setOnlinerBulkProxyDraft(""); }}>Clear input</Button>

@@ -16,6 +16,7 @@ export type DiscordOnlinerAccount = {
   id: string;
   hasBotToken: boolean;
   hasProxy: boolean;
+  richPresenceEnabled: boolean;
   currentActivity: string | null;
   connectionState: DiscordOnlinerConnectionState;
   bot: { id: string; username: string; tag: string; avatarUrl: string | null } | null;
@@ -127,7 +128,7 @@ export function saveDiscordOnliner(input: DiscordOnlinerInput) {
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: string }) {
+export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: string; richPresenceEnabled: boolean }) {
   return fetch("/api/onliner/accounts", {
     method: "POST",
     credentials: "same-origin",
@@ -136,7 +137,7 @@ export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: st
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl: string; lineNumber: number }>) {
+export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl: string; richPresenceEnabled: boolean; lineNumber: number }>) {
   return fetch("/api/onliner/accounts/bulk", {
     method: "POST",
     credentials: "same-origin",
