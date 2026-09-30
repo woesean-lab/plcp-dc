@@ -3098,6 +3098,37 @@ async function exchangeCommunityOAuthRefreshToken(config, refreshToken) {
   };
 }
 
+async function exchangeCommunityOAuthAuthorizationCode(config, code, redirectUri) {
+  const response = await fetch(`${discordApiBase}/oauth2/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: config.clientId,
+      client_secret: config.clientSecret,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: redirectUri
+    }),
+    signal: AbortSignal.timeout(15_000)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = String(payload?.error_description ?? payload?.message ?? payload?.error ?? "Discord rejected the OAuth code exchange.").trim();
+    const error = new Error(`OAuth token exchange failed (HTTP ${response.status}): ${message}`);
+    error.statusCode = response.status >= 500 ? 502 : 409;
+    throw error;
+  }
+  const accessToken = String(payload?.access_token ?? "").trim();
+  const refreshToken = String(payload?.refresh_token ?? "").trim();
+  const expiresIn = Number(payload?.expires_in);
+  if (accessToken.length < 20 || refreshToken.length < 20 || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+    const error = new Error("Discord returned an incomplete OAuth authorization response.");
+    error.statusCode = 502;
+    throw error;
+  }
+  return { accessToken, refreshToken, expiresAt: new Date(Date.now() + expiresIn * 1000), expiresIn };
+}
+
 async function refreshStoredCommunityOAuthCredential(config, member, { force = false } = {}) {
   const discordUserId = String(member?.discord_user_id ?? "").trim();
   if (!isDiscordGuildId(discordUserId)) throw new Error("A valid Discord user is required for OAuth refresh.");
@@ -6859,6 +6890,139 @@ app.delete("/api/community/categories/:categoryId", requireSession, async (req, 
     next(error);
   } finally {
     client.release();
+  }
+});
+
+app.post("/api/community/categories/:categoryId/accounts", requireSession, async (req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before adding an account." });
+
+    const requestedCategoryId = String(req.params.categoryId ?? "").trim().toLowerCase();
+    const categoryId = parseCommunityCategoryId(requestedCategoryId);
+    const accountToken = String(req.body?.accountToken ?? "").trim();
+    if (!categoryId || categoryId !== requestedCategoryId) return res.status(400).json({ message: "Choose a valid Members Stock category." });
+    if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
+
+    const category = await pool.query(
+      "SELECT id, name FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [config.guildId, categoryId]
+    );
+    if (!category.rowCount) return res.status(404).json({ message: "Members Stock category not found." });
+
+    const accountIdentity = await requestDiscord("users/@me", { headers: { Authorization: accountToken } });
+    if (!accountIdentity.response.ok || !isDiscordGuildId(String(accountIdentity.payload?.id ?? ""))) {
+      return res.status(accountIdentity.response.status === 429 ? 429 : 401).json({
+        message: accountIdentity.response.status === 429
+          ? "Discord is rate limiting account checks. Try again shortly."
+          : "Discord rejected this account token. Check that it is current and valid."
+      });
+    }
+
+    const redirectUri = `${req.protocol}://${req.get("host")}/api/community/oauth/callback`;
+    const authorizeQuery = new URLSearchParams({
+      client_id: config.clientId,
+      response_type: "code",
+      redirect_uri: redirectUri,
+      scope: "identify guilds.join"
+    });
+    const authorizeResponse = await fetch(`${discordApiBase}/oauth2/authorize?${authorizeQuery.toString()}`, {
+      method: "POST",
+      headers: { Authorization: accountToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ authorize: true, permissions: "0" }),
+      signal: AbortSignal.timeout(15_000)
+    });
+    const authorizePayload = await authorizeResponse.json().catch(() => ({}));
+    if (!authorizeResponse.ok) {
+      const discordMessage = String(authorizePayload?.message ?? authorizePayload?.error_description ?? "Discord rejected the application authorization.").trim();
+      const error = new Error(authorizeResponse.status === 401
+        ? "Discord rejected this account token."
+        : authorizeResponse.status === 429
+          ? "Discord is rate limiting OAuth authorizations. Try again shortly."
+          : `Discord OAuth authorization failed (HTTP ${authorizeResponse.status}): ${discordMessage}`);
+      error.statusCode = authorizeResponse.status === 429 ? 429 : authorizeResponse.status >= 500 ? 502 : 409;
+      throw error;
+    }
+
+    const authorizationLocation = String(authorizePayload?.location ?? "").trim();
+    let authorizationCode = "";
+    try {
+      authorizationCode = new URL(authorizationLocation, redirectUri).searchParams.get("code") ?? "";
+    } catch {
+      authorizationCode = "";
+    }
+    if (!authorizationCode) {
+      const error = new Error("Discord did not return an OAuth authorization code. The account may require additional verification or consent.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const oauth = await exchangeCommunityOAuthAuthorizationCode(config, authorizationCode, redirectUri);
+    const oauthIdentity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${oauth.accessToken}` } });
+    const discordUserId = String(accountIdentity.payload.id);
+    const verifiedUserId = String(oauthIdentity.payload?.user?.id ?? "");
+    const scopes = Array.isArray(oauthIdentity.payload?.scopes) ? oauthIdentity.payload.scopes.map(String) : [];
+    if (!oauthIdentity.response.ok || verifiedUserId !== discordUserId || !scopes.includes("guilds.join")) {
+      const error = new Error("The new OAuth authorization could not be verified with the required guilds.join permission.");
+      error.statusCode = 502;
+      throw error;
+    }
+
+    const username = String(accountIdentity.payload?.username ?? `Discord user ${discordUserId}`).trim().slice(0, 100);
+    const displayName = String(accountIdentity.payload?.global_name ?? "").trim().slice(0, 100) || null;
+    const avatarHash = String(accountIdentity.payload?.avatar ?? "").trim();
+    const avatarUrl = avatarHash
+      ? `https://cdn.discordapp.com/avatars/${encodeURIComponent(discordUserId)}/${encodeURIComponent(avatarHash)}.png?size=128`
+      : null;
+    const positionResult = await pool.query(
+      "SELECT COALESCE(MAX(sort_position), 0)::bigint AS maximum FROM community_oauth_joins WHERE guild_id = $1 AND stock_type = $2",
+      [config.guildId, categoryId]
+    );
+    const sortPosition = Number(positionResult.rows[0]?.maximum ?? 0) + 1024;
+    const details = `OAuth authorization is managed automatically and is valid until ${oauth.expiresAt.toISOString()}.`;
+    const saved = await pool.query(
+      `INSERT INTO community_oauth_joins
+         (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'authorized', $9, $10, NOW(), NULL, NULL, $11)
+       ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
+         username = EXCLUDED.username,
+         display_name = EXCLUDED.display_name,
+         avatar_url = EXCLUDED.avatar_url,
+         encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
+         encrypted_access_token = EXCLUDED.encrypted_access_token,
+         access_token_expires_at = EXCLUDED.access_token_expires_at,
+         status = 'authorized',
+         stock_type = EXCLUDED.stock_type,
+         details = EXCLUDED.details,
+         authorized_at = NOW(),
+         joined_at = NULL,
+         reserved_order_id = NULL,
+         sort_position = CASE WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position ELSE community_oauth_joins.sort_position END
+       RETURNING discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at`,
+      [discordUserId, config.guildId, username, displayName, avatarUrl, encryptCredential(oauth.refreshToken), encryptCredential(oauth.accessToken), oauth.expiresAt, categoryId, details, sortPosition]
+    );
+    const row = saved.rows[0];
+    res.status(201).set("Cache-Control", "no-store").json({
+      categoryId,
+      categoryName: category.rows[0].name,
+      member: {
+        id: row.discord_user_id,
+        username: row.username,
+        displayName: row.display_name,
+        avatarUrl: row.avatar_url,
+        status: row.status,
+        stockType: row.stock_type,
+        details: row.details,
+        reservedOrderId: row.reserved_order_id,
+        sortPosition: Number(row.sort_position),
+        authorizedAt: row.authorized_at,
+        joinedAt: row.joined_at,
+        presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
+        presenceCheckedAt: row.presence_checked_at
+      }
+    });
+  } catch (error) {
+    next(error);
   }
 });
 

@@ -150,6 +150,12 @@ export type CommunityOAuthExportRecord = {
   expires_in: number;
 };
 
+export type CommunityAccountAuthorizationResult = {
+  categoryId: string;
+  categoryName: string;
+  member: CommunityJoinRecord;
+};
+
 async function parseResponse<T>(response: Response) {
   const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
   if (!response.ok) throw new Error(payload.message ?? `Request failed with ${response.status}`);
@@ -280,6 +286,16 @@ export function importCommunityOAuthStock(records: unknown[], categoryId: Commun
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ records, categoryId })
   }).then(parseResponse<CommunityOAuthImportResult>);
+}
+
+export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType) {
+  return fetch(`/api/community/categories/${encodeURIComponent(categoryId)}/accounts`, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountToken })
+  }).then(parseResponse<CommunityAccountAuthorizationResult>);
 }
 
 export function exportCommunityOAuthStock(categoryId: CommunityStockType) {

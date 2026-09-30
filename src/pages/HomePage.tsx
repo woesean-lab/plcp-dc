@@ -54,6 +54,7 @@ import {
   TriangleAlert,
   Trash2,
   UploadCloud,
+  UserPlus,
   Users,
   X,
   Zap,
@@ -63,6 +64,7 @@ import { extractBotInvite } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import {
+  addCommunityAccount,
   clearCommunityConfig,
   createCommunityStockCategory,
   deleteCommunityStockCategory,
@@ -757,6 +759,10 @@ export default function HomePage() {
   const [communityCategoryModalOpen, setCommunityCategoryModalOpen] = useState(false);
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
+  const [communityAccountCategory, setCommunityAccountCategory] = useState<CommunityStockCategory | null>(null);
+  const [communityAccountToken, setCommunityAccountToken] = useState("");
+  const [showCommunityAccountToken, setShowCommunityAccountToken] = useState(false);
+  const [addingCommunityAccount, setAddingCommunityAccount] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
@@ -950,7 +956,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -960,13 +966,14 @@ export default function HomePage() {
       if (communityBulkDeleteOpen && communityBulkAction === null) setCommunityBulkDeleteOpen(false);
       if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
       if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
+      if (communityAccountCategory && !addingCommunityAccount) closeCommunityAccountModal();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -1792,6 +1799,38 @@ export default function HomePage() {
     setEditingCommunityCategoryId(null);
     setCommunityCategoryDraft({ name: "", isPeriodic: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
+  }
+
+  function beginAddingCommunityAccount(category: CommunityStockCategory) {
+    setCommunityAccountCategory(category);
+    setCommunityAccountToken("");
+    setShowCommunityAccountToken(false);
+  }
+
+  function closeCommunityAccountModal() {
+    setCommunityAccountCategory(null);
+    setCommunityAccountToken("");
+    setShowCommunityAccountToken(false);
+  }
+
+  async function handleAddCommunityAccount(event: FormEvent) {
+    event.preventDefault();
+    const category = communityAccountCategory;
+    const accountToken = communityAccountToken.trim();
+    if (!category || addingCommunityAccount) return;
+    if (accountToken.length < 20) return notifyError("Enter a valid Discord account token.");
+    try {
+      setAddingCommunityAccount(true);
+      const result = await addCommunityAccount(accountToken, category.id);
+      setCommunityStockType(category.id);
+      await refreshCommunityStatus(category.id);
+      closeCommunityAccountModal();
+      notifySuccess(`${result.member.displayName || result.member.username} authorized and added to ${result.categoryName}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Discord account could not be authorized.");
+    } finally {
+      setAddingCommunityAccount(false);
+    }
   }
 
   function resetCommunityCategoryDraft() {
@@ -2676,6 +2715,7 @@ export default function HomePage() {
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
                 </button>
                 <div className="community-category-actions">
+                  <Button type="button" variant="secondary" size="xs" disabled={!communityStockConfigured || addingCommunityAccount} onClick={() => beginAddingCommunityAccount(category)}><UserPlus className="h-3.5 w-3.5" /> Add account</Button>
                   <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
                   <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
@@ -4509,6 +4549,42 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {communityAccountCategory ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingCommunityAccount) closeCommunityAccountModal(); }}>
+          <form className="confirm-modal community-account-modal" onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
+            <h2 id="community-account-title">Add Discord account</h2>
+            <p>The account will authorize the configured bot application. Only the resulting OAuth access and refresh tokens are encrypted and saved; the account token is not stored.</p>
+            <label className="mt-5 grid gap-2 text-left">
+              <span className={fieldLabelClass}>Account token</span>
+              <span className="onliner-secret-field">
+                <Input
+                  autoFocus
+                  type={showCommunityAccountToken ? "text" : "password"}
+                  value={communityAccountToken}
+                  maxLength={4096}
+                  autoComplete="off"
+                  placeholder="Discord account token"
+                  disabled={addingCommunityAccount}
+                  onChange={(event) => setCommunityAccountToken(event.target.value)}
+                />
+                <button type="button" aria-label={showCommunityAccountToken ? "Hide account token" : "Show account token"} title={showCommunityAccountToken ? "Hide token" : "Show token"} disabled={addingCommunityAccount} onClick={() => setShowCommunityAccountToken((current) => !current)}>
+                  {showCommunityAccountToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </span>
+            </label>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={addingCommunityAccount} onClick={closeCommunityAccountModal}>Cancel</Button>
+              <Button type="submit" disabled={addingCommunityAccount || communityAccountToken.trim().length < 20}>
+                {addingCommunityAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+                {addingCommunityAccount ? "Authorizing..." : "Authorize & add"}
+              </Button>
+            </div>
+          </form>
         </div>
       ) : null}
 
