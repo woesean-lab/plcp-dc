@@ -2836,19 +2836,6 @@ export default function HomePage() {
   );
 
   const showManageSkeleton = refreshingManage && !orders.length;
-  const onlinerConnectionState = onlinerSnapshot?.connectionState ?? (loadingOnliner ? "connecting" : "disconnected");
-  const onlinerConnectionLabel = onlinerConnectionState === "connected"
-    ? "Connected"
-    : onlinerConnectionState === "reconnecting"
-      ? "Reconnecting"
-      : onlinerConnectionState === "connecting"
-        ? "Connecting"
-        : onlinerConnectionState === "error" ? "Error" : "Disconnected";
-  const onlinerBadgeVariant = onlinerConnectionState === "connected"
-    ? "success" as const
-    : onlinerConnectionState === "error"
-      ? "destructive" as const
-      : "secondary" as const;
   const onlinerNextConnectionSeconds = onlinerSnapshot?.nextConnectionAt
     ? Math.max(0, Math.ceil((new Date(onlinerSnapshot.nextConnectionAt).getTime() - onlinerCountdownNow) / 1_000))
     : null;
@@ -3881,8 +3868,6 @@ export default function HomePage() {
                 <Badge variant={onlinerSnapshot?.worker?.status === "online" && !onlinerSnapshot.worker.connectionPaused ? "success" : onlinerSnapshot?.worker?.status === "standby" || onlinerSnapshot?.worker?.connectionPaused ? "secondary" : "destructive"}>
                   Worker {onlinerSnapshot?.worker?.connectionPaused ? "paused" : onlinerSnapshot?.worker?.status ?? "offline"}
                 </Badge>
-                <Badge variant={onlinerBadgeVariant}>{onlinerConnectionLabel}</Badge>
-                <Badge variant={onlinerSnapshot?.configured ? "success" : "destructive"}>{onlinerSnapshot?.accounts.length ? `${onlinerSnapshot.accounts.length} bot${onlinerSnapshot.accounts.length === 1 ? "" : "s"} saved` : "No bots"}</Badge>
               </div>
             </header>
 
