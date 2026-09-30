@@ -250,7 +250,22 @@ function createDiscordGatewayIdentityProperties() {
   return {
     os: "windows",
     browser: "Discord Client",
-    device: "desktop"
+    device: "desktop",
+    system_locale: "en-US",
+    browser_user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9156 Chrome/124.0.6367.243 Electron/30.0.6 Safari/537.36",
+    browser_version: "1.0.9156",
+    os_version: "10",
+    release_channel: "stable",
+    client_build_number: 280000
+  };
+}
+function createDiscordGatewayClientState() {
+  return {
+    guild_versions: {},
+    highest_last_message_id: "0",
+    read_state_version: 0,
+    user_guild_settings_version: -1,
+    private_channels_version: "0"
   };
 }
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
@@ -1357,7 +1372,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
           token: account.botToken,
           intents: 1,
           properties: createDiscordGatewayIdentityProperties(),
-          presence
+          presence,
+          capabilities: 16381,
+          compress: false,
+          client_state: createDiscordGatewayClientState()
         }
       }));
       appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
@@ -2010,7 +2028,10 @@ async function ensureCommunityPresenceGateway(config) {
         d: {
           token: config.botToken,
           intents: communityGatewayIntents,
-          properties: createDiscordGatewayIdentityProperties()
+          properties: createDiscordGatewayIdentityProperties(),
+          capabilities: 16381,
+          compress: false,
+          client_state: createDiscordGatewayClientState()
         }
       }));
       return;
