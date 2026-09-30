@@ -5242,6 +5242,7 @@
   min-height: 0;
   gap: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   padding: 4px 5px 4px 4px;
   border: 1px solid var(--app-divider);
@@ -5378,12 +5379,14 @@
   .onliner-account-delay > span:last-child { justify-content: space-between; }
   .onliner-account-row {
     grid-template:
-      "avatar copy actions" auto
+      "avatar copy copy" auto
       "avatar status actions" auto
       / auto minmax(0, 1fr) auto;
-    min-height: 68px;
+    width: 100%;
+    min-width: 0;
+    min-height: 74px;
     column-gap: 8px;
-    row-gap: 5px;
+    row-gap: 6px;
     padding: 8px 6px;
   }
   .onliner-account-row .onliner-bot-avatar {
@@ -5409,7 +5412,8 @@
   }
   .onliner-account-actions {
     grid-area: actions;
-    align-self: center;
+    align-self: start;
+    justify-self: end;
   }
   .onliner-account-reconnect,
   .onliner-account-edit,
