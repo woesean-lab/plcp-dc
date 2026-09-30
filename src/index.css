@@ -5495,32 +5495,47 @@
 
 .onliner-presence-panel {
   display: grid;
-  gap: 13px;
+  gap: 18px;
   border: 1px solid var(--app-border);
   border-radius: 14px;
-  padding: 14px;
+  padding: 18px;
   background: var(--app-surface-soft);
 }
 
-.onliner-presence-heading > span,
-.onliner-source-card > span { display: grid; gap: 3px; }
-.onliner-presence-heading strong,
-.onliner-source-card strong { color: var(--app-text); font-size: 13px; }
-.onliner-presence-heading small,
-.onliner-source-card small { color: var(--app-muted); font-size: 10px; line-height: 1.45; }
+.onliner-section-heading { display: flex; align-items: center; gap: 11px; }
+.onliner-section-heading > span:last-child { display: grid; gap: 3px; }
+.onliner-section-heading strong { color: var(--app-text); font-size: 13px; font-weight: 650; }
+.onliner-section-heading small { color: var(--app-muted); font-size: 10px; line-height: 1.45; }
+.onliner-section-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--app-accent-bright) 22%, var(--app-border));
+  border-radius: 10px;
+  color: var(--app-accent-bright);
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-control-bg));
+}
+.onliner-presence-settings { display: grid; gap: 0; border-top: 1px solid var(--app-divider); }
+.onliner-setting-group { display: grid; grid-template-columns: 145px minmax(0, 1fr); gap: 18px; align-items: start; padding: 16px 0; border-bottom: 1px solid var(--app-divider); }
+.onliner-setting-group:last-child { padding-bottom: 0; border-bottom: 0; }
+.onliner-setting-copy { display: grid; gap: 4px; padding-top: 3px; }
+.onliner-setting-copy strong { color: var(--app-text-secondary); font-size: 11px; font-weight: 650; }
+.onliner-setting-copy small { color: var(--app-muted); font-size: 9px; line-height: 1.45; }
 
 .onliner-status-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .onliner-status-options label {
   display: flex;
   align-items: center;
   gap: 8px;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 7px 10px;
   border: 1px solid var(--app-border);
   border-radius: 9px;
   color: var(--app-muted);
   background: rgba(5, 6, 13, .3);
-  font-size: 11px;
+  font-size: 10px;
   text-transform: capitalize;
   cursor: pointer;
 }
@@ -5536,24 +5551,49 @@
 }
 
 .onliner-chance-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-.onliner-chance-grid > label { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--app-border); border-radius: 10px; background: rgba(5, 6, 13, .28); }
+.onliner-chance-grid > label { display: grid; gap: 6px; }
 .onliner-chance-grid > label > span:first-child { color: var(--app-text-secondary); font-size: 10px; font-weight: 700; text-transform: capitalize; }
-.onliner-chance-grid > label > span:last-child { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px; }
+.onliner-chance-grid > label > span:last-child { position: relative; display: block; }
 .onliner-chance-grid .ui-input { height: 34px; min-height: 34px; padding: 5px 7px; }
-.onliner-chance-grid b { color: var(--app-muted); font-size: 10px; }
+.onliner-chance-grid b { position: absolute; top: 50%; right: 9px; color: var(--app-muted); font-size: 9px; transform: translateY(-50%); pointer-events: none; }
 
-.onliner-source-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.onliner-source-card { display: grid; min-width: 0; gap: 10px; border: 1px solid var(--app-border); border-radius: 14px; padding: 13px; background: var(--app-surface-soft); }
-.onliner-source-card .onliner-game-textarea { min-height: 128px; }
+.onliner-activity-section { display: grid; gap: 16px; }
+.onliner-activity-section > .onliner-section-heading { padding: 0 3px; }
+.onliner-source-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.onliner-source-card { position: relative; display: flex; min-width: 0; flex-direction: column; gap: 12px; overflow: hidden; border: 1px solid var(--app-border); border-radius: 14px; padding: 15px; background: var(--app-surface-soft); }
+.onliner-source-card::before { position: absolute; inset: 0 auto 0 0; width: 2px; background: var(--source-color, var(--app-accent-bright)); content: ""; opacity: .65; }
+.onliner-source-card[data-source="playing"] { --source-color: #8095ff; }
+.onliner-source-card[data-source="listening"] { --source-color: #67d8a0; }
+.onliner-source-card[data-source="watching"] { --source-color: #ff727d; }
+.onliner-source-card[data-source="streaming"] { --source-color: #a783ff; }
+.onliner-source-card[data-source="watching"] { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(130px, .7fr) minmax(180px, 1fr) minmax(180px, 1fr); align-items: center; }
+.onliner-source-card[data-source="watching"] > p { min-height: 0; }
+.onliner-source-head { display: flex; align-items: center; gap: 10px; }
+.onliner-source-head > span { display: grid; width: 30px; height: 30px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: var(--source-color); background: color-mix(in srgb, var(--source-color) 11%, transparent); }
+.onliner-source-head > div { display: grid; gap: 1px; }
+.onliner-source-head strong { color: var(--app-text); font-size: 12px; font-weight: 650; }
+.onliner-source-head small { color: var(--app-muted); font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.onliner-source-card > p { min-height: 30px; margin: 0; color: var(--app-muted); font-size: 9px; line-height: 1.55; }
+.onliner-source-card > label { display: grid; gap: 7px; }
+.onliner-source-card .onliner-game-textarea { min-height: 112px; }
+.onliner-stream-card { grid-column: 1 / -1; }
+.onliner-stream-card > p { min-height: 0; }
 .onliner-stream-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .onliner-stream-grid label { display: grid; min-width: 0; gap: 8px; }
-.onliner-stream-grid .onliner-game-textarea { min-height: 140px; }
+.onliner-stream-grid .onliner-game-textarea { min-height: 126px; }
+
+@media (max-width: 1080px) {
+  .onliner-setting-group { grid-template-columns: 1fr; gap: 10px; }
+  .onliner-setting-copy small { max-width: 440px; }
+}
 
 @media (max-width: 760px) {
   .onliner-status-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-chance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-source-grid,
   .onliner-stream-grid { grid-template-columns: 1fr; }
+  .onliner-stream-card { grid-column: auto; }
+  .onliner-source-card[data-source="watching"] { grid-column: auto; display: flex; }
 }
 
 @media (max-width: 480px) {

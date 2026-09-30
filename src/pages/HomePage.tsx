@@ -26,6 +26,7 @@ import {
   Eye,
   EyeOff,
   History,
+  Headphones,
   Heart,
   KeyRound,
   ListChecks,
@@ -43,6 +44,7 @@ import {
   RotateCcw,
   Search,
   Settings2,
+  SlidersHorizontal,
   Shield,
   ShieldCheck,
   Square,
@@ -4034,57 +4036,81 @@ export default function HomePage() {
                   </label>
 
                   <div className="onliner-presence-panel">
-                    <div className="onliner-presence-heading"><span><strong>Bot status</strong><small>Choose one status or use Mixed for a balanced distribution across bots.</small></span></div>
-                    <div className="onliner-status-options">
-                      <label data-status="mixed">
-                        <input
-                          type="checkbox"
-                          checked={onlinerDraft.statuses.length === 3}
-                          onChange={(event) => setOnlinerDraft((current) => ({
-                            ...current,
-                            statuses: event.target.checked ? ["online", "idle", "dnd"] : ["online"]
-                          }))}
-                        />
-                        <i /> <span>Mixed · balanced</span>
-                      </label>
-                      {(["online", "idle", "dnd"] as const).map((status) => (
-                        <label key={status} data-status={status}>
-                          <input type="checkbox" checked={onlinerDraft.statuses.includes(status)} onChange={(event) => setOnlinerDraft((current) => ({
-                            ...current,
-                            statuses: event.target.checked ? [...new Set([...current.statuses, status])] : current.statuses.length > 1 ? current.statuses.filter((item) => item !== status) : current.statuses
-                          }))} />
-                          <i /> <span>{status === "dnd" ? "Do not disturb" : status}</span>
-                        </label>
-                      ))}
+                    <div className="onliner-section-heading">
+                      <span className="onliner-section-icon" aria-hidden="true"><SlidersHorizontal className="h-4 w-4" /></span>
+                      <span><strong>Presence behavior</strong><small>Control how your bots appear and which activities they can display.</small></span>
+                    </div>
+                    <div className="onliner-presence-settings">
+                      <div className="onliner-setting-group">
+                        <div className="onliner-setting-copy"><strong>Bot status</strong><small>Select one or mix all three statuses.</small></div>
+                        <div className="onliner-status-options">
+                          <label data-status="mixed">
+                            <input
+                              type="checkbox"
+                              checked={onlinerDraft.statuses.length === 3}
+                              onChange={(event) => setOnlinerDraft((current) => ({
+                                ...current,
+                                statuses: event.target.checked ? ["online", "idle", "dnd"] : ["online"]
+                              }))}
+                            />
+                            <i /> <span>Mixed</span>
+                          </label>
+                          {(["online", "idle", "dnd"] as const).map((status) => (
+                            <label key={status} data-status={status}>
+                              <input type="checkbox" checked={onlinerDraft.statuses.includes(status)} onChange={(event) => setOnlinerDraft((current) => ({
+                                ...current,
+                                statuses: event.target.checked ? [...new Set([...current.statuses, status])] : current.statuses.length > 1 ? current.statuses.filter((item) => item !== status) : current.statuses
+                              }))} />
+                              <i /> <span>{status === "dnd" ? "Do not disturb" : status}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="onliner-setting-group">
+                        <div className="onliner-setting-copy"><strong>Activity chances</strong><small>Chance of each activity appearing when a presence is generated.</small></div>
+                        <div className="onliner-chance-grid">
+                          {(["playing", "streaming", "listening", "watching"] as const).map((type) => (
+                            <label key={type}>
+                              <span>{type}</span>
+                              <span><Input aria-label={`${type} activity chance`} type="number" min={0} max={100} value={onlinerDraft.activityChances[type]} onChange={(event) => setOnlinerDraft((current) => ({ ...current, activityChances: { ...current.activityChances, [type]: Math.min(100, Math.max(0, Number(event.target.value) || 0)) } }))} /><b>%</b></span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="onliner-presence-panel">
-                    <div className="onliner-presence-heading"><span><strong>Activity chances</strong><small>Each type rolls separately from 0–100% whenever presence is generated.</small></span></div>
-                    <div className="onliner-chance-grid">
-                      {(["playing", "streaming", "listening", "watching"] as const).map((type) => (
-                        <label key={type}>
-                          <span>{type}</span>
-                          <span><Input type="number" min={0} max={100} value={onlinerDraft.activityChances[type]} onChange={(event) => setOnlinerDraft((current) => ({ ...current, activityChances: { ...current.activityChances, [type]: Math.min(100, Math.max(0, Number(event.target.value) || 0)) } }))} /><b>%</b></span>
-                        </label>
-                      ))}
+                  <div className="onliner-activity-section">
+                    <div className="onliner-section-heading">
+                      <span className="onliner-section-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
+                      <span><strong>Activity content</strong><small>Add the content that bots will use for each activity type.</small></span>
                     </div>
-                  </div>
-
-                  <div className="onliner-source-grid">
-                    <label className="onliner-source-card"><span><strong>Playing · Discord games</strong><small>Exact game names use Discord's official catalog icon · leave empty for the built-in list</small></span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Leave empty for automatic game catalog\n—or enter custom games here"} /></label>
-                    <label className="onliner-source-card"><span><strong>Listening · Spotify</strong><small>Loads real track, artist, duration and album artwork · cached for 30 minutes</small></span><Input value={onlinerDraft.spotifyPlaylistId} maxLength={22} onChange={(event) => setOnlinerDraft((current) => ({ ...current, spotifyPlaylistId: event.target.value.trim() }))} placeholder="Spotify playlist ID" /><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Fallback tracks · one per line"} /></label>
-                    <label className="onliner-source-card"><span><strong>Watching · YouTube + Twitch</strong><small>Random YouTube videos and Twitch users share this pool; Twitch uses the users, categories and titles below</small></span><Input value={onlinerDraft.youtubePlaylistId} maxLength={100} onChange={(event) => setOnlinerDraft((current) => ({ ...current, youtubePlaylistId: event.target.value.trim() }))} placeholder="YouTube playlist ID or URL" /></label>
-                  </div>
-
-                  <div className="onliner-presence-panel">
-                    <div className="onliner-presence-heading">
-                      <span><strong>Streaming · Twitch</strong><small>Each bot randomly combines one Twitch user, category and title from these pools.</small></span>
-                    </div>
-                    <div className="onliner-stream-grid">
-                      <label><span className={fieldLabelClass}>Users · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder="dazznovanation" /></label>
-                      <label><span className={fieldLabelClass}>Categories · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingCategories} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingCategories: event.target.value }))} placeholder={"Just Chatting\nVALORANT\nMusic"} /></label>
-                      <label><span className={fieldLabelClass}>Titles · one per line</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingTitles} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingTitles: event.target.value }))} placeholder={"Chill vibes only\nLate night stream"} /></label>
+                    <div className="onliner-source-grid">
+                      <div className="onliner-source-card" data-source="playing">
+                        <div className="onliner-source-head"><span aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span><div><strong>Playing</strong><small>Discord games</small></div></div>
+                        <p>Use one game per line. Leave empty to use the built-in game catalog.</p>
+                        <label><span className={fieldLabelClass}>Game list</span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Minecraft\nVALORANT\nLeague of Legends"} /></label>
+                      </div>
+                      <div className="onliner-source-card" data-source="listening">
+                        <div className="onliner-source-head"><span aria-hidden="true"><Headphones className="h-4 w-4" /></span><div><strong>Listening</strong><small>Spotify</small></div></div>
+                        <p>Fetch real track details from a playlist, with optional fallback tracks.</p>
+                        <label><span className={fieldLabelClass}>Playlist ID</span><Input value={onlinerDraft.spotifyPlaylistId} maxLength={22} onChange={(event) => setOnlinerDraft((current) => ({ ...current, spotifyPlaylistId: event.target.value.trim() }))} placeholder="Spotify playlist ID" /></label>
+                        <label><span className={fieldLabelClass}>Fallback tracks</span><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Track — Artist\nOne per line"} /></label>
+                      </div>
+                      <div className="onliner-source-card" data-source="watching">
+                        <div className="onliner-source-head"><span aria-hidden="true"><Eye className="h-4 w-4" /></span><div><strong>Watching</strong><small>YouTube</small></div></div>
+                        <p>Pick random videos from a YouTube playlist for watching activities.</p>
+                        <label><span className={fieldLabelClass}>Playlist</span><Input value={onlinerDraft.youtubePlaylistId} maxLength={100} onChange={(event) => setOnlinerDraft((current) => ({ ...current, youtubePlaylistId: event.target.value.trim() }))} placeholder="Playlist ID or URL" /></label>
+                      </div>
+                      <div className="onliner-source-card onliner-stream-card" data-source="streaming">
+                        <div className="onliner-source-head"><span aria-hidden="true"><RadioTower className="h-4 w-4" /></span><div><strong>Streaming</strong><small>Twitch</small></div></div>
+                        <p>Each bot randomly combines one user, category and title from these lists.</p>
+                        <div className="onliner-stream-grid">
+                          <label><span className={fieldLabelClass}>Users</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder={"tarik\nshroud\nxqc"} /></label>
+                          <label><span className={fieldLabelClass}>Categories</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingCategories} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingCategories: event.target.value }))} placeholder={"Just Chatting\nVALORANT\nMusic"} /></label>
+                          <label><span className={fieldLabelClass}>Titles</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingTitles} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingTitles: event.target.value }))} placeholder={"Chill vibes only\nLate night stream"} /></label>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
