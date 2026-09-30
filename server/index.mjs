@@ -1412,12 +1412,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       } else {
         const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
         socket.send(JSON.stringify({
-          op: 2,
-          d: {
-            token: account.botToken,
-            intents: 1,
-            properties: createDiscordGatewayIdentityProperties(),
-            presence,
+        op: 2,
+        d: {
+          token: account.botToken,
+          properties: createDiscordGatewayIdentityProperties(),
+          presence,
             capabilities: 16381,
             compress: false,
             client_state: createDiscordGatewayClientState()
@@ -1936,7 +1935,6 @@ let communityGuildLeaveProgress = { active: false, total: 0, completed: 0, curre
 const communityMemberPresenceCache = new Map();
 const communityGatewayPresenceCache = new Map();
 const communityGatewayWatchedPresenceKeys = new Map();
-const communityGatewayIntents = (1 << 0) | (1 << 1) | (1 << 8);
 let communityPresenceGateway = null;
 
 function normalizeCommunityPresenceStatus(value) {
@@ -2095,7 +2093,6 @@ async function ensureCommunityPresenceGateway(config) {
         op: 2,
         d: {
           token: config.botToken,
-          intents: communityGatewayIntents,
           properties: createDiscordGatewayIdentityProperties(),
           capabilities: 16381,
           compress: false,
