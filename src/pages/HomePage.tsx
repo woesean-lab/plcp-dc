@@ -1600,19 +1600,19 @@ export default function HomePage() {
   async function handleOnlinerControl(action: "start" | "reconnect" | "continue" | "pause" | "stop") {
     try {
       setOnlinerControlAction(action);
-      const snapshot = action === "start" || action === "reconnect"
+      const snapshot = action === "start"
         ? await reconnectDiscordOnliner()
-        : action === "continue"
+        : action === "continue" || action === "reconnect"
           ? await continueDiscordOnlinerConnections()
           : action === "pause"
             ? await pauseDiscordOnlinerConnections()
             : await stopDiscordOnlinerConnections();
       setOnlinerSnapshot(snapshot);
-      notifySuccess(action === "start" || action === "reconnect"
-        ? action === "reconnect"
-          ? "All Gateway connections are restarting from the beginning."
-          : "Gateway connection process started from the beginning."
-        : action === "continue"
+      notifySuccess(action === "start"
+        ? "Gateway connection process started from the beginning."
+        : action === "reconnect"
+          ? "Disconnected Gateway connections are restarting. Connected bots were left online."
+          : action === "continue"
           ? "Gateway connection process continued with the remaining bots."
           : action === "pause"
           ? "New Gateway connections paused; connected bots were kept online."
@@ -3904,9 +3904,9 @@ export default function HomePage() {
                           {onlinerControlAction === "continue" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                           Continue
                         </Button>
-                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null} onClick={() => void handleOnlinerControl("reconnect")} title="Disconnect every bot and restart all Gateway connections from the beginning">
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.connectedCount >= onlinerSnapshot.accounts.length} onClick={() => void handleOnlinerControl("reconnect")} title="Reconnect disconnected bots without interrupting bots that are already online">
                           {onlinerControlAction === "reconnect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                          Reconnect all
+                          Reconnect offline
                         </Button>
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("pause")} title="Pause pending connections without disconnecting bots that are already online">
                           {onlinerControlAction === "pause" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
