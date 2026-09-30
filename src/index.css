@@ -3970,6 +3970,29 @@
     scrollbar-gutter: stable;
   }
 
+  .boost-stock-format-toggle {
+    display: flex;
+    align-items: flex-start;
+    gap: .7rem;
+    border: 1px solid var(--app-border);
+    border-radius: 12px;
+    padding: .75rem .85rem;
+    background: rgba(255, 255, 255, .018);
+    cursor: pointer;
+  }
+
+  .boost-stock-format-toggle input {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+    margin-top: 2px;
+    accent-color: var(--app-accent-bright);
+  }
+
+  .boost-stock-format-toggle > span { display: grid; gap: .2rem; }
+  .boost-stock-format-toggle strong { color: var(--app-text); font-size: .75rem; }
+  .boost-stock-format-toggle small { color: var(--app-muted); font-size: .65rem; line-height: 1.45; }
+
   .onliner-bulk-help {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

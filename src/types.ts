@@ -143,6 +143,7 @@ export interface BoostStock {
 export interface BoostTokenStockInput {
   oneMonthTokens: string;
   threeMonthTokens: string;
+  removeTwoFactor?: boolean;
 }
 
 export interface BoostTokenStockSnapshot {

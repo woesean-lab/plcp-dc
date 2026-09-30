@@ -3196,11 +3196,22 @@ function normalizeBoostTokenList(value) {
   return Array.from(new Set(items.map((item) => String(item ?? "").trim()).filter(Boolean)));
 }
 
+function removeBoostTokenTwoFactor(value) {
+  const parts = String(value ?? "").split(":");
+  return parts.length >= 4 ? parts.slice(0, -1).join(":") : String(value ?? "");
+}
+
 function normalizeBoostTokenStock(value) {
   const stock = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const normalizeTokens = (tokens) => {
+    const normalized = normalizeBoostTokenList(tokens);
+    return stock.removeTwoFactor === true
+      ? normalizeBoostTokenList(normalized.map(removeBoostTokenTwoFactor))
+      : normalized;
+  };
   return {
-    oneMonth: normalizeBoostTokenList(stock.oneMonthTokens ?? stock.oneMonth),
-    threeMonth: normalizeBoostTokenList(stock.threeMonthTokens ?? stock.threeMonth)
+    oneMonth: normalizeTokens(stock.oneMonthTokens ?? stock.oneMonth),
+    threeMonth: normalizeTokens(stock.threeMonthTokens ?? stock.threeMonth)
   };
 }
 

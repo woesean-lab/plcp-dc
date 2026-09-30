@@ -666,6 +666,7 @@ export default function HomePage() {
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
+  const [removeBoostTokenTwoFactor, setRemoveBoostTokenTwoFactor] = useState(false);
   const [boostTokenLists, setBoostTokenLists] = useState<{ oneMonthTokens: string[]; threeMonthTokens: string[] }>({
     oneMonthTokens: [],
     threeMonthTokens: []
@@ -2031,9 +2032,10 @@ export default function HomePage() {
 
     try {
       setSavingBoostStock(true);
-      const result = await saveBoostStock(boostTokenDrafts);
+      const result = await saveBoostStock({ ...boostTokenDrafts, removeTwoFactor: removeBoostTokenTwoFactor });
       setBoostStock(result.stock);
       setBoostTokenDrafts(EMPTY_BOOST_TOKEN_DRAFTS);
+      setRemoveBoostTokenTwoFactor(false);
       setShowAddTokensModal(false);
       void refreshBoostStockTokens();
       notifySuccess("Boost stock updated.");
@@ -4803,6 +4805,17 @@ export default function HomePage() {
             <p>Paste one token per line. Tokens are stored in encrypted PostgreSQL and used only when a Boosts order runs.</p>
 
             <form onSubmit={handleSaveBoostStock} className="mt-5 grid gap-5">
+              <label className="boost-stock-format-toggle">
+                <input
+                  type="checkbox"
+                  checked={removeBoostTokenTwoFactor}
+                  onChange={(event) => setRemoveBoostTokenTwoFactor(event.target.checked)}
+                />
+                <span>
+                  <strong>Remove 2FA field</strong>
+                  <small>Entries in email:pass:token:2fa format will be stored as email:pass:token.</small>
+                </span>
+              </label>
               <div className="grid gap-4 md:grid-cols-2">
                 <label className="grid gap-2">
                   <span className={fieldLabelClass}>1 month tokens</span>
