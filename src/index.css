@@ -5376,9 +5376,48 @@
   .onliner-account-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-account-delay { align-items: stretch; flex-direction: column; }
   .onliner-account-delay > span:last-child { justify-content: space-between; }
-  .onliner-account-row { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .onliner-account-status { grid-column: 2; justify-self: start; }
-  .onliner-account-actions { grid-column: 3; grid-row: 1 / span 2; }
+  .onliner-account-row {
+    grid-template:
+      "avatar copy actions" auto
+      "avatar status actions" auto
+      / auto minmax(0, 1fr) auto;
+    min-height: 68px;
+    column-gap: 8px;
+    row-gap: 5px;
+    padding: 8px 6px;
+  }
+  .onliner-account-row .onliner-bot-avatar {
+    grid-area: avatar;
+    align-self: start;
+  }
+  .onliner-account-copy {
+    grid-area: copy;
+    align-self: start;
+  }
+  .onliner-account-copy em {
+    display: -webkit-box;
+    overflow: hidden;
+    line-height: 1.35;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+  .onliner-account-status {
+    grid-area: status;
+    justify-self: start;
+    align-self: start;
+  }
+  .onliner-account-actions {
+    grid-area: actions;
+    align-self: center;
+  }
+  .onliner-account-reconnect,
+  .onliner-account-edit,
+  .onliner-account-remove {
+    width: 26px;
+    min-width: 26px;
+    min-height: 26px;
+  }
 }
 
 .onliner-rotation-panel {

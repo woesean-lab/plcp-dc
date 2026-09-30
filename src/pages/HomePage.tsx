@@ -3907,11 +3907,11 @@ export default function HomePage() {
                     </div>
                     {onlinerSnapshot?.configured && onlinerSnapshot.enabled ? (
                       <div className="onliner-account-controls" aria-label="Bot profile connection controls">
-                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null} onClick={() => void handleOnlinerControl("start")} title="Restart the connection process for every bot">
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true || onlinerSnapshot.connectedCount > 0} onClick={() => void handleOnlinerControl("start")} title="Start all bot connections after they have been stopped">
                           {onlinerControlAction === "start" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
                           Start
                         </Button>
-                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true} onClick={() => void handleOnlinerControl("continue")} title="Continue connecting bots that are not online">
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true || onlinerSnapshot.connectedCount === 0} onClick={() => void handleOnlinerControl("continue")} title="Continue connecting bots that are not online">
                           {onlinerControlAction === "continue" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                           Continue
                         </Button>
