@@ -1074,6 +1074,19 @@ function chooseDiscordOnlinerVariant(values, currentValue) {
   return alternatives[Math.floor(Math.random() * alternatives.length)] ?? values[0];
 }
 
+function chooseDiscordOnlinerStatus(config, runtime) {
+  const statuses = Array.isArray(config.statuses) && config.statuses.length ? config.statuses : ["online"];
+  if (statuses.length === 1) return statuses[0];
+  const usage = new Map(statuses.map((status) => [status, 0]));
+  for (const candidate of discordOnlinerRuntimes.values()) {
+    if (candidate === runtime || candidate.state !== "connected" || !usage.has(candidate.currentStatus)) continue;
+    usage.set(candidate.currentStatus, usage.get(candidate.currentStatus) + 1);
+  }
+  const minimumUsage = Math.min(...usage.values());
+  const leastUsed = statuses.filter((status) => usage.get(status) === minimumUsage);
+  return chooseDiscordOnlinerVariant(leastUsed, runtime.currentStatus);
+}
+
 function getDiscordOnlinerRandomPlayingStart() {
   const minimumElapsedMs = 3 * 60_000;
   const maximumElapsedMs = 6 * 60 * 60_000;
@@ -1111,7 +1124,7 @@ function buildDiscordOnlinerSpotifyActivity(track, runtime) {
 
 function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
   if (chooseNext || !runtime.currentStatus) {
-    runtime.currentStatus = chooseDiscordOnlinerVariant(config.statuses, runtime.currentStatus);
+    runtime.currentStatus = chooseDiscordOnlinerStatus(config, runtime);
   }
   if (chooseNext || !runtime.currentActivities) {
     const activities = [];
@@ -1221,7 +1234,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
 function buildDiscordOnlinerAccountPresence(config, account, runtime, chooseNext = false) {
   if (account.richPresenceEnabled !== false) return buildDiscordOnlinerPresence(config, runtime, chooseNext);
   if (chooseNext || !runtime.currentStatus) {
-    runtime.currentStatus = chooseDiscordOnlinerVariant(config.statuses, runtime.currentStatus);
+    runtime.currentStatus = chooseDiscordOnlinerStatus(config, runtime);
   }
   runtime.currentActivities = [];
   runtime.currentActivity = null;

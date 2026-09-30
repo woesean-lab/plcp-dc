@@ -4017,8 +4017,19 @@ export default function HomePage() {
                   </label>
 
                   <div className="onliner-presence-panel">
-                    <div className="onliner-presence-heading"><span><strong>Status pool</strong><small>A status is selected independently for every bot.</small></span></div>
+                    <div className="onliner-presence-heading"><span><strong>Bot status</strong><small>Choose one status or use Mixed for a balanced distribution across bots.</small></span></div>
                     <div className="onliner-status-options">
+                      <label data-status="mixed">
+                        <input
+                          type="checkbox"
+                          checked={onlinerDraft.statuses.length === 3}
+                          onChange={(event) => setOnlinerDraft((current) => ({
+                            ...current,
+                            statuses: event.target.checked ? ["online", "idle", "dnd"] : ["online"]
+                          }))}
+                        />
+                        <i /> <span>Mixed · balanced</span>
+                      </label>
                       {(["online", "idle", "dnd"] as const).map((status) => (
                         <label key={status} data-status={status}>
                           <input type="checkbox" checked={onlinerDraft.statuses.includes(status)} onChange={(event) => setOnlinerDraft((current) => ({

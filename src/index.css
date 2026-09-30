@@ -5509,7 +5509,7 @@
 .onliner-presence-heading small,
 .onliner-source-card small { color: var(--app-muted); font-size: 10px; line-height: 1.45; }
 
-.onliner-status-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.onliner-status-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .onliner-status-options label {
   display: flex;
   align-items: center;
@@ -5530,6 +5530,10 @@
 .onliner-status-options label[data-status="online"]:has(input:checked) i { background: var(--app-success); box-shadow: 0 0 8px rgba(105, 221, 178, .48); }
 .onliner-status-options label[data-status="idle"]:has(input:checked) i { background: #f4be4e; }
 .onliner-status-options label[data-status="dnd"]:has(input:checked) i { background: var(--app-danger); }
+.onliner-status-options label[data-status="mixed"]:has(input:checked) i {
+  background: conic-gradient(var(--app-success) 0 33%, #f4be4e 33% 66%, var(--app-danger) 66% 100%);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--app-accent-bright) 34%, transparent);
+}
 
 .onliner-chance-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
 .onliner-chance-grid > label { display: grid; gap: 7px; padding: 10px; border: 1px solid var(--app-border); border-radius: 10px; background: rgba(5, 6, 13, .28); }
@@ -5546,6 +5550,7 @@
 .onliner-stream-grid .onliner-game-textarea { min-height: 140px; }
 
 @media (max-width: 760px) {
+  .onliner-status-options { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-chance-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-source-grid,
   .onliner-stream-grid { grid-template-columns: 1fr; }
