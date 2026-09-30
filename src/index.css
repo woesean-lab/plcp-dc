@@ -5216,6 +5216,26 @@
 .onliner-account-delay > span:last-child { display: flex; align-items: center; gap: 8px; }
 .onliner-account-delay .ui-input { width: 86px; }
 .onliner-account-delay b { color: var(--app-muted); font-size: 10px; font-weight: 600; }
+.onliner-next-connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 1px solid color-mix(in srgb, var(--app-accent-bright) 34%, var(--app-border));
+  border-radius: 11px;
+  color: var(--app-muted);
+  background: var(--app-accent-soft);
+  font-size: 11px;
+}
+
+.onliner-next-connection svg { color: var(--app-accent-bright); }
+.onliner-next-connection strong {
+  margin-left: auto;
+  color: var(--app-accent-bright);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 .onliner-account-list {
   display: grid;
   max-height: 274px;

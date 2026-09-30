@@ -389,6 +389,7 @@ function createDiscordOnlinerRuntime(accountId) {
     activityTimer: null,
     connectionQueueTimer: null,
     connectionQueueContinuation: null,
+    nextQueuedConnectionAt: null,
     heartbeatAcknowledged: true,
     state: "disconnected",
     bot: null,
@@ -424,7 +425,8 @@ function serializeDiscordOnlinerRuntime(runtime) {
     connectedAt: runtime.connectedAt,
     lastDisconnectedAt: runtime.lastDisconnectedAt,
     lastError: runtime.lastError,
-    reconnectAttempt: runtime.reconnectAttempt
+    reconnectAttempt: runtime.reconnectAttempt,
+    nextQueuedConnectionAt: runtime.nextQueuedConnectionAt
   };
 }
 
@@ -832,6 +834,10 @@ async function getDiscordOnlinerConfig() {
 function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
   const connectedAccounts = accounts.filter((account) => account.connectionState === "connected");
   const firstAccount = accounts[0] ?? null;
+  const nextConnectionAt = accounts
+    .map((account) => account.nextQueuedConnectionAt)
+    .filter(Boolean)
+    .sort()[0] ?? null;
   const aggregateState = !accounts.length
     ? "disconnected"
     : connectedAccounts.length === accounts.length
@@ -847,6 +853,7 @@ function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
     hasProxy: accounts.some((account) => account.hasProxy),
     accounts,
     connectedCount: connectedAccounts.length,
+    nextConnectionAt,
     enabled: Boolean(config.enabled),
     status: config.status,
     activityType: config.activityType,
@@ -922,7 +929,8 @@ async function getDiscordOnlinerSnapshotForApi(config) {
       connectedAt: workerOnline ? saved.connectedAt ?? null : null,
       lastDisconnectedAt: saved.lastDisconnectedAt ?? null,
       lastError: workerOnline ? saved.lastError ?? null : "Onliner worker is offline.",
-      reconnectAttempt: Math.max(0, Number(saved.reconnectAttempt) || 0)
+      reconnectAttempt: Math.max(0, Number(saved.reconnectAttempt) || 0),
+      nextQueuedConnectionAt: workerOnline ? saved.nextQueuedConnectionAt ?? null : null
     };
   });
   const logs = logsResult.rows.reverse().map((row) => ({
@@ -954,6 +962,7 @@ function clearDiscordOnlinerTimers(runtime) {
   runtime.activityTimer = null;
   runtime.connectionQueueTimer = null;
   runtime.connectionQueueContinuation = null;
+  runtime.nextQueuedConnectionAt = null;
 }
 
 function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
@@ -1458,9 +1467,12 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
     const continueQueue = queue.length ? () => {
       const runtime = getDiscordOnlinerRuntime(account.id);
       const delayMs = config.connectionDelaySeconds * 1_000;
+      runtime.nextQueuedConnectionAt = new Date(Date.now() + delayMs).toISOString();
       appendDiscordOnlinerLog("info", `Connection succeeded; next bot starts in ${config.connectionDelaySeconds}s.`, account.id);
       runtime.connectionQueueTimer = setTimeout(() => {
         runtime.connectionQueueTimer = null;
+        runtime.nextQueuedConnectionAt = null;
+        queueDiscordOnlinerRuntimePersist(runtime);
         startNext();
       }, delayMs);
       runtime.connectionQueueTimer.unref?.();

@@ -32,6 +32,7 @@ export type DiscordOnlinerSnapshot = {
   hasProxy: boolean;
   accounts: DiscordOnlinerAccount[];
   connectedCount: number;
+  nextConnectionAt: string | null;
   enabled: boolean;
   status: DiscordOnlinerStatus;
   activityType: DiscordOnlinerActivityType;

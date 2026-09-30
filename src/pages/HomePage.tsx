@@ -688,6 +688,7 @@ export default function HomePage() {
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
   const [savingOnliner, setSavingOnliner] = useState(false);
+  const [onlinerCountdownNow, setOnlinerCountdownNow] = useState(() => Date.now());
   const [onlinerLogTransport, setOnlinerLogTransport] = useState<"connecting" | "live" | "polling">("connecting");
   const onlinerLogCursorRef = useRef(0);
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
@@ -1029,6 +1030,13 @@ export default function HomePage() {
     // Tokenu balance is loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, apiConfigured, dcordConfigured]);
+
+  useEffect(() => {
+    if (activeTab !== "onliner") return;
+    setOnlinerCountdownNow(Date.now());
+    const countdownTimer = window.setInterval(() => setOnlinerCountdownNow(Date.now()), 1_000);
+    return () => window.clearInterval(countdownTimer);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "onliner") return;
@@ -2841,6 +2849,9 @@ export default function HomePage() {
     : onlinerConnectionState === "error"
       ? "destructive" as const
       : "secondary" as const;
+  const onlinerNextConnectionSeconds = onlinerSnapshot?.nextConnectionAt
+    ? Math.max(0, Math.ceil((new Date(onlinerSnapshot.nextConnectionAt).getTime() - onlinerCountdownNow) / 1_000))
+    : null;
 
   return (
     <div className="relative">
@@ -3918,6 +3929,13 @@ export default function HomePage() {
                       <span><strong>Connection delay</strong><small>Wait after each successful connection before starting the next bot.</small></span>
                       <span><Input type="number" min={1} max={300} value={onlinerDraft.connectionDelaySeconds} onChange={(event) => setOnlinerDraft((current) => ({ ...current, connectionDelaySeconds: Math.min(300, Math.max(1, Number(event.target.value) || 1)) }))} /><b>seconds</b></span>
                     </label>
+                    {onlinerNextConnectionSeconds !== null ? (
+                      <div className="onliner-next-connection" role="status" aria-live="polite">
+                        <Timer className="h-4 w-4" aria-hidden="true" />
+                        <span>Next bot connection in</span>
+                        <strong>{onlinerNextConnectionSeconds}s</strong>
+                      </div>
+                    ) : null}
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
