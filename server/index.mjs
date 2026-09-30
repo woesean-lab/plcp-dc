@@ -996,6 +996,12 @@ function stopDiscordOnliner({ resetIdentity = false } = {}) {
   for (const runtime of discordOnlinerRuntimes.values()) stopDiscordOnlinerRuntime(runtime, { resetIdentity });
 }
 
+function advanceDiscordOnlinerConnectionQueue(runtime, outcome) {
+  const continueConnectionQueue = runtime.connectionQueueContinuation;
+  runtime.connectionQueueContinuation = null;
+  if (continueConnectionQueue) continueConnectionQueue(outcome);
+}
+
 function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
   const activeConfig = runtime.config ?? config;
   const activeAccount = activeConfig.accounts.find((item) => item.id === account.id) ?? account;
@@ -1008,6 +1014,7 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
   if (runtime.automaticReconnectBlocked) {
     runtime.state = "error";
     queueDiscordOnlinerRuntimePersist(runtime);
+    advanceDiscordOnlinerConnectionQueue(runtime, "failed");
     return;
   }
   if (runtime.reconnectAttempt >= discordOnlinerMaxReconnectAttempts) {
@@ -1016,6 +1023,7 @@ function scheduleDiscordOnlinerReconnect(config, account, runtime, generation) {
     runtime.lastError = `Automatic reconnect stopped after ${discordOnlinerMaxReconnectAttempts} failed attempts. Check the bot token and proxy, then use Continue or Start.`;
     appendDiscordOnlinerLog("error", `[RECONNECT_LIMIT] ${runtime.lastError}`, account.id);
     queueDiscordOnlinerRuntimePersist(runtime);
+    advanceDiscordOnlinerConnectionQueue(runtime, "failed");
     return;
   }
   runtime.reconnectAttempt += 1;
@@ -1354,9 +1362,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.reconnectNotBefore = 0;
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, runtime, generation);
-      const continueConnectionQueue = runtime.connectionQueueContinuation;
-      runtime.connectionQueueContinuation = null;
-      if (continueConnectionQueue) continueConnectionQueue();
+      advanceDiscordOnlinerConnectionQueue(runtime, "connected");
       return;
     }
     if (payload.t === "GUILD_CREATE") {
@@ -1410,6 +1416,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         : `Discord rejected this Gateway session with non-retryable close code ${code}. Automatic reconnect stopped.`;
       appendDiscordOnlinerLog("error", `[${code}] ${runtime.lastError}`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
+      advanceDiscordOnlinerConnectionQueue(runtime, "failed");
       return;
     }
     if (code === 4008) {
@@ -1437,6 +1444,7 @@ function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0, onConn
     runtime.state = "error";
     runtime.lastError = "A dedicated proxy is required before this bot can connect.";
     appendDiscordOnlinerLog("error", runtime.lastError, account.id);
+    advanceDiscordOnlinerConnectionQueue(runtime, "failed");
     return;
   }
   const generation = runtime.generation;
@@ -1464,11 +1472,15 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
     if (discordOnlinerConnectionsPaused) return;
     const account = queue.shift();
     if (!account) return;
-    const continueQueue = queue.length ? () => {
+    const continueQueue = queue.length ? (outcome = "connected") => {
       const runtime = getDiscordOnlinerRuntime(account.id);
       const delayMs = config.connectionDelaySeconds * 1_000;
       runtime.nextQueuedConnectionAt = new Date(Date.now() + delayMs).toISOString();
-      appendDiscordOnlinerLog("info", `Connection succeeded; next bot starts in ${config.connectionDelaySeconds}s.`, account.id);
+      appendDiscordOnlinerLog(
+        outcome === "connected" ? "info" : "warn",
+        `${outcome === "connected" ? "Connection succeeded" : "Connection failed permanently; skipping this bot"}; next bot starts in ${config.connectionDelaySeconds}s.`,
+        account.id
+      );
       runtime.connectionQueueTimer = setTimeout(() => {
         runtime.connectionQueueTimer = null;
         runtime.nextQueuedConnectionAt = null;
