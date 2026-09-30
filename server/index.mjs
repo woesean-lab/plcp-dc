@@ -396,6 +396,7 @@ function createDiscordOnlinerRuntime(accountId) {
     bot: null,
     guildIds: new Set(),
     connectedAt: null,
+    hasConnectedOnce: false,
     lastDisconnectedAt: null,
     lastError: null,
     reconnectAttempt: 0,
@@ -974,6 +975,7 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.socket = null;
   runtime.state = "disconnected";
   runtime.connectedAt = null;
+  runtime.hasConnectedOnce = false;
   runtime.reconnectAttempt = 0;
   runtime.automaticReconnectBlocked = false;
   runtime.reconnectNotBefore = 0;
@@ -1371,6 +1373,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.guildIds = new Set((Array.isArray(payload.d?.guilds) ? payload.d.guilds : []).map((guild) => String(guild?.id ?? "")).filter(isDiscordGuildId));
       runtime.state = "connected";
       runtime.connectedAt = new Date().toISOString();
+      runtime.hasConnectedOnce = true;
       runtime.lastError = null;
       runtime.reconnectAttempt = 0;
       runtime.automaticReconnectBlocked = false;
@@ -1432,6 +1435,14 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("error", `[${code}] ${runtime.lastError}`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
       advanceDiscordOnlinerConnectionQueue(runtime, "failed");
+      return;
+    }
+    if (runtime.hasConnectedOnce) {
+      runtime.automaticReconnectBlocked = true;
+      runtime.state = "error";
+      runtime.lastError = `Gateway connection closed after it was established (code ${code}). Automatic reconnect is disabled; reconnect this bot manually.`;
+      appendDiscordOnlinerLog("error", `[RECONNECT_DISABLED] ${runtime.lastError}`, account.id);
+      queueDiscordOnlinerRuntimePersist(runtime);
       return;
     }
     if (code === 4008) {
