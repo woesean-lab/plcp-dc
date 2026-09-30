@@ -3906,7 +3906,7 @@ export default function HomePage() {
                         </Button>
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.connectedCount >= onlinerSnapshot.accounts.length} onClick={() => void handleOnlinerControl("reconnect")} title="Reconnect disconnected bots without interrupting bots that are already online">
                           {onlinerControlAction === "reconnect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-                          Reconnect offline
+                          Reconnect
                         </Button>
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("pause")} title="Pause pending connections without disconnecting bots that are already online">
                           {onlinerControlAction === "pause" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
