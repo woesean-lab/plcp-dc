@@ -706,7 +706,7 @@ export default function HomePage() {
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
   const [showOnlinerEditProxy, setShowOnlinerEditProxy] = useState(false);
   const onlinerCredentialRequestRef = useRef(0);
-  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "continue" | "pause" | "stop" | null>(null);
+  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "reconnect" | "continue" | "pause" | "stop" | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
@@ -1597,10 +1597,10 @@ export default function HomePage() {
     }
   }
 
-  async function handleOnlinerControl(action: "start" | "continue" | "pause" | "stop") {
+  async function handleOnlinerControl(action: "start" | "reconnect" | "continue" | "pause" | "stop") {
     try {
       setOnlinerControlAction(action);
-      const snapshot = action === "start"
+      const snapshot = action === "start" || action === "reconnect"
         ? await reconnectDiscordOnliner()
         : action === "continue"
           ? await continueDiscordOnlinerConnections()
@@ -1608,8 +1608,10 @@ export default function HomePage() {
             ? await pauseDiscordOnlinerConnections()
             : await stopDiscordOnlinerConnections();
       setOnlinerSnapshot(snapshot);
-      notifySuccess(action === "start"
-        ? "Gateway connection process started from the beginning."
+      notifySuccess(action === "start" || action === "reconnect"
+        ? action === "reconnect"
+          ? "All Gateway connections are restarting from the beginning."
+          : "Gateway connection process started from the beginning."
         : action === "continue"
           ? "Gateway connection process continued with the remaining bots."
           : action === "pause"
@@ -3901,6 +3903,10 @@ export default function HomePage() {
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused !== true || onlinerSnapshot.connectedCount === 0} onClick={() => void handleOnlinerControl("continue")} title="Continue connecting bots that are not online">
                           {onlinerControlAction === "continue" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                           Continue
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null} onClick={() => void handleOnlinerControl("reconnect")} title="Disconnect every bot and restart all Gateway connections from the beginning">
+                          {onlinerControlAction === "reconnect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          Reconnect all
                         </Button>
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("pause")} title="Pause pending connections without disconnecting bots that are already online">
                           {onlinerControlAction === "pause" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
