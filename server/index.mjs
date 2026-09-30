@@ -248,9 +248,9 @@ const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 function createDiscordGatewayIdentityProperties() {
   return {
-    os: process.platform,
-    browser: "bot",
-    device: "bot"
+    os: "windows",
+    browser: "Discord Client",
+    device: "desktop"
   };
 }
 const discordOnlinerProxyProtocols = new Set(["http:", "https:", "socks:", "socks4:", "socks4a:", "socks5:", "socks5h:"]);
@@ -1345,7 +1345,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
           return;
         }
         runtime.heartbeatAcknowledged = false;
-        socket.send(JSON.stringify({ op: 1, d: sequence }));
+        socket.send(JSON.stringify({ op: 1, d: null }));
       };
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
@@ -1369,8 +1369,8 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
       runtime.heartbeatAcknowledged = false;
-      socket.send(JSON.stringify({ op: 1, d: sequence }));
-      appendDiscordOnlinerLog("info", `Discord requested a HEARTBEAT; sent${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
+      socket.send(JSON.stringify({ op: 1, d: null }));
+      appendDiscordOnlinerLog("info", "Discord requested a HEARTBEAT; sent with a null sequence.", account.id);
       return;
     }
     if (payload?.op === 7) {
@@ -1976,7 +1976,6 @@ async function ensureCommunityPresenceGateway(config) {
     resolveReady,
     rejectReady,
     settled: false,
-    sequence: null,
     heartbeatTimer: null,
     initialHeartbeatTimer: null,
     guildIds: new Set(),
@@ -1998,11 +1997,10 @@ async function ensureCommunityPresenceGateway(config) {
     } catch {
       return;
     }
-    if (Number.isInteger(payload?.s)) gateway.sequence = payload.s;
     if (payload?.op === 10) {
       const heartbeatInterval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
       const heartbeat = () => {
-        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: gateway.sequence }));
+        if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: null }));
       };
       gateway.initialHeartbeatTimer = setTimeout(heartbeat, Math.floor(Math.random() * heartbeatInterval));
       gateway.heartbeatTimer = setInterval(heartbeat, heartbeatInterval);
@@ -2018,7 +2016,7 @@ async function ensureCommunityPresenceGateway(config) {
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
-      socket.send(JSON.stringify({ op: 1, d: gateway.sequence }));
+      socket.send(JSON.stringify({ op: 1, d: null }));
       return;
     }
     if (payload?.op === 7 || payload?.op === 9) {
