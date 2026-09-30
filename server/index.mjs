@@ -248,7 +248,7 @@ const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 function createDiscordGatewayIdentityProperties() {
   return {
-    os: "windows",
+    os: "Windows",
     browser: "Discord Client",
     device: "desktop",
     system_locale: "en-US",
@@ -414,6 +414,9 @@ function createDiscordOnlinerRuntime(accountId) {
     connectionQueueStartNext: null,
     nextQueuedConnectionAt: null,
     heartbeatAcknowledged: true,
+    sequence: null,
+    sessionId: null,
+    resumeGatewayUrl: null,
     state: "disconnected",
     bot: null,
     guildIds: new Set(),
@@ -1004,6 +1007,9 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.reconnectAttempt = 0;
   runtime.automaticReconnectBlocked = false;
   runtime.reconnectNotBefore = 0;
+  runtime.sequence = null;
+  runtime.sessionId = null;
+  runtime.resumeGatewayUrl = null;
   runtime.guildIds = new Set();
   runtime.currentActivity = null;
   runtime.currentActivities = null;
@@ -1285,16 +1291,34 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
-  const gatewayEndpoint = "wss://gateway.discord.gg:443";
+  const defaultGatewayUrl = "wss://gateway.discord.gg/?v=10&encoding=json";
+  let gatewayUrl = defaultGatewayUrl;
+  let shouldResume = false;
+  if (runtime.sessionId && Number.isInteger(runtime.sequence) && runtime.resumeGatewayUrl) {
+    try {
+      const resumeUrl = new URL(runtime.resumeGatewayUrl);
+      if (resumeUrl.protocol !== "wss:") throw new Error("Invalid resume protocol");
+      resumeUrl.searchParams.set("v", "10");
+      resumeUrl.searchParams.set("encoding", "json");
+      gatewayUrl = resumeUrl.toString();
+      shouldResume = true;
+    } catch {
+      runtime.sequence = null;
+      runtime.sessionId = null;
+      runtime.resumeGatewayUrl = null;
+    }
+  }
+  const parsedGatewayUrl = new URL(gatewayUrl);
+  const gatewayEndpoint = `${parsedGatewayUrl.protocol}//${parsedGatewayUrl.hostname}:${parsedGatewayUrl.port || "443"}`;
   const proxyEndpoint = account.proxyUrl ? getDiscordOnlinerProxyEndpoint(account.proxyUrl) : null;
   appendDiscordOnlinerLog("info", proxyEndpoint
     ? `Outbound route: ${proxyEndpoint} -> ${gatewayEndpoint}.`
     : `Outbound route: direct -> ${gatewayEndpoint}.`, account.id);
-  const socket = new WebSocket("wss://gateway.discord.gg/?v=10&encoding=json", {
+  const socket = new WebSocket(gatewayUrl, {
     agent: account.proxyUrl ? createDiscordOnlinerProxyAgent(account.proxyUrl) : undefined
   });
   runtime.socket = socket;
-  let sequence = null;
+  let sequence = shouldResume ? runtime.sequence : null;
   let transportOpened = false;
 
   socket.on("upgrade", (response) => {
@@ -1352,7 +1376,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("warn", `Ignored a non-JSON Gateway frame (${raw.length ?? 0} bytes).`, account.id);
       return;
     }
-    if (Number.isInteger(payload?.s)) sequence = payload.s;
+    if (Number.isInteger(payload?.s)) {
+      sequence = payload.s;
+      runtime.sequence = payload.s;
+    }
     if (payload?.op === 10) {
       const interval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
       appendDiscordOnlinerLog("info", `Gateway HELLO received; heartbeat interval is ${Math.round(interval / 1000)}s.`, account.id);
@@ -1372,20 +1399,32 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.heartbeatAcknowledged = true;
       runtime.heartbeatTimer = setInterval(heartbeat, interval);
       runtime.heartbeatTimer.unref?.();
-      const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
-      socket.send(JSON.stringify({
-        op: 2,
-        d: {
-          token: account.botToken,
-          intents: 1,
-          properties: createDiscordGatewayIdentityProperties(),
-          presence,
-          capabilities: 16381,
-          compress: false,
-          client_state: createDiscordGatewayClientState()
-        }
-      }));
-      appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
+      if (shouldResume) {
+        socket.send(JSON.stringify({
+          op: 6,
+          d: {
+            token: account.botToken,
+            session_id: runtime.sessionId,
+            seq: sequence
+          }
+        }));
+        appendDiscordOnlinerLog("info", `RESUME payload sent to Discord (seq ${sequence}).`, account.id);
+      } else {
+        const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
+        socket.send(JSON.stringify({
+          op: 2,
+          d: {
+            token: account.botToken,
+            intents: 1,
+            properties: createDiscordGatewayIdentityProperties(),
+            presence,
+            capabilities: 16381,
+            compress: false,
+            client_state: createDiscordGatewayClientState()
+          }
+        }));
+        appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
+      }
       return;
     }
     if (payload?.op === 11) {
@@ -1405,6 +1444,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 9) {
       appendDiscordOnlinerLog("warn", `INVALID SESSION received (opcode 9, resumable: ${payload.d === true ? "yes" : "no"}).`, account.id);
+      if (payload.d !== true) {
+        runtime.sequence = null;
+        runtime.sessionId = null;
+        runtime.resumeGatewayUrl = null;
+      }
       socket.close(4000, "Discord invalidated session");
       return;
     }
@@ -1416,6 +1460,9 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     if (payload.t === "READY") {
       const user = payload.d?.user ?? {};
       const userId = String(user.id ?? "");
+      runtime.sessionId = String(payload.d?.session_id ?? "") || null;
+      runtime.resumeGatewayUrl = String(payload.d?.resume_gateway_url ?? "") || null;
+      runtime.sequence = sequence;
       runtime.bot = {
         id: userId,
         username: String(user.global_name ?? user.username ?? "Discord Bot"),
@@ -1433,6 +1480,20 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, account, runtime, generation);
       advanceDiscordOnlinerConnectionQueue(runtime, "connected");
+      return;
+    }
+    if (payload.t === "RESUMED") {
+      runtime.state = "connected";
+      runtime.connectedAt = new Date().toISOString();
+      runtime.hasConnectedOnce = true;
+      runtime.lastError = null;
+      runtime.reconnectAttempt = 0;
+      runtime.automaticReconnectBlocked = false;
+      runtime.reconnectNotBefore = 0;
+      appendDiscordOnlinerLog("success", `Gateway session RESUMED${sequence == null ? "" : ` from seq ${sequence}`}.`, account.id);
+      scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, account, runtime, generation);
+      advanceDiscordOnlinerConnectionQueue(runtime, "connected");
+      queueDiscordOnlinerRuntimePersist(runtime);
       return;
     }
     if (payload.t === "GUILD_CREATE") {
@@ -1479,6 +1540,9 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     const closeReason = reason?.toString().trim();
     appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", `Gateway closed with code ${code}${closeReason ? ` (${closeReason})` : ""}.`, account.id);
     if ([4004, 4010, 4011, 4012, 4013, 4014].includes(code)) {
+      runtime.sequence = null;
+      runtime.sessionId = null;
+      runtime.resumeGatewayUrl = null;
       runtime.automaticReconnectBlocked = true;
       runtime.state = "error";
       runtime.lastError = code === 4004
@@ -1489,13 +1553,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       advanceDiscordOnlinerConnectionQueue(runtime, "failed");
       return;
     }
-    if (runtime.hasConnectedOnce) {
-      runtime.automaticReconnectBlocked = true;
-      runtime.state = "error";
-      runtime.lastError = `Gateway connection closed after it was established (code ${code}). Automatic reconnect is disabled; reconnect this bot manually.`;
-      appendDiscordOnlinerLog("error", `[RECONNECT_DISABLED] ${runtime.lastError}`, account.id);
-      queueDiscordOnlinerRuntimePersist(runtime);
-      return;
+    if ([1000, 1001, 4003, 4005, 4007, 4009].includes(code)) {
+      runtime.sequence = null;
+      runtime.sessionId = null;
+      runtime.resumeGatewayUrl = null;
     }
     if (code === 4008) {
       runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerRateLimitCooldownMs);
