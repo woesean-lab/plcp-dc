@@ -196,6 +196,33 @@ function parseOnlinerBulkTokenLines(value: string) {
   }).filter(Boolean);
 }
 
+function describeCommunityAccountError(message: string) {
+  const normalized = message.toLowerCase();
+  if (normalized.includes("verify your account")) {
+    return { title: "Account verification required", detail: "Open Discord and complete the account verification, then retry this token." };
+  }
+  if (normalized.includes("rate limit")) {
+    return { title: "Discord rate limit", detail: "Wait a short while before retrying this account." };
+  }
+  if (normalized.includes("rejected this account token") || normalized.includes("invalid") && normalized.includes("token")) {
+    return { title: "Token was rejected", detail: "Check whether this Discord account token is current and valid." };
+  }
+  if (normalized.includes("proxy pool")) {
+    return { title: "No proxy available", detail: "Add an available proxy to the Onliner pool, then retry this account." };
+  }
+  if (normalized.includes("up to") && normalized.includes("account profile")) {
+    return { title: "Onliner capacity reached", detail: "Remove an unused Onliner account before adding another one." };
+  }
+  if (normalized.includes("additional verification") || normalized.includes("consent")) {
+    return { title: "Additional confirmation required", detail: "Open Discord, complete the authorization confirmation, and retry." };
+  }
+  const detail = message
+    .replace(/^Discord OAuth authorization failed \(HTTP \d+\):\s*/i, "")
+    .replace(/^Discord account could not be authorized:\s*/i, "")
+    .trim();
+  return { title: "Authorization failed", detail: detail || "Discord could not authorize this account. Check the token and retry." };
+}
+
 const COMMUNITY_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
   { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
@@ -4743,7 +4770,7 @@ export default function HomePage() {
 
       {communityAccountCategory ? (
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingCommunityAccount) closeCommunityAccountModal(); }}>
-          <form className="confirm-modal community-account-modal" onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
+          <form className="confirm-modal community-account-modal community-account-add-modal" onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
@@ -4804,8 +4831,19 @@ export default function HomePage() {
             ) : null}
             {communityAccountBulkErrors.length ? (
               <div className="community-account-bulk-errors" role="alert">
-                <strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} failed</strong>
-                <ul>{communityAccountBulkErrors.slice(0, 12).map((failure) => <li key={`${failure.lineNumber}-${failure.message}`}>Line {failure.lineNumber}: {failure.message}</li>)}</ul>
+                <div className="community-account-bulk-error-heading">
+                  <span aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
+                  <div><strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} need attention</strong><small>Only failed accounts remain in the field above, ready to retry.</small></div>
+                </div>
+                <ul>{communityAccountBulkErrors.slice(0, 12).map((failure) => {
+                  const presentation = describeCommunityAccountError(failure.message);
+                  return (
+                    <li key={`${failure.lineNumber}-${failure.message}`}>
+                      <span>Line {failure.lineNumber}</span>
+                      <div><strong>{presentation.title}</strong><small>{presentation.detail}</small></div>
+                    </li>
+                  );
+                })}</ul>
                 {communityAccountBulkErrors.length > 12 ? <small>And {communityAccountBulkErrors.length - 12} more failed lines.</small> : null}
               </div>
             ) : null}

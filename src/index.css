@@ -7964,6 +7964,12 @@
   width: min(560px, calc(100vw - 32px));
 }
 
+.community-account-add-modal {
+  width: min(780px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
 .community-account-mode {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8000,21 +8006,64 @@
 }
 
 .community-account-bulk-errors {
-  max-height: 150px;
+  max-height: 230px;
   overflow: auto;
   margin-top: 12px;
   border: 1px solid color-mix(in srgb, var(--app-danger) 38%, transparent);
-  border-radius: 10px;
-  padding: 10px 12px;
+  border-radius: 12px;
+  padding: 12px;
   background: color-mix(in srgb, var(--app-danger) 8%, transparent);
   color: var(--app-text-secondary);
   text-align: left;
 }
 
-.community-account-bulk-errors strong { color: var(--app-danger); font-size: 11px; }
-.community-account-bulk-errors ul { display: grid; gap: 4px; margin: 7px 0 0; padding-left: 17px; }
-.community-account-bulk-errors li,
-.community-account-bulk-errors small { font-size: 10px; line-height: 1.4; }
+.community-account-bulk-error-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.community-account-bulk-error-heading > span {
+  display: grid;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 32%, transparent);
+  border-radius: 9px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+}
+
+.community-account-bulk-error-heading strong,
+.community-account-bulk-error-heading small,
+.community-account-bulk-errors li strong,
+.community-account-bulk-errors li small { display: block; }
+.community-account-bulk-error-heading strong { color: var(--app-danger); font-size: 12px; }
+.community-account-bulk-error-heading small { margin-top: 2px; color: var(--app-muted); font-size: 9px; }
+.community-account-bulk-errors ul { display: grid; gap: 7px; margin: 11px 0 0; padding: 0; list-style: none; }
+.community-account-bulk-errors li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--app-danger) 18%, var(--app-divider));
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: rgba(4, 5, 11, .2);
+}
+.community-account-bulk-errors li > span {
+  border-radius: 6px;
+  padding: 3px 6px;
+  color: var(--app-danger);
+  background: color-mix(in srgb, var(--app-danger) 10%, transparent);
+  font-size: 9px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.community-account-bulk-errors li strong { color: var(--app-text-secondary); font-size: 10px; }
+.community-account-bulk-errors li small { margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.45; }
+.community-account-bulk-errors > small { display: block; margin-top: 8px; color: var(--app-muted); font-size: 9px; }
 
 .community-category-modal > label {
   margin-top: 18px;
