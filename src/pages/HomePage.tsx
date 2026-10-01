@@ -326,6 +326,16 @@ function getCommunityPresenceLabel(status: CommunityAdminStatus["recent"][number
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
+function getCommunityOnlinerBadge(record: CommunityAdminStatus["recent"][number]) {
+  switch (record.onlinerConnectionState) {
+    case "connected": return { label: "Onliner connected", variant: "success" as const };
+    case "connecting": return { label: "Onliner connecting", variant: "secondary" as const };
+    case "reconnecting": return { label: "Onliner reconnecting", variant: "secondary" as const };
+    case "error": return { label: "Onliner failed", variant: "destructive" as const };
+    default: return { label: "Onliner disconnected", variant: "outline" as const };
+  }
+}
+
 const EMPTY_COMMUNITY_CONFIG_DRAFT = {
   clientId: "",
   clientSecret: "",
@@ -1235,6 +1245,35 @@ export default function HomePage() {
     if (activeTab === "stock" && stockCategory === "boosts") void refreshDcordProxies();
     // Dcord proxy list is only needed by the Boost Stock panel.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, stockCategory]);
+
+  useEffect(() => {
+    if (activeTab !== "stock" || stockCategory !== "offline") return;
+    let cancelled = false;
+    const refreshOnlinerStates = () => {
+      void getDiscordOnliner().then((snapshot) => {
+        if (cancelled) return;
+        const accountById = new Map(snapshot.accounts.map((account) => [account.id, account]));
+        setCommunityStatus((current) => current ? {
+          ...current,
+          recent: current.recent.map((record) => {
+            if (!record.onlinerAccountId) return record;
+            const account = accountById.get(record.onlinerAccountId);
+            return account ? {
+              ...record,
+              onlinerConnectionState: account.connectionState,
+              onlinerLastError: account.lastError
+            } : record;
+          })
+        } : current);
+      }).catch(() => {});
+    };
+    refreshOnlinerStates();
+    const timer = window.setInterval(refreshOnlinerStates, 3_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [activeTab, stockCategory]);
 
   function applyBoostStockSnapshot(snapshot: BoostTokenStockSnapshot) {
@@ -3023,6 +3062,7 @@ export default function HomePage() {
         <div className="community-recent-list">
           {communityVisibleRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
+            const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
             const revealedToken = communityAccessTokens[record.id];
             return (
               <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
@@ -3041,6 +3081,12 @@ export default function HomePage() {
                   <small>{record.displayName
                     ? `@${record.username} · ${record.details || new Date(record.authorizedAt).toLocaleString()}`
                     : record.details || new Date(record.authorizedAt).toLocaleString()}</small>
+                  {record.onlinerConnected && record.onlinerLastError ? (
+                    <span className="community-member-onliner-error" title={record.onlinerLastError}>
+                      <TriangleAlert className="h-3 w-3" aria-hidden="true" />
+                      <span>{record.onlinerLastError}</span>
+                    </span>
+                  ) : null}
                   <span className="community-member-access-token" data-visible={Boolean(revealedToken)}>
                     <KeyRound className="h-3 w-3" aria-hidden="true" />
                     <code title={revealedToken?.accessToken}>{revealedToken?.accessToken ?? "Access token hidden"}</code>
@@ -3067,7 +3113,7 @@ export default function HomePage() {
                   <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
                     <i aria-hidden="true" /> {getCommunityPresenceLabel(record.presenceStatus)}
                   </span>
-                  {record.onlinerConnected ? <Badge variant="success">Onliner</Badge> : null}
+                  {onlinerBadge ? <Badge variant={onlinerBadge.variant} title={record.onlinerLastError ?? undefined}>{onlinerBadge.label}</Badge> : null}
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                 </span>
                 <span className="community-member-row-actions">
@@ -4212,40 +4258,6 @@ export default function HomePage() {
                         <strong>{onlinerNextConnectionSeconds}s</strong>
                       </div>
                     ) : null}
-                    <section className="dcord-proxy-panel onliner-proxy-pool">
-                      <header className="dcord-proxy-header">
-                        <div><p className={labelClass}>Gateway routing</p><h2>Onliner proxy pool</h2></div>
-                        <div className="dcord-proxy-actions">
-                          <span>{parseProxyDraft(onlinerProxyDraft).length} typed / {onlinerProxyCount} saved · {onlinerAvailableProxyCount} available{onlinerCoolingProxyCount ? ` · ${onlinerCoolingProxyCount} cooling` : ""}</span>
-                          <Button type="button" size="xs" disabled={savingOnlinerProxies} onClick={() => void handleSaveOnlinerProxies()}>
-                            {savingOnlinerProxies ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-                            {savingOnlinerProxies ? "Saving..." : "Save proxies"}
-                          </Button>
-                        </div>
-                      </header>
-                      <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
-                      {onlinerProxyDetails.length ? (
-                        <div className="onliner-proxy-usage">
-                          <div className="onliner-proxy-usage-heading">
-                            <span>Saved proxy</span><span>Accounts</span><span>Status</span><span>Health</span>
-                          </div>
-                          <div className="onliner-proxy-usage-list">
-                            {onlinerProxyDetails.map((proxy) => (
-                              <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
-                                <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
-                                <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
-                                <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
-                                <span className="onliner-proxy-health-copy">
-                                  <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : "No active failures"}</strong>
-                                  <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-                      <p className="app-copy text-xs">Accounts are assigned the least-used saved proxy automatically. Updating this list redistributes existing profiles.</p>
-                    </section>
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
@@ -4310,6 +4322,40 @@ export default function HomePage() {
                         </Button>
                       </span>
                     </div>
+                    <section className="dcord-proxy-panel onliner-proxy-pool">
+                      <header className="dcord-proxy-header">
+                        <div><p className={labelClass}>Gateway routing</p><h2>Onliner proxy pool</h2></div>
+                        <div className="dcord-proxy-actions">
+                          <span>{parseProxyDraft(onlinerProxyDraft).length} typed / {onlinerProxyCount} saved · {onlinerAvailableProxyCount} available{onlinerCoolingProxyCount ? ` · ${onlinerCoolingProxyCount} cooling` : ""}</span>
+                          <Button type="button" size="xs" disabled={savingOnlinerProxies} onClick={() => void handleSaveOnlinerProxies()}>
+                            {savingOnlinerProxies ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            {savingOnlinerProxies ? "Saving..." : "Save proxies"}
+                          </Button>
+                        </div>
+                      </header>
+                      <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
+                      {onlinerProxyDetails.length ? (
+                        <div className="onliner-proxy-usage">
+                          <div className="onliner-proxy-usage-heading">
+                            <span>Saved proxy</span><span>Accounts</span><span>Status</span><span>Health</span>
+                          </div>
+                          <div className="onliner-proxy-usage-list">
+                            {onlinerProxyDetails.map((proxy) => (
+                              <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
+                                <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
+                                <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
+                                <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
+                                <span className="onliner-proxy-health-copy">
+                                  <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : "No active failures"}</strong>
+                                  <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <p className="app-copy text-xs">Accounts are assigned the least-used saved proxy automatically. Updating this list redistributes existing profiles.</p>
+                    </section>
                   </div>
 
                   <label className="onliner-enabled-card">

@@ -8695,6 +8695,25 @@
   font-size: 9px;
 }
 
+.community-member-onliner-error {
+  display: flex;
+  min-width: 0;
+  max-width: min(680px, 58vw);
+  align-items: flex-start;
+  gap: 5px;
+  margin-top: 5px;
+  border-left: 2px solid var(--app-danger);
+  padding: 4px 7px;
+  border-radius: 0 6px 6px 0;
+  color: var(--app-danger);
+  background: var(--app-danger-soft);
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.community-member-onliner-error > svg { flex: 0 0 auto; margin-top: 1px; }
+.community-member-onliner-error > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .community-member-access-token > svg {
   flex: 0 0 auto;
   color: var(--app-accent-bright);

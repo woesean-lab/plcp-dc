@@ -459,6 +459,11 @@ function serializeDiscordOnlinerRuntime(runtime) {
   };
 }
 
+function normalizeDiscordOnlinerConnectionState(value) {
+  const state = String(value ?? "").trim().toLowerCase();
+  return ["connected", "connecting", "reconnecting", "error", "disconnected"].includes(state) ? state : "disconnected";
+}
+
 function queueDiscordOnlinerRuntimePersist(runtime) {
   if (!serviceRunsOnliner || !runtime?.accountId) return;
   discordOnlinerPendingRuntimeWrites.set(runtime.accountId, serializeDiscordOnlinerRuntime(runtime));
@@ -7481,20 +7486,57 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         .filter((account) => isDiscordGuildId(account.discordUserId))
         .map((account) => [account.discordUserId, account.id])
     );
+    const onlinerRuntimeByAccountId = new Map();
     if (onlinerConfig.accounts.length) {
-      const runtimeLinks = await pool.query(
-        `SELECT account_id, payload->'bot'->>'id' AS discord_user_id
-         FROM discord_onliner_runtime
-         WHERE account_id = ANY($1::text[])`,
-        [onlinerConfig.accounts.map((account) => account.id)]
-      );
+      const [runtimeLinks, workerResult] = await Promise.all([
+        pool.query(
+          `SELECT account_id, payload, payload->'bot'->>'id' AS discord_user_id
+           FROM discord_onliner_runtime
+           WHERE account_id = ANY($1::text[])`,
+          [onlinerConfig.accounts.map((account) => account.id)]
+        ),
+        serviceRunsOnliner
+          ? Promise.resolve({ rows: [] })
+          : pool.query("SELECT status, heartbeat_at FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+      ]);
+      const workerRow = workerResult.rows[0] ?? {};
+      const heartbeatAt = workerRow.heartbeat_at ? new Date(workerRow.heartbeat_at).getTime() : 0;
+      const workerOnline = serviceRunsOnliner || (workerRow.status === "online" && Date.now() - heartbeatAt < discordOnlinerWorkerHeartbeatMs * 3);
       for (const runtime of runtimeLinks.rows) {
         const discordUserId = String(runtime.discord_user_id ?? "");
         if (isDiscordGuildId(discordUserId) && !onlinerAccountByUserId.has(discordUserId)) {
           onlinerAccountByUserId.set(discordUserId, String(runtime.account_id));
         }
+        if (!serviceRunsOnliner) {
+          onlinerRuntimeByAccountId.set(String(runtime.account_id), {
+            connectionState: workerOnline ? normalizeDiscordOnlinerConnectionState(runtime.payload?.connectionState) : "disconnected",
+            lastError: workerOnline ? String(runtime.payload?.lastError ?? "").trim() || null : "Onliner worker is offline."
+          });
+        }
+      }
+      if (serviceRunsOnliner) {
+        for (const account of onlinerConfig.accounts) {
+          const runtime = discordOnlinerRuntimes.get(account.id);
+          onlinerRuntimeByAccountId.set(account.id, {
+            connectionState: normalizeDiscordOnlinerConnectionState(runtime?.state),
+            lastError: String(runtime?.lastError ?? "").trim() || null
+          });
+        }
+      } else {
+        for (const account of onlinerConfig.accounts) {
+          if (!onlinerRuntimeByAccountId.has(account.id)) {
+            onlinerRuntimeByAccountId.set(account.id, {
+              connectionState: "disconnected",
+              lastError: workerOnline ? null : "Onliner worker is offline."
+            });
+          }
+        }
       }
     }
+    const onlinerStatusByUserId = new Map([...onlinerAccountByUserId.entries()].map(([discordUserId, accountId]) => {
+      const runtime = onlinerRuntimeByAccountId.get(accountId) ?? { connectionState: "disconnected", lastError: null };
+      return [discordUserId, { accountId, ...runtime }];
+    }));
     const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, activeCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
@@ -7505,7 +7547,9 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       syncProgress,
       stockCategories,
       activeCategoryId,
-      recent: recentResult.rows.map((row) => ({
+      recent: recentResult.rows.map((row) => {
+        const onliner = onlinerStatusByUserId.get(String(row.discord_user_id));
+        return {
         id: row.discord_user_id,
         username: row.username,
         displayName: row.display_name,
@@ -7519,10 +7563,13 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         joinedAt: row.joined_at,
         presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
         presenceCheckedAt: row.presence_checked_at,
-        onlinerConnected: onlinerAccountByUserId.has(String(row.discord_user_id)),
-        onlinerAccountId: onlinerAccountByUserId.get(String(row.discord_user_id)) ?? null,
+        onlinerConnected: Boolean(onliner),
+        onlinerAccountId: onliner?.accountId ?? null,
+        onlinerConnectionState: onliner?.connectionState ?? null,
+        onlinerLastError: onliner?.lastError ?? null,
         hasStoredAccountToken: row.has_stored_account_token === true
-      }))
+      };
+      })
     });
   } catch (error) {
     next(error);

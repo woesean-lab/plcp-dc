@@ -87,6 +87,8 @@ export type CommunityJoinRecord = {
   presenceCheckedAt: string | null;
   onlinerConnected: boolean;
   onlinerAccountId: string | null;
+  onlinerConnectionState: "connected" | "connecting" | "reconnecting" | "error" | "disconnected" | null;
+  onlinerLastError: string | null;
   hasStoredAccountToken: boolean;
 };
 
