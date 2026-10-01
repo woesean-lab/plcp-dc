@@ -8479,11 +8479,17 @@
 
 .community-recent-list > div {
   display: grid;
-  grid-template-columns: 16px 34px minmax(0, 1fr) auto 32px;
+  grid-template-columns: 16px 34px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 10px;
   border-top: 1px solid var(--app-divider);
   padding-top: 9px;
+}
+
+.community-member-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .community-recent-list > div[data-state="failed"] {

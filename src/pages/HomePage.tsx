@@ -66,8 +66,10 @@ import { buildGuestOrderLink } from "../lib/order-links";
 import {
   addCommunityAccount,
   clearCommunityConfig,
+  connectCommunityMemberToOnliner,
   createCommunityStockCategory,
   deleteCommunityStockCategory,
+  disconnectCommunityMemberFromOnliner,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
   getCommunityMemberAccessToken,
@@ -766,6 +768,12 @@ export default function HomePage() {
   const [communityOnlinerProxy, setCommunityOnlinerProxy] = useState("");
   const [showCommunityOnlinerProxy, setShowCommunityOnlinerProxy] = useState(false);
   const [addingCommunityAccount, setAddingCommunityAccount] = useState(false);
+  const [communityOnlinerMember, setCommunityOnlinerMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [communityOnlinerToken, setCommunityOnlinerToken] = useState("");
+  const [communityMemberOnlinerProxy, setCommunityMemberOnlinerProxy] = useState("");
+  const [showCommunityOnlinerToken, setShowCommunityOnlinerToken] = useState(false);
+  const [showCommunityMemberOnlinerProxy, setShowCommunityMemberOnlinerProxy] = useState(false);
+  const [communityOnlinerActionId, setCommunityOnlinerActionId] = useState<string | null>(null);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
@@ -959,7 +967,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -970,13 +978,14 @@ export default function HomePage() {
       if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
       if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
       if (communityAccountCategory && !addingCommunityAccount) closeCommunityAccountModal();
+      if (communityOnlinerMember && communityOnlinerActionId === null) closeCommunityOnlinerModal();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -1843,6 +1852,55 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Discord account could not be authorized.");
     } finally {
       setAddingCommunityAccount(false);
+    }
+  }
+
+  function beginConnectingCommunityMemberToOnliner(record: CommunityAdminStatus["recent"][number]) {
+    setCommunityOnlinerMember(record);
+    setCommunityOnlinerToken("");
+    setCommunityMemberOnlinerProxy("");
+    setShowCommunityOnlinerToken(false);
+    setShowCommunityMemberOnlinerProxy(false);
+  }
+
+  function closeCommunityOnlinerModal() {
+    setCommunityOnlinerMember(null);
+    setCommunityOnlinerToken("");
+    setCommunityMemberOnlinerProxy("");
+    setShowCommunityOnlinerToken(false);
+    setShowCommunityMemberOnlinerProxy(false);
+  }
+
+  async function handleConnectCommunityMemberToOnliner(event: FormEvent) {
+    event.preventDefault();
+    const member = communityOnlinerMember;
+    if (!member || communityOnlinerActionId) return;
+    if (communityOnlinerToken.trim().length < 20) return notifyError("Enter this member's Discord account token.");
+    if (!communityMemberOnlinerProxy.trim()) return notifyError("A dedicated proxy is required for Onliner.");
+    try {
+      setCommunityOnlinerActionId(member.id);
+      await connectCommunityMemberToOnliner(member.id, communityOnlinerToken.trim(), communityMemberOnlinerProxy.trim());
+      await refreshCommunityStatus(communityStockType);
+      closeCommunityOnlinerModal();
+      notifySuccess(`${member.displayName || member.username} connected to Onliner.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Member could not be connected to Onliner.");
+    } finally {
+      setCommunityOnlinerActionId(null);
+    }
+  }
+
+  async function disconnectCommunityMemberOnliner(record: CommunityAdminStatus["recent"][number]) {
+    if (communityOnlinerActionId) return;
+    try {
+      setCommunityOnlinerActionId(record.id);
+      await disconnectCommunityMemberFromOnliner(record.id);
+      await refreshCommunityStatus(communityStockType);
+      notifySuccess(`${record.displayName || record.username} removed from Onliner. Members Stock was not changed.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Member could not be removed from Onliner.");
+    } finally {
+      setCommunityOnlinerActionId(null);
     }
   }
 
@@ -2882,21 +2940,37 @@ export default function HomePage() {
                   <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
                     <i aria-hidden="true" /> {getCommunityPresenceLabel(record.presenceStatus)}
                   </span>
+                  {record.onlinerConnected ? <Badge variant="success">Onliner</Badge> : null}
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                 </span>
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="dangerGhost"
-                  title={`Remove ${record.username} from Members Stock`}
-                  aria-label={`Remove ${record.username} from Members Stock`}
-                  disabled={removingCommunityUserId !== null || Boolean(record.reservedOrderId)}
-                  onClick={() => setCommunityMemberPendingDeletion(record)}
-                >
-                  {removingCommunityUserId === record.id
-                    ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-                    : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
-                </Button>
+                <span className="community-member-row-actions">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant={record.onlinerConnected ? "dangerGhost" : "secondary"}
+                    title={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
+                    aria-label={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
+                    disabled={communityOnlinerActionId !== null}
+                    onClick={() => record.onlinerConnected ? void disconnectCommunityMemberOnliner(record) : beginConnectingCommunityMemberToOnliner(record)}
+                  >
+                    {communityOnlinerActionId === record.id
+                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      : record.onlinerConnected ? <Power className="h-3.5 w-3.5" aria-hidden="true" /> : <RadioTower className="h-3.5 w-3.5" aria-hidden="true" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="dangerGhost"
+                    title={`Remove ${record.username} from Members Stock`}
+                    aria-label={`Remove ${record.username} from Members Stock`}
+                    disabled={removingCommunityUserId !== null || Boolean(record.reservedOrderId)}
+                    onClick={() => setCommunityMemberPendingDeletion(record)}
+                  >
+                    {removingCommunityUserId === record.id
+                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
+                  </Button>
+                </span>
               </div>
             );
           })}
@@ -4562,6 +4636,38 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {communityOnlinerMember ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && communityOnlinerActionId === null) closeCommunityOnlinerModal(); }}>
+          <form className="confirm-modal community-account-modal" onSubmit={handleConnectCommunityMemberToOnliner} role="dialog" aria-modal="true" aria-labelledby="connect-member-onliner-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><RadioTower className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Members Stock · Onliner</p>
+            <h2 id="connect-member-onliner-title">Connect {communityOnlinerMember.displayName || communityOnlinerMember.username}</h2>
+            <p>Enter this account's current Discord token and a dedicated proxy. They will be encrypted in Onliner for Gateway reconnects; the existing OAuth stock record will not be changed.</p>
+            <label className="mt-5 grid gap-2 text-left">
+              <span className={fieldLabelClass}>Account token</span>
+              <span className="onliner-secret-field">
+                <Input autoFocus type={showCommunityOnlinerToken ? "text" : "password"} value={communityOnlinerToken} maxLength={4096} autoComplete="off" placeholder="Discord account token" disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityOnlinerToken(event.target.value)} />
+                <button type="button" aria-label={showCommunityOnlinerToken ? "Hide account token" : "Show account token"} title={showCommunityOnlinerToken ? "Hide token" : "Show token"} disabled={communityOnlinerActionId !== null} onClick={() => setShowCommunityOnlinerToken((current) => !current)}>{showCommunityOnlinerToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+              </span>
+            </label>
+            <label className="mt-4 grid gap-2 text-left">
+              <span className={fieldLabelClass}>Dedicated Onliner proxy</span>
+              <span className="onliner-secret-field">
+                <Input type={showCommunityMemberOnlinerProxy ? "text" : "password"} value={communityMemberOnlinerProxy} maxLength={2000} autoComplete="off" placeholder="http://user:pass@host:port" disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityMemberOnlinerProxy(event.target.value)} />
+                <button type="button" aria-label={showCommunityMemberOnlinerProxy ? "Hide Onliner proxy" : "Show Onliner proxy"} title={showCommunityMemberOnlinerProxy ? "Hide proxy" : "Show proxy"} disabled={communityOnlinerActionId !== null} onClick={() => setShowCommunityMemberOnlinerProxy((current) => !current)}>{showCommunityMemberOnlinerProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
+              </span>
+            </label>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={communityOnlinerActionId !== null} onClick={closeCommunityOnlinerModal}>Cancel</Button>
+              <Button type="submit" disabled={communityOnlinerActionId !== null || communityOnlinerToken.trim().length < 20 || !communityMemberOnlinerProxy.trim()}>
+                {communityOnlinerActionId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
+                {communityOnlinerActionId ? "Connecting..." : "Connect to Onliner"}
+              </Button>
+            </div>
+          </form>
         </div>
       ) : null}
 

@@ -551,7 +551,8 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       id,
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
-      richPresenceEnabled: account?.richPresenceEnabled !== false
+      richPresenceEnabled: account?.richPresenceEnabled !== false,
+      discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
   }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
@@ -6909,6 +6910,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     let onlinerCurrent = null;
     let onlinerCandidate = null;
     let onlinerAccount = null;
+    let normalizedOnlinerProxyUrl = "";
     let onlinerAlreadyConnected = false;
     if (connectToOnliner) {
       onlinerCurrent = await getDiscordOnlinerConfig();
@@ -6917,15 +6919,10 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         if (onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
           return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
         }
-        const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedOnlinerProxyUrl);
-        if (!suppliedOnlinerProxyUrl || !proxyUrl) {
+        normalizedOnlinerProxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedOnlinerProxyUrl);
+        if (!suppliedOnlinerProxyUrl || !normalizedOnlinerProxyUrl) {
           return res.status(400).json({ message: "Enter a valid dedicated HTTP, HTTPS, or SOCKS proxy to connect this account to Onliner." });
         }
-        onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl, richPresenceEnabled: true };
-        onlinerCandidate = normalizeDiscordOnlinerConfig({
-          ...onlinerCurrent,
-          accounts: [...onlinerCurrent.accounts, onlinerAccount]
-        });
       }
     }
 
@@ -6992,6 +6989,24 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
       error.statusCode = 502;
       throw error;
     }
+    if (connectToOnliner && onlinerCurrent) {
+      const existingOnlinerAccount = onlinerCurrent.accounts.find((account) => account.botToken === accountToken);
+      if (existingOnlinerAccount) {
+        onlinerAccount = { ...existingOnlinerAccount, discordUserId };
+        if (existingOnlinerAccount.discordUserId !== discordUserId) {
+          onlinerCandidate = normalizeDiscordOnlinerConfig({
+            ...onlinerCurrent,
+            accounts: onlinerCurrent.accounts.map((account) => account.id === existingOnlinerAccount.id ? onlinerAccount : account)
+          });
+        }
+      } else {
+        onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl: normalizedOnlinerProxyUrl, richPresenceEnabled: true, discordUserId };
+        onlinerCandidate = normalizeDiscordOnlinerConfig({
+          ...onlinerCurrent,
+          accounts: [...onlinerCurrent.accounts, onlinerAccount]
+        });
+      }
+    }
 
     const username = String(accountIdentity.payload?.username ?? `Discord user ${discordUserId}`).trim().slice(0, 100);
     const displayName = String(accountIdentity.payload?.global_name ?? "").trim().slice(0, 100) || null;
@@ -7051,7 +7066,9 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at,
         presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
-        presenceCheckedAt: row.presence_checked_at
+        presenceCheckedAt: row.presence_checked_at,
+        onlinerConnected: connectToOnliner,
+        onlinerAccountId: onlinerAccount?.id ?? null
       }
     });
   } catch (error) {
@@ -7304,6 +7321,26 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         [config.guildId, activeCategoryId]
       )
     ]);
+    const onlinerConfig = await getDiscordOnlinerConfig();
+    const onlinerAccountByUserId = new Map(
+      onlinerConfig.accounts
+        .filter((account) => isDiscordGuildId(account.discordUserId))
+        .map((account) => [account.discordUserId, account.id])
+    );
+    if (onlinerConfig.accounts.length) {
+      const runtimeLinks = await pool.query(
+        `SELECT account_id, payload->'bot'->>'id' AS discord_user_id
+         FROM discord_onliner_runtime
+         WHERE account_id = ANY($1::text[])`,
+        [onlinerConfig.accounts.map((account) => account.id)]
+      );
+      for (const runtime of runtimeLinks.rows) {
+        const discordUserId = String(runtime.discord_user_id ?? "");
+        if (isDiscordGuildId(discordUserId) && !onlinerAccountByUserId.has(discordUserId)) {
+          onlinerAccountByUserId.set(discordUserId, String(runtime.account_id));
+        }
+      }
+    }
     const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, activeCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,
@@ -7327,7 +7364,9 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at,
         presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
-        presenceCheckedAt: row.presence_checked_at
+        presenceCheckedAt: row.presence_checked_at,
+        onlinerConnected: onlinerAccountByUserId.has(String(row.discord_user_id)),
+        onlinerAccountId: onlinerAccountByUserId.get(String(row.discord_user_id)) ?? null
       }))
     });
   } catch (error) {
@@ -7384,6 +7423,107 @@ app.get("/api/community/members/:discordUserId/access-token", requireSession, as
       accessToken: decryptCredential(record.encrypted_access_token),
       expiresAt: record.access_token_expires_at
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/members/:discordUserId/onliner", requireSession, async (req, res, next) => {
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    const accountToken = String(req.body?.accountToken ?? "").trim();
+    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) return res.status(400).json({ message: "A valid Members Stock user is required." });
+    if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
+    if (!suppliedProxyUrl || !proxyUrl) return res.status(400).json({ message: "Enter a valid dedicated HTTP, HTTPS, or SOCKS proxy." });
+
+    const communityConfig = await getCommunityOAuthConfig();
+    if (!communityConfig.configured) return res.status(503).json({ message: "Configure the Members bot before managing Onliner connections." });
+    const member = await pool.query(
+      "SELECT username FROM community_oauth_joins WHERE guild_id = $1 AND discord_user_id = $2 LIMIT 1",
+      [communityConfig.guildId, discordUserId]
+    );
+    if (!member.rowCount) return res.status(404).json({ message: "This user is no longer in Members Stock." });
+
+    const identity = await requestDiscord("users/@me", { headers: { Authorization: accountToken } });
+    if (!identity.response.ok || String(identity.payload?.id ?? "") !== discordUserId) {
+      return res.status(identity.response.status === 429 ? 429 : 401).json({
+        message: identity.response.status === 429
+          ? "Discord is rate limiting account checks. Try again shortly."
+          : "This account token is invalid or belongs to a different Members Stock user."
+      });
+    }
+
+    const current = await getDiscordOnlinerConfig();
+    const explicitlyLinked = current.accounts.find((account) => account.discordUserId === discordUserId);
+    if (explicitlyLinked) return res.status(409).json({ message: "This member is already connected to Onliner." });
+    const tokenMatch = current.accounts.find((account) => account.botToken === accountToken);
+    if (!tokenMatch && current.accounts.length >= discordOnlinerAccountLimit) {
+      return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
+    }
+
+    const accountId = tokenMatch?.id ?? crypto.randomUUID();
+    const linkedAccount = {
+      ...(tokenMatch ?? {}),
+      id: accountId,
+      botToken: accountToken,
+      proxyUrl,
+      richPresenceEnabled: tokenMatch?.richPresenceEnabled !== false,
+      discordUserId
+    };
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: tokenMatch
+        ? current.accounts.map((account) => account.id === tokenMatch.id ? linkedAccount : account)
+        : [...current.accounts, linkedAccount]
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner) {
+      const existingRuntime = discordOnlinerRuntimes.get(accountId);
+      if (existingRuntime) stopDiscordOnlinerRuntime(existingRuntime, { resetIdentity: true });
+      const savedAccount = candidate.accounts.find((account) => account.id === accountId);
+      if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    appendDiscordOnlinerLog("success", `Members Stock account ${member.rows[0].username} was connected to Onliner.`, accountId);
+    res.status(tokenMatch ? 200 : 201).json({ connected: true, accountId, alreadyExisted: Boolean(tokenMatch) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/community/members/:discordUserId/onliner", requireSession, async (req, res, next) => {
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) return res.status(400).json({ message: "A valid Members Stock user is required." });
+    const current = await getDiscordOnlinerConfig();
+    const linkedIds = new Set(current.accounts.filter((account) => account.discordUserId === discordUserId).map((account) => account.id));
+    if (current.accounts.length) {
+      const runtimeLinks = await pool.query(
+        `SELECT account_id FROM discord_onliner_runtime
+         WHERE account_id = ANY($1::text[]) AND payload->'bot'->>'id' = $2`,
+        [current.accounts.map((account) => account.id), discordUserId]
+      );
+      runtimeLinks.rows.forEach((row) => linkedIds.add(String(row.account_id)));
+    }
+    if (!linkedIds.size) return res.status(404).json({ message: "This member is not connected to Onliner." });
+
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: current.accounts.filter((account) => !linkedIds.has(account.id))
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    for (const accountId of linkedIds) {
+      const runtime = discordOnlinerRuntimes.get(accountId);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      discordOnlinerRuntimes.delete(accountId);
+      discordOnlinerPendingRuntimeWrites.delete(accountId);
+    }
+    await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [[...linkedIds]]);
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    appendDiscordOnlinerLog("info", `Members Stock account ${discordUserId} was removed from Onliner.`);
+    res.json({ removed: true, removedProfiles: linkedIds.size });
   } catch (error) {
     next(error);
   }

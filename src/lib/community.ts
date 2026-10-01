@@ -85,6 +85,8 @@ export type CommunityJoinRecord = {
   stockType: CommunityStockType;
   presenceStatus: "online" | "idle" | "dnd" | "offline" | "unknown";
   presenceCheckedAt: string | null;
+  onlinerConnected: boolean;
+  onlinerAccountId: string | null;
 };
 
 export type CommunityAdminStatus = CommunityJoinSummary & {
@@ -190,6 +192,24 @@ export function getCommunityMemberAccessToken(discordUserId: string) {
     cache: "no-store",
     credentials: "same-origin"
   }).then(parseResponse<{ accessToken: string; expiresAt: string | null }>);
+}
+
+export function connectCommunityMemberToOnliner(discordUserId: string, accountToken: string, proxyUrl: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountToken, proxyUrl })
+  }).then(parseResponse<{ connected: boolean; accountId: string; alreadyExisted: boolean }>);
+}
+
+export function disconnectCommunityMemberFromOnliner(discordUserId: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ removed: boolean; removedProfiles: number }>);
 }
 
 export function removeCommunityAuthorizations(ids: string[]) {
