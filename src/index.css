@@ -8360,6 +8360,14 @@
   gap: 7px;
 }
 
+.community-stock-add-account-action {
+  display: flex;
+  align-items: center;
+  margin-left: 3px;
+  border-left: 1px solid var(--app-divider);
+  padding-left: 10px;
+}
+
 .community-stock-import-actions p {
   display: flex;
   align-items: center;

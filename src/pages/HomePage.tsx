@@ -2814,10 +2814,7 @@ export default function HomePage() {
             <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.bot?.name ?? "Members Bot"}</h2>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" size="sm" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}><UserPlus className="h-4 w-4" /> Add account</Button>
-          <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
-        </div>
+        <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
       </div>
 
       <div className="community-category-manager">
@@ -2902,6 +2899,11 @@ export default function HomePage() {
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
+          <span className="community-stock-add-account-action">
+            <Button type="button" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}>
+              <UserPlus className="h-4 w-4" /> Add account
+            </Button>
+          </span>
         </div>
       </form>
 
