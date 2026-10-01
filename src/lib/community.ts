@@ -87,6 +87,7 @@ export type CommunityJoinRecord = {
   presenceCheckedAt: string | null;
   onlinerConnected: boolean;
   onlinerAccountId: string | null;
+  hasStoredAccountToken: boolean;
 };
 
 export type CommunityAdminStatus = CommunityJoinSummary & {
@@ -194,13 +195,13 @@ export function getCommunityMemberAccessToken(discordUserId: string) {
   }).then(parseResponse<{ accessToken: string; expiresAt: string | null }>);
 }
 
-export function connectCommunityMemberToOnliner(discordUserId: string, accountToken: string, proxyUrl: string) {
+export function connectCommunityMemberToOnliner(discordUserId: string, richPresenceEnabled: boolean) {
   return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountToken, proxyUrl })
+    body: JSON.stringify({ richPresenceEnabled })
   }).then(parseResponse<{ connected: boolean; accountId: string; alreadyExisted: boolean }>);
 }
 
@@ -310,7 +311,7 @@ export function importCommunityOAuthStock(records: unknown[], categoryId: Commun
   }).then(parseResponse<CommunityOAuthImportResult>);
 }
 
-export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType, onliner?: { connect: boolean; proxyUrl: string }) {
+export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType, onliner?: { connect: boolean; richPresenceEnabled: boolean }) {
   return fetch(`/api/community/categories/${encodeURIComponent(categoryId)}/accounts`, {
     method: "POST",
     cache: "no-store",
@@ -319,7 +320,7 @@ export function addCommunityAccount(accountToken: string, categoryId: CommunityS
     body: JSON.stringify({
       accountToken,
       connectToOnliner: onliner?.connect === true,
-      onlinerProxyUrl: onliner?.proxyUrl ?? ""
+      richPresenceEnabled: onliner?.richPresenceEnabled !== false
     })
   }).then(parseResponse<CommunityAccountAuthorizationResult>);
 }

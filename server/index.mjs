@@ -246,6 +246,8 @@ const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
+const discordOnlinerProxyHealth = new Map();
+let discordOnlinerProxySelectionSequence = 0;
 function createDiscordGatewayIdentityProperties() {
   return {
     os: "Windows",
@@ -555,6 +557,10 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
   }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
+  const proxyPoolSource = Array.isArray(value.proxyPool)
+    ? value.proxyPool
+    : sourceAccounts.map((account) => account?.proxyUrl);
+  const proxyPool = [...new Set(proxyPoolSource.map(normalizeDiscordOnlinerProxyUrl).filter(Boolean))].slice(0, 10_000);
   const status = discordOnlinerStatuses.has(String(value.status ?? "").toLowerCase())
     ? String(value.status).toLowerCase()
     : "online";
@@ -587,6 +593,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   ]));
   return {
     accounts,
+    proxyPool,
     enabled: value.enabled !== false,
     status,
     activityType,
@@ -613,6 +620,47 @@ function normalizeDiscordOnlinerConfig(value = {}) {
     streamingTitles: normalizePresenceItems(value.streamingTitles, defaultDiscordOnlinerStreamingTitles),
     watch: normalizePresenceItems(value.watch).filter((item) => !["youtube", "twitch", "kick"].includes(item.toLowerCase()))
   };
+}
+
+function recordDiscordOnlinerProxyHealth(proxyUrl, success) {
+  if (!proxyUrl) return;
+  const current = discordOnlinerProxyHealth.get(proxyUrl) ?? { failures: 0, unavailableUntil: 0, lastSuccessAt: 0, lastFailureAt: 0, lastSelectedAt: 0 };
+  if (success) {
+    current.failures = 0;
+    current.unavailableUntil = 0;
+    current.lastSuccessAt = Date.now();
+  } else {
+    current.failures += 1;
+    current.lastFailureAt = Date.now();
+    current.unavailableUntil = Date.now() + Math.min(30 * 60_000, 60_000 * (2 ** Math.min(current.failures - 1, 5)));
+  }
+  discordOnlinerProxyHealth.set(proxyUrl, current);
+}
+
+function selectDiscordOnlinerProxy(config, additionalAssignments = [], excludedProxies = []) {
+  const excluded = new Set(excludedProxies);
+  const proxies = (Array.isArray(config?.proxyPool) ? config.proxyPool : []).filter((proxy) => !excluded.has(proxy));
+  if (!proxies.length) return "";
+  const usage = new Map(proxies.map((proxy) => [proxy, 0]));
+  for (const proxy of [...config.accounts.map((account) => account.proxyUrl), ...additionalAssignments]) {
+    if (usage.has(proxy)) usage.set(proxy, usage.get(proxy) + 1);
+  }
+  const now = Date.now();
+  const healthy = proxies.filter((proxy) => (discordOnlinerProxyHealth.get(proxy)?.unavailableUntil ?? 0) <= now);
+  const candidates = healthy.length ? healthy : proxies;
+  const selected = [...candidates].sort((left, right) => {
+    const usageDifference = usage.get(left) - usage.get(right);
+    if (usageDifference) return usageDifference;
+    const leftHealth = discordOnlinerProxyHealth.get(left);
+    const rightHealth = discordOnlinerProxyHealth.get(right);
+    const failureDifference = (leftHealth?.failures ?? 0) - (rightHealth?.failures ?? 0);
+    if (failureDifference) return failureDifference;
+    return (leftHealth?.lastSelectedAt ?? 0) - (rightHealth?.lastSelectedAt ?? 0);
+  })[0];
+  const health = discordOnlinerProxyHealth.get(selected) ?? { failures: 0, unavailableUntil: 0, lastSuccessAt: 0, lastFailureAt: 0, lastSelectedAt: 0 };
+  health.lastSelectedAt = now + (discordOnlinerProxySelectionSequence++ % 1000);
+  discordOnlinerProxyHealth.set(selected, health);
+  return selected;
 }
 
 function normalizeDiscordOnlinerYouTubePlaylistId(value) {
@@ -1330,6 +1378,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("unexpected-response", (_request, response) => {
     if (generation !== runtime.generation) return;
     const statusCode = Number(response.statusCode) || 0;
+    if (account.proxyUrl) recordDiscordOnlinerProxyHealth(account.proxyUrl, statusCode !== 407);
     if (statusCode === 407) {
       runtime.automaticReconnectBlocked = true;
       runtime.state = "error";
@@ -1356,6 +1405,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("open", () => {
     if (generation !== runtime.generation) return;
     transportOpened = true;
+    if (account.proxyUrl) recordDiscordOnlinerProxyHealth(account.proxyUrl, true);
     const networkSocket = socket._socket;
     const localAddress = formatDiscordOnlinerSocketAddress(networkSocket?.localAddress, networkSocket?.localPort);
     const peerAddress = formatDiscordOnlinerSocketAddress(networkSocket?.remoteAddress, networkSocket?.remotePort);
@@ -1525,6 +1575,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         appendDiscordOnlinerLog("error", `Gateway error: ${runtime.lastError}`, account.id);
       }
       if (proxyEndpoint && !transportOpened) appendDiscordOnlinerLog("error", `Proxy route failed: ${proxyEndpoint} -> ${gatewayEndpoint}.`, account.id);
+      if (account.proxyUrl && !transportOpened) recordDiscordOnlinerProxyHealth(account.proxyUrl, false);
       queueDiscordOnlinerRuntimePersist(runtime);
     }
   });
@@ -2770,8 +2821,8 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
   await copyCommunityStockCategories(queryable, sourceGuildId, targetGuildId);
   await queryable.query(
     `INSERT INTO community_oauth_joins
-       (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-     SELECT discord_user_id, $2, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at,
+       (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_account_token, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+     SELECT discord_user_id, $2, username, display_name, avatar_url, encrypted_account_token, encrypted_refresh_token, encrypted_access_token, access_token_expires_at,
             CASE WHEN status = 'failed' THEN 'failed' ELSE 'authorized' END,
             stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
@@ -2785,6 +2836,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        username = EXCLUDED.username,
        display_name = EXCLUDED.display_name,
        avatar_url = EXCLUDED.avatar_url,
+       encrypted_account_token = COALESCE(EXCLUDED.encrypted_account_token, community_oauth_joins.encrypted_account_token),
        encrypted_refresh_token = COALESCE(EXCLUDED.encrypted_refresh_token, community_oauth_joins.encrypted_refresh_token),
        encrypted_access_token = EXCLUDED.encrypted_access_token,
        access_token_expires_at = EXCLUDED.access_token_expires_at,
@@ -6026,6 +6078,7 @@ async function initializeDatabase() {
       username TEXT NOT NULL,
       display_name TEXT,
       avatar_url TEXT,
+      encrypted_account_token TEXT,
       encrypted_refresh_token TEXT,
       encrypted_access_token TEXT,
       access_token_expires_at TIMESTAMPTZ,
@@ -6040,6 +6093,7 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_refresh_token TEXT");
+  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_account_token TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS display_name TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS encrypted_access_token TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS access_token_expires_at TIMESTAMPTZ");
@@ -6188,6 +6242,60 @@ app.get("/api/onliner", requireSession, async (_req, res, next) => {
   }
 });
 
+app.get("/api/onliner/proxies", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    const availableCount = config.proxyPool.filter((proxy) => (discordOnlinerProxyHealth.get(proxy)?.unavailableUntil ?? 0) <= Date.now()).length;
+    res.set("Cache-Control", "no-store").json({
+      proxies: config.proxyPool,
+      count: config.proxyPool.length,
+      availableCount,
+      coolingDownCount: config.proxyPool.length - availableCount,
+      assignedAccounts: config.accounts.filter((account) => Boolean(account.proxyUrl)).length
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/onliner/proxies", requireSession, async (req, res, next) => {
+  try {
+    const requested = Array.isArray(req.body?.proxies) ? req.body.proxies : [];
+    if (requested.length > 10_000) return res.status(400).json({ message: "Onliner supports up to 10,000 saved proxies." });
+    const proxies = [];
+    for (let index = 0; index < requested.length; index += 1) {
+      const proxy = normalizeDiscordOnlinerProxyUrl(requested[index]);
+      if (!proxy) return res.status(400).json({ message: `Proxy line ${index + 1} is invalid.` });
+      if (!proxies.includes(proxy)) proxies.push(proxy);
+    }
+    const current = await getDiscordOnlinerConfig();
+    const assignedProxies = [];
+    const assignmentConfig = { ...current, proxyPool: proxies, accounts: [] };
+    const assignedAccounts = current.accounts.map((account) => {
+      const proxyUrl = selectDiscordOnlinerProxy(assignmentConfig, assignedProxies);
+      if (proxyUrl) assignedProxies.push(proxyUrl);
+      return { ...account, proxyUrl };
+    });
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      proxyPool: proxies,
+      accounts: assignedAccounts
+    });
+    for (const proxy of [...discordOnlinerProxyHealth.keys()]) {
+      if (!candidate.proxyPool.includes(proxy)) discordOnlinerProxyHealth.delete(proxy);
+    }
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
+      await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
+      discordOnlinerWorkerCurrentConfig = candidate;
+    }
+    const availableCount = candidate.proxyPool.filter((proxy) => (discordOnlinerProxyHealth.get(proxy)?.unavailableUntil ?? 0) <= Date.now()).length;
+    res.json({ proxies: candidate.proxyPool, count: candidate.proxyPool.length, availableCount, coolingDownCount: candidate.proxyPool.length - availableCount, assignedAccounts: candidate.accounts.filter((account) => Boolean(account.proxyUrl)).length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
   try {
     discordOnlinerLogs.length = 0;
@@ -6288,13 +6396,11 @@ app.post("/api/onliner/accounts", requireSession, async (req, res, next) => {
     const current = await getDiscordOnlinerConfig();
     if (current.accounts.length >= discordOnlinerAccountLimit) return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} bot profiles.` });
     const botToken = String(req.body?.botToken ?? "").trim();
-    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
     const richPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
-    if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
     if (current.accounts.some((account) => account.botToken === botToken)) return res.status(409).json({ message: "This bot token is already saved." });
-    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
-    if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+    const proxyUrl = selectDiscordOnlinerProxy(current);
+    if (!proxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,
       accounts: [...current.accounts, { id: crypto.randomUUID(), botToken, proxyUrl, richPresenceEnabled }]
@@ -6333,15 +6439,13 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
     if (accountIndex < 0) return res.status(404).json({ message: "Bot profile not found." });
 
     const botToken = String(req.body?.botToken ?? "").trim();
-    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
     const richPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!botToken || botToken.length > 2000) return res.status(400).json({ message: "A valid Discord bot token is required." });
-    if (!suppliedProxyUrl) return res.status(400).json({ message: "A dedicated proxy is required for every bot token." });
     if (current.accounts.some((account) => account.id !== accountId && account.botToken === botToken)) {
       return res.status(409).json({ message: "This bot token is already saved in another profile." });
     }
-    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
-    if (!proxyUrl) return res.status(400).json({ message: "Enter a valid HTTP, HTTPS, or SOCKS proxy." });
+    const proxyUrl = current.accounts[accountIndex].proxyUrl || selectDiscordOnlinerProxy(current);
+    if (!proxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
 
     const updatedAccount = { ...current.accounts[accountIndex], id: accountId, botToken, proxyUrl, richPresenceEnabled };
     const candidate = normalizeDiscordOnlinerConfig({
@@ -6382,13 +6486,11 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
       const input = requestedAccounts[index];
       const lineNumber = Number.parseInt(input?.lineNumber, 10) || index + 1;
       const botToken = normalizeDiscordOnlinerBulkBotToken(input?.botToken);
-      const suppliedProxyUrl = String(input?.proxyUrl ?? "").trim();
       const richPresenceEnabled = input?.richPresenceEnabled !== false;
       if (!botToken || botToken.length > 2000) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid Discord bot token.` });
-      if (!suppliedProxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: a dedicated proxy is required.` });
       if (knownTokens.has(botToken)) return res.status(409).json({ message: `Line ${lineNumber}: this bot token is duplicated or already saved.` });
-      const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
-      if (!proxyUrl) return res.status(400).json({ message: `Line ${lineNumber}: enter a valid HTTP, HTTPS, or SOCKS proxy.` });
+      const proxyUrl = selectDiscordOnlinerProxy(current, additions.map((account) => account.proxyUrl));
+      if (!proxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
       knownTokens.add(botToken);
       additions.push({ id: crypto.randomUUID(), botToken, proxyUrl, richPresenceEnabled });
     }
@@ -6430,6 +6532,35 @@ app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, 
     await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = $1", [accountId]);
     discordOnlinerPendingRuntimeWrites.delete(accountId);
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.json(await getDiscordOnlinerSnapshotForApi(candidate));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/accounts/:accountId/rotate-proxy", requireSession, async (req, res, next) => {
+  try {
+    const current = await getDiscordOnlinerConfig();
+    const accountId = String(req.params.accountId ?? "");
+    const account = current.accounts.find((item) => item.id === accountId);
+    if (!account) return res.status(404).json({ message: "Onliner profile not found." });
+    if (account.proxyUrl) recordDiscordOnlinerProxyHealth(account.proxyUrl, false);
+    const proxyUrl = selectDiscordOnlinerProxy(current, [], account.proxyUrl ? [account.proxyUrl] : []);
+    if (!proxyUrl) return res.status(409).json({ message: "No other available proxy exists in the Onliner pool." });
+    const updatedAccount = { ...account, proxyUrl };
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: current.accounts.map((item) => item.id === accountId ? updatedAccount : item)
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner) {
+      const runtime = discordOnlinerRuntimes.get(accountId);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      const savedAccount = candidate.accounts.find((item) => item.id === accountId);
+      if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    appendDiscordOnlinerLog("info", "Proxy changed from the central pool; restarting this Gateway connection.", accountId);
     res.json(await getDiscordOnlinerSnapshotForApi(candidate));
   } catch (error) {
     next(error);
@@ -6903,7 +7034,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const categoryId = parseCommunityCategoryId(requestedCategoryId);
     const accountToken = String(req.body?.accountToken ?? "").trim();
     const connectToOnliner = req.body?.connectToOnliner === true;
-    const suppliedOnlinerProxyUrl = String(req.body?.onlinerProxyUrl ?? "").trim();
+    const onlinerRichPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!categoryId || categoryId !== requestedCategoryId) return res.status(400).json({ message: "Choose a valid Members Stock category." });
     if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
 
@@ -6919,10 +7050,8 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         if (onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
           return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
         }
-        normalizedOnlinerProxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedOnlinerProxyUrl);
-        if (!suppliedOnlinerProxyUrl || !normalizedOnlinerProxyUrl) {
-          return res.status(400).json({ message: "Enter a valid dedicated HTTP, HTTPS, or SOCKS proxy to connect this account to Onliner." });
-        }
+        normalizedOnlinerProxyUrl = selectDiscordOnlinerProxy(onlinerCurrent);
+        if (!normalizedOnlinerProxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
       }
     }
 
@@ -6992,15 +7121,15 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     if (connectToOnliner && onlinerCurrent) {
       const existingOnlinerAccount = onlinerCurrent.accounts.find((account) => account.botToken === accountToken);
       if (existingOnlinerAccount) {
-        onlinerAccount = { ...existingOnlinerAccount, discordUserId };
-        if (existingOnlinerAccount.discordUserId !== discordUserId) {
+        onlinerAccount = { ...existingOnlinerAccount, discordUserId, richPresenceEnabled: onlinerRichPresenceEnabled };
+        if (existingOnlinerAccount.discordUserId !== discordUserId || existingOnlinerAccount.richPresenceEnabled !== onlinerRichPresenceEnabled) {
           onlinerCandidate = normalizeDiscordOnlinerConfig({
             ...onlinerCurrent,
             accounts: onlinerCurrent.accounts.map((account) => account.id === existingOnlinerAccount.id ? onlinerAccount : account)
           });
         }
       } else {
-        onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl: normalizedOnlinerProxyUrl, richPresenceEnabled: true, discordUserId };
+        onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl: normalizedOnlinerProxyUrl, richPresenceEnabled: onlinerRichPresenceEnabled, discordUserId };
         onlinerCandidate = normalizeDiscordOnlinerConfig({
           ...onlinerCurrent,
           accounts: [...onlinerCurrent.accounts, onlinerAccount]
@@ -7022,12 +7151,13 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const details = `OAuth authorization is managed automatically and is valid until ${oauth.expiresAt.toISOString()}.`;
     const saved = await pool.query(
       `INSERT INTO community_oauth_joins
-         (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'authorized', $9, $10, NOW(), NULL, NULL, $11)
+         (discord_user_id, guild_id, username, display_name, avatar_url, encrypted_account_token, encrypted_refresh_token, encrypted_access_token, access_token_expires_at, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'authorized', $10, $11, NOW(), NULL, NULL, $12)
        ON CONFLICT (discord_user_id, guild_id) DO UPDATE SET
          username = EXCLUDED.username,
          display_name = EXCLUDED.display_name,
          avatar_url = EXCLUDED.avatar_url,
+         encrypted_account_token = EXCLUDED.encrypted_account_token,
          encrypted_refresh_token = EXCLUDED.encrypted_refresh_token,
          encrypted_access_token = EXCLUDED.encrypted_access_token,
          access_token_expires_at = EXCLUDED.access_token_expires_at,
@@ -7039,7 +7169,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
          reserved_order_id = NULL,
          sort_position = CASE WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position ELSE community_oauth_joins.sort_position END
        RETURNING discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at`,
-      [discordUserId, config.guildId, username, displayName, avatarUrl, encryptCredential(oauth.refreshToken), encryptCredential(oauth.accessToken), oauth.expiresAt, categoryId, details, sortPosition]
+      [discordUserId, config.guildId, username, displayName, avatarUrl, encryptCredential(accountToken), encryptCredential(oauth.refreshToken), encryptCredential(oauth.accessToken), oauth.expiresAt, categoryId, details, sortPosition]
     );
     const row = saved.rows[0];
     if (onlinerCandidate && onlinerAccount) {
@@ -7068,7 +7198,8 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
         presenceCheckedAt: row.presence_checked_at,
         onlinerConnected: connectToOnliner,
-        onlinerAccountId: onlinerAccount?.id ?? null
+        onlinerAccountId: onlinerAccount?.id ?? null,
+        hasStoredAccountToken: true
       }
     });
   } catch (error) {
@@ -7310,7 +7441,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
       pool.query(
-        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at
+        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at,
+                encrypted_account_token IS NOT NULL AS has_stored_account_token
          FROM community_oauth_joins
          WHERE guild_id = $1
            AND ($2::text IS NULL OR stock_type = $2)
@@ -7366,7 +7498,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
         presenceCheckedAt: row.presence_checked_at,
         onlinerConnected: onlinerAccountByUserId.has(String(row.discord_user_id)),
-        onlinerAccountId: onlinerAccountByUserId.get(String(row.discord_user_id)) ?? null
+        onlinerAccountId: onlinerAccountByUserId.get(String(row.discord_user_id)) ?? null,
+        hasStoredAccountToken: row.has_stored_account_token === true
       }))
     });
   } catch (error) {
@@ -7431,20 +7564,20 @@ app.get("/api/community/members/:discordUserId/access-token", requireSession, as
 app.post("/api/community/members/:discordUserId/onliner", requireSession, async (req, res, next) => {
   try {
     const discordUserId = String(req.params.discordUserId ?? "").trim();
-    const accountToken = String(req.body?.accountToken ?? "").trim();
-    const suppliedProxyUrl = String(req.body?.proxyUrl ?? "").trim();
+    const richPresenceEnabled = req.body?.richPresenceEnabled !== false;
     if (!isDiscordGuildId(discordUserId)) return res.status(400).json({ message: "A valid Members Stock user is required." });
-    if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
-    const proxyUrl = normalizeDiscordOnlinerProxyUrl(suppliedProxyUrl);
-    if (!suppliedProxyUrl || !proxyUrl) return res.status(400).json({ message: "Enter a valid dedicated HTTP, HTTPS, or SOCKS proxy." });
 
     const communityConfig = await getCommunityOAuthConfig();
     if (!communityConfig.configured) return res.status(503).json({ message: "Configure the Members bot before managing Onliner connections." });
     const member = await pool.query(
-      "SELECT username FROM community_oauth_joins WHERE guild_id = $1 AND discord_user_id = $2 LIMIT 1",
+      "SELECT username, encrypted_account_token FROM community_oauth_joins WHERE guild_id = $1 AND discord_user_id = $2 LIMIT 1",
       [communityConfig.guildId, discordUserId]
     );
     if (!member.rowCount) return res.status(404).json({ message: "This user is no longer in Members Stock." });
+    if (!member.rows[0].encrypted_account_token) {
+      return res.status(409).json({ message: "This older stock record has no saved account token. Add the account again once to enable token-free Onliner connections." });
+    }
+    const accountToken = decryptCredential(member.rows[0].encrypted_account_token);
 
     const identity = await requestDiscord("users/@me", { headers: { Authorization: accountToken } });
     if (!identity.response.ok || String(identity.payload?.id ?? "") !== discordUserId) {
@@ -7462,6 +7595,8 @@ app.post("/api/community/members/:discordUserId/onliner", requireSession, async 
     if (!tokenMatch && current.accounts.length >= discordOnlinerAccountLimit) {
       return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
     }
+    const proxyUrl = tokenMatch?.proxyUrl || selectDiscordOnlinerProxy(current);
+    if (!proxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
 
     const accountId = tokenMatch?.id ?? crypto.randomUUID();
     const linkedAccount = {
@@ -7469,7 +7604,7 @@ app.post("/api/community/members/:discordUserId/onliner", requireSession, async 
       id: accountId,
       botToken: accountToken,
       proxyUrl,
-      richPresenceEnabled: tokenMatch?.richPresenceEnabled !== false,
+      richPresenceEnabled,
       discordUserId
     };
     const candidate = normalizeDiscordOnlinerConfig({
@@ -7508,6 +7643,16 @@ app.delete("/api/community/members/:discordUserId/onliner", requireSession, asyn
       runtimeLinks.rows.forEach((row) => linkedIds.add(String(row.account_id)));
     }
     if (!linkedIds.size) return res.status(404).json({ message: "This member is not connected to Onliner." });
+
+    const recoverableAccountToken = current.accounts.find((account) => linkedIds.has(account.id) && account.botToken)?.botToken;
+    if (recoverableAccountToken) {
+      await pool.query(
+        `UPDATE community_oauth_joins
+         SET encrypted_account_token = COALESCE(encrypted_account_token, $2)
+         WHERE discord_user_id = $1`,
+        [discordUserId, encryptCredential(recoverableAccountToken)]
+      );
+    }
 
     const candidate = normalizeDiscordOnlinerConfig({
       ...current,

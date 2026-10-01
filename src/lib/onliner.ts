@@ -113,6 +113,25 @@ export function getDiscordOnliner() {
   return fetch("/api/onliner", { cache: "no-store", credentials: "same-origin" }).then(parseResponse);
 }
 
+export async function getDiscordOnlinerProxies() {
+  const response = await fetch("/api/onliner/proxies", { cache: "no-store", credentials: "same-origin" });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as { proxies: string[]; count: number; availableCount: number; coolingDownCount: number; assignedAccounts: number };
+}
+
+export async function saveDiscordOnlinerProxies(proxies: string[]) {
+  const response = await fetch("/api/onliner/proxies", {
+    method: "PUT",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proxies })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as { proxies: string[]; count: number; availableCount: number; coolingDownCount: number; assignedAccounts: number };
+}
+
 export async function getDiscordOnlinerLogs(after = 0) {
   const response = await fetch(`/api/onliner/logs?after=${encodeURIComponent(String(after))}`, { cache: "no-store", credentials: "same-origin" });
   const payload = await response.json().catch(() => ({}));
@@ -129,7 +148,7 @@ export function saveDiscordOnliner(input: DiscordOnlinerInput) {
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: string; richPresenceEnabled: boolean }) {
+export function addDiscordOnlinerAccount(input: { botToken: string; richPresenceEnabled: boolean }) {
   return fetch("/api/onliner/accounts", {
     method: "POST",
     credentials: "same-origin",
@@ -138,7 +157,7 @@ export function addDiscordOnlinerAccount(input: { botToken: string; proxyUrl: st
   }).then(parseResponse);
 }
 
-export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; proxyUrl: string; richPresenceEnabled: boolean; lineNumber: number }>) {
+export function addDiscordOnlinerAccountsBulk(accounts: Array<{ botToken: string; richPresenceEnabled: boolean; lineNumber: number }>) {
   return fetch("/api/onliner/accounts/bulk", {
     method: "POST",
     credentials: "same-origin",
@@ -157,7 +176,7 @@ export async function getDiscordOnlinerAccountCredentials(accountId: string) {
   return payload as DiscordOnlinerAccountCredentials;
 }
 
-export function updateDiscordOnlinerAccount(accountId: string, input: { botToken: string; proxyUrl: string; richPresenceEnabled: boolean }) {
+export function updateDiscordOnlinerAccount(accountId: string, input: { botToken: string; richPresenceEnabled: boolean }) {
   return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}`, {
     method: "PUT",
     credentials: "same-origin",
@@ -175,6 +194,13 @@ export function removeDiscordOnlinerAccount(accountId: string) {
 
 export function reconnectDiscordOnlinerAccount(accountId: string) {
   return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}/reconnect`, {
+    method: "POST",
+    credentials: "same-origin"
+  }).then(parseResponse);
+}
+
+export function rotateDiscordOnlinerAccountProxy(accountId: string) {
+  return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}/rotate-proxy`, {
     method: "POST",
     credentials: "same-origin"
   }).then(parseResponse);

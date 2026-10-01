@@ -101,13 +101,16 @@ import {
   clearDiscordOnlinerLogs,
   continueDiscordOnlinerConnections,
   getDiscordOnliner,
+  getDiscordOnlinerProxies,
   getDiscordOnlinerAccountCredentials,
   getDiscordOnlinerLogs,
   pauseDiscordOnlinerConnections,
   reconnectDiscordOnliner,
   reconnectDiscordOnlinerAccount,
+  rotateDiscordOnlinerAccountProxy,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
+  saveDiscordOnlinerProxies,
   stopDiscordOnlinerConnections,
   updateDiscordOnlinerAccount,
   type DiscordOnlinerLogEntry,
@@ -180,7 +183,7 @@ const EMPTY_ONLINER_DRAFT = {
   connectionDelaySeconds: 3
 };
 
-const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", proxyUrl: "", richPresenceEnabled: true };
+const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", richPresenceEnabled: true };
 
 function parseOnlinerBulkLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -709,17 +712,21 @@ export default function HomePage() {
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
   const [showOnlinerBulkModal, setShowOnlinerBulkModal] = useState(false);
   const [onlinerBulkTokenDraft, setOnlinerBulkTokenDraft] = useState("");
-  const [onlinerBulkProxyDraft, setOnlinerBulkProxyDraft] = useState("");
   const [onlinerBulkRichPresenceEnabled, setOnlinerBulkRichPresenceEnabled] = useState(true);
+  const [onlinerProxyDraft, setOnlinerProxyDraft] = useState("");
+  const [onlinerProxyCount, setOnlinerProxyCount] = useState(0);
+  const [onlinerAvailableProxyCount, setOnlinerAvailableProxyCount] = useState(0);
+  const [onlinerCoolingProxyCount, setOnlinerCoolingProxyCount] = useState(0);
+  const [savingOnlinerProxies, setSavingOnlinerProxies] = useState(false);
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnlinerAccountId, setReconnectingOnlinerAccountId] = useState<string | null>(null);
+  const [changingOnlinerProxyId, setChangingOnlinerProxyId] = useState<string | null>(null);
   const [editingOnlinerAccountId, setEditingOnlinerAccountId] = useState<string | null>(null);
   const [onlinerEditDraft, setOnlinerEditDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnlinerCredentials, setLoadingOnlinerCredentials] = useState(false);
   const [savingOnlinerAccount, setSavingOnlinerAccount] = useState(false);
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
-  const [showOnlinerEditProxy, setShowOnlinerEditProxy] = useState(false);
   const onlinerCredentialRequestRef = useRef(0);
   const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "reconnect" | "continue" | "pause" | "stop" | null>(null);
   const [savingApiKey, setSavingApiKey] = useState(false);
@@ -762,17 +769,16 @@ export default function HomePage() {
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [communityAccountCategory, setCommunityAccountCategory] = useState<CommunityStockCategory | null>(null);
+  const [communityAccountMode, setCommunityAccountMode] = useState<"single" | "bulk">("single");
   const [communityAccountToken, setCommunityAccountToken] = useState("");
   const [showCommunityAccountToken, setShowCommunityAccountToken] = useState(false);
   const [communityConnectToOnliner, setCommunityConnectToOnliner] = useState(false);
-  const [communityOnlinerProxy, setCommunityOnlinerProxy] = useState("");
-  const [showCommunityOnlinerProxy, setShowCommunityOnlinerProxy] = useState(false);
+  const [communityAccountRichPresence, setCommunityAccountRichPresence] = useState(true);
   const [addingCommunityAccount, setAddingCommunityAccount] = useState(false);
+  const [communityAccountProgress, setCommunityAccountProgress] = useState({ completed: 0, total: 0 });
+  const [communityAccountBulkErrors, setCommunityAccountBulkErrors] = useState<Array<{ lineNumber: number; message: string }>>([]);
   const [communityOnlinerMember, setCommunityOnlinerMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
-  const [communityOnlinerToken, setCommunityOnlinerToken] = useState("");
-  const [communityMemberOnlinerProxy, setCommunityMemberOnlinerProxy] = useState("");
-  const [showCommunityOnlinerToken, setShowCommunityOnlinerToken] = useState(false);
-  const [showCommunityMemberOnlinerProxy, setShowCommunityMemberOnlinerProxy] = useState(false);
+  const [communityOnlinerRichPresence, setCommunityOnlinerRichPresence] = useState(true);
   const [communityOnlinerActionId, setCommunityOnlinerActionId] = useState<string | null>(null);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
@@ -1026,7 +1032,6 @@ export default function HomePage() {
         setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
         setLoadingOnlinerCredentials(false);
         setShowOnlinerEditToken(false);
-        setShowOnlinerEditProxy(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -1073,6 +1078,15 @@ export default function HomePage() {
     if (activeTab !== "onliner") return;
     let cancelled = false;
     setLoadingOnliner(true);
+    void getDiscordOnlinerProxies().then((result) => {
+      if (cancelled) return;
+      setOnlinerProxyDraft(result.proxies.join("\n"));
+      setOnlinerProxyCount(result.count);
+      setOnlinerAvailableProxyCount(result.availableCount);
+      setOnlinerCoolingProxyCount(result.coolingDownCount);
+    }).catch((error) => {
+      if (!cancelled) notifyError(error instanceof Error ? error.message : "Onliner proxies could not be loaded.");
+    });
     void getDiscordOnliner().then((snapshot) => {
       if (cancelled) return;
       onlinerLogCursorRef.current = snapshot.logs.reduce((highest, entry) => Math.max(highest, entry.id), 0);
@@ -1107,6 +1121,13 @@ export default function HomePage() {
           onlinerLogCursorRef.current = Math.max(onlinerLogCursorRef.current, ...logsById.keys());
           return { ...snapshot, logs: [...logsById.values()].sort((left, right) => left.id - right.id).slice(-100) };
         });
+      }).catch(() => {});
+      void getDiscordOnlinerProxies().then((result) => {
+        if (!cancelled) {
+          setOnlinerProxyCount(result.count);
+          setOnlinerAvailableProxyCount(result.availableCount);
+          setOnlinerCoolingProxyCount(result.coolingDownCount);
+        }
       }).catch(() => {});
     }, 3000);
     const mergeLiveLogs = (entries: DiscordOnlinerLogEntry[]) => {
@@ -1496,18 +1517,13 @@ export default function HomePage() {
 
   async function handleAddOnlinerAccount() {
     const botToken = onlinerAccountDraft.botToken.trim();
-    const proxyUrl = onlinerAccountDraft.proxyUrl.trim();
     if (!botToken) {
       notifyError("Enter the Discord bot token.");
       return;
     }
-    if (!proxyUrl) {
-      notifyError("Enter the Gateway proxy address.");
-      return;
-    }
     try {
       setAddingOnlinerAccount(true);
-      const snapshot = await addDiscordOnlinerAccount({ botToken, proxyUrl, richPresenceEnabled: onlinerAccountDraft.richPresenceEnabled });
+      const snapshot = await addDiscordOnlinerAccount({ botToken, richPresenceEnabled: onlinerAccountDraft.richPresenceEnabled });
       setOnlinerSnapshot(snapshot);
       setOnlinerAccountDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       notifySuccess("Bot profile added; the Onliner worker will connect it.");
@@ -1521,22 +1537,16 @@ export default function HomePage() {
   async function handleAddOnlinerAccountsBulk(event: FormEvent) {
     event.preventDefault();
     const botTokens = parseOnlinerBulkTokenLines(onlinerBulkTokenDraft);
-    const proxyUrls = parseOnlinerBulkLines(onlinerBulkProxyDraft);
-    if (!botTokens.length || !proxyUrls.length) {
-      notifyError("Paste at least one bot token and one proxy.");
+    if (!botTokens.length) {
+      notifyError("Paste at least one bot token.");
       return;
     }
-    if (botTokens.length !== proxyUrls.length) {
-      notifyError(`Token and proxy counts must match (${botTokens.length} tokens, ${proxyUrls.length} proxies).`);
-      return;
-    }
-    const accounts = botTokens.map((botToken, index) => ({ botToken, proxyUrl: proxyUrls[index], richPresenceEnabled: onlinerBulkRichPresenceEnabled, lineNumber: index + 1 }));
+    const accounts = botTokens.map((botToken, index) => ({ botToken, richPresenceEnabled: onlinerBulkRichPresenceEnabled, lineNumber: index + 1 }));
     try {
       setAddingOnlinerBulk(true);
       const snapshot = await addDiscordOnlinerAccountsBulk(accounts);
       setOnlinerSnapshot(snapshot);
       setOnlinerBulkTokenDraft("");
-      setOnlinerBulkProxyDraft("");
       setOnlinerBulkRichPresenceEnabled(true);
       setShowOnlinerBulkModal(false);
       notifySuccess(`${accounts.length} bot profile${accounts.length === 1 ? "" : "s"} added; the Onliner worker will connect them.`);
@@ -1554,7 +1564,6 @@ export default function HomePage() {
     setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
     setLoadingOnlinerCredentials(false);
     setShowOnlinerEditToken(false);
-    setShowOnlinerEditProxy(false);
   }
 
   async function handleOpenOnlinerAccountEditor(accountId: string) {
@@ -1564,13 +1573,11 @@ export default function HomePage() {
       setEditingOnlinerAccountId(accountId);
       setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       setShowOnlinerEditToken(false);
-      setShowOnlinerEditProxy(false);
       setLoadingOnlinerCredentials(true);
       const credentials = await getDiscordOnlinerAccountCredentials(accountId);
       if (requestId !== onlinerCredentialRequestRef.current) return;
       setOnlinerEditDraft({
         botToken: credentials.botToken,
-        proxyUrl: credentials.proxyUrl,
         richPresenceEnabled: credentials.richPresenceEnabled
       });
     } catch (error) {
@@ -1586,16 +1593,14 @@ export default function HomePage() {
     event.preventDefault();
     if (!editingOnlinerAccountId) return;
     const botToken = onlinerEditDraft.botToken.trim();
-    const proxyUrl = onlinerEditDraft.proxyUrl.trim();
-    if (!botToken || !proxyUrl) {
-      notifyError("Both the bot token and dedicated proxy are required.");
+    if (!botToken) {
+      notifyError("The bot token is required.");
       return;
     }
     try {
       setSavingOnlinerAccount(true);
       const snapshot = await updateDiscordOnlinerAccount(editingOnlinerAccountId, {
         botToken,
-        proxyUrl,
         richPresenceEnabled: onlinerEditDraft.richPresenceEnabled
       });
       onlinerCredentialRequestRef.current += 1;
@@ -1603,12 +1608,28 @@ export default function HomePage() {
       setEditingOnlinerAccountId(null);
       setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
       setShowOnlinerEditToken(false);
-      setShowOnlinerEditProxy(false);
       notifySuccess("Bot profile saved; the worker restarts only this bot if its credentials changed.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Bot profile could not be updated.");
     } finally {
       setSavingOnlinerAccount(false);
+    }
+  }
+
+  async function handleSaveOnlinerProxies() {
+    try {
+      setSavingOnlinerProxies(true);
+      const result = await saveDiscordOnlinerProxies(parseProxyDraft(onlinerProxyDraft));
+      setOnlinerProxyDraft(result.proxies.join("\n"));
+      setOnlinerProxyCount(result.count);
+      setOnlinerAvailableProxyCount(result.availableCount);
+      setOnlinerCoolingProxyCount(result.coolingDownCount);
+      setOnlinerSnapshot(await getDiscordOnliner());
+      notifySuccess(`${result.count} Onliner prox${result.count === 1 ? "y" : "ies"} saved and assigned automatically.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner proxies could not be saved.");
+    } finally {
+      setSavingOnlinerProxies(false);
     }
   }
 
@@ -1633,6 +1654,21 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Bot Gateway connection could not be restarted.");
     } finally {
       setReconnectingOnlinerAccountId(null);
+    }
+  }
+
+  async function handleRotateOnlinerProxy(accountId: string) {
+    try {
+      setChangingOnlinerProxyId(accountId);
+      setOnlinerSnapshot(await rotateDiscordOnlinerAccountProxy(accountId));
+      const proxies = await getDiscordOnlinerProxies();
+      setOnlinerAvailableProxyCount(proxies.availableCount);
+      setOnlinerCoolingProxyCount(proxies.coolingDownCount);
+      notifySuccess("A healthier proxy was assigned and this Gateway connection is restarting.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Another proxy could not be assigned.");
+    } finally {
+      setChangingOnlinerProxyId(null);
     }
   }
 
@@ -1815,39 +1851,69 @@ export default function HomePage() {
 
   function beginAddingCommunityAccount(category: CommunityStockCategory) {
     setCommunityAccountCategory(category);
+    setCommunityAccountMode("single");
     setCommunityAccountToken("");
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
-    setCommunityOnlinerProxy("");
-    setShowCommunityOnlinerProxy(false);
+    setCommunityAccountRichPresence(true);
+    setCommunityAccountProgress({ completed: 0, total: 0 });
+    setCommunityAccountBulkErrors([]);
   }
 
   function closeCommunityAccountModal() {
     setCommunityAccountCategory(null);
+    setCommunityAccountMode("single");
     setCommunityAccountToken("");
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
-    setCommunityOnlinerProxy("");
-    setShowCommunityOnlinerProxy(false);
+    setCommunityAccountRichPresence(true);
+    setCommunityAccountProgress({ completed: 0, total: 0 });
+    setCommunityAccountBulkErrors([]);
   }
 
   async function handleAddCommunityAccount(event: FormEvent) {
     event.preventDefault();
     const category = communityAccountCategory;
-    const accountToken = communityAccountToken.trim();
     if (!category || addingCommunityAccount) return;
-    if (accountToken.length < 20) return notifyError("Enter a valid Discord account token.");
-    if (communityConnectToOnliner && !communityOnlinerProxy.trim()) return notifyError("A dedicated proxy is required for Onliner.");
+    const accountTokens = communityAccountMode === "bulk"
+      ? parseOnlinerBulkTokenLines(communityAccountToken)
+      : [communityAccountToken.trim()].filter(Boolean);
+    if (!accountTokens.length || accountTokens.some((token) => token.length < 20)) {
+      return notifyError(communityAccountMode === "bulk" ? "Enter one valid Discord account token per line." : "Enter a valid Discord account token.");
+    }
+    if (accountTokens.length > 500) return notifyError("You can add up to 500 accounts in one bulk operation.");
     try {
       setAddingCommunityAccount(true);
-      const result = await addCommunityAccount(accountToken, category.id, {
-        connect: communityConnectToOnliner,
-        proxyUrl: communityOnlinerProxy.trim()
-      });
+      setCommunityAccountBulkErrors([]);
+      setCommunityAccountProgress({ completed: 0, total: accountTokens.length });
+      const successes = [];
+      const failures: Array<{ lineNumber: number; message: string }> = [];
+      for (let index = 0; index < accountTokens.length; index += 1) {
+        try {
+          const result = await addCommunityAccount(accountTokens[index], category.id, {
+            connect: communityConnectToOnliner,
+            richPresenceEnabled: communityAccountRichPresence
+          });
+          successes.push(result);
+        } catch (error) {
+          failures.push({ lineNumber: index + 1, message: error instanceof Error ? error.message : "Account could not be authorized." });
+        } finally {
+          setCommunityAccountProgress({ completed: index + 1, total: accountTokens.length });
+        }
+      }
       setCommunityStockType(category.id);
       await refreshCommunityStatus(category.id);
-      closeCommunityAccountModal();
-      notifySuccess(`${result.member.displayName || result.member.username} authorized and added to ${result.categoryName}${result.onlinerConnected ? result.onlinerAlreadyConnected ? "; already connected to Onliner" : " and connected to Onliner" : ""}.`);
+      if (failures.length) {
+        setCommunityAccountBulkErrors(failures);
+        setCommunityAccountToken(failures.map((failure) => accountTokens[failure.lineNumber - 1]).join("\n"));
+        notifyError(`${successes.length} account${successes.length === 1 ? "" : "s"} added; ${failures.length} failed. Check the line details in the modal.`);
+      } else {
+        const result = successes[0];
+        closeCommunityAccountModal();
+        notifySuccess(accountTokens.length === 1
+          ? `${result.member.displayName || result.member.username} authorized and added to ${result.categoryName}${result.onlinerConnected ? result.onlinerAlreadyConnected ? "; already connected to Onliner" : " and connected to Onliner" : ""}.`
+          : `${successes.length} accounts authorized and added to ${result.categoryName}${communityConnectToOnliner ? " and connected to Onliner" : ""}.`);
+      }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Discord account could not be authorized.");
     } finally {
@@ -1856,30 +1922,26 @@ export default function HomePage() {
   }
 
   function beginConnectingCommunityMemberToOnliner(record: CommunityAdminStatus["recent"][number]) {
+    if (!record.hasStoredAccountToken) {
+      notifyError("This older record has no saved account token. Add the account again once, then connect it to Onliner without re-entering the token.");
+      return;
+    }
     setCommunityOnlinerMember(record);
-    setCommunityOnlinerToken("");
-    setCommunityMemberOnlinerProxy("");
-    setShowCommunityOnlinerToken(false);
-    setShowCommunityMemberOnlinerProxy(false);
+    setCommunityOnlinerRichPresence(true);
   }
 
   function closeCommunityOnlinerModal() {
     setCommunityOnlinerMember(null);
-    setCommunityOnlinerToken("");
-    setCommunityMemberOnlinerProxy("");
-    setShowCommunityOnlinerToken(false);
-    setShowCommunityMemberOnlinerProxy(false);
+    setCommunityOnlinerRichPresence(true);
   }
 
   async function handleConnectCommunityMemberToOnliner(event: FormEvent) {
     event.preventDefault();
     const member = communityOnlinerMember;
     if (!member || communityOnlinerActionId) return;
-    if (communityOnlinerToken.trim().length < 20) return notifyError("Enter this member's Discord account token.");
-    if (!communityMemberOnlinerProxy.trim()) return notifyError("A dedicated proxy is required for Onliner.");
     try {
       setCommunityOnlinerActionId(member.id);
-      await connectCommunityMemberToOnliner(member.id, communityOnlinerToken.trim(), communityMemberOnlinerProxy.trim());
+      await connectCommunityMemberToOnliner(member.id, communityOnlinerRichPresence);
       await refreshCommunityStatus(communityStockType);
       closeCommunityOnlinerModal();
       notifySuccess(`${member.displayName || member.username} connected to Onliner.`);
@@ -2752,7 +2814,10 @@ export default function HomePage() {
             <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.bot?.name ?? "Members Bot"}</h2>
           </div>
         </div>
-        <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
+        <div className="flex items-center gap-2">
+          <Button type="button" size="sm" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}><UserPlus className="h-4 w-4" /> Add account</Button>
+          <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
+        </div>
       </div>
 
       <div className="community-category-manager">
@@ -2786,7 +2851,6 @@ export default function HomePage() {
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
                 </button>
                 <div className="community-category-actions">
-                  <Button type="button" variant="secondary" size="xs" disabled={!communityStockConfigured || addingCommunityAccount} onClick={() => beginAddingCommunityAccount(category)}><UserPlus className="h-3.5 w-3.5" /> Add account</Button>
                   <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
                   <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
@@ -4040,7 +4104,7 @@ export default function HomePage() {
                     <h2 className="app-title mt-1 text-lg font-semibold">Onliner configuration</h2>
                   </div>
                 </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">Each token and its proxy are encrypted in PostgreSQL, run in an isolated Gateway connection, and are never returned after saving.</p>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">Tokens and the central proxy pool are encrypted in PostgreSQL. Each Gateway connection receives a proxy automatically.</p>
 
                 <form className="mt-6 grid gap-5" onSubmit={handleSaveOnliner}>
                   <div className="onliner-account-manager">
@@ -4085,6 +4149,20 @@ export default function HomePage() {
                         <strong>{onlinerNextConnectionSeconds}s</strong>
                       </div>
                     ) : null}
+                    <section className="dcord-proxy-panel onliner-proxy-pool">
+                      <header className="dcord-proxy-header">
+                        <div><p className={labelClass}>Gateway routing</p><h2>Onliner proxy pool</h2></div>
+                        <div className="dcord-proxy-actions">
+                          <span>{parseProxyDraft(onlinerProxyDraft).length} typed / {onlinerProxyCount} saved · {onlinerAvailableProxyCount} available{onlinerCoolingProxyCount ? ` · ${onlinerCoolingProxyCount} cooling` : ""}</span>
+                          <Button type="button" size="xs" disabled={savingOnlinerProxies} onClick={() => void handleSaveOnlinerProxies()}>
+                            {savingOnlinerProxies ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
+                            {savingOnlinerProxies ? "Saving..." : "Save proxies"}
+                          </Button>
+                        </div>
+                      </header>
+                      <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
+                      <p className="app-copy text-xs">Accounts are assigned the least-used saved proxy automatically. Updating this list redistributes existing profiles.</p>
+                    </section>
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
                         {onlinerSnapshot.accounts.map((account, index) => (
@@ -4099,7 +4177,7 @@ export default function HomePage() {
                                   {account.connectionState}
                                 </Badge>
                               </span>
-                              <small>{account.hasProxy ? "Dedicated proxy" : "Proxy required"} · Rich Presence {account.richPresenceEnabled ? "on" : "off"}</small>
+                              <small>{account.hasProxy ? "Pool proxy assigned" : "Proxy pool required"} · Rich Presence {account.richPresenceEnabled ? "on" : "off"}</small>
                               {account.lastError ? <em>{account.lastError}</em> : null}
                             </div>
                             <Badge className="onliner-account-status" variant={account.connectionState === "connected" ? "success" : account.connectionState === "error" ? "destructive" : "secondary"}>
@@ -4109,8 +4187,11 @@ export default function HomePage() {
                               <Button className="onliner-account-reconnect" type="button" size="xs" variant="ghost" aria-label={`Reconnect ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Reconnect this bot" disabled={reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || savingOnlinerAccount || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleReconnectOnlinerAccount(account.id)}>
                                 {reconnectingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                               </Button>
-                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token and proxy" disabled={loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
+                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token" disabled={loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
                                 {loadingOnlinerCredentials && editingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
+                              </Button>
+                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Change proxy for ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Change to another available proxy" disabled={changingOnlinerProxyId !== null || reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || onlinerProxyCount < 2} onClick={() => void handleRotateOnlinerProxy(account.id)}>
+                                {changingOnlinerProxyId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
                               </Button>
                               <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={removingOnlinerAccountId !== null || savingOnlinerAccount} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
                                 {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
@@ -4120,14 +4201,10 @@ export default function HomePage() {
                         ))}
                       </div>
                     ) : null}
-                    <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-4">
                       <label className="grid gap-2">
                         <span className={fieldLabelClass}>New bot token</span>
                         <Input type="password" value={onlinerAccountDraft.botToken} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder="Discord bot token" autoComplete="new-password" />
-                      </label>
-                      <label className="grid gap-2">
-                        <span className={fieldLabelClass}>Dedicated proxy</span>
-                        <Input type="password" value={onlinerAccountDraft.proxyUrl} onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, proxyUrl: event.target.value }))} placeholder="http://user:pass@host:port" autoComplete="new-password" />
                       </label>
                     </div>
                     <label className="onliner-enabled-card">
@@ -4140,12 +4217,12 @@ export default function HomePage() {
                       <span><strong>Use Rich Presence</strong><small>Send the configured activities for this bot. Turn it off to keep the bot online without an activity.</small></span>
                     </label>
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span className="app-copy text-xs">HTTP(S), SOCKS4/5 and host:port:user:pass are supported.</span>
+                      <span className="app-copy text-xs">A proxy is selected automatically from the saved pool.</span>
                       <span className="flex flex-wrap gap-2">
                         <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(true)}>
                           <ListChecks className="h-4 w-4" /> Bulk add
                         </Button>
-                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk || !onlinerAccountDraft.botToken.trim() || !onlinerAccountDraft.proxyUrl.trim()} onClick={() => void handleAddOnlinerAccount()}>
+                        <Button type="button" size="sm" variant="secondary" disabled={addingOnlinerAccount || addingOnlinerBulk || !onlinerAccountDraft.botToken.trim() || !onlinerProxyCount} onClick={() => void handleAddOnlinerAccount()}>
                           {addingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add bot
                         </Button>
                       </span>
@@ -4645,24 +4722,15 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><RadioTower className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · Onliner</p>
             <h2 id="connect-member-onliner-title">Connect {communityOnlinerMember.displayName || communityOnlinerMember.username}</h2>
-            <p>Enter this account's current Discord token and a dedicated proxy. They will be encrypted in Onliner for Gateway reconnects; the existing OAuth stock record will not be changed.</p>
-            <label className="mt-5 grid gap-2 text-left">
-              <span className={fieldLabelClass}>Account token</span>
-              <span className="onliner-secret-field">
-                <Input autoFocus type={showCommunityOnlinerToken ? "text" : "password"} value={communityOnlinerToken} maxLength={4096} autoComplete="off" placeholder="Discord account token" disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityOnlinerToken(event.target.value)} />
-                <button type="button" aria-label={showCommunityOnlinerToken ? "Hide account token" : "Show account token"} title={showCommunityOnlinerToken ? "Hide token" : "Show token"} disabled={communityOnlinerActionId !== null} onClick={() => setShowCommunityOnlinerToken((current) => !current)}>{showCommunityOnlinerToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
-              </span>
-            </label>
-            <label className="mt-4 grid gap-2 text-left">
-              <span className={fieldLabelClass}>Dedicated Onliner proxy</span>
-              <span className="onliner-secret-field">
-                <Input type={showCommunityMemberOnlinerProxy ? "text" : "password"} value={communityMemberOnlinerProxy} maxLength={2000} autoComplete="off" placeholder="http://user:pass@host:port" disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityMemberOnlinerProxy(event.target.value)} />
-                <button type="button" aria-label={showCommunityMemberOnlinerProxy ? "Hide Onliner proxy" : "Show Onliner proxy"} title={showCommunityMemberOnlinerProxy ? "Hide proxy" : "Show proxy"} disabled={communityOnlinerActionId !== null} onClick={() => setShowCommunityMemberOnlinerProxy((current) => !current)}>{showCommunityMemberOnlinerProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
-              </span>
+            <p>The saved account token will be used automatically, and the least-used proxy will be selected from the central Onliner proxy pool.</p>
+            <label className="onliner-enabled-card mt-5 text-left">
+              <input type="checkbox" checked={communityOnlinerRichPresence} disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityOnlinerRichPresence(event.target.checked)} />
+              <Star className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+              <span><strong>Use Rich Presence</strong><small>Turn it off to keep the account online without activities.</small></span>
             </label>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={communityOnlinerActionId !== null} onClick={closeCommunityOnlinerModal}>Cancel</Button>
-              <Button type="submit" disabled={communityOnlinerActionId !== null || communityOnlinerToken.trim().length < 20 || !communityMemberOnlinerProxy.trim()}>
+              <Button autoFocus type="submit" disabled={communityOnlinerActionId !== null}>
                 {communityOnlinerActionId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
                 {communityOnlinerActionId ? "Connecting..." : "Connect to Onliner"}
               </Button>
@@ -4676,11 +4744,31 @@ export default function HomePage() {
           <form className="confirm-modal community-account-modal" onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
-            <h2 id="community-account-title">Add Discord account</h2>
-            <p>The account will authorize the configured bot application. OAuth access and refresh tokens are encrypted and saved.{communityConnectToOnliner ? " The account token and proxy will also be encrypted in Onliner so its Gateway session can reconnect." : " The account token is not stored unless Onliner is enabled below."}</p>
+            <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
+            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Account tokens and resulting OAuth credentials are encrypted and saved so Onliner can be enabled later without entering tokens again.{communityConnectToOnliner ? " Proxies will be assigned automatically and evenly from the central Onliner pool." : " Account tokens are never returned to the browser after this step."}</p>
+            <div className="community-account-mode" role="group" aria-label="Account add mode">
+              <Button
+                type="button"
+                size="sm"
+                variant={communityAccountMode === "single" ? "default" : "secondary"}
+                disabled={addingCommunityAccount}
+                onClick={() => { setCommunityAccountMode("single"); setCommunityAccountToken(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
+              >
+                <UserPlus className="h-4 w-4" /> Single account
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={communityAccountMode === "bulk" ? "default" : "secondary"}
+                disabled={addingCommunityAccount}
+                onClick={() => { setCommunityAccountMode("bulk"); setCommunityAccountToken(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
+              >
+                <ListChecks className="h-4 w-4" /> Bulk accounts
+              </Button>
+            </div>
             <label className="mt-5 grid gap-2 text-left">
-              <span className={fieldLabelClass}>Account token</span>
-              <span className="onliner-secret-field">
+              <span className={fieldLabelClass}>{communityAccountMode === "bulk" ? "Account tokens · one per line" : "Account token"}</span>
+              {communityAccountMode === "single" ? <span className="onliner-secret-field">
                 <Input
                   autoFocus
                   type={showCommunityAccountToken ? "text" : "password"}
@@ -4694,37 +4782,48 @@ export default function HomePage() {
                 <button type="button" aria-label={showCommunityAccountToken ? "Hide account token" : "Show account token"} title={showCommunityAccountToken ? "Hide token" : "Show token"} disabled={addingCommunityAccount} onClick={() => setShowCommunityAccountToken((current) => !current)}>
                   {showCommunityAccountToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
-              </span>
+              </span> : (
+                <textarea
+                  autoFocus
+                  className="community-account-bulk-input"
+                  value={communityAccountToken}
+                  disabled={addingCommunityAccount}
+                  spellCheck={false}
+                  placeholder={"token_one\ntoken_two\nemail:password:token_three"}
+                  onChange={(event) => { setCommunityAccountToken(event.target.value); setCommunityAccountBulkErrors([]); }}
+                />
+              )}
             </label>
+            {communityAccountMode === "bulk" ? (
+              <p className="community-account-bulk-summary">
+                <span>{parseOnlinerBulkTokenLines(communityAccountToken).length} account{parseOnlinerBulkTokenLines(communityAccountToken).length === 1 ? "" : "s"} ready</span>
+                {communityAccountProgress.total ? <span>{communityAccountProgress.completed}/{communityAccountProgress.total} processed</span> : <span>Maximum 500 per batch</span>}
+              </p>
+            ) : null}
+            {communityAccountBulkErrors.length ? (
+              <div className="community-account-bulk-errors" role="alert">
+                <strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} failed</strong>
+                <ul>{communityAccountBulkErrors.slice(0, 12).map((failure) => <li key={`${failure.lineNumber}-${failure.message}`}>Line {failure.lineNumber}: {failure.message}</li>)}</ul>
+                {communityAccountBulkErrors.length > 12 ? <small>And {communityAccountBulkErrors.length - 12} more failed lines.</small> : null}
+              </div>
+            ) : null}
             <label className="onliner-enabled-card mt-4 text-left">
               <input type="checkbox" checked={communityConnectToOnliner} disabled={addingCommunityAccount} onChange={(event) => setCommunityConnectToOnliner(event.target.checked)} />
               <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
               <span><strong>Connect to Onliner</strong><small>Save this account in Onliner and start its Gateway presence after OAuth succeeds.</small></span>
             </label>
             {communityConnectToOnliner ? (
-              <label className="mt-4 grid gap-2 text-left">
-                <span className={fieldLabelClass}>Dedicated Onliner proxy</span>
-                <span className="onliner-secret-field">
-                  <Input
-                    type={showCommunityOnlinerProxy ? "text" : "password"}
-                    value={communityOnlinerProxy}
-                    maxLength={2000}
-                    autoComplete="off"
-                    placeholder="http://user:pass@host:port"
-                    disabled={addingCommunityAccount}
-                    onChange={(event) => setCommunityOnlinerProxy(event.target.value)}
-                  />
-                  <button type="button" aria-label={showCommunityOnlinerProxy ? "Hide Onliner proxy" : "Show Onliner proxy"} title={showCommunityOnlinerProxy ? "Hide proxy" : "Show proxy"} disabled={addingCommunityAccount} onClick={() => setShowCommunityOnlinerProxy((current) => !current)}>
-                    {showCommunityOnlinerProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </span>
+              <label className="onliner-enabled-card mt-3 text-left">
+                <input type="checkbox" checked={communityAccountRichPresence} disabled={addingCommunityAccount} onChange={(event) => setCommunityAccountRichPresence(event.target.checked)} />
+                <Star className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+                <span><strong>Use Rich Presence</strong><small>Turn it off to connect without activities.</small></span>
               </label>
             ) : null}
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={addingCommunityAccount} onClick={closeCommunityAccountModal}>Cancel</Button>
-              <Button type="submit" disabled={addingCommunityAccount || communityAccountToken.trim().length < 20 || (communityConnectToOnliner && !communityOnlinerProxy.trim())}>
+              <Button type="submit" disabled={addingCommunityAccount || (communityAccountMode === "single" ? communityAccountToken.trim().length < 20 : !parseOnlinerBulkTokenLines(communityAccountToken).length || parseOnlinerBulkTokenLines(communityAccountToken).length > 500)}>
                 {addingCommunityAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                {addingCommunityAccount ? "Authorizing..." : "Authorize & add"}
+                {addingCommunityAccount ? `${communityAccountProgress.completed}/${communityAccountProgress.total} authorizing...` : communityAccountMode === "bulk" ? "Authorize & add all" : "Authorize & add"}
               </Button>
             </div>
           </form>
@@ -4981,8 +5080,8 @@ export default function HomePage() {
           <div className="confirm-modal onliner-account-edit-modal w-[min(620px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="onliner-account-edit-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Pencil className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Bot profile</p>
-            <h2 id="onliner-account-edit-title">Edit token and proxy</h2>
-            <p>Credentials remain hidden by default. Changed credentials restart only this bot's Gateway connection.</p>
+            <h2 id="onliner-account-edit-title">Edit token</h2>
+            <p>The assigned proxy is managed by the central pool. Changing the token restarts only this Gateway connection.</p>
 
             <form onSubmit={handleUpdateOnlinerAccount} className="mt-5 grid gap-4">
               <label className="grid gap-2">
@@ -5002,22 +5101,6 @@ export default function HomePage() {
                   </button>
                 </span>
               </label>
-              <label className="grid gap-2">
-                <span className={fieldLabelClass}>Dedicated proxy</span>
-                <span className="onliner-secret-field">
-                  <Input
-                    type={showOnlinerEditProxy ? "text" : "password"}
-                    value={onlinerEditDraft.proxyUrl}
-                    onChange={(event) => setOnlinerEditDraft((current) => ({ ...current, proxyUrl: event.target.value }))}
-                    placeholder={loadingOnlinerCredentials ? "Loading encrypted proxy..." : "http://user:pass@host:port"}
-                    autoComplete="new-password"
-                    disabled={loadingOnlinerCredentials || savingOnlinerAccount}
-                  />
-                  <button type="button" aria-label={showOnlinerEditProxy ? "Hide proxy" : "Show proxy"} title={showOnlinerEditProxy ? "Hide proxy" : "Show proxy"} disabled={loadingOnlinerCredentials} onClick={() => setShowOnlinerEditProxy((current) => !current)}>
-                    {showOnlinerEditProxy ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                </span>
-              </label>
               <label className="onliner-enabled-card">
                 <input
                   type="checkbox"
@@ -5030,11 +5113,11 @@ export default function HomePage() {
               </label>
               <div className="onliner-edit-note">
                 <KeyRound className="h-4 w-4" aria-hidden="true" />
-                <span>Token and proxy are loaded only for this edit session and cleared when the modal closes.</span>
+                <span>The token is loaded only for this edit session and cleared when the modal closes.</span>
               </div>
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={savingOnlinerAccount} onClick={closeOnlinerAccountEditor}>Cancel</Button>
-                <Button type="submit" disabled={loadingOnlinerCredentials || savingOnlinerAccount || !onlinerEditDraft.botToken.trim() || !onlinerEditDraft.proxyUrl.trim()}>
+                <Button type="submit" disabled={loadingOnlinerCredentials || savingOnlinerAccount || !onlinerEditDraft.botToken.trim()}>
                   {savingOnlinerAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
                   {savingOnlinerAccount ? "Saving..." : "Save profile"}
                 </Button>
@@ -5055,10 +5138,10 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Bot className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Onliner</p>
             <h2 id="onliner-bulk-title">Bulk add bot profiles</h2>
-            <p>Paste tokens on the left and proxies on the right. Lines are paired by position, so both columns must contain the same number of entries.</p>
+            <p>Paste one token per line. Proxies are assigned automatically from the central Onliner pool.</p>
 
             <form onSubmit={handleAddOnlinerAccountsBulk} className="mt-5 grid gap-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 <label className="grid gap-2">
                   <span className={fieldLabelClass}>Bot tokens · one per line</span>
                   <textarea
@@ -5070,20 +5153,10 @@ export default function HomePage() {
                   />
                   <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length} token(s) · a:s:token supported</span>
                 </label>
-                <label className="grid gap-2">
-                  <span className={fieldLabelClass}>Proxies · one per line</span>
-                  <textarea
-                    className="ui-input min-h-80 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6"
-                    value={onlinerBulkProxyDraft}
-                    onChange={(event) => setOnlinerBulkProxyDraft(event.target.value)}
-                    placeholder={"http://user:pass@host:port\nsocks5://user:pass@host:port\nhost:port:user:pass"}
-                  />
-                  <span className="text-xs text-[var(--app-muted)]">{parseOnlinerBulkLines(onlinerBulkProxyDraft).length} proxy/proxies</span>
-                </label>
               </div>
               <div className="onliner-bulk-help">
-                <span><strong>Pairing</strong><code>Token 1 ↔ Proxy 1</code></span>
-                <span><strong>Requirement</strong><code>Counts must match</code></span>
+                <span><strong>Proxy pool</strong><code>{onlinerProxyCount} saved</code></span>
+                <span><strong>Assignment</strong><code>Least used</code></span>
                 <span><strong>Remaining capacity</strong><code>{Math.max(0, DISCORD_ONLINER_ACCOUNT_LIMIT - (onlinerSnapshot?.accounts.length ?? 0))}</code></span>
               </div>
               <label className="onliner-enabled-card">
@@ -5097,8 +5170,8 @@ export default function HomePage() {
               </label>
               <div className="confirm-modal-actions">
                 <Button type="button" variant="secondary" disabled={addingOnlinerBulk} onClick={() => setShowOnlinerBulkModal(false)}>Cancel</Button>
-                <Button type="button" variant="secondary" disabled={addingOnlinerBulk || (!onlinerBulkTokenDraft && !onlinerBulkProxyDraft)} onClick={() => { setOnlinerBulkTokenDraft(""); setOnlinerBulkProxyDraft(""); }}>Clear input</Button>
-                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerBulkProxyDraft.trim() || parseOnlinerBulkTokenLines(onlinerBulkTokenDraft).length !== parseOnlinerBulkLines(onlinerBulkProxyDraft).length || (onlinerSnapshot?.accounts.length ?? 0) >= DISCORD_ONLINER_ACCOUNT_LIMIT}>
+                <Button type="button" variant="secondary" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft} onClick={() => setOnlinerBulkTokenDraft("")}>Clear input</Button>
+                <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerProxyCount || (onlinerSnapshot?.accounts.length ?? 0) >= DISCORD_ONLINER_ACCOUNT_LIMIT}>
                   {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {addingOnlinerBulk ? "Adding..." : "Add profiles"}
                 </Button>
