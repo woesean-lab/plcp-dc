@@ -8640,17 +8640,17 @@
 }
 
 .community-onliner-chip {
-  --onliner-state: #67c7ff;
+  --onliner-state: var(--app-success);
   display: inline-flex;
   min-height: 30px;
   align-items: center;
   gap: 7px;
-  border: 1px solid color-mix(in srgb, var(--onliner-state) 42%, var(--app-border));
+  border: 0;
   border-radius: 8px;
   padding: 3px 8px 3px 4px;
   color: var(--onliner-state);
-  background: linear-gradient(135deg, color-mix(in srgb, var(--onliner-state) 13%, transparent), rgba(4, 5, 11, .3));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+  background: color-mix(in srgb, var(--onliner-state) 9%, var(--app-control-bg));
+  box-shadow: none;
   white-space: nowrap;
 }
 
@@ -8672,7 +8672,7 @@
   bottom: 1px;
   width: 5px;
   height: 5px;
-  border: 1px solid rgba(4, 5, 11, .9);
+  border: 0;
   border-radius: 999px;
   background: var(--onliner-state);
   box-shadow: 0 0 6px color-mix(in srgb, var(--onliner-state) 75%, transparent);
@@ -8698,7 +8698,7 @@
   min-height: 30px;
   align-items: center;
   gap: 5px;
-  border: 1px solid var(--app-border);
+  border: 0;
   border-radius: 8px;
   padding: 4px 8px;
   color: var(--app-subtle);
@@ -8710,10 +8710,9 @@
 .community-rich-presence-chip span { color: var(--app-muted); font-size: 7px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .community-rich-presence-chip strong { color: currentColor; font-size: 8px; font-weight: 850; text-transform: uppercase; }
 .community-rich-presence-chip[data-enabled="true"] {
-  border-color: color-mix(in srgb, #9b8cff 42%, var(--app-border));
   color: #b8adff;
-  background: linear-gradient(135deg, rgba(155, 140, 255, .14), rgba(4, 5, 11, .28));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035), 0 0 16px rgba(155, 140, 255, .07);
+  background: color-mix(in srgb, #9b8cff 10%, var(--app-control-bg));
+  box-shadow: none;
 }
 
 .community-member-presence {
