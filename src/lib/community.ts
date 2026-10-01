@@ -297,6 +297,16 @@ export function leaveCommunityBotGuilds(guildIds: string[]) {
   }>);
 }
 
+export function leaveDiscordUserGuild(accountToken: string, guildId: string) {
+  return fetch("/api/discord/user/leave-guild", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ accountToken, guildId })
+  }).then(parseResponse<{ left: true; guildId: string; username: string | null } >);
+}
+
 export function getCommunityGuildLeaveProgress() {
   return fetch("/api/community/bot/leave-progress", {
     cache: "no-store",

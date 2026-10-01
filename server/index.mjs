@@ -10026,6 +10026,53 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
   }
 });
 
+app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next) => {
+  try {
+    const accountToken = String(req.body?.accountToken ?? "").trim();
+    const guildId = String(req.body?.guildId ?? "").trim();
+    if (accountToken.length < 20 || accountToken.length > 4096 || /\s/.test(accountToken)) {
+      return res.status(400).json({ message: "A valid Discord user token is required." });
+    }
+    if (!isDiscordGuildId(guildId)) {
+      return res.status(400).json({ message: "A valid Discord guild ID is required." });
+    }
+
+    const identity = await requestDiscord("users/@me", {
+      cache: "no-store",
+      headers: { Authorization: accountToken }
+    });
+    if (!identity.response.ok) {
+      return res.status(identity.response.status === 429 ? 429 : 401).json({
+        message: identity.response.status === 429
+          ? "Discord rate limited this account. Wait a moment and try again."
+          : "Discord rejected the user token."
+      });
+    }
+
+    const leave = await requestDiscord(`users/@me/guilds/${encodeURIComponent(guildId)}`, {
+      method: "DELETE",
+      cache: "no-store",
+      headers: { Authorization: accountToken }
+    });
+    if (!leave.response.ok) {
+      const discordMessage = typeof leave.payload?.message === "string" ? leave.payload.message.trim() : "";
+      const message = leave.response.status === 404
+        ? "This account is not in that server, or the guild ID is incorrect."
+        : leave.response.status === 429
+          ? "Discord rate limited this account. Wait a moment and try again."
+          : discordMessage || "Discord did not allow this account to leave the server.";
+      return res.status(leave.response.status >= 400 && leave.response.status < 500 ? leave.response.status : 502).json({ message });
+    }
+
+    const username = typeof identity.payload?.username === "string"
+      ? `${identity.payload.username}${identity.payload.discriminator && identity.payload.discriminator !== "0" ? `#${identity.payload.discriminator}` : ""}`
+      : null;
+    return res.json({ left: true, guildId, username });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
   try {
     const invite = extractDiscordInviteCode(req.body?.id);

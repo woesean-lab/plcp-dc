@@ -77,6 +77,7 @@ import {
   getCommunityGuildLeaveProgress,
   importCommunityOAuthStock,
   leaveCommunityBotGuilds,
+  leaveDiscordUserGuild,
   removeCommunityAuthorization,
   removeCommunityAuthorizations,
   reorderCommunityAuthorizations,
@@ -736,6 +737,9 @@ export default function HomePage() {
 
   const [dcordApiKey, setDcordApiKey] = useState("");
   const [dcordConfigured, setDcordConfigured] = useState(false);
+  const [userGuildLeaveDraft, setUserGuildLeaveDraft] = useState({ accountToken: "", guildId: "" });
+  const [showUserGuildLeaveConfirm, setShowUserGuildLeaveConfirm] = useState(false);
+  const [leavingUserGuild, setLeavingUserGuild] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
   const [removeBoostTokenTwoFactor, setRemoveBoostTokenTwoFactor] = useState(false);
@@ -2246,6 +2250,35 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
     } finally {
       setSavingDcordApiKey(false);
+    }
+  }
+
+  function handleRequestUserGuildLeave(event: FormEvent) {
+    event.preventDefault();
+    const accountToken = userGuildLeaveDraft.accountToken.trim();
+    const guildId = userGuildLeaveDraft.guildId.trim();
+    if (!accountToken) {
+      notifyError("Discord user token is required.");
+      return;
+    }
+    if (!/^\d{17,20}$/.test(guildId)) {
+      notifyError("Enter a valid Discord guild ID.");
+      return;
+    }
+    setShowUserGuildLeaveConfirm(true);
+  }
+
+  async function confirmUserGuildLeave() {
+    try {
+      setLeavingUserGuild(true);
+      const result = await leaveDiscordUserGuild(userGuildLeaveDraft.accountToken.trim(), userGuildLeaveDraft.guildId.trim());
+      setShowUserGuildLeaveConfirm(false);
+      setUserGuildLeaveDraft({ accountToken: "", guildId: "" });
+      notifySuccess(`${result.username ?? "Discord account"} left server ${result.guildId}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "The account could not leave the server.");
+    } finally {
+      setLeavingUserGuild(false);
     }
   }
 
@@ -4522,6 +4555,48 @@ export default function HomePage() {
                   </div>
                 </form>
               </section>
+
+              <section className={`${shell} p-5 sm:p-6`}>
+                <div className="flex items-center gap-3">
+                  <span className="stat-icon" aria-hidden="true"><LogOut className="h-4 w-4" /></span>
+                  <div>
+                    <p className={labelClass}>User account utility</p>
+                    <h2 className="app-title mt-1 text-lg font-semibold">Leave a Discord server</h2>
+                  </div>
+                </div>
+                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
+                  Enter a Discord user token and guild ID. The token is used only for this request and is never saved.
+                </p>
+                <form onSubmit={handleRequestUserGuildLeave} className="mt-6 grid gap-4">
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>User token</span>
+                    <Input
+                      type="password"
+                      value={userGuildLeaveDraft.accountToken}
+                      onChange={(event) => setUserGuildLeaveDraft((current) => ({ ...current, accountToken: event.target.value }))}
+                      placeholder="Discord user token"
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="grid gap-2">
+                    <span className={fieldLabelClass}>Guild ID</span>
+                    <Input
+                      value={userGuildLeaveDraft.guildId}
+                      onChange={(event) => setUserGuildLeaveDraft((current) => ({ ...current, guildId: event.target.value.trim() }))}
+                      placeholder="Discord server ID"
+                      inputMode="numeric"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-3 pt-1">
+                    <Button type="submit" variant="destructive" disabled={leavingUserGuild || !userGuildLeaveDraft.accountToken.trim() || !userGuildLeaveDraft.guildId.trim()}>
+                      <LogOut className="h-4 w-4" /> Leave server
+                    </Button>
+                    {(userGuildLeaveDraft.accountToken || userGuildLeaveDraft.guildId) ? (
+                      <Button type="button" variant="secondary" disabled={leavingUserGuild} onClick={() => setUserGuildLeaveDraft({ accountToken: "", guildId: "" })}>Clear</Button>
+                    ) : null}
+                  </div>
+                </form>
+              </section>
               </div>
 
               <aside className={`${shell} p-5 sm:p-6`}>
@@ -4603,6 +4678,26 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={leavingCommunityGuilds} onClick={() => void confirmLeaveSelectedCommunityGuilds()}>
                 {leavingCommunityGuilds ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                 {leavingCommunityGuilds ? "Leaving servers..." : "Leave selected"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {showUserGuildLeaveConfirm ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !leavingUserGuild) setShowUserGuildLeaveConfirm(false); }}>
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="leave-user-guild-title" aria-describedby="leave-user-guild-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">User account</p>
+            <h2 id="leave-user-guild-title">Leave server {userGuildLeaveDraft.guildId.trim()}?</h2>
+            <p id="leave-user-guild-description">
+              Discord will remove this user account from the server. Rejoining later will require a valid invite, and a server owner cannot leave before transferring ownership.
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={leavingUserGuild} onClick={() => setShowUserGuildLeaveConfirm(false)}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={leavingUserGuild} onClick={() => void confirmUserGuildLeave()}>
+                {leavingUserGuild ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
+                {leavingUserGuild ? "Leaving..." : "Yes, leave server"}
               </Button>
             </div>
           </div>
