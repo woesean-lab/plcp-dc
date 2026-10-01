@@ -89,6 +89,7 @@ export type CommunityJoinRecord = {
   onlinerAccountId: string | null;
   onlinerConnectionState: "connected" | "connecting" | "reconnecting" | "error" | "disconnected" | null;
   onlinerLastError: string | null;
+  onlinerRichPresenceEnabled: boolean | null;
   hasStoredAccountToken: boolean;
 };
 

@@ -7533,9 +7533,11 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         }
       }
     }
+    const onlinerAccountConfigById = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
     const onlinerStatusByUserId = new Map([...onlinerAccountByUserId.entries()].map(([discordUserId, accountId]) => {
       const runtime = onlinerRuntimeByAccountId.get(accountId) ?? { connectionState: "disconnected", lastError: null };
-      return [discordUserId, { accountId, ...runtime }];
+      const account = onlinerAccountConfigById.get(accountId);
+      return [discordUserId, { accountId, richPresenceEnabled: account?.richPresenceEnabled !== false, ...runtime }];
     }));
     const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, activeCategoryId);
     res.set("Cache-Control", "no-store").json({
@@ -7567,6 +7569,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         onlinerAccountId: onliner?.accountId ?? null,
         onlinerConnectionState: onliner?.connectionState ?? null,
         onlinerLastError: onliner?.lastError ?? null,
+        onlinerRichPresenceEnabled: onliner ? onliner.richPresenceEnabled : null,
         hasStoredAccountToken: row.has_stored_account_token === true
       };
       })

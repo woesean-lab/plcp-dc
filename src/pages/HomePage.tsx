@@ -328,11 +328,11 @@ function getCommunityPresenceLabel(status: CommunityAdminStatus["recent"][number
 
 function getCommunityOnlinerBadge(record: CommunityAdminStatus["recent"][number]) {
   switch (record.onlinerConnectionState) {
-    case "connected": return { label: "Onliner connected", variant: "success" as const };
-    case "connecting": return { label: "Onliner connecting", variant: "secondary" as const };
-    case "reconnecting": return { label: "Onliner reconnecting", variant: "secondary" as const };
-    case "error": return { label: "Onliner failed", variant: "destructive" as const };
-    default: return { label: "Onliner disconnected", variant: "outline" as const };
+    case "connected": return { label: "Live", state: "connected" as const };
+    case "connecting": return { label: "Starting", state: "connecting" as const };
+    case "reconnecting": return { label: "Retrying", state: "reconnecting" as const };
+    case "error": return { label: "Failed", state: "error" as const };
+    default: return { label: "Offline", state: "disconnected" as const };
   }
 }
 
@@ -1262,7 +1262,8 @@ export default function HomePage() {
             return account ? {
               ...record,
               onlinerConnectionState: account.connectionState,
-              onlinerLastError: account.lastError
+              onlinerLastError: account.lastError,
+              onlinerRichPresenceEnabled: account.richPresenceEnabled
             } : record;
           })
         } : current);
@@ -3113,7 +3114,19 @@ export default function HomePage() {
                   <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
                     <i aria-hidden="true" /> {getCommunityPresenceLabel(record.presenceStatus)}
                   </span>
-                  {onlinerBadge ? <Badge variant={onlinerBadge.variant} title={record.onlinerLastError ?? undefined}>{onlinerBadge.label}</Badge> : null}
+                  {onlinerBadge ? (
+                    <span className="community-onliner-chip" data-state={onlinerBadge.state} title={record.onlinerLastError ?? `Onliner ${onlinerBadge.label.toLowerCase()}`}>
+                      <span className="community-onliner-chip-icon" aria-hidden="true"><RadioTower className="h-3.5 w-3.5" /><i /></span>
+                      <span><b>Onliner</b><em>{onlinerBadge.label}</em></span>
+                    </span>
+                  ) : null}
+                  {record.onlinerConnected ? (
+                    <span className="community-rich-presence-chip" data-enabled={record.onlinerRichPresenceEnabled === true} title={`Rich Presence ${record.onlinerRichPresenceEnabled === true ? "enabled" : "disabled"}`}>
+                      <Star className="h-3 w-3" aria-hidden="true" />
+                      <span>Rich Presence</span>
+                      <strong>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</strong>
+                    </span>
+                  ) : null}
                   <Badge variant={badge.variant}>{badge.label}</Badge>
                 </span>
                 <span className="community-member-row-actions">
