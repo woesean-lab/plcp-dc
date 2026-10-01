@@ -1,14 +1,13 @@
-# Tokenu Members Console
+# PLCP Discord Console
 
-React + Vite uygulamasi. Admin panelinden Tokenu reseller API ile:
+React + Vite tabanli Discord operasyon paneli.
 
-- Siparis olusturma
-- Siparisleri yerel olarak takip etme
-- `/orders` uzerinden public siparis sorgulama
-- API key'i kodda tutmadan PostgreSQL'de sifreli saklama
-- Dcord uzerinden Boosts siparisi olusturma ve Boosts stok takibi
-- Acik kullanici onayi ile tek bir Discord sunucusuna Community OAuth katilimi
-- Apply-to-Join acik sunucularda Members botu ile deneysel otomatik basvuru onayi
+- Sifreli OAuth Members Stock yonetimi
+- Kategori bazli uye teslimati, kontrol ve replacement
+- Dcord uzerinden Boosts siparisi ve yerel token stok takibi
+- Merkezi, dengeli ve saglik kontrollu Onliner proxy havuzu
+- Discord Gateway Onliner ve Rich Presence yonetimi
+- Public siparis monitoru
 
 ## Gelistirme
 
@@ -29,51 +28,52 @@ Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olar
 
 Ayni image iki ayri EasyPanel App servisinde calistirilabilir:
 
-- `plcp-dc`: `SERVICE_ROLE=web` — paneli ve API'yi sunar, Discord Gateway baglantisi acmaz.
+- `plcp-dc`: `SERVICE_ROLE=web` — paneli ve API'yi sunar, Discord Onliner Gateway baglantisi acmaz.
 - `plcp-onliner`: `SERVICE_ROLE=onliner` — yalnizca Discord Onliner worker'ini calistirir, domain gerektirmez.
-- `SERVICE_ROLE=all`: geriye donuk uyumluluk ve yerel gelistirme icin iki rolu ayni process'te calistirir.
+- `SERVICE_ROLE=all`: yerel gelistirme icin iki rolu ayni process'te calistirir.
 
 Iki servis ayni PostgreSQL baglanti ve sifreleme ortam degiskenlerini kullanmalidir. Onliner servisi
-tek replica olarak calistirilmalidir. PostgreSQL advisory lock, gecis veya yanlis yapilandirma sirasinda
-ikinci worker'in ayni botlari baglamasini engeller. Web deploylari worker process'ini etkilemez; worker
-ayar, komut, runtime durumu ve loglari ortak PostgreSQL uzerinden panelle senkronize eder.
+tek replica olarak calistirilmalidir. PostgreSQL advisory lock ikinci worker'in ayni hesaplari
+baglamasini engeller. Ayarlar, runtime durumu ve loglar ortak PostgreSQL uzerinden senkronize edilir.
 
-## Notlar
+## Dcord Boosts
 
-- API anahtarlari koda gommeli degil; admin panelindeki ayarlar bolumune girilir ve PostgreSQL'de sifreli saklanir.
-- `EXPERIMENTAL_JOIN_ENABLED` varsayilan olarak `true` degerindedir. Members 2 botu hedef sunucuda algilandiginda sunucunun basvuru yontemi otomatik olarak Apply to Join yapilir; mevcut dogrulama formu korunur ve basvuru sorusu yoksa varsayilan bir soru eklenir. OAuth katilimi pending bir basvuru olusturursa bot basvuruyu listeler ve otomatik onaylar. Botun hedef sunucuda `Create Invite`, `Kick Members` ve `Manage Server` izinleri olmalidir. Gerektiginde `false` ile eski engelleme davranisina donulebilir.
-- Varsayilan API tabani: `https://dev.tokenu.net/api/v1/reseller`
-- Dcord Boosts siparisleri yerel token stokundan token ayirir; her token 2x boost olarak sayilir. Siparis once Dcord Tasks API ile olusturulur, donen `task_id` kaydedilir ve sonuc ayni gorev uzerinden takip edilir.
-- Dcord proxy listesi Boost Stock panelinden yonetilir ve sifreli saklanir. Dcord'un `join` endpointi proxy gerektirdigi icin her token icin bir proxy rezerve edilir, siparis eslesmesi sifreli saklanir ve rezerve edilen proxy listeden kaldirilir. `host:port:user:pass` girdileri otomatik olarak Dcord'un bekledigi `user:pass@host:port` formatina donusturulur.
-- Dcord Boosts concurrency de siparis formundan secilir; her siparis kendi paralel isleme sayisini saklar.
-- Dcord endpointi ortam degiskenleriyle ayarlanir:
+- Siparisler yerel token stokundan token ayirir; her token 2x boost olarak sayilir.
+- Her token icin Boost Stock panelindeki listeden bir proxy rezerve edilir.
+- `host:port:user:pass` girdileri `user:pass@host:port` formatina donusturulur.
+- Dcord endpointi su ortam degiskenleriyle ayarlanabilir:
   - `DCORD_API_BASE_URL`
   - `DCORD_TASK_CREATE_PATH`
   - `DCORD_TASK_STATUS_PATH`
-  - `DCORD_USER_AGENT` (varsayilan `plcp-dc/0.1 (+https://capheaven.dcord.co API client)`)
-  - `DCORD_WGET_FALLBACK` (`false` yapilirsa HTML challenge durumunda wget fallback devre disi kalir)
-  - `DCORD_REQUEST_TIMEOUT_MS` (varsayilan `30000`)
-  - `DCORD_PROXY_CHECK_URL` (varsayilan `https://discord.com/api/v10/gateway`; Dcord'a gorev gondermeden once proxy baglantisini kontrol eder)
-  - `DCORD_PROXY_CHECK_TIMEOUT_MS` (varsayilan `10000`)
-  - `DCORD_TASK_POLL_INTERVAL_MS` (varsayilan `3000`)
-  - `DCORD_TASK_MAX_WAIT_MS` (varsayilan `620000`)
-  - `DCORD_RETRY_BASE_MS` (varsayilan `30000`)
-  - `DCORD_RETRY_MAX_MS` (varsayilan `600000`)
-  - `DCORD_MAX_RETRY_ATTEMPTS` (varsayilan `12`)
-- Tokenu dokumani: [Reseller API Docs](https://tokenu.gitbook.io/reseller-api-docs/)
+  - `DCORD_USER_AGENT`
+  - `DCORD_WGET_FALLBACK`
+  - `DCORD_REQUEST_TIMEOUT_MS`
+  - `DCORD_PROXY_CHECK_URL`
+  - `DCORD_PROXY_CHECK_TIMEOUT_MS`
+  - `DCORD_TASK_POLL_INTERVAL_MS`
+  - `DCORD_TASK_MAX_WAIT_MS`
+  - `DCORD_RETRY_BASE_MS`
+  - `DCORD_RETRY_MAX_MS`
+  - `DCORD_MAX_RETRY_ATTEMPTS`
 
-## Community OAuth testi
+## Members OAuth
 
-Bu akis Tokenu siparislerinden bagimsizdir. Kullanici `/join` sayfasinda hedef sunucuyu gorur ve
-Discord uzerinden `identify guilds.join` izni verir. Yenilenebilir OAuth izni sifreli saklanir;
-yonetici Ayarlar ekranindaki `Add authorized members` komutunu verdiginde bot bekleyen kullanicilari
-yapilandirilmis sunucuya ekler. OAuth bilgileri tarayiciya geri dondurulmez.
+Discord uygulamasinda `identify guilds.join` kapsamli OAuth yetkisi kullanilir. Access token,
+refresh token ve yeniden kullanilmasi gereken hesap tokenlari PostgreSQL'de sifreli saklanir.
 
-Discord Developer Portal icindeki OAuth2 redirect adresi su sunucu adresiyle ayni olmalidir:
+Discord Developer Portal OAuth2 redirect adresi:
 
 ```text
 https://your-domain.example/api/community/oauth/callback
 ```
 
-Gerekli ortam degiskenleri `.env.example` dosyasinda listelenmistir. Bot hedef sunucuda bulunmali
-ve Discord'un Add Guild Member endpointi icin gerekli izne sahip olmalidir.
+Bot hedef sunucuda bulunmali ve Add Guild Member islemi icin gerekli izinlere sahip olmalidir.
+Apply-to-Join otomasyonu `EXPERIMENTAL_JOIN_ENABLED` ile kontrol edilir.
+
+## Onliner
+
+Onliner hesaplari merkezi proxy havuzundan en az kullanilan saglikli proxy'yi otomatik alir.
+Basarisiz proxyler gecici cooldown'a girer. Hesap bazinda Rich Presence kapatilabilir ve proxy
+manuel olarak degistirilebilir.
+
+Gerekli ortam degiskenleri `.env.example` dosyasinda listelenmistir.

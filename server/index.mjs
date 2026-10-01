@@ -21,11 +21,6 @@ const serviceRunsWeb = serviceRole === "web" || serviceRole === "all";
 const serviceRunsOnliner = serviceRole === "onliner" || serviceRole === "all";
 const sessionCookie = "plcp_session";
 const sessionDurationMs = 12 * 60 * 60 * 1000;
-const legacyApiPrefix = "/api/tokenu";
-const integrationApiPrefix = "/api/integration";
-const tokenuApiBase = process.env.TOKENU_API_BASE_URL ?? "https://dev.tokenu.net/api/v1/reseller";
-const tokenuOauthApiBase = process.env.TOKENU_OAUTH_API_BASE_URL ?? "https://api.tokenu.net/api/oauth2";
-const tokenuDataApiBase = process.env.TOKENU_DATA_API_BASE_URL ?? "https://api.tokenu.net/api/data";
 const dcordApiBase = process.env.DCORD_API_BASE_URL ?? "https://capheaven.dcord.co";
 const dcordTaskCreatePath = process.env.DCORD_TASK_CREATE_PATH ?? "/api/task/create";
 const dcordTaskStatusPath = process.env.DCORD_TASK_STATUS_PATH ?? "/api/task/status";
@@ -3279,16 +3274,6 @@ async function refreshStoredCommunityOAuthCredential(config, member, { force = f
   return job;
 }
 
-async function loadTokenuApiKey() {
-  const result = await pool.query("SELECT encrypted_value FROM app_settings WHERE setting_key = 'tokenu_api_key' LIMIT 1");
-  if (!result.rowCount) {
-    const error = new Error("Tokenu API key has not been configured in Admin settings.");
-    error.statusCode = 503;
-    throw error;
-  }
-  return decryptCredential(result.rows[0].encrypted_value);
-}
-
 async function loadEncryptedSetting(settingKey) {
   const result = await pool.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 LIMIT 1", [settingKey]);
   return result.rowCount ? decryptCredential(result.rows[0].encrypted_value) : null;
@@ -3730,43 +3715,6 @@ async function getBoostTokenStockSnapshot() {
     threeMonthTokens: stock.threeMonth,
     usedTokens: await loadUsedBoostTokenHistory()
   };
-}
-
-async function requestTokenuWithKey(apiKey, baseUrl, pathname, init = {}) {
-
-  const response = await fetch(new URL(pathname, `${baseUrl.replace(/\/$/, "")}/`), {
-    ...init,
-    headers: {
-      Authorization: apiKey,
-      ...(init.headers ?? {})
-    }
-  });
-  const text = await response.text();
-  let payload = text;
-
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch {
-    // Preserve non-JSON upstream error messages.
-  }
-
-  if (!response.ok) {
-    const error = new Error(
-      typeof payload === "object" && payload && ("message" in payload || "detail" in payload)
-        ? String(payload.message ?? payload.detail)
-        : typeof payload === "string" && payload
-          ? payload
-          : `Tokenu request failed with ${response.status}.`
-    );
-    error.statusCode = response.status;
-    throw error;
-  }
-
-  return payload;
-}
-
-async function requestTokenu(baseUrl, pathname, init = {}) {
-  return requestTokenuWithKey(await loadTokenuApiKey(), baseUrl, pathname, init);
 }
 
 function resolveDcordApiUrl(pathname) {
@@ -5941,36 +5889,6 @@ async function recoverBlockedDcordJobOrders() {
   }
 }
 
-async function requestTokenuPublicData(pathname, init = {}) {
-  const response = await fetch(new URL(pathname, `${tokenuDataApiBase.replace(/\/$/, "")}/`), init);
-  const text = await response.text();
-  let payload = text;
-
-  try {
-    payload = text ? JSON.parse(text) : {};
-  } catch {
-    // Preserve non-JSON upstream error messages.
-  }
-
-  if (!response.ok) {
-    const upstreamMessage =
-      typeof payload === "object" && payload && "message" in payload
-        ? String(payload.message)
-        : typeof payload === "string" && payload
-          ? payload
-          : `Tokenu request failed with ${response.status}.`;
-    const error = new Error(
-      upstreamMessage.trim().toLowerCase() === "invalid action"
-        ? "Restart is not available yet. Make sure the Discord server restriction has been removed, then try again."
-        : upstreamMessage
-    );
-    error.statusCode = upstreamMessage.trim().toLowerCase() === "invalid action" ? 409 : response.status;
-    throw error;
-  }
-
-  return payload;
-}
-
 async function initializeDiscordOnlinerDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
@@ -5979,6 +5897,7 @@ async function initializeDiscordOnlinerDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query("DELETE FROM app_settings WHERE setting_key = 'tokenu_api_key'");
   await pool.query(`
     CREATE TABLE IF NOT EXISTS discord_onliner_runtime (
       account_id TEXT PRIMARY KEY,
@@ -9699,25 +9618,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       return res.set("Cache-Control", "no-store").json({ ...publicPayload, liveBoostStock, canManageDcordTokens });
     }
 
-    if (!trackedPayload && /^(members_|dcord_)/i.test(uniqid)) {
-      return res.status(404).set("Cache-Control", "no-store").json({ message: "Order could not be found." });
-    }
-
-    const cacheBuster = Date.now();
-    const payload = await requestTokenu(
-      tokenuApiBase,
-      `status?uniqid=${encodeURIComponent(uniqid)}&_=${cacheBuster}`,
-      { cache: "no-store" }
-    );
-    const cooldownKey = `${req.ip}:${uniqid}`;
-    const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
-    const delayUpdateCooldownSeconds = Math.max(0, Math.ceil((cooldownUntil - Date.now()) / 1000));
-    const restartCooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
-    const restartCooldownSeconds = Math.max(0, Math.ceil((restartCooldownUntil - Date.now()) / 1000));
-    const responsePayload = typeof payload === "object" && payload && !Array.isArray(payload)
-      ? { ...payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds, isEldoradoSale: trackedPayload?.isEldoradoSale !== false }
-      : { data: payload, liveBoostStock, delayUpdateCooldownSeconds, restartCooldownSeconds, isEldoradoSale: trackedPayload?.isEldoradoSale !== false };
-    res.set("Cache-Control", "no-store").json(responsePayload);
+    return res.status(404).set("Cache-Control", "no-store").json({ message: "Order could not be found." });
   } catch (error) {
     next(error);
   }
@@ -9790,50 +9691,7 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
       return res.json({ delay, speedProfile: requestedSpeedProfile, updated: true });
     }
 
-    const payload = await requestTokenu(tokenuOauthApiBase, "delay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uniqid, delay })
-    });
-    publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
-    res.json(payload);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post("/api/public/orders/:uniqid/restart", async (req, res, next) => {
-  try {
-    const uniqid = String(req.params.uniqid ?? "").trim();
-    if (!uniqid || uniqid.length > 160) {
-      return res.status(400).json({ message: "A valid order ID is required." });
-    }
-
-    const cooldownKey = `${req.ip}:${uniqid}`;
-    const cooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
-    if (cooldownUntil > Date.now()) {
-      return res.status(429).json({
-        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before restarting again.`
-      });
-    }
-
-    const currentStatus = await requestTokenu(
-      tokenuApiBase,
-      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
-      { cache: "no-store" }
-    );
-    const normalizedStatus = String(currentStatus?.status ?? "").trim().toUpperCase();
-    if (!normalizedStatus.includes("INVITE") || !normalizedStatus.includes("PAUSED")) {
-      return res.status(409).json({ message: "Order is not in Invites Paused status." });
-    }
-
-    const payload = await requestTokenu(
-      tokenuOauthApiBase,
-      `restart?uniqid=${encodeURIComponent(uniqid)}`,
-      { method: "GET", cache: "no-store" }
-    );
-    publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
-    res.set("Cache-Control", "no-store").json(payload);
+    return res.status(404).json({ message: "Members order could not be found." });
   } catch (error) {
     next(error);
   }
@@ -9891,50 +9749,13 @@ app.post("/api/auth/logout", async (req, res, next) => {
   }
 });
 
-app.get([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (_req, res, next) => {
+app.get("/api/admin/config", requireSession, async (_req, res, next) => {
   try {
-    const result = await pool.query(
-      "SELECT setting_key FROM app_settings WHERE setting_key = ANY($1::text[])",
-      [["tokenu_api_key", "dcord_api_key"]]
-    );
-    const configuredKeys = new Set(result.rows.map((row) => row.setting_key));
-    const tokenuConfigured = configuredKeys.has("tokenu_api_key");
-    const dcordConfigured = configuredKeys.has("dcord_api_key");
+    const result = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'dcord_api_key' LIMIT 1");
     res.json({
-      configured: tokenuConfigured,
-      tokenuConfigured,
-      dcordConfigured,
+      dcordConfigured: result.rowCount > 0,
       boostStock: summarizeBoostTokenStock(await loadBoostTokenStock())
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.put([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (req, res, next) => {
-  try {
-    const apiKey = String(req.body?.apiKey ?? "").trim();
-    if (!apiKey || apiKey.length > 2000) {
-      return res.status(400).json({ message: "A valid Tokenu API key is required." });
-    }
-
-    const balance = await requestTokenuWithKey(apiKey, tokenuApiBase, "balance");
-    await pool.query(
-      `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
-       VALUES ('tokenu_api_key', $1, NOW())
-       ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
-      [encryptCredential(apiKey)]
-    );
-    res.json({ configured: true, balance: balance?.balance });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.delete([`${legacyApiPrefix}/config`, `${integrationApiPrefix}/config`], requireSession, async (_req, res, next) => {
-  try {
-    await pool.query("DELETE FROM app_settings WHERE setting_key = 'tokenu_api_key'");
-    res.status(204).end();
   } catch (error) {
     next(error);
   }
@@ -10185,14 +10006,6 @@ app.post("/api/dcord/boost-stock/delete-used", requireSession, async (req, res, 
   }
 });
 
-app.get([`${legacyApiPrefix}/balance`, `${integrationApiPrefix}/balance`], requireSession, async (_req, res, next) => {
-  try {
-    res.json(await requestTokenu(tokenuApiBase, "balance"));
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
   try {
     const value = String(req.body?.value ?? "").trim();
@@ -10209,27 +10022,6 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });
     }
-    next(error);
-  }
-});
-
-app.post([`${legacyApiPrefix}/orders`, `${integrationApiPrefix}/orders`], requireSession, async (req, res, next) => {
-  try {
-    const { service, id, amount, delay, billingCycle } = req.body ?? {};
-    if (typeof service !== "string" || typeof id !== "string" || !id.trim() || !Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ message: "Valid service, server ID, and amount are required." });
-    }
-
-    const payload = { service, id: id.trim(), amount };
-    if (Number.isFinite(delay)) payload.delay = delay;
-    if (Number.isFinite(billingCycle)) payload.billingCycle = billingCycle;
-
-    res.json(await requestTokenu(tokenuApiBase, "order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    }));
-  } catch (error) {
     next(error);
   }
 });
@@ -10301,59 +10093,6 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       uniqid,
       stock: summarizeBoostTokenStock(nextStock)
     });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get([`${legacyApiPrefix}/orders/:uniqid/status`, `${integrationApiPrefix}/orders/:uniqid/status`], requireSession, async (req, res, next) => {
-  try {
-    const uniqid = String(req.params.uniqid ?? "").trim();
-    if (!uniqid || uniqid.length > 160) {
-      return res.status(400).json({ message: "A valid order ID is required." });
-    }
-    if (/^(members_|dcord_)/i.test(uniqid)) {
-      return res.status(404).json({ message: "Use the matching Members or Boost order status endpoint." });
-    }
-
-    const payload = await requestTokenu(
-      tokenuApiBase,
-      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
-      { cache: "no-store" }
-    );
-    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    let trackedPayload = tracked.rows[0]?.payload;
-    if (
-      trackedPayload &&
-      typeof trackedPayload === "object" &&
-      !Array.isArray(trackedPayload) &&
-      (!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) &&
-      typeof trackedPayload.serverInvite === "string" &&
-      trackedPayload.serverInvite.trim()
-    ) {
-      try {
-        const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
-        trackedPayload = {
-          ...trackedPayload,
-          serverId: trackedPayload.serverId ?? inviteInfo.guildId,
-          serverName: trackedPayload.serverName ?? inviteInfo.guildName,
-          serverMemberCount: Number.isFinite(trackedPayload.serverMemberCount)
-            ? trackedPayload.serverMemberCount
-            : inviteInfo.approximateMemberCount
-        };
-        await pool.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [
-          uniqid,
-          JSON.stringify(trackedPayload)
-        ]);
-      } catch {
-        // Keep the order lookup available even if Discord count lookup fails.
-      }
-    }
-    const responsePayload =
-      typeof payload === "object" && payload && !Array.isArray(payload) && typeof trackedPayload === "object" && trackedPayload && !Array.isArray(trackedPayload)
-        ? { ...trackedPayload, ...payload }
-        : payload;
-    res.set("Cache-Control", "no-store").json(responsePayload);
   } catch (error) {
     next(error);
   }
@@ -10617,91 +10356,9 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
   }
 });
 
-app.post([`${legacyApiPrefix}/orders/:uniqid/restart`, `${integrationApiPrefix}/orders/:uniqid/restart`], requireSession, async (req, res, next) => {
-  try {
-    const uniqid = String(req.params.uniqid ?? "").trim();
-    if (!uniqid || uniqid.length > 160) {
-      return res.status(400).json({ message: "A valid order ID is required." });
-    }
-
-    const cooldownKey = `${req.ip}:${uniqid}`;
-    const cooldownUntil = publicRestartCooldowns.get(cooldownKey) ?? 0;
-    if (cooldownUntil > Date.now()) {
-      return res.status(429).json({
-        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before restarting again.`
-      });
-    }
-
-    const currentStatus = await requestTokenu(
-      tokenuApiBase,
-      `status?uniqid=${encodeURIComponent(uniqid)}&_=${Date.now()}`,
-      { cache: "no-store" }
-    );
-    const normalizedStatus = String(currentStatus?.status ?? "").trim().toUpperCase();
-    if (!normalizedStatus.includes("INVITE") || !normalizedStatus.includes("PAUSED")) {
-      return res.status(409).json({ message: "Order is not in Invites Paused status." });
-    }
-
-    const payload = await requestTokenu(
-      tokenuOauthApiBase,
-      `restart?uniqid=${encodeURIComponent(uniqid)}`,
-      { method: "GET", cache: "no-store" }
-    );
-    publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
-    res.set("Cache-Control", "no-store").json(payload);
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.get([`${legacyApiPrefix}/check`, `${integrationApiPrefix}/check`], requireSession, async (req, res, next) => {
-  try {
-    const service = String(req.query.service ?? "").trim();
-    const id = String(req.query.id ?? "").trim();
-    if (!service || !id || service.length > 80 || id.length > 160) {
-      return res.status(400).json({ message: "A valid service and server ID are required." });
-    }
-
-    res.json(await requestTokenu(
-      tokenuApiBase,
-      `check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
-    ));
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.post([`${legacyApiPrefix}/orders/:uniqid/delay`, `${integrationApiPrefix}/orders/:uniqid/delay`], requireSession, async (req, res, next) => {
-  try {
-    const uniqid = String(req.params.uniqid ?? "").trim();
-    const delay = Number.parseInt(req.body?.delay, 10);
-    if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay <= 0 || delay > 1200) {
-      return res.status(400).json({ message: "A valid order ID and delay are required." });
-    }
-
-    const cooldownKey = `admin:${uniqid}`;
-    const cooldownUntil = publicDelayCooldowns.get(cooldownKey) ?? 0;
-    if (cooldownUntil > Date.now()) {
-      return res.status(429).json({
-        message: `Please wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)} seconds before updating again.`
-      });
-    }
-
-    const payload = await requestTokenu(tokenuOauthApiBase, "delay", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ uniqid, delay })
-    });
-    publicDelayCooldowns.set(cooldownKey, Date.now() + publicDelayCooldownMs);
-    res.json(payload);
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.get("/api/orders", requireSession, async (_req, res, next) => {
   try {
-    const result = await pool.query("SELECT payload FROM tracked_orders ORDER BY created_at DESC");
+    const result = await pool.query("SELECT payload FROM tracked_orders WHERE payload->>'provider' IN ('community', 'dcord') ORDER BY created_at DESC");
     res.json(result.rows.map((row) => row.payload));
   } catch (error) {
     next(error);
@@ -10750,7 +10407,12 @@ app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
 
 app.put("/api/orders", requireSession, async (req, res, next) => {
   const orders = Array.isArray(req.body?.orders) ? req.body.orders : null;
-  if (!orders || orders.some((order) => !order || typeof order.uniqid !== "string" || !order.uniqid.trim())) {
+  if (!orders || orders.some((order) =>
+    !order ||
+    typeof order.uniqid !== "string" ||
+    !order.uniqid.trim() ||
+    !["community", "dcord"].includes(order.provider)
+  )) {
     return res.status(400).json({ message: "A valid orders array is required." });
   }
 

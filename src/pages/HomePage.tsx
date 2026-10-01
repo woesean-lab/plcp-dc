@@ -7,7 +7,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
 import {
   Bot,
-  CircleDollarSign,
   Check,
   Copy,
   Crown,
@@ -61,7 +60,7 @@ import {
 } from "lucide-react";
 import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
 import { extractBotInvite } from "../lib/bot-invite";
-import { extractDiscordInviteCode, resolveDiscordGuildId, resolveDiscordGuildInfo } from "../lib/discord";
+import { extractDiscordInviteCode, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import {
   addCommunityAccount,
@@ -121,33 +120,29 @@ import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/serv
 import {
   checkAvailableAmount,
   checkDcordConnection,
-  clearIntegrationApiKey,
   clearDcordApiKey,
   createOrder,
   deleteBoostStockTokens,
   deleteUsedBoostTokens,
   clearDcordProxies,
-  getBalance,
   getBoostStockTokens,
   getDcordProxies,
   getOrderStatus,
-  getIntegrationConfig,
+  getAdminConfig,
   markBoostStockTokensUsed,
-  restartOrder,
+  restartCommunityOrder,
   returnUsedBoostToken,
   saveBoostStock,
   saveDcordApiKey,
   saveDcordProxies,
-  saveIntegrationApiKey
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
 const EMPTY_FORM = {
-  service: "OAUTH-ONLINE" as ServiceType,
+  service: "COMMUNITY-OFFLINE" as ServiceType,
   serverId: "",
   amount: 100,
   delay: 1,
-  billingCycle: 1,
   duration: 1 as 1 | 3,
   useProxy: true,
   concurrency: 1,
@@ -743,8 +738,6 @@ export default function HomePage() {
   const navigate = useNavigate();
   const activeTab = normalizeAdminTab(searchParams.get("tab"));
 
-  const [apiKey, setApiKey] = useState("");
-  const [apiConfigured, setApiConfigured] = useState(false);
   const [dcordApiKey, setDcordApiKey] = useState("");
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
@@ -763,7 +756,6 @@ export default function HomePage() {
   const [stockView, setStockView] = useState<"active" | "used">("active");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
-  const [balance, setBalance] = useState<number | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -796,7 +788,6 @@ export default function HomePage() {
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
   const onlinerCredentialRequestRef = useRef(0);
   const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "reconnect" | "continue" | "pause" | "stop" | null>(null);
-  const [savingApiKey, setSavingApiKey] = useState(false);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
@@ -808,7 +799,6 @@ export default function HomePage() {
   const [returningUsedTokenId, setReturningUsedTokenId] = useState<string | null>(null);
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [loadingBalance, setLoadingBalance] = useState(false);
   const [checkingDcordConnection, setCheckingDcordConnection] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
@@ -945,7 +935,7 @@ export default function HomePage() {
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
-  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : selectedIsCommunity ? Boolean(communityStatus?.configured) : apiConfigured;
+  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : Boolean(communityStatus?.configured);
   const selectedCanCreate = selectedApiConfigured && (
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
@@ -978,7 +968,6 @@ export default function HomePage() {
   );
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
-  const memberServiceOptions = SERVICE_OPTIONS.filter((option) => option.kind === "members");
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
   const paginatedOrders = useMemo(() => {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
@@ -1109,16 +1098,14 @@ export default function HomePage() {
   }, [editingOnlinerAccountId, savingOnlinerAccount]);
 
   useEffect(() => {
-    void loadIntegrationConnection();
+    void loadConnections();
     // The initial connection check runs once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadIntegrationConnection() {
+  async function loadConnections() {
     try {
-      const config = await getIntegrationConfig();
-      const tokenuConfigured = config.tokenuConfigured ?? config.configured;
-      setApiConfigured(tokenuConfigured);
+      const config = await getAdminConfig();
       setDcordConfigured(config.dcordConfigured);
       setBoostStock(config.boostStock);
     } catch (error) {
@@ -1128,11 +1115,9 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "settings") return;
-    if (apiConfigured && balance === null) void refreshBalance();
     void loadCommunityConfiguration();
-    // Tokenu balance is loaded lazily when Settings is opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, apiConfigured, dcordConfigured]);
+  }, [activeTab, dcordConfigured]);
 
   useEffect(() => {
     if (activeTab !== "onliner") return;
@@ -1435,18 +1420,6 @@ export default function HomePage() {
       if (pollHandle !== null) window.clearTimeout(pollHandle);
     };
   }, [communityStatus?.syncing, communityStockType]);
-
-  async function refreshBalance() {
-    try {
-      setLoadingBalance(true);
-      const data = await getBalance();
-      setBalance(data.balance);
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Balance could not be loaded.");
-    } finally {
-      setLoadingBalance(false);
-    }
-  }
 
   async function refreshCommunityStatus(categoryId = communityStockType) {
     const requestId = ++communityStatusRequestRef.current;
@@ -2202,7 +2175,7 @@ export default function HomePage() {
 
   async function refreshAvailability(requestId: number) {
     try {
-      const serverId = selectedIsBoost || selectedIsCommunity ? form.serverId.trim() : await resolveDiscordGuildId(form.serverId);
+      const serverId = form.serverId.trim();
       if (selectedIsCommunity) {
         const allocations = form.communityMultiCategory
           ? communityCategories.flatMap((category) => Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : [])
@@ -2243,43 +2216,6 @@ export default function HomePage() {
       setCommunityAvailability({});
     } finally {
       if (requestId === availabilityRequestRef.current) setCheckingAvailability(false);
-    }
-  }
-
-  async function handleSaveApiKey(event: FormEvent) {
-    event.preventDefault();
-    const value = apiKey.trim();
-    if (!value) {
-      notifyError("API key is required.");
-      return;
-    }
-
-    try {
-      setSavingApiKey(true);
-      const result = await saveIntegrationApiKey(value);
-      setApiConfigured(true);
-      setApiKey("");
-      if (typeof result.balance === "number") setBalance(result.balance);
-      notifySuccess("API key verified and saved securely.");
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "API key could not be saved.");
-    } finally {
-      setSavingApiKey(false);
-    }
-  }
-
-  async function handleClearApiKey() {
-    try {
-      setSavingApiKey(true);
-      await clearIntegrationApiKey();
-      setApiConfigured(false);
-      setApiKey("");
-      setBalance(null);
-      notifySuccess("API key removed from the server.");
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "API key could not be removed.");
-    } finally {
-      setSavingApiKey(false);
     }
   }
 
@@ -2604,7 +2540,8 @@ export default function HomePage() {
 
     try {
       setRestartingOrderId(order.uniqid);
-      await restartOrder(order.uniqid);
+      if (order.provider !== "community") throw new Error("Only Members orders can be continued here.");
+      await restartCommunityOrder(order.uniqid);
       notifySuccess(`Continue request sent for ${order.uniqid}.`);
 
       try {
@@ -2691,7 +2628,7 @@ export default function HomePage() {
     const serverId = serverInfo.guildId;
     const created = await createOrder({
       ...payload,
-      id: payloadIsBoost || payloadIsCommunity ? targetId : serverId
+      id: targetId
     });
     const createdStock = (created as { stock?: BoostStock }).stock;
     if (createdStock) {
@@ -2700,7 +2637,7 @@ export default function HomePage() {
 
     const nextOrder: TrackedOrder = {
       uniqid: created.uniqid,
-      provider: payloadIsBoost ? "dcord" : payloadIsCommunity ? "community" : "tokenu",
+      provider: payloadIsBoost ? "dcord" : "community",
       service: payload.service,
       serverId,
       serverName: serverInfo.guildName,
@@ -2710,7 +2647,6 @@ export default function HomePage() {
       speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
       joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
       isEldoradoSale: payload.isEldoradoSale,
-      billingCycle: payload.service === "OAUTH-ONLINE" ? payload.billingCycle : undefined,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
@@ -2730,7 +2666,7 @@ export default function HomePage() {
 
     persistOrders([nextOrder, ...orders]);
     notifySuccess(`Order created: ${created.uniqid}`);
-    const providerQuery = payloadIsBoost ? "&provider=dcord" : payloadIsCommunity ? "&provider=community" : "";
+    const providerQuery = payloadIsBoost ? "&provider=dcord" : "&provider=community";
     navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
   }
 
@@ -2751,7 +2687,6 @@ export default function HomePage() {
       id: form.serverId.trim(),
       amount: form.amount,
       delay: selectedIsBoost ? undefined : form.delay,
-      billingCycle: form.service === "OAUTH-ONLINE" ? form.billingCycle : undefined,
       duration: selectedIsBoost ? form.duration : undefined,
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
@@ -3223,20 +3158,17 @@ export default function HomePage() {
                         <span className={fieldLabelClass}>Choose service</span>
                         <p className="service-selector-copy">Select members or boosts, then configure the order details.</p>
                       </div>
-                      <span className="service-selector-count">3 services</span>
+                      <span className="service-selector-count">2 services</span>
                     </div>
                     <div className="service-grid service-grid-compact choose-service-grid">
                       {[
-                        { value: "members", title: "Members", description: "Tokenu member delivery", icon: KeyRound },
-                        { value: "community", title: "Members 2", description: "Connected OAuth stock", icon: Users },
+                        { value: "community", title: "Members", description: "Connected OAuth stock", icon: Users },
                         { value: "boosts", title: "Boosts", description: "Dcord join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
                       ].map((option, index) => {
                         const Icon = option.icon;
                         const selected = option.value === "boosts"
                           ? selectedIsBoost
-                          : option.value === "community"
-                            ? selectedIsCommunity
-                            : !selectedIsBoost && !selectedIsCommunity;
+                          : selectedIsCommunity;
 
                         return (
                           <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
@@ -3251,9 +3183,7 @@ export default function HomePage() {
                                   ...current,
                                   service: option.value === "boosts"
                                     ? "DCORD-BOOSTS"
-                                    : option.value === "community"
-                                      ? "COMMUNITY-OFFLINE"
-                                      : memberServiceOptions[0]?.value ?? "OAUTH-ONLINE",
+                                    : "COMMUNITY-OFFLINE",
                                   communityCategoryId: option.value === "community" ? (communityCategories[0]?.id ?? current.communityCategoryId) : current.communityCategoryId,
                                   communityMultiCategory: option.value === "community" ? false : current.communityMultiCategory,
                                   communityCategoryAmounts: option.value === "community" && communityCategories[0]
@@ -3289,56 +3219,6 @@ export default function HomePage() {
                       })}
                     </div>
                   </fieldset>
-
-                  {!selectedIsBoost && !selectedIsCommunity ? (
-                    <fieldset className="service-selector md:col-span-2">
-                      <legend className="sr-only">Member service</legend>
-                      <div className="service-selector-heading">
-                        <div>
-                          <span className={fieldLabelClass}>Member mode</span>
-                          <p className="service-selector-copy">Choose the Tokenu member service type.</p>
-                        </div>
-                        <span className="service-selector-count">{memberServiceOptions.length} modes</span>
-                      </div>
-                      <div className="service-grid">
-                        {memberServiceOptions.map((option, index) => {
-                          const Icon = option.icon;
-                          const selected = form.service === option.value;
-
-                          return (
-                            <label key={option.value} className={`service-option ${selected ? "is-selected" : ""}`} data-service={option.value}>
-                              <input
-                                className="sr-only"
-                                type="radio"
-                                name="memberService"
-                                value={option.value}
-                                checked={selected}
-                                onChange={() => setForm((current) => ({ ...current, service: option.value }))}
-                              />
-                              <span className="service-option-head" aria-hidden="true">
-                                <span className="service-option-icon">
-                                  <Icon className="h-5 w-5" />
-                                </span>
-                                <span className="service-option-state">
-                                  {selected ? (
-                                    <>
-                                      <Check className="h-3 w-3" />
-                                      Selected
-                                    </>
-                                  ) : (
-                                    String(index + 1).padStart(2, "0")
-                                  )}
-                                </span>
-                              </span>
-                              <span className="service-option-title">{option.title}</span>
-                              <span className="service-option-description">{option.description}</span>
-                              <span className="service-option-code">{option.value}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    </fieldset>
-                  ) : null}
 
                   {selectedIsCommunity ? (
                     <fieldset className="service-selector md:col-span-2">
@@ -3696,7 +3576,7 @@ export default function HomePage() {
                             </div>
                           </>
                         ) : null}
-                        <div className={`boost-order-grid members-order-grid ${form.service === "OAUTH-ONLINE" ? "is-online" : ""} ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -3731,20 +3611,6 @@ export default function HomePage() {
                             </div>
                           </label>
 
-                          {!selectedIsCommunity ? (
-                            <label className="boost-order-field">
-                              <span className="boost-order-label">Delay</span>
-                              <input
-                                className="boost-number-input"
-                                type="number"
-                                min={1}
-                                max={1200}
-                                value={form.delay}
-                                onChange={(event) => setForm((current) => ({ ...current, delay: Number(event.target.value) || 1 }))}
-                              />
-                            </label>
-                          ) : null}
-
                           {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">
                               <span className="boost-order-label">Month</span>
@@ -3754,20 +3620,6 @@ export default function HomePage() {
                                 ))}
                               </div>
                             </div>
-                          ) : null}
-
-                          {form.service === "OAUTH-ONLINE" ? (
-                            <label className="boost-order-field">
-                              <span className="boost-order-label">Billing cycle</span>
-                              <input
-                                className="boost-number-input"
-                                type="number"
-                                min={1}
-                                max={12}
-                                value={form.billingCycle}
-                                onChange={(event) => setForm((current) => ({ ...current, billingCycle: Number(event.target.value) || 1 }))}
-                              />
-                            </label>
                           ) : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
@@ -3791,7 +3643,7 @@ export default function HomePage() {
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
-                        Configure {selectedIsBoost ? "Dcord" : selectedIsCommunity ? "Members bot" : "Tokenu"}
+                        Configure {selectedIsBoost ? "Dcord" : "Members bot"}
                       </Link>
                     </Button>
                   ) : null}
@@ -4527,11 +4379,10 @@ export default function HomePage() {
             <header className="page-heading">
               <div>
                 <p className={labelClass}>Settings</p>
-                <h1 className="page-title">Integration connection</h1>
-                <p className="app-copy page-copy">Configure the server-side integration connection and review its balance.</p>
+                <h1 className="page-title">Connections</h1>
+                <p className="app-copy page-copy">Configure the Members bot and Dcord connection.</p>
               </div>
               <div className="page-heading-meta">
-                <Badge variant={apiConfigured ? "success" : "destructive"}>Tokenu {apiConfigured ? "Connected" : "Missing"}</Badge>
                 <Badge variant={dcordConfigured ? "success" : "destructive"}>Dcord {dcordConfigured ? "Connected" : "Missing"}</Badge>
                 <Badge variant={communityConfig?.configured ? "success" : "destructive"}>Members bot {communityConfig?.configured ? "Connected" : "Missing"}</Badge>
               </div>
@@ -4670,44 +4521,6 @@ export default function HomePage() {
               <section className={`${shell} p-5 sm:p-6`}>
                 <div className="flex items-center gap-3">
                   <span className="stat-icon" aria-hidden="true">
-                    <ShieldCheck className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Secure access</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Integration API key</h2>
-                  </div>
-                </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Enter the key here once. It is verified by the server, encrypted in PostgreSQL, and never returned to this browser or exposed to visitors.
-                </p>
-                <form onSubmit={handleSaveApiKey} className="mt-6 grid gap-5">
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>{apiConfigured ? "Replace API key" : "API key"}</span>
-                    <Input
-                      type="password"
-                      value={apiKey}
-                      onChange={(event) => setApiKey(event.target.value)}
-                      placeholder={apiConfigured ? "Enter a new key to replace the current one" : "Paste integration API key"}
-                      autoComplete="new-password"
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    <Button className="min-w-[132px] max-sm:w-full" type="submit" disabled={savingApiKey || !apiKey.trim()}>
-                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                      {savingApiKey ? "Verifying..." : apiConfigured ? "Replace key" : "Save key"}
-                    </Button>
-                    {apiConfigured ? (
-                      <Button className="min-w-[132px] max-sm:w-full" variant="destructive" type="button" disabled={savingApiKey} onClick={() => void handleClearApiKey()}>
-                        Remove key
-                      </Button>
-                    ) : null}
-                  </div>
-                </form>
-              </section>
-
-              <section className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
                     <KeyRound className="h-4 w-4" />
                   </span>
                   <div>
@@ -4761,15 +4574,6 @@ export default function HomePage() {
                       <KeyRound className="h-4 w-4" />
                     </span>
                     <span>
-                      <span className="settings-status-label">API access</span>
-                      <strong>{apiConfigured ? "Tokenu configured" : "Tokenu missing"}</strong>
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true">
-                      <KeyRound className="h-4 w-4" />
-                    </span>
-                    <span>
                       <span className="settings-status-label">Dcord access</span>
                       <strong>{dcordConfigured ? "Configured" : "Missing"}</strong>
                     </span>
@@ -4789,19 +4593,6 @@ export default function HomePage() {
                   </div>
                   <div className="settings-status-row">
                     <span className="stat-icon" aria-hidden="true">
-                      <CircleDollarSign className="h-4 w-4" />
-                    </span>
-                    <span>
-                      <span className="settings-status-label">Tokenu balance</span>
-                      {loadingBalance ? (
-                        <Skeleton className="mt-2 h-4 w-24" aria-label="Loading balance" />
-                      ) : (
-                        <strong>{balance === null ? "Not synced" : `$${formatNumber(balance)}`}</strong>
-                      )}
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true">
                       <ShieldCheck className="h-4 w-4" />
                     </span>
                     <span>
@@ -4809,13 +4600,6 @@ export default function HomePage() {
                       <strong>Encrypted PostgreSQL</strong>
                     </span>
                   </div>
-                </div>
-
-                <div className="mt-5 grid gap-3">
-                <Button className="w-full" variant="secondary" type="button" onClick={refreshBalance} disabled={!apiConfigured || loadingBalance}>
-                  <RefreshCw className={`h-4 w-4 ${loadingBalance ? "animate-spin" : ""}`} aria-hidden="true" />
-                  Refresh Tokenu balance
-                </Button>
                 </div>
 
               </aside>

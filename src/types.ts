@@ -1,8 +1,7 @@
-export type MemberServiceType = "OAUTH-OFFLINE" | "OAUTH-ONLINE" | "OAUTH-PREMIUM" | "OAUTH-NFT";
 export type CommunityServiceType = "COMMUNITY-OFFLINE" | "COMMUNITY-ONLINE";
 export type BoostServiceType = "DCORD-BOOSTS";
-export type ServiceType = MemberServiceType | CommunityServiceType | BoostServiceType;
-export type OrderProvider = "tokenu" | "community" | "dcord";
+export type ServiceType = CommunityServiceType | BoostServiceType;
+export type OrderProvider = "community" | "dcord";
 export type BoostDuration = 1 | 3;
 export type CommunityJoinMethod = "create_invite";
 
@@ -31,7 +30,6 @@ export interface CreateOrderPayload {
   id: string;
   amount: number;
   delay?: number;
-  billingCycle?: number;
   duration?: BoostDuration;
   useProxy?: boolean;
   concurrency?: number;
@@ -56,10 +54,6 @@ export interface CreateOrderResponse {
   joinMethod?: CommunityJoinMethod;
   createdAt?: string;
   expiredAt?: string | null;
-}
-
-export interface BalanceResponse {
-  balance: number;
 }
 
 export interface OrderStatusResponse {
@@ -117,7 +111,6 @@ export interface TrackedOrder {
   activeDelay?: number | null;
   nextMemberAt?: string | null;
   statusDelay?: number;
-  billingCycle?: number;
   duration?: BoostDuration;
   useProxy?: boolean;
   concurrency?: number;

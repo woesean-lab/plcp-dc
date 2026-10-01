@@ -8,7 +8,7 @@ import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Pla
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, restartPublicOrder, resumePublicCommunityOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -595,12 +595,9 @@ export default function PublicOrderPage() {
     try {
       restartInFlightRef.current = true;
       setRestartingOrder(true);
-      if (isCommunityOrder) {
-        const restarted = await restartPublicCommunityOrder(uniqid);
-        setStatus((current) => mergeOrderStatus(current, restarted));
-      } else {
-        await restartPublicOrder(uniqid);
-      }
+      if (!isCommunityOrder) return;
+      const restarted = await restartPublicCommunityOrder(uniqid);
+      setStatus((current) => mergeOrderStatus(current, restarted));
       restartCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
       setRestartCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
       toast.success("Restart request sent successfully.");

@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, restartOrder as restartIntegrationOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -362,7 +362,9 @@ export default function OrderPage() {
   const [params, setParams] = useSearchParams();
   const [uniqid, setUniqid] = useState(params.get("uniqid") ?? "");
   const providerParam = params.get("provider");
-  const provider = (["dcord", "community"].includes(providerParam ?? "") ? providerParam : "tokenu") as OrderProvider;
+  const provider = (["dcord", "community"].includes(providerParam ?? "")
+    ? providerParam
+    : uniqid.toLowerCase().startsWith("dcord_") ? "dcord" : "community") as OrderProvider;
   const [result, setResult] = useState<OrderStatusResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
@@ -385,7 +387,7 @@ export default function OrderPage() {
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
   const [pageLoading, setPageLoading] = useState(true);
-  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(provider === "tokenu" ? 10 : 2);
+  const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
   const isDcordProvider = provider === "dcord";
   const isCommunityProvider = provider === "community";
@@ -519,7 +521,7 @@ export default function OrderPage() {
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
-    const refreshEvery = provider === "tokenu" ? 10 : 2;
+    const refreshEvery = 2;
     setSecondsUntilRefresh(terminal ? 0 : refreshEvery);
     if (!target || terminal) return;
 
@@ -562,7 +564,7 @@ export default function OrderPage() {
       setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       toast.success(`Loaded ${target}.`);
-      setParams(provider === "tokenu" ? { uniqid: target } : { uniqid: target, provider });
+      setParams({ uniqid: target, provider });
     } catch (error) {
       setResult(null);
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
@@ -643,13 +645,10 @@ export default function OrderPage() {
 
     try {
       setRestartingOrder(true);
-      if (isCommunityProvider) {
-        const restarted = await restartCommunityOrder(target);
-        setResult((current) => mergeOrderStatus(current, restarted));
-      } else {
-        await restartIntegrationOrder(target);
-      }
-      toast.success(isCommunityProvider ? "Server restriction checked." : "Restart request sent.");
+      if (!isCommunityProvider) return;
+      const restarted = await restartCommunityOrder(target);
+      setResult((current) => mergeOrderStatus(current, restarted));
+      toast.success("Server restriction checked.");
 
       try {
         const data = await getOrderStatus(target, provider);

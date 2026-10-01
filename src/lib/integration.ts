@@ -1,4 +1,4 @@
-import type { BalanceResponse, BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -45,28 +45,8 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   return payload as T;
 }
 
-export function getIntegrationConfig() {
-  return requestJson<{ tokenuConfigured: boolean; dcordConfigured: boolean; configured: boolean; boostStock: BoostStock }>("/api/integration/config");
-}
-
-export function saveIntegrationApiKey(apiKey: string) {
-  return requestJson<{ configured: true; balance?: number }>("/api/integration/config", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ apiKey })
-  });
-}
-
-export async function clearIntegrationApiKey() {
-  const response = await fetch("/api/integration/config", { method: "DELETE", cache: "no-store" });
-  if (!response.ok) {
-    const payload = (await response.json().catch(() => ({}))) as { message?: string };
-    throw new Error(payload.message ?? `Request failed with ${response.status}`);
-  }
-}
-
-export async function getBalance() {
-  return requestJson<BalanceResponse>("/api/integration/balance");
+export function getAdminConfig() {
+  return requestJson<{ dcordConfigured: boolean; boostStock: BoostStock }>("/api/admin/config");
 }
 
 export async function createOrder(payload: CreateOrderPayload) {
@@ -87,33 +67,21 @@ export async function createOrder(payload: CreateOrderPayload) {
     });
   }
 
-  return requestJson<CreateOrderResponse>("/api/integration/orders", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(payload)
-  });
+  throw new Error("Unsupported order service.");
 }
 
-export async function getOrderStatus(uniqid: string, provider: OrderProvider = "tokenu") {
+export async function getOrderStatus(uniqid: string, provider: OrderProvider = "community") {
   const prefix = provider === "dcord"
     ? "/api/dcord/boost-orders"
-    : provider === "community"
-      ? "/api/community/orders"
-      : "/api/integration/orders";
+    : "/api/community/orders";
   return requestJson<OrderStatusResponse>(`${prefix}/${encodeURIComponent(uniqid)}/status`);
-}
-
-export async function restartOrder(uniqid: string) {
-  return requestJson<unknown>(`/api/integration/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
 export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "restart" | "community-restart" | "pause" | "resume", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -137,10 +105,6 @@ export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfi
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ delay, speedProfile })
   });
-}
-
-export function restartPublicOrder(uniqid: string) {
-  return requestPublicOrderApi<unknown>(uniqid, "restart", { method: "POST" });
 }
 
 export function restartPublicCommunityOrder(uniqid: string) {
@@ -277,18 +241,17 @@ export async function checkAvailableAmount(service: string, id: string, duration
     );
   }
 
-  return requestJson<{ available: number; maximum: number }>(
-    `/api/integration/check?service=${encodeURIComponent(service)}&id=${encodeURIComponent(id)}`
-  );
+  throw new Error("Unsupported order service.");
 }
 
 export async function updateOrderDelay(
   uniqid: string,
   delay: number,
-  provider: OrderProvider = "tokenu",
+  provider: OrderProvider = "community",
   speedProfile?: "safe" | "balanced" | "fast" | "custom"
 ) {
-  const prefix = provider === "community" ? "/api/community/orders" : "/api/integration/orders";
+  if (provider !== "community") throw new Error("Delay updates are only supported for Members orders.");
+  const prefix = "/api/community/orders";
   return requestJson<unknown>(`${prefix}/${encodeURIComponent(uniqid)}/delay`, {
     method: "POST",
     headers: {

@@ -1700,7 +1700,6 @@
     transition: opacity 180ms ease;
   }
 
-  .service-option[data-service="OAUTH-OFFLINE"],
   .service-option[data-service="COMMUNITY-OFFLINE"] {
     --service-tone: #e6e8ef;
     --service-tone-soft: rgba(255, 255, 255, 0.075);
@@ -1709,7 +1708,6 @@
     --service-tone-ink: #f4f5fb;
   }
 
-  .service-option[data-service="OAUTH-ONLINE"],
   .service-option[data-service="COMMUNITY-ONLINE"] {
     --service-tone: #69ddb2;
     --service-tone-soft: rgba(105, 221, 178, 0.13);
@@ -1718,28 +1716,12 @@
     --service-tone-ink: #a9f4d8;
   }
 
-  .service-option[data-service="OAUTH-PREMIUM"] {
-    --service-tone: #f8d66d;
-    --service-tone-soft: rgba(248, 214, 109, 0.13);
-    --service-tone-border: rgba(248, 214, 109, 0.36);
-    --service-tone-glow: rgba(248, 214, 109, 0.2);
-    --service-tone-ink: #ffe9a4;
-  }
-
   .service-option[data-service="boost-duration-3"] {
     --service-tone: #f8d66d;
     --service-tone-soft: rgba(248, 214, 109, 0.13);
     --service-tone-border: rgba(248, 214, 109, 0.36);
     --service-tone-glow: rgba(248, 214, 109, 0.2);
     --service-tone-ink: #ffe9a4;
-  }
-
-  .service-option[data-service="OAUTH-NFT"] {
-    --service-tone: #69c8ff;
-    --service-tone-soft: rgba(105, 200, 255, 0.13);
-    --service-tone-border: rgba(105, 200, 255, 0.36);
-    --service-tone-glow: rgba(105, 200, 255, 0.2);
-    --service-tone-ink: #b7e7ff;
   }
 
   .service-option:hover {

@@ -2,6 +2,10 @@ import type { TrackedOrder } from "../types";
 
 const STORAGE_KEY = "integration.trackedOrders";
 
+function isSupportedOrder(order: TrackedOrder) {
+  return order.provider === "community" || order.provider === "dcord";
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (response.ok) return response.json() as Promise<T>;
   const payload = await response.json().catch(() => ({})) as { message?: string };
@@ -15,10 +19,11 @@ export async function loadTrackedOrders(): Promise<TrackedOrder[]> {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     const legacyOrders = raw ? (JSON.parse(raw) as TrackedOrder[]) : [];
-    if (legacyOrders.length) {
-      await saveTrackedOrders(legacyOrders);
-      localStorage.removeItem(STORAGE_KEY);
-      return legacyOrders;
+    const supportedOrders = legacyOrders.filter(isSupportedOrder);
+    localStorage.removeItem(STORAGE_KEY);
+    if (supportedOrders.length) {
+      await saveTrackedOrders(supportedOrders);
+      return supportedOrders;
     }
   } catch {
     // Ignore malformed legacy browser data.
@@ -28,7 +33,7 @@ export async function loadTrackedOrders(): Promise<TrackedOrder[]> {
 }
 
 export async function saveTrackedOrders(orders: TrackedOrder[]) {
-  const compactOrders = orders.map((order) => ({
+  const compactOrders = orders.filter(isSupportedOrder).map((order) => ({
     uniqid: order.uniqid,
     provider: order.provider,
     service: order.service,
@@ -40,7 +45,6 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     added: order.added,
     delay: order.delay,
     statusDelay: order.statusDelay,
-    billingCycle: order.billingCycle,
     duration: order.duration,
     useProxy: order.useProxy,
     concurrency: order.concurrency,
