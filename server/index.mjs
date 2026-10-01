@@ -7552,6 +7552,36 @@ app.get("/api/community/members/:discordUserId/access-token", requireSession, as
   }
 });
 
+app.get("/api/community/members/:discordUserId/account-token", requireSession, async (req, res, next) => {
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) {
+      return res.status(400).json({ message: "A valid connected user is required." });
+    }
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.status(503).json({ message: "Configure Members Stock before viewing user tokens." });
+    }
+    const result = await pool.query(
+      `SELECT encrypted_account_token
+       FROM community_oauth_joins
+       WHERE discord_user_id = $1 AND guild_id = $2
+       LIMIT 1`,
+      [discordUserId, config.guildId]
+    );
+    const record = result.rows[0];
+    if (!record?.encrypted_account_token) {
+      return res.status(404).json({ message: "This member does not have a stored user token." });
+    }
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      Pragma: "no-cache"
+    }).json({ accountToken: decryptCredential(record.encrypted_account_token) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/community/members/:discordUserId/onliner", requireSession, async (req, res, next) => {
   try {
     const discordUserId = String(req.params.discordUserId ?? "").trim();

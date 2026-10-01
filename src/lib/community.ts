@@ -198,6 +198,13 @@ export function getCommunityMemberAccessToken(discordUserId: string) {
   }).then(parseResponse<{ accessToken: string; expiresAt: string | null }>);
 }
 
+export function getCommunityMemberAccountToken(discordUserId: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/account-token`, {
+    cache: "no-store",
+    credentials: "same-origin"
+  }).then(parseResponse<{ accountToken: string }>);
+}
+
 export function connectCommunityMemberToOnliner(discordUserId: string, richPresenceEnabled: boolean) {
   return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
     method: "POST",

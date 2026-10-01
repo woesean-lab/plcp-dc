@@ -71,6 +71,7 @@ import {
   disconnectCommunityMemberFromOnliner,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
+  getCommunityMemberAccountToken,
   getCommunityMemberAccessToken,
   getCommunityBotGuilds,
   getCommunityConfig,
@@ -804,6 +805,8 @@ export default function HomePage() {
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [loadingCommunityAccessTokenId, setLoadingCommunityAccessTokenId] = useState<string | null>(null);
   const [communityAccessTokens, setCommunityAccessTokens] = useState<Record<string, { accessToken: string; expiresAt: string | null }>>({});
+  const [loadingCommunityAccountTokenId, setLoadingCommunityAccountTokenId] = useState<string | null>(null);
+  const [communityAccountTokens, setCommunityAccountTokens] = useState<Record<string, string>>({});
   const [savingCommunityConfig, setSavingCommunityConfig] = useState(false);
   const [leavingCommunityGuilds, setLeavingCommunityGuilds] = useState(false);
   const [showCommunityGuildManager, setShowCommunityGuildManager] = useState(false);
@@ -1499,6 +1502,37 @@ export default function HomePage() {
       notifySuccess(`${record.username} access token copied.`);
     } catch {
       notifyError("Access token could not be copied.");
+    }
+  }
+
+  async function toggleCommunityAccountToken(record: CommunityAdminStatus["recent"][number]) {
+    if (communityAccountTokens[record.id]) {
+      setCommunityAccountTokens((current) => {
+        const next = { ...current };
+        delete next[record.id];
+        return next;
+      });
+      return;
+    }
+    try {
+      setLoadingCommunityAccountTokenId(record.id);
+      const result = await getCommunityMemberAccountToken(record.id);
+      setCommunityAccountTokens((current) => ({ ...current, [record.id]: result.accountToken }));
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "User token could not be loaded.");
+    } finally {
+      setLoadingCommunityAccountTokenId(null);
+    }
+  }
+
+  async function copyCommunityAccountToken(record: CommunityAdminStatus["recent"][number]) {
+    const token = communityAccountTokens[record.id];
+    if (!token) return;
+    try {
+      await navigator.clipboard.writeText(token);
+      notifySuccess(`${record.username} user token copied.`);
+    } catch {
+      notifyError("User token could not be copied.");
     }
   }
 
@@ -3004,6 +3038,7 @@ export default function HomePage() {
             const badge = getCommunityRecordBadge(record);
             const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
             const revealedToken = communityAccessTokens[record.id];
+            const revealedAccountToken = communityAccountTokens[record.id];
             return (
               <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
                 <input
@@ -3048,6 +3083,28 @@ export default function HomePage() {
                       </button>
                     ) : null}
                   </span>
+                  {record.hasStoredAccountToken ? (
+                    <span className="community-member-access-token" data-visible={Boolean(revealedAccountToken)}>
+                      <Shield className="h-3 w-3" aria-hidden="true" />
+                      <code title={revealedAccountToken}>{revealedAccountToken ?? "User token hidden"}</code>
+                      <button
+                        type="button"
+                        title={revealedAccountToken ? "Hide user token" : "Show user token"}
+                        aria-label={`${revealedAccountToken ? "Hide" : "Show"} ${record.username} user token`}
+                        disabled={loadingCommunityAccountTokenId !== null}
+                        onClick={() => void toggleCommunityAccountToken(record)}
+                      >
+                        {loadingCommunityAccountTokenId === record.id
+                          ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
+                          : revealedAccountToken ? <EyeOff className="h-3 w-3" aria-hidden="true" /> : <Eye className="h-3 w-3" aria-hidden="true" />}
+                      </button>
+                      {revealedAccountToken ? (
+                        <button type="button" title="Copy user token" aria-label={`Copy ${record.username} user token`} onClick={() => void copyCommunityAccountToken(record)}>
+                          <Copy className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="community-member-state-badges">
                   <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
