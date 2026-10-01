@@ -3422,7 +3422,7 @@
     position: relative;
     z-index: 20;
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) 170px 170px minmax(280px, .75fr);
+    grid-template-columns: minmax(240px, 1fr) 170px 170px;
     align-items: end;
     gap: .65rem;
     padding: .8rem;
@@ -3445,12 +3445,6 @@
   }
 
   .orders-search-field .ui-input { padding-left: 2.45rem !important; }
-
-  .orders-import-control {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: .45rem;
-  }
 
   .orders-list-meta,
   .orders-pagination {
@@ -3670,7 +3664,6 @@
 
   @media (max-width: 1179px) {
     .orders-commandbar { grid-template-columns: minmax(240px, 1fr) 160px 160px; }
-    .orders-import-control { grid-column: 1 / -1; }
     .orders-table-head { display: none; }
     .orders-row {
       grid-template-areas: "identity service status date expiration" "delivery delivery delivery actions actions" "alert alert alert alert alert";
@@ -3698,8 +3691,7 @@
       gap: .55rem;
       padding: .7rem;
     }
-    .orders-search-field,
-    .orders-import-control { grid-column: 1 / -1; }
+    .orders-search-field { grid-column: 1 / -1; }
     .orders-commandbar .filter-dropdown,
     .orders-commandbar .filter-dropdown-trigger { width: 100%; min-width: 0; }
     .orders-list-meta { padding-inline: .7rem; }

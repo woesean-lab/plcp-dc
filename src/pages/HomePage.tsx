@@ -660,10 +660,6 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
               <Skeleton className="h-11 w-full" />
               <SkeletonField />
               <SkeletonField />
-              <div className="orders-import-control">
-                <Skeleton className="h-11 w-full" />
-                <Skeleton className="h-10 w-16" />
-              </div>
             </div>
             <div className="orders-list-meta">
               <Skeleton className="h-2.5 w-28" />
@@ -860,7 +856,6 @@ export default function HomePage() {
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [orderIdToTrack, setOrderIdToTrack] = useState("");
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -2747,30 +2742,6 @@ export default function HomePage() {
     }
   }
 
-  function trackOrderManually() {
-    const uniqid = orderIdToTrack.trim();
-    if (!uniqid) {
-      notifyError("Order ID is required.");
-      return;
-    }
-
-    if (orders.some((order) => order.uniqid === uniqid)) {
-      notifyError("Order is already tracked.");
-      return;
-    }
-
-    persistOrders([
-      {
-        uniqid,
-        createdAt: new Date().toISOString(),
-        status: "NEW"
-      },
-      ...orders
-    ]);
-    setOrderIdToTrack("");
-    notifySuccess("Order added.");
-  }
-
   const communityStockLoading = loadingCommunityStatus && !communityStatus;
   const communityStockConfigured = Boolean(communityStatus?.configured);
   const communityStockBadge = communityStockLoading
@@ -3703,10 +3674,6 @@ export default function HomePage() {
                   <FilterDropdown label="Type" showLabel={false} value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
-                  <div className="orders-import-control">
-                    <Input value={orderIdToTrack} onChange={(event) => setOrderIdToTrack(event.target.value)} placeholder="Add existing order ID" aria-label="Existing order ID" className="font-mono" />
-                    <Button type="button" variant="secondary" size="sm" onClick={trackOrderManually}><Plus className="h-4 w-4" /> Add</Button>
-                  </div>
                 </div>
 
                 <div className="orders-list-meta">
