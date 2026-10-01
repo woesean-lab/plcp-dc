@@ -663,6 +663,36 @@ function selectDiscordOnlinerProxy(config, additionalAssignments = [], excludedP
   return selected;
 }
 
+function getDiscordOnlinerProxyPoolResponse(config) {
+  const usage = new Map(config.proxyPool.map((proxy) => [proxy, 0]));
+  for (const account of config.accounts) {
+    if (usage.has(account.proxyUrl)) usage.set(account.proxyUrl, usage.get(account.proxyUrl) + 1);
+  }
+  const now = Date.now();
+  const details = config.proxyPool.map((proxy) => {
+    const health = discordOnlinerProxyHealth.get(proxy);
+    const unavailableUntil = Math.max(0, Number(health?.unavailableUntil) || 0);
+    return {
+      proxy,
+      assignedAccounts: usage.get(proxy) ?? 0,
+      status: unavailableUntil > now ? "cooling" : "available",
+      failureCount: Math.max(0, Number(health?.failures) || 0),
+      cooldownUntil: unavailableUntil > now ? new Date(unavailableUntil).toISOString() : null,
+      lastSuccessAt: health?.lastSuccessAt ? new Date(health.lastSuccessAt).toISOString() : null,
+      lastFailureAt: health?.lastFailureAt ? new Date(health.lastFailureAt).toISOString() : null
+    };
+  });
+  const availableCount = details.filter((proxy) => proxy.status === "available").length;
+  return {
+    proxies: config.proxyPool,
+    details,
+    count: config.proxyPool.length,
+    availableCount,
+    coolingDownCount: config.proxyPool.length - availableCount,
+    assignedAccounts: config.accounts.filter((account) => Boolean(account.proxyUrl)).length
+  };
+}
+
 function normalizeDiscordOnlinerYouTubePlaylistId(value) {
   const input = String(value ?? "").trim();
   if (!input) return "";
@@ -6245,14 +6275,7 @@ app.get("/api/onliner", requireSession, async (_req, res, next) => {
 app.get("/api/onliner/proxies", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
-    const availableCount = config.proxyPool.filter((proxy) => (discordOnlinerProxyHealth.get(proxy)?.unavailableUntil ?? 0) <= Date.now()).length;
-    res.set("Cache-Control", "no-store").json({
-      proxies: config.proxyPool,
-      count: config.proxyPool.length,
-      availableCount,
-      coolingDownCount: config.proxyPool.length - availableCount,
-      assignedAccounts: config.accounts.filter((account) => Boolean(account.proxyUrl)).length
-    });
+    res.set("Cache-Control", "no-store").json(getDiscordOnlinerProxyPoolResponse(config));
   } catch (error) {
     next(error);
   }
@@ -6289,8 +6312,7 @@ app.put("/api/onliner/proxies", requireSession, async (req, res, next) => {
       await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
       discordOnlinerWorkerCurrentConfig = candidate;
     }
-    const availableCount = candidate.proxyPool.filter((proxy) => (discordOnlinerProxyHealth.get(proxy)?.unavailableUntil ?? 0) <= Date.now()).length;
-    res.json({ proxies: candidate.proxyPool, count: candidate.proxyPool.length, availableCount, coolingDownCount: candidate.proxyPool.length - availableCount, assignedAccounts: candidate.accounts.filter((account) => Boolean(account.proxyUrl)).length });
+    res.json(getDiscordOnlinerProxyPoolResponse(candidate));
   } catch (error) {
     next(error);
   }

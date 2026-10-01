@@ -114,6 +114,7 @@ import {
   stopDiscordOnlinerConnections,
   updateDiscordOnlinerAccount,
   type DiscordOnlinerLogEntry,
+  type DiscordOnlinerProxyDetail,
   type DiscordOnlinerSnapshot
 } from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
@@ -432,6 +433,34 @@ function formatTrackedDate(value: string) {
   }).format(date);
 }
 
+function formatOnlinerProxyLabel(proxy: string) {
+  try {
+    const parsed = new URL(proxy);
+    const username = parsed.username ? `${decodeURIComponent(parsed.username)}:••••@` : "";
+    return `${parsed.protocol}//${username}${parsed.hostname}${parsed.port ? `:${parsed.port}` : ""}`;
+  } catch {
+    return proxy.replace(/\/\/([^:@/]+):([^@/]+)@/, "//$1:••••@");
+  }
+}
+
+function formatOnlinerProxyEvent(value: string | null) {
+  if (!value) return "Not tested yet";
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) return "Unknown";
+  const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (elapsedSeconds < 60) return `${elapsedSeconds}s ago`;
+  if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)}m ago`;
+  if (elapsedSeconds < 86_400) return `${Math.floor(elapsedSeconds / 3600)}h ago`;
+  return `${Math.floor(elapsedSeconds / 86_400)}d ago`;
+}
+
+function formatOnlinerProxyCooldown(value: string | null, now: number) {
+  if (!value) return "Available";
+  const remainingSeconds = Math.max(0, Math.ceil((new Date(value).getTime() - now) / 1000));
+  if (remainingSeconds < 60) return `Retry in ${remainingSeconds}s`;
+  return `Retry in ${Math.ceil(remainingSeconds / 60)}m`;
+}
+
 function formatOrderStatus(status?: string) {
   const label = String(status ?? "New").trim().replace(/[_-]+/g, " ").toLowerCase();
   return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : "New";
@@ -744,6 +773,7 @@ export default function HomePage() {
   const [onlinerProxyCount, setOnlinerProxyCount] = useState(0);
   const [onlinerAvailableProxyCount, setOnlinerAvailableProxyCount] = useState(0);
   const [onlinerCoolingProxyCount, setOnlinerCoolingProxyCount] = useState(0);
+  const [onlinerProxyDetails, setOnlinerProxyDetails] = useState<DiscordOnlinerProxyDetail[]>([]);
   const [savingOnlinerProxies, setSavingOnlinerProxies] = useState(false);
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
@@ -1111,6 +1141,7 @@ export default function HomePage() {
       setOnlinerProxyCount(result.count);
       setOnlinerAvailableProxyCount(result.availableCount);
       setOnlinerCoolingProxyCount(result.coolingDownCount);
+      setOnlinerProxyDetails(result.details);
     }).catch((error) => {
       if (!cancelled) notifyError(error instanceof Error ? error.message : "Onliner proxies could not be loaded.");
     });
@@ -1154,6 +1185,7 @@ export default function HomePage() {
           setOnlinerProxyCount(result.count);
           setOnlinerAvailableProxyCount(result.availableCount);
           setOnlinerCoolingProxyCount(result.coolingDownCount);
+          setOnlinerProxyDetails(result.details);
         }
       }).catch(() => {});
     }, 3000);
@@ -1651,6 +1683,7 @@ export default function HomePage() {
       setOnlinerProxyCount(result.count);
       setOnlinerAvailableProxyCount(result.availableCount);
       setOnlinerCoolingProxyCount(result.coolingDownCount);
+      setOnlinerProxyDetails(result.details);
       setOnlinerSnapshot(await getDiscordOnliner());
       notifySuccess(`${result.count} Onliner prox${result.count === 1 ? "y" : "ies"} saved and assigned automatically.`);
     } catch (error) {
@@ -1691,6 +1724,7 @@ export default function HomePage() {
       const proxies = await getDiscordOnlinerProxies();
       setOnlinerAvailableProxyCount(proxies.availableCount);
       setOnlinerCoolingProxyCount(proxies.coolingDownCount);
+      setOnlinerProxyDetails(proxies.details);
       notifySuccess("A healthier proxy was assigned and this Gateway connection is restarting.");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Another proxy could not be assigned.");
@@ -4190,6 +4224,26 @@ export default function HomePage() {
                         </div>
                       </header>
                       <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
+                      {onlinerProxyDetails.length ? (
+                        <div className="onliner-proxy-usage">
+                          <div className="onliner-proxy-usage-heading">
+                            <span>Saved proxy</span><span>Accounts</span><span>Status</span><span>Health</span>
+                          </div>
+                          <div className="onliner-proxy-usage-list">
+                            {onlinerProxyDetails.map((proxy) => (
+                              <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
+                                <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
+                                <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
+                                <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
+                                <span className="onliner-proxy-health-copy">
+                                  <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : "No active failures"}</strong>
+                                  <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <p className="app-copy text-xs">Accounts are assigned the least-used saved proxy automatically. Updating this list redistributes existing profiles.</p>
                     </section>
                     {onlinerSnapshot?.accounts.length ? (

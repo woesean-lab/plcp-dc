@@ -9216,6 +9216,68 @@
   box-shadow: inset 0 0 0 1px var(--app-accent-border);
 }
 
+.onliner-proxy-usage {
+  overflow-x: auto;
+  border-top: 1px solid var(--app-divider);
+  background: rgba(4, 5, 11, .16);
+}
+
+.onliner-proxy-usage-heading,
+.onliner-proxy-usage-row {
+  display: grid;
+  min-width: 680px;
+  grid-template-columns: minmax(220px, 1fr) 105px 115px minmax(160px, .65fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.onliner-proxy-usage-heading {
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--app-divider);
+  color: var(--app-subtle);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.onliner-proxy-usage-list {
+  max-height: 310px;
+  overflow: auto;
+}
+
+.onliner-proxy-usage-row {
+  min-height: 52px;
+  padding: 8px 14px;
+  color: var(--app-muted);
+}
+
+.onliner-proxy-usage-row + .onliner-proxy-usage-row { border-top: 1px solid var(--app-divider); }
+
+.onliner-proxy-address,
+.onliner-proxy-assigned,
+.onliner-proxy-health-state {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.onliner-proxy-address svg { flex: 0 0 auto; color: var(--app-accent); }
+.onliner-proxy-address code { overflow: hidden; color: var(--app-text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.onliner-proxy-assigned svg { color: var(--app-subtle); }
+.onliner-proxy-assigned strong { color: var(--app-text); font-size: 12px; }
+.onliner-proxy-assigned small { color: var(--app-subtle); font-size: 9px; }
+.onliner-proxy-health-state { display: grid; grid-template-columns: 7px minmax(0, 1fr); column-gap: 7px; }
+.onliner-proxy-health-state i { grid-row: 1 / 3; width: 7px; height: 7px; border-radius: 999px; background: var(--app-success); box-shadow: 0 0 0 3px var(--app-success-soft); }
+.onliner-proxy-health-state strong,
+.onliner-proxy-health-copy strong { color: var(--app-text-secondary); font-size: 9px; }
+.onliner-proxy-health-state small,
+.onliner-proxy-health-copy small { color: var(--app-subtle); font-size: 8px; }
+.onliner-proxy-health-copy { display: grid; min-width: 0; gap: 3px; }
+.onliner-proxy-usage-row[data-status="cooling"] .onliner-proxy-health-state i { background: var(--app-danger); box-shadow: 0 0 0 3px var(--app-danger-soft); }
+.onliner-proxy-usage-row[data-status="cooling"] .onliner-proxy-health-state strong { color: var(--app-danger); }
+
 .stock-workbench {
   overflow: hidden;
 }

@@ -103,6 +103,25 @@ export type DiscordOnlinerAccountCredentials = {
   richPresenceEnabled: boolean;
 };
 
+export type DiscordOnlinerProxyDetail = {
+  proxy: string;
+  assignedAccounts: number;
+  status: "available" | "cooling";
+  failureCount: number;
+  cooldownUntil: string | null;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+};
+
+export type DiscordOnlinerProxyPool = {
+  proxies: string[];
+  details: DiscordOnlinerProxyDetail[];
+  count: number;
+  availableCount: number;
+  coolingDownCount: number;
+  assignedAccounts: number;
+};
+
 async function parseResponse(response: Response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
@@ -117,7 +136,7 @@ export async function getDiscordOnlinerProxies() {
   const response = await fetch("/api/onliner/proxies", { cache: "no-store", credentials: "same-origin" });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
-  return payload as { proxies: string[]; count: number; availableCount: number; coolingDownCount: number; assignedAccounts: number };
+  return payload as DiscordOnlinerProxyPool;
 }
 
 export async function saveDiscordOnlinerProxies(proxies: string[]) {
@@ -129,7 +148,7 @@ export async function saveDiscordOnlinerProxies(proxies: string[]) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
-  return payload as { proxies: string[]; count: number; availableCount: number; coolingDownCount: number; assignedAccounts: number };
+  return payload as DiscordOnlinerProxyPool;
 }
 
 export async function getDiscordOnlinerLogs(after = 0) {
