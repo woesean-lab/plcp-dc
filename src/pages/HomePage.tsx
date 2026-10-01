@@ -3116,18 +3116,18 @@ export default function HomePage() {
                   </span>
                   {onlinerBadge ? (
                     <span className="community-onliner-chip" data-state={onlinerBadge.state} title={record.onlinerLastError ?? `Onliner ${onlinerBadge.label.toLowerCase()}`}>
-                      <span className="community-onliner-chip-icon" aria-hidden="true"><RadioTower className="h-3.5 w-3.5" /><i /></span>
-                      <span><b>Onliner</b><em>{onlinerBadge.label}</em></span>
+                      <RadioTower className="h-3 w-3" aria-hidden="true" />
+                      <span>Onliner</span><b>{onlinerBadge.label}</b>
                     </span>
                   ) : null}
                   {record.onlinerConnected ? (
                     <span className="community-rich-presence-chip" data-enabled={record.onlinerRichPresenceEnabled === true} title={`Rich Presence ${record.onlinerRichPresenceEnabled === true ? "enabled" : "disabled"}`}>
                       <Star className="h-3 w-3" aria-hidden="true" />
                       <span>Rich Presence</span>
-                      <strong>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</strong>
+                      <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
                     </span>
                   ) : null}
-                  <Badge variant={badge.variant}>{badge.label}</Badge>
+                  <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
                 </span>
                 <span className="community-member-row-actions">
                   <Button
