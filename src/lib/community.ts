@@ -83,8 +83,6 @@ export type CommunityJoinRecord = {
   authorizedAt: string;
   joinedAt: string | null;
   stockType: CommunityStockType;
-  presenceStatus: "online" | "idle" | "dnd" | "offline" | "unknown";
-  presenceCheckedAt: string | null;
   onlinerConnected: boolean;
   onlinerAccountId: string | null;
   onlinerConnectionState: "connected" | "connecting" | "reconnecting" | "error" | "disconnected" | null;

@@ -318,11 +318,6 @@ function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number])
   return { label: "Connected", variant: "success" as const };
 }
 
-function getCommunityPresenceLabel(status: CommunityAdminStatus["recent"][number]["presenceStatus"]) {
-  if (status === "dnd") return "DND";
-  return status.charAt(0).toUpperCase() + status.slice(1);
-}
-
 function getCommunityOnlinerBadge(record: CommunityAdminStatus["recent"][number]) {
   switch (record.onlinerConnectionState) {
     case "connected": return { label: "Live", state: "connected" as const };
@@ -817,7 +812,6 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityPresenceFilter, setCommunityPresenceFilter] = useState("all");
   const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     isPeriodic: false,
@@ -2827,14 +2821,12 @@ export default function HomePage() {
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
-  const communityPresenceOrder = { online: 0, idle: 1, dnd: 2, offline: 3, unknown: 4 } as const;
   const communityVisibleRecords = communityCategoryRecords
-    .filter((record) => communityPresenceFilter === "all" || record.presenceStatus === communityPresenceFilter)
     .sort((left, right) => {
       const inactiveOrder = Number(left.status === "failed") - Number(right.status === "failed");
       if (inactiveOrder !== 0) return inactiveOrder;
-      const presenceOrder = communityPresenceOrder[left.presenceStatus] - communityPresenceOrder[right.presenceStatus];
-      if (presenceOrder !== 0) return presenceOrder;
+      const onlinerOrder = Number(right.onlinerConnectionState === "connected") - Number(left.onlinerConnectionState === "connected");
+      if (onlinerOrder !== 0) return onlinerOrder;
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
       return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
@@ -2993,24 +2985,6 @@ export default function HomePage() {
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
           </label>
           <div className="community-member-priority-actions">
-            <FilterDropdown
-              label="Presence status"
-              showLabel={false}
-              className="community-member-presence-filter"
-              value={communityPresenceFilter}
-              options={[
-                { value: "all", label: "All presence" },
-                { value: "online", label: "Online" },
-                { value: "idle", label: "Idle" },
-                { value: "dnd", label: "DND" },
-                { value: "offline", label: "Offline" },
-                { value: "unknown", label: "Unknown" }
-              ]}
-              onChange={(value) => {
-                setCommunityPresenceFilter(value);
-                setSelectedCommunityMemberIds([]);
-              }}
-            />
             <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
@@ -3107,9 +3081,6 @@ export default function HomePage() {
                   ) : null}
                 </span>
                 <span className="community-member-state-badges">
-                  <span className="community-member-presence" data-presence={record.presenceStatus} title={record.presenceCheckedAt ? `Presence checked ${new Date(record.presenceCheckedAt).toLocaleString()}` : "Run Check members from an order to collect presence."}>
-                    <i aria-hidden="true" /> {getCommunityPresenceLabel(record.presenceStatus)}
-                  </span>
                   {onlinerBadge ? (
                     <span className="community-onliner-chip" data-state={onlinerBadge.state} title={record.onlinerLastError ?? `Onliner ${onlinerBadge.label.toLowerCase()}`}>
                       <RadioTower className="h-3 w-3" aria-hidden="true" />

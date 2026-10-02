@@ -190,7 +190,7 @@ export type CommunityMemberCheckResult = {
     active: number;
     inactive: number;
     unknown: number;
-    presence: { online: number; idle: number; dnd: number; offline: number; unknown: number };
+    onliner: { live: number; offline: number };
     checkedAt: string;
   };
 };
@@ -199,7 +199,7 @@ export type CommunityMemberCheckProgress = {
   active: boolean;
   total: number;
   checked: number;
-  stage: "idle" | "starting" | "presence" | "members" | "saving" | "complete" | "failed";
+  stage: "idle" | "starting" | "onliner" | "members" | "saving" | "complete" | "failed";
   message?: string;
 };
 

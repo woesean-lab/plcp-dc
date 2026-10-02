@@ -2977,21 +2977,13 @@ function isCommunityResultManagementExpired(order, result) {
   return Number.isFinite(expiresAt) && expiresAt <= Date.now();
 }
 
-const communityOfflineReplacementCheckMaxAgeMs = 5 * 60_000;
+const communityOnlinerReplacementCheckMaxAgeMs = 5 * 60_000;
 
-function isCommunityResultPeriodic(order, result) {
-  const categoryId = getCommunityResultStockType(order, result);
-  const allocation = Array.isArray(order?.categoryAllocations)
-    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
-    : null;
-  return allocation ? allocation.isPeriodic === true : order?.categoryIsPeriodic === true;
-}
-
-function isCommunityOfflineReplacementEligible(order, result) {
-  if (!isCommunityResultPeriodic(order, result) || isCommunityResultManagementExpired(order, result)) return false;
-  if (String(result?.presenceStatus ?? "").toLowerCase() !== "offline") return false;
-  const checkedAt = new Date(result?.presenceCheckedAt).getTime();
-  return Number.isFinite(checkedAt) && checkedAt >= Date.now() - communityOfflineReplacementCheckMaxAgeMs;
+function isCommunityOnlinerReplacementEligible(order, result) {
+  if (isCommunityResultManagementExpired(order, result)) return false;
+  if (result?.onlinerLive !== false) return false;
+  const checkedAt = new Date(result?.onlinerCheckedAt).getTime();
+  return Number.isFinite(checkedAt) && checkedAt >= Date.now() - communityOnlinerReplacementCheckMaxAgeMs;
 }
 
 function isCommunityServiceType(service) {
@@ -4158,13 +4150,19 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
   const discordUserIds = order.communityResults
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId);
-  onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "presence" });
-  let presenceByUserId = new Map(discordUserIds.map((discordUserId) => [discordUserId, "unknown"]));
-  try {
-    presenceByUserId = await loadCommunityGatewayPresences(orderConfig, targetGuildId, discordUserIds);
-  } catch (error) {
-    console.warn("Members presence check unavailable:", error instanceof Error ? error.message : error);
+  onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "onliner" });
+  const onlinerConfig = await getDiscordOnlinerConfig();
+  const onlinerSnapshot = await getDiscordOnlinerSnapshotForApi(onlinerConfig);
+  const onlinerAccountByUserId = new Map();
+  const configuredAccountById = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
+  for (const account of onlinerSnapshot.accounts ?? []) {
+    const configuredAccount = configuredAccountById.get(account.id);
+    const configuredUserId = String(configuredAccount?.discordUserId ?? "").trim();
+    const runtimeUserId = String(account?.bot?.id ?? "").trim();
+    const discordUserId = isDiscordGuildId(configuredUserId) ? configuredUserId : runtimeUserId;
+    if (isDiscordGuildId(discordUserId)) onlinerAccountByUserId.set(discordUserId, account);
   }
+  const onlinerCheckedAt = new Date().toISOString();
   const stock = discordUserIds.length
     ? await pool.query(
         `SELECT DISTINCT ON (discord_user_id)
@@ -4186,15 +4184,22 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     const batch = discordUserIds.slice(start, start + 10);
     const results = await Promise.all(batch.map(async (discordUserId) => {
       const record = stockByUserId.get(discordUserId);
-      const presenceStatus = normalizeCommunityPresenceStatus(presenceByUserId.get(discordUserId));
-      const presenceFields = {
-        presenceStatus,
-        presenceDetails: presenceStatus === "unknown"
-          ? "Discord presence could not be determined right now."
-          : presenceStatus === "offline"
-            ? "Discord currently reports this member as offline or invisible."
-            : `Discord currently reports this member as ${presenceStatus}.`,
-        presenceCheckedAt: new Date().toISOString()
+      const onlinerAccount = onlinerAccountByUserId.get(discordUserId);
+      const onlinerConnectionState = onlinerAccount
+        ? normalizeDiscordOnlinerConnectionState(onlinerAccount.connectionState)
+        : "disconnected";
+      const onlinerLive = onlinerConfig.enabled !== false && Boolean(onlinerAccount) && onlinerConnectionState === "connected";
+      const onlinerFields = {
+        onlinerLive,
+        onlinerConnectionState,
+        onlinerDetails: onlinerLive
+          ? "This member is Live in Onliner."
+          : onlinerAccount?.lastError
+            ? `This member is not Live in Onliner: ${String(onlinerAccount.lastError).trim()}`
+            : onlinerAccount
+              ? `This member is not Live in Onliner (${onlinerConnectionState}).`
+              : "This member is not connected to Onliner.",
+        onlinerCheckedAt
       };
       let membershipStatus = "unknown";
       let membershipDetails = "Server membership could not be verified right now.";
@@ -4232,7 +4237,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
           accessToken = decryptCredential(record.encrypted_access_token);
         }
         if (!accessToken) {
-          return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired and no refresh token is available.", membershipStatus, membershipDetails, ...presenceFields }];
+          return [discordUserId, { status: "inactive", details: "OAuth access token is missing or expired and no refresh token is available.", membershipStatus, membershipDetails, ...onlinerFields }];
         }
         let identity = await requestDiscord("oauth2/@me", {
           headers: { Authorization: `Bearer ${accessToken}` }
@@ -4250,49 +4255,33 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
             identity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } });
           } catch (error) {
             if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
-              return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...presenceFields }];
+              return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...onlinerFields }];
             }
-            return [discordUserId, { status: "unknown", details: "OAuth refresh could not be completed right now.", membershipStatus, membershipDetails, ...presenceFields }];
+            return [discordUserId, { status: "unknown", details: "OAuth refresh could not be completed right now.", membershipStatus, membershipDetails, ...onlinerFields }];
           }
         }
         if (!identity.response.ok || String(identity.payload?.user?.id ?? "") !== discordUserId) {
           if (identity.response.status === 401 || identity.response.ok) {
-            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails, ...presenceFields }];
+            return [discordUserId, { status: "inactive", details: "OAuth authorization is expired or invalid.", membershipStatus, membershipDetails, ...onlinerFields }];
           }
-          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails, ...presenceFields }];
+          return [discordUserId, { status: "unknown", details: `Discord could not verify OAuth authorization (HTTP ${identity.response.status}).`, membershipStatus, membershipDetails, ...onlinerFields }];
         }
         return [discordUserId, {
           status: "active",
           details: "OAuth authorization is active.",
           membershipStatus,
           membershipDetails,
-          ...presenceFields
+          ...onlinerFields
         }];
       } catch (error) {
         if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
-          return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...presenceFields }];
+          return [discordUserId, { status: "inactive", details: "OAuth authorization could not be refreshed and is no longer valid.", membershipStatus, membershipDetails, ...onlinerFields }];
         }
-        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails, ...presenceFields }];
+        return [discordUserId, { status: "unknown", details: "OAuth authorization could not be checked right now.", membershipStatus, membershipDetails, ...onlinerFields }];
       }
     }));
     results.forEach(([discordUserId, result]) => checks.set(discordUserId, result));
     onProgress({ active: true, total: discordUserIds.length, checked: Math.min(start + results.length, discordUserIds.length), stage: "members" });
-  }
-
-  const presenceUpdates = [...checks.entries()].map(([discordUserId, check]) => ({
-    discord_user_id: discordUserId,
-    presence_status: normalizeCommunityPresenceStatus(check.presenceStatus),
-    presence_checked_at: check.presenceCheckedAt
-  }));
-  if (presenceUpdates.length) {
-    await pool.query(
-      `UPDATE community_oauth_joins AS stock
-       SET presence_status = checked.presence_status,
-           presence_checked_at = checked.presence_checked_at
-       FROM jsonb_to_recordset($1::jsonb) AS checked(discord_user_id text, presence_status text, presence_checked_at timestamptz)
-       WHERE stock.discord_user_id = checked.discord_user_id`,
-      [JSON.stringify(presenceUpdates)]
-    );
   }
 
   const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
@@ -4326,9 +4315,10 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
       authorizationDetails: check.details,
       membershipStatus: check.membershipStatus,
       membershipDetails: check.membershipDetails,
-      presenceStatus: check.presenceStatus,
-      presenceDetails: check.presenceDetails,
-      presenceCheckedAt: check.presenceCheckedAt,
+      onlinerLive: check.onlinerLive,
+      onlinerConnectionState: check.onlinerConnectionState,
+      onlinerDetails: check.onlinerDetails,
+      onlinerCheckedAt: check.onlinerCheckedAt,
       authorizationCheckedAt: checkedAt
     } : item;
   });
@@ -4337,12 +4327,9 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     active: [...checks.values()].filter((check) => check.status === "active").length,
     inactive: inactiveUserIds.length,
     unknown: [...checks.values()].filter((check) => check.status === "unknown").length,
-    presence: {
-      online: [...checks.values()].filter((check) => check.presenceStatus === "online").length,
-      idle: [...checks.values()].filter((check) => check.presenceStatus === "idle").length,
-      dnd: [...checks.values()].filter((check) => check.presenceStatus === "dnd").length,
-      offline: [...checks.values()].filter((check) => check.presenceStatus === "offline").length,
-      unknown: [...checks.values()].filter((check) => check.presenceStatus === "unknown").length
+    onliner: {
+      live: [...checks.values()].filter((check) => check.onlinerLive === true).length,
+      offline: [...checks.values()].filter((check) => check.onlinerLive === false).length
     },
     checkedAt
   };
@@ -4716,6 +4703,10 @@ function resetCommunityResultVerification(result, overrides = {}) {
   delete next.presenceStatus;
   delete next.presenceDetails;
   delete next.presenceCheckedAt;
+  delete next.onlinerLive;
+  delete next.onlinerConnectionState;
+  delete next.onlinerDetails;
+  delete next.onlinerCheckedAt;
   return { ...next, ...overrides };
 }
 
@@ -6041,8 +6032,6 @@ async function initializeDatabase() {
       details TEXT,
       authorized_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       joined_at TIMESTAMPTZ,
-      presence_status TEXT,
-      presence_checked_at TIMESTAMPTZ,
       PRIMARY KEY (discord_user_id, guild_id)
     )
   `);
@@ -6054,8 +6043,6 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS reserved_order_id TEXT");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS stock_type TEXT NOT NULL DEFAULT 'offline'");
   await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS sort_position BIGINT");
-  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS presence_status TEXT");
-  await pool.query("ALTER TABLE community_oauth_joins ADD COLUMN IF NOT EXISTS presence_checked_at TIMESTAMPTZ");
   await pool.query("UPDATE community_oauth_joins SET stock_type = 'offline' WHERE stock_type IS NULL OR BTRIM(stock_type) = ''");
   await pool.query(`
     WITH ranked AS (
@@ -7114,7 +7101,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
          joined_at = NULL,
          reserved_order_id = NULL,
          sort_position = CASE WHEN community_oauth_joins.stock_type <> EXCLUDED.stock_type THEN EXCLUDED.sort_position ELSE community_oauth_joins.sort_position END
-       RETURNING discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at`,
+       RETURNING discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position`,
       [discordUserId, config.guildId, username, displayName, avatarUrl, encryptCredential(accountToken), encryptCredential(oauth.refreshToken), encryptCredential(oauth.accessToken), oauth.expiresAt, categoryId, details, sortPosition]
     );
     const row = saved.rows[0];
@@ -7141,8 +7128,6 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         sortPosition: Number(row.sort_position),
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at,
-        presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
-        presenceCheckedAt: row.presence_checked_at,
         onlinerConnected: connectToOnliner,
         onlinerAccountId: onlinerAccount?.id ?? null,
         hasStoredAccountToken: true
@@ -7387,7 +7372,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
       pool.query(
-        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position, presence_status, presence_checked_at,
+        `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position,
                 encrypted_account_token IS NOT NULL AS has_stored_account_token
          FROM community_oauth_joins
          WHERE guild_id = $1
@@ -7482,8 +7467,6 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         sortPosition: Number(row.sort_position),
         authorizedAt: row.authorized_at,
         joinedAt: row.joined_at,
-        presenceStatus: normalizeCommunityPresenceStatus(row.presence_status),
-        presenceCheckedAt: row.presence_checked_at,
         onlinerConnected: Boolean(onliner),
         onlinerAccountId: onliner?.accountId ?? null,
         onlinerConnectionState: onliner?.connectionState ?? null,
@@ -9181,8 +9164,8 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const replaceableIndices = results.flatMap((item, index) => {
       const state = String(item?.state ?? "").toLowerCase();
       const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed";
-      const offlineWithPeriodicSupport = isCommunityOfflineReplacementEligible(order, item);
-      return (["failed", "blocked", "already_member"].includes(state) || removed || offlineWithPeriodicSupport)
+      const notLiveWithPeriodicSupport = isCommunityOnlinerReplacementEligible(order, item);
+      return (["failed", "blocked", "already_member"].includes(state) || removed || notLiveWithPeriodicSupport)
         && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
@@ -9371,10 +9354,10 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
     const replaceableStates = new Set(["failed", "blocked", "already_member"]);
     const memberWasRemoved = String(failedResult?.membershipStatus ?? "").toLowerCase() === "removed";
-    const offlineWithPeriodicSupport = isCommunityOfflineReplacementEligible(order, failedResult);
-    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved && !offlineWithPeriodicSupport)) {
+    const notLiveWithPeriodicSupport = isCommunityOnlinerReplacementEligible(order, failedResult);
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved && !notLiveWithPeriodicSupport)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Only failed, already-member, removed, or recently checked offline members from period-based categories can be replaced." });
+      return res.status(409).json({ message: "Only failed, already-member, removed, or recently checked non-Live Onliner members can be replaced." });
     }
 
     let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;
