@@ -1055,7 +1055,7 @@ export default function PublicOrderPage() {
                               ) : null}
                               {item.membershipStatus === "removed" ? (
                                 <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
-                                  Removed from server
+                                  Left server
                                 </span>
                               ) : null}
                               {typeof item.onlinerLive === "boolean" ? (

@@ -4526,7 +4526,15 @@ async function leaveAllCommunityOrderMembers(order) {
 
   communityOrderLeaveAllActive.add(orderId);
   try {
-    const userIds = [...new Set(results.map((item) => String(item?.discordUserId ?? "")).filter(isDiscordGuildId))];
+    const userIds = [...new Set(results
+      .filter((item) => String(item?.membershipStatus ?? "").toLowerCase() !== "removed")
+      .map((item) => String(item?.discordUserId ?? ""))
+      .filter(isDiscordGuildId))];
+    if (!userIds.length) {
+      const error = new Error("Every account in this order has already left the server.");
+      error.statusCode = 409;
+      throw error;
+    }
     const stock = await pool.query(
       `SELECT discord_user_id, encrypted_account_token
        FROM community_oauth_joins

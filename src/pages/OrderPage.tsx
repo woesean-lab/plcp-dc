@@ -463,6 +463,7 @@ export default function OrderPage() {
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
+  const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.membershipStatus !== "removed").length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
     if (item.onlinerLive !== false) return false;
@@ -1225,9 +1226,9 @@ export default function OrderPage() {
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
                     <>
-                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || !communityMemberResults.length}>
+                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || communityMembersStillInServerCount === 0}>
                         <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                        {leavingAllCommunityMembers ? "Leaving..." : "Leave all"}
+                        {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
                       </Button>
                       <span className="member-check-control">
                         <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
@@ -1291,7 +1292,7 @@ export default function OrderPage() {
                         ) : null}
                         {item.membershipStatus === "removed" ? (
                           <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
-                            Removed from server
+                            Left server
                           </span>
                         ) : null}
                         {typeof item.onlinerLive === "boolean" ? (
@@ -1357,7 +1358,7 @@ export default function OrderPage() {
             <p className="app-kicker text-[var(--app-danger)]">Leave server</p>
             <h2 id="leave-all-members-title">Make all members leave?</h2>
             <p id="leave-all-members-description">
-              All {communityMemberResults.length} accounts in this order will leave server {serverId || "-"} using their saved user tokens and assigned Onliner proxies. Accounts without a working proxy or token will be reported as failed and will never fall back to the backend IP.
+              All {communityMembersStillInServerCount} remaining accounts in this order will leave server {serverId || "-"} using their saved user tokens and assigned Onliner proxies. Accounts without a working proxy or token will be reported as failed and will never fall back to the backend IP.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={leavingAllCommunityMembers} onClick={() => setShowLeaveAllCommunityModal(false)}>Cancel</Button>
