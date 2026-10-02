@@ -8656,7 +8656,7 @@ function sanitizePublicCommunityOrder(order) {
       const sanitized = { ...item };
       const state = String(item.state ?? "").toLowerCase();
       sanitized.details = item.membershipStatus === "removed"
-        ? "This member is no longer in the server and can be replaced."
+        ? "This member is no longer in the server."
         : item.authorizationStatus === "inactive"
           ? "This member is still in the server, but its OAuth authorization is inactive."
         : state === "joined"
@@ -9165,7 +9165,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       const state = String(item?.state ?? "").toLowerCase();
       const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed";
       const notLiveWithPeriodicSupport = isCommunityOnlinerReplacementEligible(order, item);
-      return (["failed", "blocked", "already_member"].includes(state) || removed || notLiveWithPeriodicSupport)
+      return !removed && (["failed", "blocked", "already_member"].includes(state) || notLiveWithPeriodicSupport)
         && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
@@ -9355,9 +9355,11 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     const replaceableStates = new Set(["failed", "blocked", "already_member"]);
     const memberWasRemoved = String(failedResult?.membershipStatus ?? "").toLowerCase() === "removed";
     const notLiveWithPeriodicSupport = isCommunityOnlinerReplacementEligible(order, failedResult);
-    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !memberWasRemoved && !notLiveWithPeriodicSupport)) {
+    if (!failedResult || typeof failedResult !== "object" || Array.isArray(failedResult) || memberWasRemoved || (!replaceableStates.has(String(failedResult.state ?? "").toLowerCase()) && !notLiveWithPeriodicSupport)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Only failed, already-member, removed, or recently checked non-Live Onliner members can be replaced." });
+      return res.status(409).json({ message: memberWasRemoved
+        ? "Members who have left the server cannot be replaced."
+        : "Only failed, already-member, or recently checked non-Live Onliner members can be replaced." });
     }
 
     let failedUserId = isDiscordGuildId(String(failedResult.discordUserId ?? "")) ? String(failedResult.discordUserId) : null;

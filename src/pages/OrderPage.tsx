@@ -472,7 +472,7 @@ export default function OrderPage() {
     return Number.isFinite(checkedAt) && checkedAt >= Date.now() - 5 * 60_000;
   };
   const replaceableCommunityMemberIndices = communityMemberResults
-    .filter((item) => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || item.membershipStatus === "removed" || isOnlinerReplacementEligible(item))
+    .filter((item) => item.membershipStatus !== "removed" && (["failed", "blocked", "already_member"].includes(item.state.toLowerCase()) || isOnlinerReplacementEligible(item)))
     .map((item) => item.index);
   const summary = isDcordProvider
     ? [
