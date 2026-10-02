@@ -669,9 +669,9 @@ export default function PublicOrderPage() {
       }, 500);
       try {
       const data = await checkPublicCommunityOrderMembers(uniqid);
-      setStatus((current) => mergeOrderStatus(current, data.order));
+      setStatus(data.order);
       setCommunityCheckNeedsBot(false);
-      toast.success(`${data.summary.active} active, ${data.summary.inactive} inactive${data.summary.unknown ? `, ${data.summary.unknown} unknown` : ""}.`);
+      toast.success(`${data.summary.onliner.live} Onliner Live, ${data.summary.onliner.offline} Not Live.`);
       } finally {
         window.clearInterval(progressTimer);
       }
