@@ -2802,7 +2802,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, icon_name, color_key, created_at, updated_at
+      `SELECT id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories AS category
        WHERE guild_id = $1
          AND NOT EXISTS (
@@ -2819,6 +2819,7 @@ async function loadCommunityStockCategories(config) {
     id: row.id,
     name: row.name,
     isPeriodic: row.is_periodic === true,
+    checkReplacementEnabled: row.check_replacement_enabled !== false,
     iconName: row.icon_name,
     colorKey: row.color_key,
     createdAt: row.created_at,
@@ -2832,8 +2833,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
 
   await queryable.query(
     `INSERT INTO community_stock_categories
-       (guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at)
-     SELECT $2, id, name, is_periodic, icon_name, color_key, created_at, NOW()
+       (guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, NOW()
      FROM community_stock_categories AS category
      WHERE guild_id = $1
        AND NOT EXISTS (
@@ -2981,6 +2982,11 @@ const communityOnlinerReplacementCheckMaxAgeMs = 5 * 60_000;
 
 function isCommunityOnlinerReplacementEligible(order, result) {
   if (isCommunityResultManagementExpired(order, result)) return false;
+  const categoryId = getCommunityResultStockType(order, result);
+  const allocation = Array.isArray(order?.categoryAllocations)
+    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
+    : null;
+  if ((allocation?.checkReplacementEnabled ?? order?.categoryCheckReplacementEnabled) === false) return false;
   if (result?.onlinerLive !== false) return false;
   const checkedAt = new Date(result?.onlinerCheckedAt).getTime();
   return Number.isFinite(checkedAt) && checkedAt >= Date.now() - communityOnlinerReplacementCheckMaxAgeMs;
@@ -5998,6 +6004,7 @@ async function initializeDatabase() {
       id TEXT NOT NULL,
       name TEXT NOT NULL,
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
+      check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       icon_name TEXT NOT NULL DEFAULT 'Users',
       color_key TEXT NOT NULL DEFAULT 'violet',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -6009,6 +6016,7 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_stock_categories DROP COLUMN IF EXISTS duration_months");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS icon_name TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE");
   await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
   await pool.query("UPDATE community_stock_categories SET color_key = CASE WHEN id = 'offline' THEN 'emerald' ELSE 'violet' END WHERE color_key IS NULL OR BTRIM(color_key) = ''");
   await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET DEFAULT 'Users'");
@@ -6853,6 +6861,7 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before creating a category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
+    const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -6862,10 +6871,10 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, icon_name, color_key)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, name, is_periodic, icon_name, color_key, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic, iconName, colorKey]
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, iconName, colorKey]
     );
     invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
@@ -6883,6 +6892,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
+    const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -6893,19 +6903,19 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const updated = await pool.query(
       `WITH updated AS (
          UPDATE community_stock_categories
-         SET name = $3, is_periodic = $4, icon_name = $5, color_key = $6, updated_at = NOW()
+         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, icon_name = $6, color_key = $7, updated_at = NOW()
          WHERE id = $2
            AND NOT EXISTS (
              SELECT 1
              FROM community_stock_category_tombstones AS tombstone
              WHERE tombstone.id = community_stock_categories.id
            )
-         RETURNING guild_id, id, name, is_periodic, icon_name, color_key, created_at, updated_at
+         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
        )
-       SELECT id, name, is_periodic, icon_name, color_key, created_at, updated_at
+       SELECT id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
        FROM updated
        WHERE guild_id = $1`,
-      [config.guildId, categoryId, name, isPeriodic, iconName, colorKey]
+      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
@@ -8084,7 +8094,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const requestedCategoryIds = requestedAllocations.map((allocation) => allocation.categoryId);
     const categoryResult = await pool.query(
-      `SELECT id, name, is_periodic
+      `SELECT id, name, is_periodic, check_replacement_enabled
        FROM community_stock_categories
        WHERE guild_id = $1 AND id = ANY($2::text[])`,
       [config.guildId, requestedCategoryIds]
@@ -8129,6 +8139,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         amount: allocation.amount,
         added: 0,
         isPeriodic: category.is_periodic === true,
+        checkReplacementEnabled: category.check_replacement_enabled !== false,
         durationMonths: category.is_periodic === true ? durationMonths : null,
         expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null
       });
@@ -8150,6 +8161,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryName: categoryAllocations.length > 1 ? `${categoryAllocations.length} categories` : primaryCategory.name,
       categoryAllocations,
       categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
+      categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,

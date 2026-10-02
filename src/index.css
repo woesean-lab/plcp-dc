@@ -8180,6 +8180,27 @@
   font-size: 9px;
 }
 
+.community-category-rule-heading {
+  display: grid;
+  gap: 3px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.community-category-rule-heading strong {
+  color: var(--app-text-secondary);
+  font-size: 11px;
+}
+
+.community-category-rule-heading small {
+  color: var(--app-subtle);
+  font-size: 9px;
+}
+
+.community-category-replacement-options {
+  margin-top: 8px;
+}
+
 @media (max-width: 640px) {
   .community-category-manager-heading {
     align-items: flex-start;

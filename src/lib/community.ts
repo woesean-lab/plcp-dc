@@ -55,6 +55,7 @@ export type CommunityStockCategory = {
   id: string;
   name: string;
   isPeriodic: boolean;
+  checkReplacementEnabled: boolean;
   iconName: string;
   colorKey: CommunityCategoryColorKey;
   createdAt: string;
@@ -67,6 +68,7 @@ export type CommunityCategoryColorKey = "violet" | "cyan" | "emerald" | "amber" 
 export type CommunityStockCategoryInput = {
   name: string;
   isPeriodic: boolean;
+  checkReplacementEnabled: boolean;
   iconName: string;
   colorKey: CommunityCategoryColorKey;
 };

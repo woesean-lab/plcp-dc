@@ -812,9 +812,10 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     isPeriodic: false,
+    checkReplacementEnabled: true,
     iconName: "Users",
     colorKey: "violet"
   });
@@ -1938,6 +1939,7 @@ export default function HomePage() {
     setCommunityCategoryDraft({
       name: category.name,
       isPeriodic: category.isPeriodic,
+      checkReplacementEnabled: category.checkReplacementEnabled,
       iconName: category.iconName || (category.isPeriodic ? "Timer" : "Users"),
       colorKey: category.colorKey || "violet"
     });
@@ -1946,7 +1948,7 @@ export default function HomePage() {
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
@@ -2069,7 +2071,7 @@ export default function HomePage() {
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -2078,6 +2080,7 @@ export default function HomePage() {
     const input = {
       name: communityCategoryDraft.name.trim(),
       isPeriodic: communityCategoryDraft.isPeriodic,
+      checkReplacementEnabled: communityCategoryDraft.checkReplacementEnabled,
       iconName: communityCategoryDraft.iconName.trim(),
       colorKey: communityCategoryDraft.colorKey
     };
@@ -2912,6 +2915,7 @@ export default function HomePage() {
                   <span className="community-category-icon" aria-hidden="true"><CategoryIcon className="h-4 w-4" /></span>
                   <span className="community-category-copy"><strong>{category.name}</strong><small>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</small></span>
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
+                  <Badge variant={category.checkReplacementEnabled ? "success" : "outline"}>{category.checkReplacementEnabled ? "Check replace on" : "Check replace off"}</Badge>
                 </button>
                 <div className="community-category-actions">
                   <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
@@ -4915,6 +4919,20 @@ export default function HomePage() {
               <label className={communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
                 <input className="sr-only" type="radio" name="categoryPeriod" checked={communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: true }))} />
                 <Timer className="h-4 w-4" /><span><strong>Period based</strong><small>Duration is selected per order</small></span>
+              </label>
+            </div>
+            <div className="community-category-rule-heading">
+              <strong>Check Members replacement</strong>
+              <small>Choose whether a Not Live result grants a replacement for this category.</small>
+            </div>
+            <div className="community-category-period-options community-category-replacement-options">
+              <label className={communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
+                <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: true }))} />
+                <RefreshCw className="h-4 w-4" /><span><strong>Enabled</strong><small>Not Live members may be replaced</small></span>
+              </label>
+              <label className={!communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
+                <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={!communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: false }))} />
+                <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check Members is informational only</small></span>
               </label>
             </div>
             <div className="confirm-modal-actions">

@@ -12,6 +12,7 @@ export interface CommunityCategoryAllocation {
   amount: number;
   added?: number;
   isPeriodic?: boolean;
+  checkReplacementEnabled?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
 }
@@ -50,6 +51,7 @@ export interface CreateOrderResponse {
   categoryName?: string;
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
+  categoryCheckReplacementEnabled?: boolean;
   durationMonths?: number | null;
   joinMethod?: CommunityJoinMethod;
   createdAt?: string;
@@ -77,6 +79,7 @@ export interface OrderStatusResponse {
   categoryName?: string;
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
+  categoryCheckReplacementEnabled?: boolean;
   durationMonths?: number | null;
   error?: string;
   canManageDcordTokens?: boolean;

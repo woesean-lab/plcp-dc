@@ -465,6 +465,7 @@ export default function OrderPage() {
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
     if (item.onlinerLive !== false) return false;
     const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    if ((allocation?.checkReplacementEnabled ?? result?.categoryCheckReplacementEnabled) === false) return false;
     const expirationValue = allocation?.expiredAt ?? result?.expiredAt ?? result?.expired_at;
     const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
     if (Number.isFinite(expirationTime) && expirationTime <= Date.now()) return false;
@@ -1215,7 +1216,7 @@ export default function OrderPage() {
                         <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
                       </button>
                       <span id="admin-member-check-description" className="member-check-tooltip" role="tooltip">
-                        Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is Live in Onliner. Members that are not Live can be replaced while their support is active.
+                        Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is Live in Onliner. Not Live members can be replaced when their category allows it and support is active.
                       </span>
                     </span>
                   ) : null}
