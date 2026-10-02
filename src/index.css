@@ -2664,6 +2664,11 @@
     color: var(--app-danger);
   }
 
+  .ui-button-danger-ghost.member-leave-all-button:disabled {
+    color: var(--app-danger);
+    opacity: 0.68;
+  }
+
   .ui-button-danger-ghost:not(:disabled):hover,
   .ui-button-danger-ghost:not(:disabled):focus-visible {
     border-color: var(--app-danger-soft);
