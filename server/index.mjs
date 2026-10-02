@@ -2980,13 +2980,16 @@ function isCommunityResultManagementExpired(order, result) {
 
 const communityOnlinerReplacementCheckMaxAgeMs = 5 * 60_000;
 
-function isCommunityOnlinerReplacementEligible(order, result) {
-  if (isCommunityResultManagementExpired(order, result)) return false;
+function isCommunityOnlinerCheckEnabled(order, result) {
   const categoryId = getCommunityResultStockType(order, result);
   const allocation = Array.isArray(order?.categoryAllocations)
     ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
     : null;
-  if ((allocation?.checkReplacementEnabled ?? order?.categoryCheckReplacementEnabled) === false) return false;
+  return (allocation?.checkReplacementEnabled ?? order?.categoryCheckReplacementEnabled) !== false;
+}
+
+function isCommunityOnlinerReplacementEligible(order, result) {
+  if (isCommunityResultManagementExpired(order, result) || !isCommunityOnlinerCheckEnabled(order, result)) return false;
   if (result?.onlinerLive !== false) return false;
   const checkedAt = new Date(result?.onlinerCheckedAt).getTime();
   return Number.isFinite(checkedAt) && checkedAt >= Date.now() - communityOnlinerReplacementCheckMaxAgeMs;
@@ -4157,10 +4160,14 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId);
   onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "onliner" });
-  const onlinerConfig = await getDiscordOnlinerConfig();
-  const onlinerSnapshot = await getDiscordOnlinerSnapshotForApi(onlinerConfig);
+  const onlinerEnabledUserIds = new Set(order.communityResults
+    .filter((item) => isCommunityOnlinerCheckEnabled(order, item))
+    .map((item) => String(item?.discordUserId ?? ""))
+    .filter(isDiscordGuildId));
+  const onlinerConfig = onlinerEnabledUserIds.size ? await getDiscordOnlinerConfig() : null;
+  const onlinerSnapshot = onlinerConfig ? await getDiscordOnlinerSnapshotForApi(onlinerConfig) : { accounts: [] };
   const onlinerAccountByUserId = new Map();
-  const configuredAccountById = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
+  const configuredAccountById = new Map((onlinerConfig?.accounts ?? []).map((account) => [account.id, account]));
   for (const account of onlinerSnapshot.accounts ?? []) {
     const configuredAccount = configuredAccountById.get(account.id);
     const configuredUserId = String(configuredAccount?.discordUserId ?? "").trim();
@@ -4190,12 +4197,17 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     const batch = discordUserIds.slice(start, start + 10);
     const results = await Promise.all(batch.map(async (discordUserId) => {
       const record = stockByUserId.get(discordUserId);
-      const onlinerAccount = onlinerAccountByUserId.get(discordUserId);
-      const onlinerConnectionState = onlinerAccount
-        ? normalizeDiscordOnlinerConnectionState(onlinerAccount.connectionState)
-        : "disconnected";
-      const onlinerLive = onlinerConfig.enabled !== false && Boolean(onlinerAccount) && onlinerConnectionState === "connected";
-      const onlinerFields = {
+      const checkOnliner = onlinerEnabledUserIds.has(discordUserId);
+      const onlinerAccount = checkOnliner ? onlinerAccountByUserId.get(discordUserId) : null;
+      const onlinerConnectionState = checkOnliner
+        ? onlinerAccount
+          ? normalizeDiscordOnlinerConnectionState(onlinerAccount.connectionState)
+          : "disconnected"
+        : undefined;
+      const onlinerLive = checkOnliner
+        ? onlinerConfig.enabled !== false && Boolean(onlinerAccount) && onlinerConnectionState === "connected"
+        : undefined;
+      const onlinerFields = checkOnliner ? {
         onlinerLive,
         onlinerConnectionState,
         onlinerDetails: onlinerLive
@@ -4206,7 +4218,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
               ? `This member is not Live in Onliner (${onlinerConnectionState}).`
               : "This member is not connected to Onliner.",
         onlinerCheckedAt
-      };
+      } : {};
       let membershipStatus = "unknown";
       let membershipDetails = "Server membership could not be verified right now.";
       try {
@@ -4335,7 +4347,8 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     unknown: [...checks.values()].filter((check) => check.status === "unknown").length,
     onliner: {
       live: [...checks.values()].filter((check) => check.onlinerLive === true).length,
-      offline: [...checks.values()].filter((check) => check.onlinerLive === false).length
+      offline: [...checks.values()].filter((check) => check.onlinerLive === false).length,
+      skipped: discordUserIds.filter((discordUserId) => !onlinerEnabledUserIds.has(discordUserId)).length
     },
     checkedAt
   };
@@ -8713,7 +8726,7 @@ async function hydrateCommunityOrderCategories(order) {
   if (!config.guildId) return order;
   if (communityCategoryDisplayCache.guildId !== config.guildId || communityCategoryDisplayCache.expiresAt <= Date.now()) {
     const result = await pool.query(
-      "SELECT id, name, color_key FROM community_stock_categories WHERE guild_id = $1",
+      "SELECT id, name, color_key, check_replacement_enabled FROM community_stock_categories WHERE guild_id = $1",
       [config.guildId]
     );
     communityCategoryDisplayCache.guildId = config.guildId;
@@ -8725,7 +8738,12 @@ async function hydrateCommunityOrderCategories(order) {
   const categoryAllocations = Array.isArray(order.categoryAllocations)
     ? order.categoryAllocations.map((allocation) => {
         const current = currentCategories.get(String(allocation?.categoryId ?? ""));
-        return current ? { ...allocation, categoryName: current.name, colorKey: current.color_key } : allocation;
+        return current ? {
+          ...allocation,
+          categoryName: current.name,
+          colorKey: current.color_key,
+          checkReplacementEnabled: current.check_replacement_enabled !== false
+        } : allocation;
       })
     : order.categoryAllocations;
   const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
@@ -8735,11 +8753,22 @@ async function hydrateCommunityOrderCategories(order) {
       ? `${categoryAllocations.length} categories`
       : primaryCategory?.name ?? order.categoryName,
     categoryColorKey: primaryCategory?.color_key ?? order.categoryColorKey,
+    categoryCheckReplacementEnabled: primaryCategory
+      ? primaryCategory.check_replacement_enabled !== false
+      : order.categoryCheckReplacementEnabled,
     categoryAllocations,
     communityResults: Array.isArray(order.communityResults)
       ? order.communityResults.map((item) => {
           const current = currentCategories.get(String(item?.categoryId ?? order.categoryId ?? ""));
-          return current ? { ...item, categoryName: current.name, colorKey: current.color_key } : item;
+          if (!current) return item;
+          const next = { ...item, categoryName: current.name, colorKey: current.color_key };
+          if (current.check_replacement_enabled === false) {
+            delete next.onlinerLive;
+            delete next.onlinerConnectionState;
+            delete next.onlinerDetails;
+            delete next.onlinerCheckedAt;
+          }
+          return next;
         })
       : order.communityResults
   };
@@ -8768,8 +8797,9 @@ app.post("/api/community/orders/:uniqid/check-members", requireSession, async (r
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    const order = tracked.rows[0]?.payload;
+    let order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    order = await hydrateCommunityOrderCategories(order);
     const result = await runCommunityOrderMemberCheck(order);
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) {
@@ -9142,11 +9172,12 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const baseConfig = await getCommunityOAuthConfig();
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
-    const order = tracked.rows[0]?.payload;
+    let order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
+    order = await hydrateCommunityOrderCategories(order);
     if (!isAdminRequest && isCommunityOrderManagementExpired(order)) {
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This order's member support period has expired." });
@@ -9324,11 +9355,12 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
 
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
-    const order = tracked.rows[0]?.payload;
+    let order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
+    order = await hydrateCommunityOrderCategories(order);
     if (!isAdminRequest && isCommunityOrderManagementExpired(order)) {
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This order's member support period has expired." });
@@ -9663,8 +9695,9 @@ app.post("/api/public/orders/:uniqid/check-members", async (req, res, next) => {
       return res.status(429).json({ message: `Wait ${Math.ceil((cooldownUntil - Date.now()) / 1000)}s before checking these members again.` });
     }
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
-    const order = tracked.rows[0]?.payload;
+    let order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    order = await hydrateCommunityOrderCategories(order);
     if (isCommunityOrderManagementExpired(order)) {
       return res.status(410).json({ message: "This order's member support period has expired." });
     }

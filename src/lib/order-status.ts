@@ -106,6 +106,24 @@ export function mergeOrderStatus(
   } else if (currentCommunityResults.length && !incomingCommunityResults.length) {
     mergedOrder.communityResults = currentCommunityResults;
   }
+  const incomingAllocations = Array.isArray(incoming.categoryAllocations) ? incoming.categoryAllocations : [];
+  const disabledCategoryIds = new Set(incomingAllocations
+    .filter((allocation) => allocation.checkReplacementEnabled === false)
+    .map((allocation) => allocation.categoryId));
+  const allOnlinerChecksDisabled = !incomingAllocations.length && incoming.categoryCheckReplacementEnabled === false;
+  if ((disabledCategoryIds.size || allOnlinerChecksDisabled) && Array.isArray(mergedOrder.communityResults)) {
+    mergedOrder.communityResults = mergedOrder.communityResults.map((result) => {
+      if (!isTokenResult(result)) return result;
+      const categoryId = String(result.categoryId ?? incoming.categoryId ?? "");
+      if (!allOnlinerChecksDisabled && !disabledCategoryIds.has(categoryId)) return result;
+      const next = { ...result };
+      delete next.onlinerLive;
+      delete next.onlinerConnectionState;
+      delete next.onlinerDetails;
+      delete next.onlinerCheckedAt;
+      return next;
+    });
+  }
 
   const currentResults = Array.isArray(current.dcordResults) ? current.dcordResults : [];
   const incomingResults = Array.isArray(incoming.dcordResults) ? incoming.dcordResults : [];

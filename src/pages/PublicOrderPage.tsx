@@ -672,7 +672,7 @@ export default function PublicOrderPage() {
       const data = await checkPublicCommunityOrderMembers(uniqid);
       setStatus(data.order);
       setCommunityCheckNeedsBot(false);
-      toast.success(`${data.summary.onliner.live} Onliner Live, ${data.summary.onliner.offline} Not Live.`);
+      toast.success(`${data.summary.onliner.live} Onliner Live, ${data.summary.onliner.offline} Not Live${data.summary.onliner.skipped ? ` · ${data.summary.onliner.skipped} skipped by category` : ""}.`);
       } finally {
         window.clearInterval(progressTimer);
       }

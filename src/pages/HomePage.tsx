@@ -315,7 +315,7 @@ function normalizeProxyDraft(value: string) {
 
 function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number]) {
   if (record.status === "failed") return { label: "Inactive", variant: "destructive" as const };
-  return { label: "Connected", variant: "success" as const };
+  return { label: "Active", variant: "success" as const };
 }
 
 function getCommunityOnlinerBadge(record: CommunityAdminStatus["recent"][number]) {
@@ -2939,7 +2939,7 @@ export default function HomePage() {
       <div className="community-admin-progress members-connected-summary">
         <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
         <div><span>Available users</span><strong>{communityVisibleSummary.ready}</strong></div>
-        <div><span>Connected users</span><strong>{communityVisibleSummary.authorized}</strong></div>
+        <div><span>Active users</span><strong>{communityVisibleSummary.authorized}</strong></div>
         <div><span>Inactive users</span><strong>{communityVisibleSummary.failed}</strong></div>
       </div>
 

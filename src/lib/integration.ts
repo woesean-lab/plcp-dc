@@ -190,7 +190,7 @@ export type CommunityMemberCheckResult = {
     active: number;
     inactive: number;
     unknown: number;
-    onliner: { live: number; offline: number };
+    onliner: { live: number; offline: number; skipped: number };
     checkedAt: string;
   };
 };
