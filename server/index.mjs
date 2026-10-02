@@ -2878,7 +2878,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        stock_type = EXCLUDED.stock_type,
        details = EXCLUDED.details,
        joined_at = community_oauth_joins.joined_at,
-       reserved_order_id = NULL,
+       reserved_order_id = community_oauth_joins.reserved_order_id,
        sort_position = community_oauth_joins.sort_position`,
     [sourceGuildId, targetGuildId]
   );
@@ -9163,6 +9163,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members bot before replacing members." });
     }
+    await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
     const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
     if (!botAccess.accessible) {
       await client.query("ROLLBACK");
@@ -9343,6 +9344,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members bot before replacing a member." });
     }
+    await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
     const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
     if (!botAccess.accessible) {
       await client.query("ROLLBACK");
