@@ -47,6 +47,7 @@ const publicCommunityReplaceCooldowns = new Map();
 const publicCommunityCheckCooldownMs = 60 * 1000;
 const publicCommunityCheckCooldowns = new Map();
 const communityOrderMemberCheckProgress = new Map();
+const communityOrderLeaveAllActive = new Set();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 let dcordCircuitOpenUntil = 0;
@@ -2744,6 +2745,57 @@ async function ensureCommunityApplyToJoin(config, guildId) {
   return { changed: true };
 }
 
+async function createCommunityExperimentalServerInvite(config, guildId) {
+  const channelsResult = await requestDiscord(`guilds/${encodeURIComponent(guildId)}/channels`, {
+    headers: { Authorization: `Bot ${config.botToken}` }
+  });
+  if (!channelsResult.response.ok || !Array.isArray(channelsResult.payload)) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord server channel list", channelsResult));
+    error.statusCode = channelsResult.response.status === 403 ? 409 : 502;
+    throw error;
+  }
+
+  const preferredTypes = new Map([[0, 0], [5, 1], [2, 2], [13, 3], [15, 4], [16, 5]]);
+  const candidates = channelsResult.payload
+    .filter((channel) => isDiscordGuildId(String(channel?.id ?? "")) && preferredTypes.has(Number(channel?.type)))
+    .sort((left, right) => (preferredTypes.get(Number(left.type)) ?? 99) - (preferredTypes.get(Number(right.type)) ?? 99));
+  let lastResult = null;
+  for (const channel of candidates) {
+    let result = await requestDiscord(`channels/${encodeURIComponent(channel.id)}/invites`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${config.botToken}`,
+        "Content-Type": "application/json",
+        "X-Audit-Log-Reason": encodeURIComponent("Members 2 Experimental Join delivery invite")
+      },
+      body: JSON.stringify({ max_age: 0, max_uses: 0, temporary: false, unique: true })
+    });
+    if (result.response.status === 429) {
+      const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 5);
+      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+      result = await requestDiscord(`channels/${encodeURIComponent(channel.id)}/invites`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bot ${config.botToken}`,
+          "Content-Type": "application/json",
+          "X-Audit-Log-Reason": encodeURIComponent("Members 2 Experimental Join delivery invite")
+        },
+        body: JSON.stringify({ max_age: 0, max_uses: 0, temporary: false, unique: true })
+      });
+    }
+    lastResult = result;
+    const code = String(result.payload?.code ?? "").trim();
+    if (result.response.ok && extractDiscordInviteCode(code)) return `https://discord.gg/${code}`;
+    if (![403, 404].includes(result.response.status)) break;
+  }
+
+  const error = new Error(lastResult
+    ? getDiscordRequestFailureDetails("Discord delivery invite creation", lastResult)
+    : "The Members bot could not find a channel where it can create the Experimental Join invite.");
+  error.statusCode = [403, 404].includes(Number(lastResult?.response?.status)) ? 409 : 502;
+  throw error;
+}
+
 async function checkDcordBoostMembershipScreening(invite, serverInfo) {
   if (serverInfo?.bypassesJoinApplication === true) {
     return { status: "closed", enabled: false, bypassedByInvite: true };
@@ -4457,6 +4509,144 @@ async function runCommunityOrderMemberCheck(order) {
   }
 }
 
+async function leaveAllCommunityOrderMembers(order) {
+  const orderId = String(order?.uniqid ?? "").trim();
+  const guildId = String(order?.serverId ?? "").trim();
+  const results = Array.isArray(order?.communityResults) ? order.communityResults : [];
+  if (!orderId || !isDiscordGuildId(guildId) || !results.length) {
+    const error = new Error("This Members order has no accounts that can leave the server.");
+    error.statusCode = 409;
+    throw error;
+  }
+  if (communityOrderLeaveAllActive.has(orderId)) {
+    const error = new Error("Leave all is already running for this order.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  communityOrderLeaveAllActive.add(orderId);
+  try {
+    const userIds = [...new Set(results.map((item) => String(item?.discordUserId ?? "")).filter(isDiscordGuildId))];
+    const stock = await pool.query(
+      `SELECT discord_user_id, encrypted_account_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+      [guildId, userIds]
+    );
+    const stockByUserId = new Map(stock.rows.map((member) => [String(member.discord_user_id), member]));
+    const onlinerConfig = await getDiscordOnlinerConfig();
+    const outcomeByUserId = new Map();
+
+    await forEachWithConcurrency(userIds, 6, async (discordUserId) => {
+      const member = stockByUserId.get(discordUserId);
+      if (!member?.encrypted_account_token) {
+        outcomeByUserId.set(discordUserId, { state: "failed", details: "No saved user token exists for this stock account." });
+        return;
+      }
+
+      let accountToken = "";
+      try {
+        accountToken = decryptCredential(member.encrypted_account_token);
+      } catch {
+        outcomeByUserId.set(discordUserId, { state: "failed", details: "The saved user token could not be decrypted." });
+        return;
+      }
+      const onlinerAccount = onlinerConfig.accounts.find((account) => String(account.discordUserId ?? "") === discordUserId)
+        ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
+      const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
+      if (!proxyUrl) {
+        outcomeByUserId.set(discordUserId, { state: "failed", details: "The account has no assigned Onliner proxy; no direct request was sent." });
+        return;
+      }
+
+      try {
+        let leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
+          method: "DELETE",
+          cache: "no-store",
+          headers: { Authorization: accountToken }
+        });
+        if (leave.response.status === 429) {
+          const retrySeconds = Math.min(Math.max(Number(leave.payload?.retry_after) || 1, 1), 10);
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+          leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
+            method: "DELETE",
+            cache: "no-store",
+            headers: { Authorization: accountToken }
+          });
+        }
+        if (leave.response.status === 204) {
+          outcomeByUserId.set(discordUserId, { state: "left", details: "Account left the Discord server through its assigned Onliner proxy." });
+          communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
+        } else if (leave.response.status === 404) {
+          outcomeByUserId.set(discordUserId, { state: "already_left", details: "Account was already outside the Discord server." });
+          communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
+        } else {
+          outcomeByUserId.set(discordUserId, {
+            state: "failed",
+            details: getDiscordRequestFailureDetails("Discord leave server", leave)
+          });
+        }
+      } catch (error) {
+        outcomeByUserId.set(discordUserId, {
+          state: "failed",
+          details: error instanceof Error ? error.message : "The proxied leave request failed."
+        });
+      }
+    });
+
+    const checkedAt = new Date().toISOString();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
+      const current = locked.rows[0]?.payload;
+      if (!current || current.provider !== "community" || !Array.isArray(current.communityResults)) {
+        await client.query("ROLLBACK");
+        const error = new Error("Members order could not be found after the leave operation.");
+        error.statusCode = 404;
+        throw error;
+      }
+      const communityResults = current.communityResults.map((item) => {
+        const outcome = outcomeByUserId.get(String(item?.discordUserId ?? ""));
+        if (!outcome) return item;
+        if (outcome.state === "failed") {
+          return { ...item, membershipDetails: outcome.details, membershipCheckedAt: checkedAt };
+        }
+        return {
+          ...item,
+          membershipStatus: "removed",
+          membershipDetails: outcome.details,
+          membershipCheckedAt: checkedAt,
+          leftServerAt: checkedAt
+        };
+      });
+      const updatedOrder = { ...current, communityResults };
+      await client.query(
+        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+        [orderId, JSON.stringify(updatedOrder)]
+      );
+      await client.query("COMMIT");
+      const outcomes = [...outcomeByUserId.values()];
+      return {
+        order: updatedOrder,
+        summary: {
+          total: userIds.length,
+          left: outcomes.filter((item) => item.state === "left").length,
+          alreadyLeft: outcomes.filter((item) => item.state === "already_left").length,
+          failed: outcomes.filter((item) => item.state === "failed").length
+        }
+      };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  } finally {
+    communityOrderLeaveAllActive.delete(orderId);
+  }
+}
+
 async function addCommunityGuildMember(config, discordUserId, accessToken) {
   let result = await requestDiscord(`guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(discordUserId)}`, {
     method: "PUT",
@@ -5256,7 +5446,7 @@ async function runCommunityOrder(order, members, config) {
       if (joinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
         botPauseIssue = {
           waitingCode: "discord_permissions",
-          details: "Experimental Join needs the Members bot to have Manage Server and Kick Members permissions.",
+          details: "Experimental Join needs the Members bot to have Manage Server, Kick Members, and Create Invite permissions.",
           memberDetails: "Waiting for the Members bot permissions required by Experimental Join."
         };
       }
@@ -5419,7 +5609,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
     if (normalizedJoinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
       botPauseIssue = {
         waitingCode: "discord_permissions",
-        details: "Experimental Join needs the Members bot to have Manage Server and Kick Members permissions.",
+        details: "Experimental Join needs the Members bot to have Manage Server, Kick Members, and Create Invite permissions.",
         memberDetails: "Waiting for the Members bot permissions required by Experimental Join."
       };
     }
@@ -8158,7 +8348,7 @@ function createCommunityBotInvite(config, guildId, joinMethod = "create_invite")
   const query = new URLSearchParams({
     client_id: config.clientId,
     scope: "bot",
-    permissions: normalizedJoinMethod === "experimental_join" ? "34" : "1",
+    permissions: normalizedJoinMethod === "experimental_join" ? "35" : "1",
     guild_id: guildId,
     disable_guild_select: "true"
   });
@@ -8344,20 +8534,19 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       joinMethod
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
-    if (joinMethod === "experimental_join" && serverInfo.bypassesJoinApplication === true) {
-      return res.status(400).json({
-        message: "Experimental Join requires a normal server invite. Create the invite without Bypass Join Application enabled."
-      });
-    }
     let { waitingForBot, waitingDetails, waitingCode, botInvite } = resolvedInvite;
+    let deliveryInvite = String(req.body?.id ?? "").trim();
+    let serverInviteCreatedByBot = false;
     if (joinMethod === "experimental_join" && !waitingForBot && !invitesPaused) {
       try {
         await ensureCommunityApplyToJoin(config, serverInfo.guildId);
+        deliveryInvite = await createCommunityExperimentalServerInvite(config, serverInfo.guildId);
+        serverInviteCreatedByBot = true;
       } catch (error) {
         if (error?.statusCode !== 409) throw error;
         waitingForBot = true;
         waitingCode = "discord_permissions";
-        waitingDetails = error instanceof Error ? error.message : "The Members bot needs Manage Server permission to enable Apply to Join.";
+        waitingDetails = error instanceof Error ? error.message : "The Members bot needs Manage Server, Kick Members, and Create Invite permissions for Experimental Join.";
         botInvite = createCommunityBotInvite(config, serverInfo.guildId, joinMethod);
       }
     }
@@ -8456,7 +8645,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
-      serverInvite: String(req.body?.id ?? "").trim(),
+      serverInvite: deliveryInvite,
+      serverInviteCreatedByBot,
       serverMemberCount: serverInfo.approximateMemberCount,
       amount,
       added: 0,
@@ -8678,9 +8868,15 @@ async function activateWaitingCommunityOrder(order) {
     return paused.rows[0]?.payload ?? invitesPausedOrder;
   }
 
+  let deliveryInvite = order.serverInvite;
+  let serverInviteCreatedByBot = order.serverInviteCreatedByBot === true;
   if (joinMethod === "experimental_join") {
     try {
       await ensureCommunityApplyToJoin(resolved.config, resolved.serverInfo.guildId);
+      if (!serverInviteCreatedByBot) {
+        deliveryInvite = await createCommunityExperimentalServerInvite(resolved.config, resolved.serverInfo.guildId);
+        serverInviteCreatedByBot = true;
+      }
     } catch (error) {
       const waitingOrder = {
         ...order,
@@ -8793,6 +8989,8 @@ async function activateWaitingCommunityOrder(order) {
       details: `${Number(current.added ?? 0)}/${current.amount} members delivered.`,
       serverId: resolved.serverInfo.guildId,
       serverName: resolved.serverInfo.guildName,
+      serverInvite: deliveryInvite,
+      serverInviteCreatedByBot,
       serverMemberCount: resolved.serverInfo.approximateMemberCount,
       communityResults: [...settledResults, ...pendingResults]
     };
@@ -8982,9 +9180,8 @@ function sanitizePublicCommunityOrder(order) {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };
       const state = String(item.state ?? "").toLowerCase();
-      sanitized.details = item.membershipStatus === "removed"
-        ? "This member is no longer in the server."
-        : item.authorizationStatus === "inactive"
+      const removedByOperator = item.membershipStatus === "removed";
+      sanitized.details = item.authorizationStatus === "inactive"
           ? "This member is still in the server, but its OAuth authorization is inactive."
         : state === "joined"
           ? "Member delivered successfully."
@@ -9004,6 +9201,12 @@ function sanitizePublicCommunityOrder(order) {
       delete sanitized.discordUserId;
       delete sanitized.replacementHistoryUserIds;
       delete sanitized.authorizationDetails;
+      if (removedByOperator) {
+        delete sanitized.membershipStatus;
+        delete sanitized.membershipDetails;
+        delete sanitized.membershipCheckedAt;
+        delete sanitized.leftServerAt;
+      }
       return sanitized;
     })
   };
@@ -9103,6 +9306,23 @@ app.post("/api/community/orders/:uniqid/check-members", requireSession, async (r
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
     order = await hydrateCommunityOrderCategories(order);
     const result = await runCommunityOrderMemberCheck(order);
+    res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    if (String(order.status ?? "").toUpperCase() !== "COMPLETED") {
+      return res.status(409).json({ message: "Leave all is available after the Members order is completed." });
+    }
+    const result = await leaveAllCommunityOrderMembers(order);
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
@@ -9503,6 +9723,13 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     if (getCommunityOrderJoinMethod(order) === "experimental_join") {
       try {
         await ensureCommunityApplyToJoin(config, targetGuildId);
+        if (order.serverInviteCreatedByBot !== true) {
+          order = {
+            ...order,
+            serverInvite: await createCommunityExperimentalServerInvite(config, targetGuildId),
+            serverInviteCreatedByBot: true
+          };
+        }
       } catch (error) {
         await client.query("ROLLBACK");
         return res.status(409).json({
@@ -9697,6 +9924,13 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     if (getCommunityOrderJoinMethod(order) === "experimental_join") {
       try {
         await ensureCommunityApplyToJoin(config, targetGuildId);
+        if (order.serverInviteCreatedByBot !== true) {
+          order = {
+            ...order,
+            serverInvite: await createCommunityExperimentalServerInvite(config, targetGuildId),
+            serverInviteCreatedByBot: true
+          };
+        }
       } catch (error) {
         await client.query("ROLLBACK");
         return res.status(409).json({

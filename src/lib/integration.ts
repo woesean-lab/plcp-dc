@@ -210,6 +210,16 @@ export function checkCommunityOrderMembers(uniqid: string) {
   );
 }
 
+export function leaveAllCommunityOrderMembers(uniqid: string) {
+  return requestJson<{
+    order: OrderStatusResponse;
+    summary: { total: number; left: number; alreadyLeft: number; failed: number };
+  }>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/leave-all`,
+    { method: "POST" }
+  );
+}
+
 export function getCommunityOrderMemberCheckProgress(uniqid: string) {
   return requestJson<CommunityMemberCheckProgress>(
     `/api/community/orders/${encodeURIComponent(uniqid)}/check-members/progress`

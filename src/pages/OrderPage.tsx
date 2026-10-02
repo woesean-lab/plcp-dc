@@ -4,10 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -384,6 +384,8 @@ export default function OrderPage() {
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
+  const [leavingAllCommunityMembers, setLeavingAllCommunityMembers] = useState(false);
+  const [showLeaveAllCommunityModal, setShowLeaveAllCommunityModal] = useState(false);
   const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
@@ -510,15 +512,16 @@ export default function OrderPage() {
   }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
       if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
+      if (event.key === "Escape" && !leavingAllCommunityMembers) setShowLeaveAllCommunityModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -795,6 +798,22 @@ export default function OrderPage() {
     } finally {
       setCheckingCommunityMembers(false);
       setCommunityMemberCheckProgress(null);
+    }
+  }
+
+  async function handleLeaveAllCommunityMembers() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || leavingAllCommunityMembers) return;
+    try {
+      setLeavingAllCommunityMembers(true);
+      const data = await leaveAllCommunityOrderMembers(target);
+      setResult(data.order);
+      setShowLeaveAllCommunityModal(false);
+      toast.success(`${data.summary.left} left, ${data.summary.alreadyLeft} already outside${data.summary.failed ? `, ${data.summary.failed} failed` : ""}.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Members could not leave the server.");
+    } finally {
+      setLeavingAllCommunityMembers(false);
     }
   }
 
@@ -1205,20 +1224,26 @@ export default function OrderPage() {
                 </div>
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
-                    <span className="member-check-control">
-                      <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers}>
-                        <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                        {checkingCommunityMembers
-                          ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
-                          : "Check members"}
+                    <>
+                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || !communityMemberResults.length}>
+                        <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                        {leavingAllCommunityMembers ? "Leaving..." : "Leave all"}
                       </Button>
-                      <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="admin-member-check-description">
-                        <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
-                      </button>
-                      <span id="admin-member-check-description" className="member-check-tooltip" role="tooltip">
-                        Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is Live in Onliner. Not Live members can be replaced when their category allows it and support is active.
+                      <span className="member-check-control">
+                        <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
+                          <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                          {checkingCommunityMembers
+                            ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
+                            : "Check members"}
+                        </Button>
+                        <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="admin-member-check-description">
+                          <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
+                        </button>
+                        <span id="admin-member-check-description" className="member-check-tooltip" role="tooltip">
+                          Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is Live in Onliner. Not Live members can be replaced when their category allows it and support is active.
+                        </span>
                       </span>
-                    </span>
+                    </>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
@@ -1320,6 +1345,31 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showLeaveAllCommunityModal ? createPortal(
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !leavingAllCommunityMembers) setShowLeaveAllCommunityModal(false);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="leave-all-members-title" aria-describedby="leave-all-members-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Leave server</p>
+            <h2 id="leave-all-members-title">Make all members leave?</h2>
+            <p id="leave-all-members-description">
+              All {communityMemberResults.length} accounts in this order will leave server {serverId || "-"} using their saved user tokens and assigned Onliner proxies. Accounts without a working proxy or token will be reported as failed and will never fall back to the backend IP.
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={leavingAllCommunityMembers} onClick={() => setShowLeaveAllCommunityModal(false)}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={leavingAllCommunityMembers} onClick={() => void handleLeaveAllCommunityMembers()}>
+                <LogOut className={`h-4 w-4 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                {leavingAllCommunityMembers ? "Leaving..." : "Yes, leave all"}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
       {showExtendCommunityModal ? createPortal(
         <div
           className="confirm-modal-backdrop"

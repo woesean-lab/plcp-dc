@@ -3586,7 +3586,7 @@ export default function HomePage() {
                               {form.communityJoinMethod === "experimental_join" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                  The bot enables Apply to Join and needs Manage Server plus Kick Members to approve requests.
+                                  The bot enables Apply to Join, creates the delivery invite, and needs Manage Server, Kick Members, plus Create Invite.
                                 </p>
                               ) : null}
                             </div>
