@@ -2660,6 +2660,10 @@
     box-shadow: none;
   }
 
+  .ui-button-danger-ghost.member-leave-all-button {
+    color: var(--app-danger);
+  }
+
   .ui-button-danger-ghost:not(:disabled):hover,
   .ui-button-danger-ghost:not(:disabled):focus-visible {
     border-color: var(--app-danger-soft);
