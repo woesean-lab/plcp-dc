@@ -1225,7 +1225,7 @@ export default function OrderPage() {
                 <span className="public-secure-mark gap-2">
                   {normalizedStatus === "COMPLETED" ? (
                     <>
-                      <Button className="member-log-action-button member-leave-all-button" type="button" variant="dangerGhost" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || !communityMemberResults.length}>
+                      <Button className="member-log-action-button" type="button" variant="dangerGhost" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || !communityMemberResults.length}>
                         <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                         {leavingAllCommunityMembers ? "Leaving..." : "Leave all"}
                       </Button>

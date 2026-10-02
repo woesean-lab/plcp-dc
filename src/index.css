@@ -1178,22 +1178,6 @@
     text-transform: none;
   }
 
-  .member-leave-all-button {
-    border-color: transparent;
-    color: #d58a97;
-    background: rgba(255, 117, 136, 0.045);
-    box-shadow: none;
-  }
-
-  .member-leave-all-button:not(:disabled):hover,
-  .member-leave-all-button:not(:disabled):focus-visible {
-    border-color: transparent;
-    color: var(--app-danger);
-    background: rgba(255, 117, 136, 0.09);
-    box-shadow: none;
-    transform: none;
-  }
-
   .member-check-control {
     position: relative;
     display: inline-flex;
