@@ -4496,6 +4496,17 @@ async function submitCommunityJoinRequest(config, inviteValue, member) {
     error.discordJoinRequest = true;
     throw error;
   }
+  const inviteInfo = await resolveDiscordInvite(inviteCode);
+  if (inviteInfo.guildId !== String(config.guildId)) {
+    const error = new Error("The Experimental Join invite no longer points to this order's server.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
+  if (inviteInfo.bypassesJoinApplication === true) {
+    const error = new Error("Experimental Join cannot use an invite with Bypass Join Application enabled.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
   if (!member?.encrypted_account_token) {
     const error = new Error("This stock account has no saved user token. Add the account again before using Experimental Join.");
     error.accountTokenInvalid = true;
@@ -4521,6 +4532,37 @@ async function submitCommunityJoinRequest(config, inviteValue, member) {
   if (currentMember.response.ok) return { alreadyMember: true, response: currentMember.response, payload: currentMember.payload };
   if (currentMember.response.status !== 404) {
     const error = new Error(getDiscordRequestFailureDetails("Discord member check", currentMember));
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  let inviteAcceptance = await requestDiscordThroughProxy(
+    `invites/${encodeURIComponent(inviteCode)}`,
+    proxyUrl,
+    {
+      method: "POST",
+      cache: "no-store",
+      headers: { ...authorization, "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    }
+  );
+  if (inviteAcceptance.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(inviteAcceptance.payload?.retry_after) || 1, 1), 10);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    inviteAcceptance = await requestDiscordThroughProxy(
+      `invites/${encodeURIComponent(inviteCode)}`,
+      proxyUrl,
+      {
+        method: "POST",
+        cache: "no-store",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({})
+      }
+    );
+  }
+  if (!inviteAcceptance.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord invite acceptance", inviteAcceptance));
+    error.accountTokenInvalid = inviteAcceptance.response.status === 401;
     error.discordJoinRequest = true;
     throw error;
   }
@@ -8302,6 +8344,11 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       joinMethod
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
+    if (joinMethod === "experimental_join" && serverInfo.bypassesJoinApplication === true) {
+      return res.status(400).json({
+        message: "Experimental Join requires a normal server invite. Create the invite without Bypass Join Application enabled."
+      });
+    }
     let { waitingForBot, waitingDetails, waitingCode, botInvite } = resolvedInvite;
     if (joinMethod === "experimental_join" && !waitingForBot && !invitesPaused) {
       try {
