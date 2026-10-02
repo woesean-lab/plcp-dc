@@ -2661,12 +2661,14 @@
   }
 
   .ui-button-danger-ghost.member-leave-all-button {
-    color: var(--app-danger);
+    border-color: rgba(255, 117, 136, 0.08);
+    color: #c6929b;
+    background: rgba(255, 117, 136, 0.055);
   }
 
   .ui-button-danger-ghost.member-leave-all-button:disabled {
-    color: var(--app-danger);
-    opacity: 0.68;
+    color: #c6929b;
+    opacity: 0.58;
   }
 
   .ui-button-danger-ghost:not(:disabled):hover,
