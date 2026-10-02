@@ -3194,7 +3194,6 @@ export default function HomePage() {
                 <h1 className="page-title">New order</h1>
                 <p className="app-copy page-copy">Choose a service and configure the delivery details.</p>
               </div>
-              <Badge variant={selectedApiConfigured ? "success" : "destructive"}>{selectedApiConfigured ? "API connected" : "API key required"}</Badge>
             </header>
 
             <section className={`${shell} p-5 sm:p-6`}>
