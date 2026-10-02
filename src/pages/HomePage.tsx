@@ -2913,9 +2913,18 @@ export default function HomePage() {
                   }}
                 >
                   <span className="community-category-icon" aria-hidden="true"><CategoryIcon className="h-4 w-4" /></span>
-                  <span className="community-category-copy"><strong>{category.name}</strong><small>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</small></span>
+                  <span className="community-category-copy">
+                    <strong>{category.name}</strong>
+                    <small>
+                      <span>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</span>
+                      {category.checkReplacementEnabled ? (
+                        <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled">
+                          <RefreshCw aria-hidden="true" />
+                        </span>
+                      ) : null}
+                    </small>
+                  </span>
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
-                  <Badge variant={category.checkReplacementEnabled ? "success" : "outline"}>{category.checkReplacementEnabled ? "Check replace on" : "Check replace off"}</Badge>
                 </button>
                 <div className="community-category-actions">
                   <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>

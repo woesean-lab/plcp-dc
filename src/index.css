@@ -7896,9 +7896,36 @@
 }
 
 .community-category-copy small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin-top: 4px;
   color: var(--app-subtle);
   font-size: 9px;
+}
+
+.community-category-copy small > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.community-category-rule-indicator {
+  display: inline-grid;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  place-items: center;
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--category-tone) 68%, var(--app-muted));
+  background: color-mix(in srgb, var(--category-tone) 7%, transparent);
+  opacity: .72;
+}
+
+.community-category-rule-indicator svg {
+  width: 8px;
+  height: 8px;
 }
 
 .community-category-actions {
