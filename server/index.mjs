@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import https from "node:https";
 import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
@@ -213,6 +214,61 @@ async function requestDiscord(pathname, init = {}) {
   });
   const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
   return { response, payload };
+}
+
+async function requestDiscordThroughProxy(pathname, proxyUrl, init = {}) {
+  const normalizedProxyUrl = normalizeDiscordOnlinerProxyUrl(proxyUrl);
+  if (!normalizedProxyUrl) throw new Error("The account's Onliner proxy is missing or invalid.");
+  const target = new URL(`${discordApiBase}/${String(pathname).replace(/^\/+/, "")}`);
+  const body = init.body == null ? null : String(init.body);
+  const headers = {
+    Accept: "application/json",
+    ...(init.headers ?? {}),
+    ...(body == null ? {} : { "Content-Length": Buffer.byteLength(body) })
+  };
+
+  return new Promise((resolve, reject) => {
+    const request = https.request(target, {
+      method: init.method ?? "GET",
+      headers,
+      agent: createDiscordOnlinerProxyAgent(normalizedProxyUrl)
+    }, (response) => {
+      const chunks = [];
+      let size = 0;
+      response.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > 2 * 1024 * 1024) {
+          request.destroy(new Error("Discord proxy response was too large."));
+          return;
+        }
+        chunks.push(chunk);
+      });
+      response.on("end", () => {
+        const status = Number(response.statusCode) || 0;
+        recordDiscordOnlinerProxyHealth(normalizedProxyUrl, status !== 407);
+        const raw = Buffer.concat(chunks).toString("utf8");
+        let payload = null;
+        if (raw) {
+          try {
+            payload = JSON.parse(raw);
+          } catch {
+            payload = {};
+          }
+        }
+        resolve({
+          response: { status, ok: status >= 200 && status < 300, headers: response.headers },
+          payload
+        });
+      });
+    });
+    request.setTimeout(15_000, () => request.destroy(new Error("Discord proxy request timed out.")));
+    request.on("error", (error) => {
+      recordDiscordOnlinerProxyHealth(normalizedProxyUrl, false);
+      reject(error);
+    });
+    if (body != null) request.write(body);
+    request.end();
+  });
 }
 
 async function forEachWithConcurrency(values, concurrency, task) {
@@ -4422,6 +4478,117 @@ async function addCommunityGuildMember(config, discordUserId, accessToken) {
   return result;
 }
 
+function answerCommunityApplicationField(field) {
+  const answered = { ...field };
+  const fieldType = String(field?.field_type ?? "").toUpperCase();
+  if (fieldType === "TERMS") answered.response = true;
+  if (fieldType === "TEXT_INPUT" || fieldType === "PARAGRAPH") {
+    answered.response = "I would like to join this server.";
+  }
+  if (fieldType === "MULTIPLE_CHOICE") answered.response = 0;
+  return answered;
+}
+
+async function submitCommunityJoinRequest(config, inviteValue, member) {
+  const inviteCode = extractDiscordInviteCode(inviteValue);
+  if (!inviteCode) {
+    const error = new Error("Experimental Join requires a valid Discord invite link.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
+  if (!member?.encrypted_account_token) {
+    const error = new Error("This stock account has no saved user token. Add the account again before using Experimental Join.");
+    error.accountTokenInvalid = true;
+    throw error;
+  }
+
+  const accountToken = decryptCredential(member.encrypted_account_token);
+  const authorization = { Authorization: accountToken };
+  const onlinerConfig = await getDiscordOnlinerConfig();
+  const onlinerAccount = onlinerConfig.accounts.find((account) =>
+    String(account.discordUserId ?? "") === String(member.discord_user_id)
+  ) ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
+  const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
+  if (!proxyUrl) {
+    const error = new Error("Experimental Join requires this account to be connected to Onliner with an assigned proxy.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
+  const currentMember = await requestDiscord(
+    `guilds/${encodeURIComponent(config.guildId)}/members/${encodeURIComponent(member.discord_user_id)}`,
+    { cache: "no-store", headers: { Authorization: `Bot ${config.botToken}` } }
+  );
+  if (currentMember.response.ok) return { alreadyMember: true, response: currentMember.response, payload: currentMember.payload };
+  if (currentMember.response.status !== 404) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord member check", currentMember));
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  const params = new URLSearchParams({ with_guild: "false", invite_code: inviteCode });
+  let verification = await requestDiscordThroughProxy(
+    `guilds/${encodeURIComponent(config.guildId)}/member-verification?${params.toString()}`,
+    proxyUrl,
+    { cache: "no-store", headers: authorization }
+  );
+  if (verification.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(verification.payload?.retry_after) || 1, 1), 10);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    verification = await requestDiscordThroughProxy(
+      `guilds/${encodeURIComponent(config.guildId)}/member-verification?${params.toString()}`,
+      proxyUrl,
+      { cache: "no-store", headers: authorization }
+    );
+  }
+  if (!verification.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord Apply-to-Join form read", verification));
+    error.accountTokenInvalid = verification.response.status === 401;
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  const formFields = Array.isArray(verification.payload?.form_fields)
+    ? verification.payload.form_fields.map(answerCommunityApplicationField)
+    : [];
+  if (!formFields.some((field) => communityApplicationFieldTypes.has(String(field?.field_type ?? "").toUpperCase()))) {
+    const error = new Error("Discord did not return an Apply-to-Join application question for this server.");
+    error.discordJoinRequest = true;
+    throw error;
+  }
+
+  let application = await requestDiscordThroughProxy(
+    `guilds/${encodeURIComponent(config.guildId)}/requests/@me`,
+    proxyUrl,
+    {
+      method: "PUT",
+      cache: "no-store",
+      headers: { ...authorization, "Content-Type": "application/json" },
+      body: JSON.stringify({ version: verification.payload?.version ?? null, form_fields: formFields })
+    }
+  );
+  if (application.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(application.payload?.retry_after) || 1, 1), 10);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    application = await requestDiscordThroughProxy(
+      `guilds/${encodeURIComponent(config.guildId)}/requests/@me`,
+      proxyUrl,
+      {
+        method: "PUT",
+        cache: "no-store",
+        headers: { ...authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ version: verification.payload?.version ?? null, form_fields: formFields })
+      }
+    );
+  }
+  if (!application.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord Apply-to-Join submission", application));
+    error.accountTokenInvalid = application.response.status === 401;
+    error.discordJoinRequest = true;
+    throw error;
+  }
+  return { ...application, alreadyMember: false };
+}
+
 function getDiscordRequestFailureDetails(label, result) {
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
@@ -4457,7 +4624,7 @@ async function approveCommunityJoinRequest(config, discordUserId) {
     ) ?? null;
   }
 
-  if (!request) {
+  if (!request && !lastListResult?.response?.ok) {
     const status = Number(lastListResult?.response?.status ?? 0);
     const message = String(lastListResult?.payload?.message ?? "").trim();
     const error = new Error(
@@ -4473,7 +4640,9 @@ async function approveCommunityJoinRequest(config, discordUserId) {
     throw error;
   }
 
-  const requestId = String(request.id ?? "").trim();
+  // Discord may temporarily return only { total } from the list endpoint.
+  // The legacy user-ID keyed action remains available as a narrow fallback.
+  const requestId = String(request?.id ?? discordUserId ?? "").trim();
   if (!isDiscordGuildId(requestId)) {
     const error = new Error("Discord returned an Apply-to-Join request without a valid request ID.");
     error.discordJoinRequest = true;
@@ -4695,6 +4864,12 @@ async function loadCommunityAccessToken(member, config) {
     throw error;
   }
   return decryptCredential(member.encrypted_access_token);
+}
+
+function isCommunityAccountTokenInvalid(value) {
+  return value?.accountTokenInvalid === true
+    || Number(value?.response?.status ?? value?.status) === 401
+    || Number(value?.payload?.code ?? value?.code) === 40002;
 }
 
 const communityBalancedDelayPattern = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
@@ -4975,57 +5150,67 @@ async function runCommunityOrder(order, members, config) {
     let botPauseIssue = null;
     let memberAuthorizationInvalid = false;
     try {
-      const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
-      if (joinMethod === "experimental_join" && joined.response.status !== 204 && (joined.response.ok || isCommunityMembershipScreeningResponse(joined))) {
-        const approval = await resolveCommunityPendingJoin(config, member.discord_user_id);
-        state = "joined";
-        details = approval.autoApproved
-          ? "Member submitted Apply to Join and was approved by the Members bot."
-          : "Member joined through Apply to Join and is approved.";
-        added += 1;
-      } else if (isCommunityMembershipScreeningResponse(joined)) {
-        if (joined.response.status === 201 && joined.payload?.pending === true) {
+      if (joinMethod === "experimental_join") {
+        const application = await submitCommunityJoinRequest(config, order.serverInvite, member);
+        if (application.alreadyMember) {
+          state = "already_member";
+          details = "User was already in the server.";
+        } else {
+          const approval = await resolveCommunityPendingJoin(config, member.discord_user_id);
           state = "joined";
-          details = "Member joined the server and is pending Discord's server-rules screening.";
+          details = approval.autoApproved
+            ? "Member submitted Apply to Join and was approved by the Members bot."
+            : "Member joined through Apply to Join and is approved.";
           added += 1;
-        } else {
-          state = "blocked";
-          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
         }
-      } else if (joined.response.status === 201) {
-        state = "joined";
-        details = "Member joined the server.";
-        added += 1;
-      } else if (joined.response.status === 204) {
-        state = "already_member";
-        details = "User was already in the server.";
       } else {
-        memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
-        if (isDiscordGuildInviteLimited(joined)) {
-          botPauseIssue = {
-            status: "INVITES PAUSED",
-            waitingCode: "discord_guild_invites_limited",
-            details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
-            memberDetails: "Waiting for Discord to restore new member access for this server."
-          };
+        const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
+        if (isCommunityMembershipScreeningResponse(joined)) {
+          if (joined.response.status === 201 && joined.payload?.pending === true) {
+            state = "joined";
+            details = "Member joined the server and is pending Discord's server-rules screening.";
+            added += 1;
+          } else {
+            state = "blocked";
+            details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+          }
+        } else if (joined.response.status === 201) {
+          state = "joined";
+          details = "Member joined the server.";
+          added += 1;
+        } else if (joined.response.status === 204) {
+          state = "already_member";
+          details = "User was already in the server.";
         } else {
-          const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
-          if (botUnavailableStatus) {
-            const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
-            if (!confirmedAccess.accessible) {
-              botPauseIssue = {
-                waitingCode: `discord_${botUnavailableStatus}`,
-                details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
-                memberDetails: "Waiting for the Members bot to return to the server."
-              };
+          memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
+          if (isDiscordGuildInviteLimited(joined)) {
+            botPauseIssue = {
+              status: "INVITES PAUSED",
+              waitingCode: "discord_guild_invites_limited",
+              details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
+              memberDetails: "Waiting for Discord to restore new member access for this server."
+            };
+          } else {
+            const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
+            if (botUnavailableStatus) {
+              const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
+              if (!confirmedAccess.accessible) {
+                botPauseIssue = {
+                  waitingCode: `discord_${botUnavailableStatus}`,
+                  details: "The Members bot was removed or lost access. Add it to the server to continue delivery.",
+                  memberDetails: "Waiting for the Members bot to return to the server."
+                };
+              }
             }
           }
+          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
         }
-        details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
-      memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(error);
+      memberAuthorizationInvalid = joinMethod === "experimental_join"
+        ? isCommunityAccountTokenInvalid(error)
+        : isDiscordMemberAuthorizationInactive(error);
       if (joinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
         botPauseIssue = {
           waitingCode: "discord_permissions",
@@ -5124,61 +5309,71 @@ async function processCommunityOrder(order, members, config) {
   }
 }
 
-async function processCommunityReplacement(orderId, resultIndex, member, config, joinMethod = "create_invite") {
+async function processCommunityReplacement(orderId, resultIndex, member, config, joinMethod = "create_invite", serverInvite = "") {
   const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod);
   let state = "failed";
   let details = "Replacement member could not be added.";
   let botPauseIssue = null;
   let memberAuthorizationInvalid = false;
   try {
-    const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
-    if (normalizedJoinMethod === "experimental_join" && joined.response.status !== 204 && (joined.response.ok || isCommunityMembershipScreeningResponse(joined))) {
-      const approval = await resolveCommunityPendingJoin(config, member.discord_user_id);
-      state = "joined";
-      details = approval.autoApproved
-        ? "Replacement member submitted Apply to Join and was approved by the Members bot."
-        : "Replacement member joined through Apply to Join and is approved.";
-    } else if (isCommunityMembershipScreeningResponse(joined)) {
-      if (joined.response.status === 201 && joined.payload?.pending === true) {
+    if (normalizedJoinMethod === "experimental_join") {
+      const application = await submitCommunityJoinRequest(config, serverInvite, member);
+      if (application.alreadyMember) {
+        state = "already_member";
+        details = "Replacement user was already in the server.";
+      } else {
+        const approval = await resolveCommunityPendingJoin(config, member.discord_user_id);
         state = "joined";
-        details = "Replacement member joined and is pending Discord's server-rules screening.";
-      } else {
-        state = "blocked";
-        details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+        details = approval.autoApproved
+          ? "Replacement member submitted Apply to Join and was approved by the Members bot."
+          : "Replacement member joined through Apply to Join and is approved.";
       }
-    } else if (joined.response.status === 201) {
-      state = "joined";
-      details = "Replacement member joined the server.";
-    } else if (joined.response.status === 204) {
-      state = "already_member";
-      details = "Replacement user was already in the server.";
     } else {
-      memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
-      if (isDiscordGuildInviteLimited(joined)) {
-        botPauseIssue = {
-          status: "INVITES PAUSED",
-          waitingCode: "discord_guild_invites_limited",
-          details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member account remains active.",
-          memberDetails: "Waiting for Discord to restore new member access for this server."
-        };
+      const joined = await addCommunityGuildMember(config, member.discord_user_id, await loadCommunityAccessToken(member, config));
+      if (isCommunityMembershipScreeningResponse(joined)) {
+        if (joined.response.status === 201 && joined.payload?.pending === true) {
+          state = "joined";
+          details = "Replacement member joined and is pending Discord's server-rules screening.";
+        } else {
+          state = "blocked";
+          details = getDiscordRequestFailureDetails("Discord Add Guild Member", joined);
+        }
+      } else if (joined.response.status === 201) {
+        state = "joined";
+        details = "Replacement member joined the server.";
+      } else if (joined.response.status === 204) {
+        state = "already_member";
+        details = "Replacement user was already in the server.";
       } else {
-        const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
-        if (botUnavailableStatus) {
-          const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
-          if (!confirmedAccess.accessible) {
-            botPauseIssue = {
-              waitingCode: `discord_${botUnavailableStatus}`,
-              details: "The Members bot was removed or lost access. Add it to the server to continue the replacement.",
-              memberDetails: "Waiting for the Members bot to return to the server."
-            };
+        memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(joined);
+        if (isDiscordGuildInviteLimited(joined)) {
+          botPauseIssue = {
+            status: "INVITES PAUSED",
+            waitingCode: "discord_guild_invites_limited",
+            details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member account remains active.",
+            memberDetails: "Waiting for Discord to restore new member access for this server."
+          };
+        } else {
+          const botUnavailableStatus = getCommunityBotUnavailableStatus(joined);
+          if (botUnavailableStatus) {
+            const confirmedAccess = await checkCommunityBotGuildAccess(config, config.guildId).catch(() => ({ accessible: false }));
+            if (!confirmedAccess.accessible) {
+              botPauseIssue = {
+                waitingCode: `discord_${botUnavailableStatus}`,
+                details: "The Members bot was removed or lost access. Add it to the server to continue the replacement.",
+                memberDetails: "Waiting for the Members bot to return to the server."
+              };
+            }
           }
         }
+        details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
       }
-      details = typeof joined.payload?.message === "string" ? joined.payload.message : `Discord request failed (${joined.response.status}).`;
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
-    memberAuthorizationInvalid = isDiscordMemberAuthorizationInactive(error);
+    memberAuthorizationInvalid = normalizedJoinMethod === "experimental_join"
+      ? isCommunityAccountTokenInvalid(error)
+      : isDiscordMemberAuthorizationInactive(error);
     if (normalizedJoinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
       botPauseIssue = {
         waitingCode: "discord_permissions",
@@ -8080,8 +8275,9 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
          AND reserved_order_id IS NULL
+         AND ($4::boolean = FALSE OR encrypted_account_token IS NOT NULL)
          AND NOT (discord_user_id = ANY($3::text[]))`,
-      [config.guildId, stockType, previouslyDeliveredUserIds]
+      [config.guildId, stockType, previouslyDeliveredUserIds, normalizeCommunityJoinMethod(req.query?.joinMethod) === "experimental_join"]
     );
     const available = Number(result.rows[0]?.available ?? 0);
     res.set("Cache-Control", "no-store").json({ available, maximum: available });
@@ -8165,15 +8361,16 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     for (const allocation of requestedAllocations) {
       const category = categoriesById.get(allocation.categoryId);
       const selected = await client.query(
-        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+        `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
            AND reserved_order_id IS NULL
+           AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
            AND NOT (discord_user_id = ANY($4::text[]))
          ORDER BY random()
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds]
+        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, joinMethod === "experimental_join"]
       );
       if (selected.rowCount < allocation.amount) {
         await client.query("ROLLBACK");
@@ -8472,12 +8669,13 @@ async function activateWaitingCommunityOrder(order) {
       .filter(isDiscordGuildId);
 
     let members = (await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+      `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
        FROM community_oauth_joins
         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+         AND ($3::boolean = FALSE OR encrypted_account_token IS NOT NULL)
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, pendingUserIds]
+      [resolved.config.guildId, pendingUserIds, joinMethod === "experimental_join"]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -8505,14 +8703,15 @@ async function activateWaitingCommunityOrder(order) {
         const categoryMissing = Math.max(0, required - (availableByCategory.get(categoryId) ?? 0));
         if (!categoryMissing) continue;
         const extra = await client.query(
-          `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+          `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
            FROM community_oauth_joins
            WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND reserved_order_id IS NULL AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+             AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
              AND NOT (discord_user_id = ANY($4::text[]))
            ORDER BY random()
            LIMIT $3
            FOR UPDATE SKIP LOCKED`,
-          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds)]
+          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds), joinMethod === "experimental_join"]
         );
         for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
         members = [...members, ...extra.rows];
@@ -9304,7 +9503,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     }
     for (const [categoryId, categoryIndices] of indicesByCategory) {
       const replacements = await client.query(
-        `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+        `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
          WHERE guild_id = $1
            AND stock_type = $4
@@ -9312,12 +9511,13 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
            AND reserved_order_id IS NULL
            AND encrypted_access_token IS NOT NULL
            AND access_token_expires_at > NOW()
+           AND ($6::boolean = FALSE OR encrypted_account_token IS NOT NULL)
            AND NOT (discord_user_id = ANY($2::text[]))
            AND NOT (username = ANY($3::text[]))
          ORDER BY random()
          LIMIT $5
          FOR UPDATE SKIP LOCKED`,
-        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length]
+        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length, getCommunityOrderJoinMethod(order) === "experimental_join"]
       );
       replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
     }
@@ -9539,7 +9739,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       ]).filter(Boolean)
     ]));
     const replacement = await client.query(
-      `SELECT discord_user_id, username, avatar_url, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
+      `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
        FROM community_oauth_joins
        WHERE guild_id = $1
          AND stock_type = $4
@@ -9547,12 +9747,13 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
          AND reserved_order_id IS NULL
          AND encrypted_access_token IS NOT NULL
          AND access_token_expires_at > NOW()
+         AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-       [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult)]
+      [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult), getCommunityOrderJoinMethod(order) === "experimental_join"]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -9590,7 +9791,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       publicCommunityReplaceCooldowns.set(publicCooldownKey, Date.now() + publicCommunityReplaceCooldownMs);
     }
 
-    void processCommunityReplacement(uniqid, resultIndex, member, config, getCommunityOrderJoinMethod(order)).catch(async (error) => {
+    void processCommunityReplacement(uniqid, resultIndex, member, config, getCommunityOrderJoinMethod(order), order.serverInvite).catch(async (error) => {
       console.error("Members replacement failed:", error instanceof Error ? error.message : error);
       await pool.query(
         "UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE discord_user_id = $1 AND guild_id = $2",
