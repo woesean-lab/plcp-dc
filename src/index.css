@@ -2103,6 +2103,7 @@
     display: flex;
     min-width: 0;
     align-items: center;
+    flex-wrap: wrap;
     gap: 1rem;
     margin-bottom: 1rem;
     padding-bottom: 1rem;
@@ -2174,6 +2175,22 @@
   .community-join-method-options button:focus-visible {
     outline: 2px solid var(--app-accent-bright);
     outline-offset: 2px;
+  }
+
+  .community-experimental-join-note {
+    display: flex;
+    flex: 1 0 calc(100% - 158px);
+    align-items: center;
+    gap: 6px;
+    margin: 7px 0 0 158px;
+    color: var(--app-muted);
+    font-size: 9px;
+    line-height: 1.45;
+  }
+
+  .community-experimental-join-note svg {
+    flex: 0 0 auto;
+    color: var(--app-accent-bright);
   }
 
   .community-speed-profile-copy {
@@ -9007,6 +9024,11 @@
 
   .community-speed-profile-copy {
     flex-basis: auto;
+  }
+
+  .community-experimental-join-note {
+    flex-basis: 100%;
+    margin-left: 0;
   }
 
   .community-join-method-options,

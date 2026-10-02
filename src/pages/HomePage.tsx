@@ -3571,7 +3571,24 @@ export default function HomePage() {
                                   <span><strong>Create Invite</strong><small>Bot Invite · Create Invite only</small></span>
                                   {form.communityJoinMethod === "create_invite" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={form.communityJoinMethod === "experimental_join"}
+                                  className={form.communityJoinMethod === "experimental_join" ? "is-selected" : ""}
+                                  onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "experimental_join" }))}
+                                >
+                                  <ListChecks className="h-4 w-4" aria-hidden="true" />
+                                  <span><strong>Experimental Join</strong><small>Apply to Join · Bot approves requests</small></span>
+                                  {form.communityJoinMethod === "experimental_join" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                                </button>
                               </div>
+                              {form.communityJoinMethod === "experimental_join" ? (
+                                <p className="community-experimental-join-note">
+                                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                  The bot enables Apply to Join and needs Manage Server plus Kick Members to approve requests.
+                                </p>
+                              ) : null}
                             </div>
 
                             <div className="community-speed-profile-field">
@@ -5032,7 +5049,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
-                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />Create Invite</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>

@@ -229,7 +229,7 @@ export function getPublicCommunityOrderMemberCheckProgress(uniqid: string) {
   );
 }
 
-export async function checkAvailableAmount(service: string, id: string, duration = 1, categoryId?: string, joinMethod?: "create_invite") {
+export async function checkAvailableAmount(service: string, id: string, duration = 1, categoryId?: string, joinMethod?: "create_invite" | "experimental_join") {
   if (isCommunityService(service)) {
     return requestJson<{ available: number; maximum: number }>(
       `/api/community/availability?invite=${encodeURIComponent(id)}&service=${encodeURIComponent(service)}${categoryId ? `&categoryId=${encodeURIComponent(categoryId)}` : ""}${joinMethod ? `&joinMethod=${encodeURIComponent(joinMethod)}` : ""}`
