@@ -4855,47 +4855,25 @@ async function joinCommunityDirectly(config, inviteValue, member) {
     throw error;
   }
 
-  const onlinerRuntime = onlinerAccount?.id ? discordOnlinerRuntimes.get(onlinerAccount.id) : null;
-  const sessionId = String(onlinerRuntime?.sessionId ?? "").trim() || null;
-  const joinContext = Buffer.from(JSON.stringify({ location: "Join Guild" })).toString("base64");
+  const result = await runDcordBoostToken(accountToken, inviteValue, {
+    boost: false,
+    proxy: normalizeDcordProxyForDcord(proxyUrl)
+  });
+  const message = String(result?.boostMessage ?? "").trim();
+  if (result?.success === true && result?.joinStatus === "joined") {
+    return { alreadyMember: false, pendingScreening: false, dcordTaskId: result.dcordTaskId };
+  }
+  if (/already.{0,20}(member|guild|server)|(?:member|guild|server).{0,20}already/i.test(message)) {
+    return { alreadyMember: true, pendingScreening: false, dcordTaskId: result?.dcordTaskId };
+  }
 
-  const requestOptions = {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Authorization: accountToken,
-      "Content-Type": "application/json",
-      Origin: "https://discord.com",
-      Referer: `https://discord.com/invite/${encodeURIComponent(inviteCode)}`,
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-      "X-Context-Properties": joinContext,
-      "X-Discord-Locale": "en-US"
-    },
-    body: JSON.stringify({ session_id: sessionId })
-  };
-  let joined = await requestDiscordThroughProxy(`invites/${encodeURIComponent(inviteCode)}`, proxyUrl, requestOptions);
-  if (joined.response.status === 429) {
-    const retrySeconds = Math.min(Math.max(Number(joined.payload?.retry_after) || 1, 1), 10);
-    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-    joined = await requestDiscordThroughProxy(`invites/${encodeURIComponent(inviteCode)}`, proxyUrl, requestOptions);
-  }
-  if (!joined.response.ok) {
-    const error = new Error(getDiscordRequestFailureDetails("Discord direct invite acceptance", joined));
-    error.accountTokenInvalid = joined.response.status === 401 || Number(joined.payload?.code) === 40002;
-    error.discordDirectJoin = true;
-    throw error;
-  }
-  const joinedGuildId = String(joined.payload?.guild?.id ?? joined.payload?.guild_id ?? "");
-  if (joinedGuildId && joinedGuildId !== String(config.guildId)) {
-    const error = new Error("Discord accepted an invite for a different server than this order.");
-    error.discordDirectJoin = true;
-    throw error;
-  }
-  return {
-    ...joined,
-    alreadyMember: joined.payload?.new_member === false,
-    pendingScreening: joined.payload?.show_verification_form === true
-  };
+  const error = new Error(message || "Dcord could not join this account to the server.");
+  error.statusCode = Number.isFinite(result?.httpStatus) ? result.httpStatus : undefined;
+  error.accountTokenInvalid = /invalid token|unauthorized|authentication|unknown user/i.test(message)
+    || Number(result?.httpStatus) === 401;
+  error.dcordJoin = true;
+  error.dcordTaskId = result?.dcordTaskId;
+  throw error;
 }
 
 function getDiscordRequestFailureDetails(label, result) {
@@ -5479,7 +5457,7 @@ async function runCommunityOrder(order, members, config) {
           state = "joined";
           details = directJoin.pendingScreening
             ? "Member joined directly and is pending Discord's server-rules screening."
-            : "Member joined directly with its user token and assigned Onliner proxy.";
+            : "Member joined through the Dcord Join API with its assigned Onliner proxy.";
           added += 1;
         }
       } else if (joinMethod === "experimental_join") {
@@ -5657,7 +5635,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         state = "joined";
         details = directJoin.pendingScreening
           ? "Replacement member joined directly and is pending Discord's server-rules screening."
-          : "Replacement member joined directly with its user token and assigned Onliner proxy.";
+          : "Replacement member joined through the Dcord Join API with its assigned Onliner proxy.";
       }
     } else if (normalizedJoinMethod === "experimental_join") {
       const application = await submitCommunityJoinRequest(config, serverInvite, member);
@@ -6035,7 +6013,7 @@ async function runDcordBoostToken(token, invite, options = {}) {
   let taskId = options.existingTaskId ? String(options.existingTaskId) : null;
   try {
     if (!taskId) {
-      const createPayload = { type: "join", token: extractDcordApiToken(token), invite, boost: true };
+      const createPayload = { type: "join", token: extractDcordApiToken(token), invite, boost: options.boost !== false };
       const proxy = String(options.proxy ?? "").trim();
       if (proxy) createPayload.proxy = proxy;
       const requestStartedAt = Date.now();
@@ -8614,6 +8592,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
+    if (normalizeCommunityJoinMethod(req.query?.joinMethod) === "directly") await loadDcordApiKey();
     const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, {
       allowWaitingForBot: true,
       joinMethod: req.query?.joinMethod
@@ -8654,6 +8633,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const delay = Number.parseInt(req.body?.delay, 10);
     const speedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
     const joinMethod = normalizeCommunityJoinMethod(req.body?.joinMethod, "create_invite");
+    if (joinMethod === "directly") await loadDcordApiKey();
     const service = String(req.body?.service ?? "");
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });

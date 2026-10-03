@@ -3590,7 +3590,7 @@ export default function HomePage() {
                                   onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "directly" }))}
                                 >
                                   <UserPlus className="h-4 w-4" aria-hidden="true" />
-                                  <span><strong>Directly</strong><small>User token · No bot required</small></span>
+                                  <span><strong>Directly</strong><small>Dcord Join API · No bot required</small></span>
                                   {form.communityJoinMethod === "directly" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
                               </div>
@@ -3603,7 +3603,7 @@ export default function HomePage() {
                               {form.communityJoinMethod === "directly" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                  Accounts accept the invite with their saved user tokens through their assigned Onliner proxies. The bot is not used.
+                                  Dcord Join API delivers each saved user token through that account's assigned Onliner proxy. The bot is not used.
                                 </p>
                               ) : null}
                             </div>
