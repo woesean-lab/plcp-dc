@@ -85,6 +85,7 @@ import {
   saveCommunityConfig,
   syncCommunityAuthorizations,
   transferCommunityAuthorizations,
+  updateCommunityMemberDisplayName,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
   type CommunityBotGuild,
@@ -835,6 +836,9 @@ export default function HomePage() {
   const [communityOnlinerMember, setCommunityOnlinerMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [communityOnlinerRichPresence, setCommunityOnlinerRichPresence] = useState(true);
   const [communityOnlinerActionId, setCommunityOnlinerActionId] = useState<string | null>(null);
+  const [communityDisplayNameMember, setCommunityDisplayNameMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [communityDisplayNameDraft, setCommunityDisplayNameDraft] = useState("");
+  const [savingCommunityDisplayName, setSavingCommunityDisplayName] = useState(false);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
@@ -1026,7 +1030,7 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
+    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember && !communityDisplayNameMember) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1038,13 +1042,14 @@ export default function HomePage() {
       if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
       if (communityAccountCategory && !addingCommunityAccount) closeCommunityAccountModal();
       if (communityOnlinerMember && communityOnlinerActionId === null) closeCommunityOnlinerModal();
+      if (communityDisplayNameMember && !savingCommunityDisplayName) closeCommunityDisplayNameModal();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
+  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, communityDisplayNameMember, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId, savingCommunityDisplayName]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -2066,6 +2071,46 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Member could not be removed from Onliner.");
     } finally {
       setCommunityOnlinerActionId(null);
+    }
+  }
+
+  function beginEditingCommunityDisplayName(record: CommunityAdminStatus["recent"][number]) {
+    if (!record.hasStoredAccountToken) {
+      notifyError("This stock record has no saved user token. Add the account again before changing its display name.");
+      return;
+    }
+    if (!record.onlinerConnected) {
+      notifyError("Connect this account to Onliner first so its assigned proxy can be used.");
+      return;
+    }
+    setCommunityDisplayNameMember(record);
+    setCommunityDisplayNameDraft(record.displayName ?? "");
+  }
+
+  function closeCommunityDisplayNameModal() {
+    setCommunityDisplayNameMember(null);
+    setCommunityDisplayNameDraft("");
+  }
+
+  async function handleSaveCommunityDisplayName(event: FormEvent) {
+    event.preventDefault();
+    const member = communityDisplayNameMember;
+    const displayName = communityDisplayNameDraft.trim();
+    if (!member || savingCommunityDisplayName) return;
+    if (!displayName || displayName.length > 32) {
+      notifyError("Display name must contain between 1 and 32 characters.");
+      return;
+    }
+    try {
+      setSavingCommunityDisplayName(true);
+      const result = await updateCommunityMemberDisplayName(member.id, displayName);
+      await refreshCommunityStatus(communityStockType);
+      closeCommunityDisplayNameModal();
+      notifySuccess(`${result.member.username}'s display name is now ${result.member.displayName}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Display name could not be changed.");
+    } finally {
+      setSavingCommunityDisplayName(false);
     }
   }
 
@@ -3110,6 +3155,19 @@ export default function HomePage() {
                   <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
                 </span>
                 <span className="community-member-row-actions">
+                  <Button
+                    type="button"
+                    size="icon-sm"
+                    variant="secondary"
+                    title={`Change ${record.username} display name`}
+                    aria-label={`Change ${record.username} display name`}
+                    disabled={savingCommunityDisplayName}
+                    onClick={() => beginEditingCommunityDisplayName(record)}
+                  >
+                    {savingCommunityDisplayName && communityDisplayNameMember?.id === record.id
+                      ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      : <Pencil className="h-3.5 w-3.5" aria-hidden="true" />}
+                  </Button>
                   <Button
                     type="button"
                     size="icon-sm"
@@ -4775,6 +4833,36 @@ export default function HomePage() {
               </Button>
             </div>
           </div>
+        </div>
+      ) : null}
+
+      {communityDisplayNameMember ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingCommunityDisplayName) closeCommunityDisplayNameModal(); }}>
+          <form className="confirm-modal community-account-modal" onSubmit={handleSaveCommunityDisplayName} role="dialog" aria-modal="true" aria-labelledby="community-display-name-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Pencil className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Members Stock · Profile</p>
+            <h2 id="community-display-name-title">Change display name</h2>
+            <p>Update <strong>@{communityDisplayNameMember.username}</strong> on Discord using its saved user token and assigned Onliner proxy.</p>
+            <label className="mt-5 grid gap-2 text-left">
+              <span className={fieldLabelClass}>New display name</span>
+              <Input
+                autoFocus
+                value={communityDisplayNameDraft}
+                maxLength={32}
+                placeholder="Discord display name"
+                disabled={savingCommunityDisplayName}
+                onChange={(event) => setCommunityDisplayNameDraft(event.target.value)}
+              />
+              <small className="text-right text-[var(--app-subtle)]">{communityDisplayNameDraft.length}/32</small>
+            </label>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={savingCommunityDisplayName} onClick={closeCommunityDisplayNameModal}>Cancel</Button>
+              <Button type="submit" disabled={savingCommunityDisplayName || !communityDisplayNameDraft.trim()}>
+                {savingCommunityDisplayName ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pencil className="h-4 w-4" />}
+                {savingCommunityDisplayName ? "Saving..." : "Save display name"}
+              </Button>
+            </div>
+          </form>
         </div>
       ) : null}
 

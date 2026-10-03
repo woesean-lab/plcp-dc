@@ -8121,6 +8121,88 @@ app.get("/api/community/members/:discordUserId/account-token", requireSession, a
   }
 });
 
+app.patch("/api/community/members/:discordUserId/display-name", requireSession, async (req, res, next) => {
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    const displayName = String(req.body?.displayName ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) {
+      return res.status(400).json({ message: "A valid Members Stock user is required." });
+    }
+    if (!displayName || displayName.length > 32) {
+      return res.status(400).json({ message: "Display name must contain between 1 and 32 characters." });
+    }
+
+    const communityConfig = await getCommunityOAuthConfig();
+    if (!communityConfig.configured) {
+      return res.status(503).json({ message: "Configure Members Stock before changing display names." });
+    }
+    const memberResult = await pool.query(
+      `SELECT username, display_name, encrypted_account_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = $2
+       LIMIT 1`,
+      [communityConfig.guildId, discordUserId]
+    );
+    const member = memberResult.rows[0];
+    if (!member) return res.status(404).json({ message: "This user is no longer in Members Stock." });
+    if (!member.encrypted_account_token) {
+      return res.status(409).json({ message: "This stock record has no saved user token. Add the account again before changing its display name." });
+    }
+
+    const accountToken = decryptCredential(member.encrypted_account_token);
+    const onlinerConfig = await getDiscordOnlinerConfig();
+    const onlinerAccount = onlinerConfig.accounts.find((account) => account.discordUserId === discordUserId)
+      ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
+    if (!proxyUrl) {
+      return res.status(409).json({ message: "Connect this account to Onliner so its assigned proxy can be used before changing the display name." });
+    }
+
+    const requestOptions = {
+      method: "PATCH",
+      cache: "no-store",
+      headers: { Authorization: accountToken, "Content-Type": "application/json" },
+      body: JSON.stringify({ global_name: displayName })
+    };
+    let updated = await requestDiscordThroughProxy("users/@me", proxyUrl, requestOptions);
+    if (updated.response.status === 429) {
+      const retrySeconds = Math.min(Math.max(Number(updated.payload?.retry_after) || 1, 1), 10);
+      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+      updated = await requestDiscordThroughProxy("users/@me", proxyUrl, requestOptions);
+    }
+    if (!updated.response.ok) {
+      const status = updated.response.status === 401 ? 401 : updated.response.status === 429 ? 429 : 400;
+      return res.status(status).json({ message: getDiscordRequestFailureDetails("Discord display name update", updated) });
+    }
+    if (String(updated.payload?.id ?? "") !== discordUserId) {
+      return res.status(409).json({ message: "Discord returned a different account after the display name update." });
+    }
+
+    const confirmedDisplayName = String(updated.payload?.global_name ?? displayName).trim().slice(0, 32) || displayName;
+    await pool.query(
+      "UPDATE community_oauth_joins SET display_name = $2 WHERE discord_user_id = $1",
+      [discordUserId, confirmedDisplayName]
+    );
+    if (onlinerAccount?.id) {
+      const runtime = discordOnlinerRuntimes.get(onlinerAccount.id);
+      if (runtime?.bot) {
+        runtime.bot = { ...runtime.bot, username: confirmedDisplayName };
+        queueDiscordOnlinerRuntimePersist(runtime);
+      }
+    }
+    res.set("Cache-Control", "no-store").json({
+      updated: true,
+      member: {
+        id: discordUserId,
+        username: String(updated.payload?.username ?? member.username),
+        displayName: confirmedDisplayName
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/community/members/:discordUserId/onliner", requireSession, async (req, res, next) => {
   try {
     const discordUserId = String(req.params.discordUserId ?? "").trim();

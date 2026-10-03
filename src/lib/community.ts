@@ -205,6 +205,16 @@ export function getCommunityMemberAccountToken(discordUserId: string) {
   }).then(parseResponse<{ accountToken: string }>);
 }
 
+export function updateCommunityMemberDisplayName(discordUserId: string, displayName: string) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/display-name`, {
+    method: "PATCH",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ displayName })
+  }).then(parseResponse<{ updated: boolean; member: { id: string; username: string; displayName: string } }>);
+}
+
 export function connectCommunityMemberToOnliner(discordUserId: string, richPresenceEnabled: boolean) {
   return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
     method: "POST",
