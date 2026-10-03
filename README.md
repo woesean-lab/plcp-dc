@@ -16,6 +16,11 @@ npm install
 npm run dev
 ```
 
+Humanizer REST transportu icin Python 3.10+ ve `primp==2.0.1` gerekir. Varsayilan
+Python komutu Windows'ta `python`, diger platformlarda `python3` olur; gerekirse
+`PRIMP_PYTHON` ile tam executable yolu verilebilir. Production image bu ortami
+`/opt/primp-venv` altinda otomatik kurar.
+
 ## Build
 
 ```bash

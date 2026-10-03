@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import https from "node:https";
 import path from "node:path";
-import { execFile as execFileCallback } from "node:child_process";
+import { execFile as execFileCallback, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -14,6 +14,9 @@ const { Pool } = pg;
 const execFile = promisify(execFileCallback);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "../dist");
+const humanizerPrimpScript = path.resolve(__dirname, "humanizer-primp.py");
+const humanizerPrimpPython = process.env.PRIMP_PYTHON
+  ?? (process.platform === "win32" ? "python" : "python3");
 const port = Number(process.env.PORT ?? 3000);
 const isProduction = process.env.NODE_ENV === "production";
 const requestedServiceRole = String(process.env.SERVICE_ROLE ?? "all").trim().toLowerCase();
@@ -347,8 +350,105 @@ function getHumanizerDiscordClientHeaders(token) {
   };
 }
 
+async function requestHumanizerDiscordWithPrimp(pathname, proxyUrl, init = {}) {
+  const normalizedProxyUrl = normalizeDiscordOnlinerProxyUrl(proxyUrl);
+  if (!normalizedProxyUrl) throw new Error("The account's Onliner proxy is missing or invalid.");
+
+  const requestPayload = JSON.stringify({
+    url: `${discordApiBase}/${String(pathname).replace(/^\/+/, "")}`,
+    proxy: normalizedProxyUrl,
+    method: init.method ?? "GET",
+    headers: init.headers ?? {},
+    body: init.body == null ? null : String(init.body)
+  });
+
+  let result;
+  try {
+    result = await new Promise((resolve, reject) => {
+      const child = spawn(humanizerPrimpPython, [humanizerPrimpScript], {
+        stdio: ["pipe", "pipe", "pipe"],
+        windowsHide: true
+      });
+      const stdout = [];
+      const stderr = [];
+      let stdoutSize = 0;
+      let stderrSize = 0;
+      let settled = false;
+      const finish = (error, value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (error) reject(error);
+        else resolve(value);
+      };
+      const timeout = setTimeout(() => {
+        child.kill();
+        finish(new Error("Humanizer primp request timed out."));
+      }, 20_000);
+
+      child.stdout.on("data", (chunk) => {
+        stdoutSize += chunk.length;
+        if (stdoutSize > 3 * 1024 * 1024) {
+          child.kill();
+          finish(new Error("Humanizer primp response was too large."));
+          return;
+        }
+        stdout.push(chunk);
+      });
+      child.stderr.on("data", (chunk) => {
+        stderrSize += chunk.length;
+        if (stderrSize <= 64 * 1024) stderr.push(chunk);
+      });
+      child.once("error", () => finish(new Error("Humanizer primp transport could not be started.")));
+      child.once("close", (code) => {
+        if (settled) return;
+        const raw = Buffer.concat(stdout).toString("utf8").trim();
+        if (code !== 0) {
+          const detail = Buffer.concat(stderr).toString("utf8").trim();
+          const safeDetail = [normalizedProxyUrl, String(init.headers?.Authorization ?? "")]
+            .filter(Boolean)
+            .reduce((value, secret) => value.split(secret).join("[redacted]"), detail);
+          finish(new Error(safeDetail ? `Humanizer primp transport failed: ${safeDetail}` : "Humanizer primp transport failed."));
+          return;
+        }
+        try {
+          finish(null, JSON.parse(raw));
+        } catch {
+          finish(new Error("Humanizer primp transport returned an invalid response."));
+        }
+      });
+      child.stdin.once("error", (error) => finish(error));
+      child.stdin.end(requestPayload);
+    });
+  } catch (error) {
+    recordDiscordOnlinerProxyHealth(normalizedProxyUrl, false);
+    throw error;
+  }
+
+  const status = Number(result?.status) || 0;
+  recordDiscordOnlinerProxyHealth(normalizedProxyUrl, status !== 407);
+  const rawText = String(result?.body ?? "");
+  let payload = null;
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText);
+    } catch {
+      payload = {};
+    }
+  }
+  return {
+    response: {
+      status,
+      ok: status >= 200 && status < 300,
+      headers: result?.headers && typeof result.headers === "object" ? result.headers : {}
+    },
+    payload,
+    rawText
+  };
+}
+
 async function sendHumanizerDiscordRequest(pathname, proxyUrl, token, method, payload) {
-  const perform = () => requestDiscordThroughProxy(pathname, proxyUrl, {
+  const perform = () => requestHumanizerDiscordWithPrimp(pathname, proxyUrl, {
     method,
     headers: getHumanizerDiscordClientHeaders(token),
     body: JSON.stringify(payload)
