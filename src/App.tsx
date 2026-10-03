@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck } from "lucide-react";
+import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck, WandSparkles } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -8,6 +8,7 @@ import BrandPage from "./pages/BrandPage";
 import LandingPage from "./pages/LandingPage";
 import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
+import HumanizerPage from "./pages/HumanizerPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
 
@@ -28,6 +29,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const search = new URLSearchParams(location.search);
   const tab = normalizeAdminTab(search.get("tab"));
   const isOrders = location.pathname.startsWith("/orders");
+  const isHumanizer = location.pathname.startsWith("/humanizer");
   const isManage = location.pathname.startsWith("/manage") || location.pathname.startsWith("/admin");
 
   return (
@@ -95,6 +97,16 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                   <span>Onliner</span>
                 </Link>
                 <Link
+                  to="/humanizer"
+                  aria-label="Humanizer"
+                  title="Humanizer"
+                  className={`app-nav-button ${isHumanizer ? "is-active" : ""}`}
+                  aria-current={isHumanizer ? "page" : undefined}
+                >
+                  <WandSparkles className="h-4 w-4" aria-hidden="true" />
+                  <span>Humanizer</span>
+                </Link>
+                <Link
                   to="/manage?tab=settings"
                   aria-label="Settings"
                   title="Settings"
@@ -137,6 +149,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
             <Route path="/orders" element={<OrderPage />} />
             <Route path="/manage" element={<HomePage />} />
             <Route path="/admin" element={<HomePage />} />
+            <Route path="/humanizer" element={<HumanizerPage />} />
             <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
           </Routes>
         </main>

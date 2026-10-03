@@ -50,6 +50,7 @@ const communityOrderMemberCheckProgress = new Map();
 const communityOrderLeaveAllActive = new Set();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
+const humanizerJobs = new Map();
 let dcordCircuitOpenUntil = 0;
 let dcordCircuitFailureCount = 0;
 
@@ -283,6 +284,151 @@ async function forEachWithConcurrency(values, concurrency, task) {
       await task(values[index], index);
     }
   }));
+}
+
+function getHumanizerJobSnapshot(job) {
+  return {
+    id: job.id,
+    status: job.status,
+    createdAt: job.createdAt,
+    startedAt: job.startedAt,
+    completedAt: job.completedAt,
+    total: job.total,
+    completed: job.completed,
+    succeeded: job.succeeded,
+    failed: job.failed,
+    skipped: job.unavailable ?? [],
+    results: job.results
+  };
+}
+
+function cleanHumanizerLines(value, maximum, maximumLength) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const normalized = [];
+  for (const item of value) {
+    const line = String(item ?? "").trim().slice(0, maximumLength);
+    if (!line || seen.has(line)) continue;
+    seen.add(line);
+    normalized.push(line);
+    if (normalized.length >= maximum) break;
+  }
+  return normalized;
+}
+
+function normalizeHumanizerAvatar(value) {
+  const avatar = String(value ?? "").trim();
+  if (!avatar) return "";
+  if (!/^data:image\/(?:png|jpe?g|webp|gif);base64,[A-Za-z0-9+/=]+$/i.test(avatar)) return "";
+  return avatar.length <= 1_500_000 ? avatar : "";
+}
+
+function getHumanizerDiscordError(result, fallback) {
+  const message = String(result?.payload?.message ?? "").trim();
+  const code = result?.payload?.code;
+  if (result?.payload?.captcha_key) return "Discord requires CAPTCHA verification; this account was skipped.";
+  if (result?.response?.status === 401) return "The saved user token is no longer valid.";
+  if (result?.response?.status === 403) return message || "Discord denied access for this account.";
+  if (result?.response?.status === 429) return "Discord rate limited this profile update.";
+  return `${message || fallback}${code == null ? "" : ` (Discord code ${code})`}`;
+}
+
+async function sendHumanizerDiscordRequest(pathname, proxyUrl, token, method, payload) {
+  const perform = () => requestDiscordThroughProxy(pathname, proxyUrl, {
+    method,
+    headers: {
+      Authorization: token,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  let result = await perform();
+  if (result.response.status === 429) {
+    const retryAfterSeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 15);
+    await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
+    result = await perform();
+  }
+  return result;
+}
+
+async function runHumanizerJob(job, accounts, options) {
+  job.status = "running";
+  job.startedAt = new Date().toISOString();
+  const pick = (values, index) => values.length ? values[index % values.length] : null;
+
+  await forEachWithConcurrency(accounts, options.concurrency, async (account, index) => {
+    const result = job.results[index];
+    result.state = "running";
+    result.startedAt = new Date().toISOString();
+    try {
+      const accountPayload = {};
+      const profilePayload = {};
+      const displayName = pick(options.displayNames, index);
+      const bio = pick(options.bios, index);
+      const pronouns = pick(options.pronouns, index);
+      const avatar = pick(options.avatars, index);
+      if (displayName) accountPayload.global_name = displayName;
+      if (avatar) accountPayload.avatar = avatar;
+      if (bio) profilePayload.bio = bio;
+      if (pronouns) profilePayload.pronouns = pronouns;
+
+      const failures = [];
+      if (Object.keys(accountPayload).length) {
+        const update = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", accountPayload);
+        if (update.response.ok) {
+          if (displayName) result.changed.push("Display name");
+          if (avatar) result.changed.push("Avatar");
+          await pool.query(
+            `UPDATE community_oauth_joins
+             SET display_name = COALESCE($3, display_name),
+                 avatar_url = CASE
+                   WHEN $4::text IS NOT NULL AND NULLIF($5::text, '') IS NOT NULL
+                   THEN 'https://cdn.discordapp.com/avatars/' || discord_user_id || '/' || $5 || '.png?size=128'
+                   ELSE avatar_url
+                 END
+             WHERE guild_id = $1 AND discord_user_id = $2`,
+            [account.guildId, account.id, displayName, avatar || null, String(update.payload?.avatar ?? "")]
+          );
+        } else {
+          failures.push(getHumanizerDiscordError(update, "Account profile could not be updated."));
+        }
+      }
+
+      if (Object.keys(profilePayload).length) {
+        const update = await sendHumanizerDiscordRequest("users/@me/profile", account.proxyUrl, account.token, "PATCH", profilePayload);
+        if (update.response.ok) {
+          if (bio) result.changed.push("Bio");
+          if (pronouns) result.changed.push("Pronouns");
+        } else {
+          failures.push(getHumanizerDiscordError(update, "Extended profile could not be updated."));
+        }
+      }
+
+      if (options.hypesquad) {
+        const houseId = options.hypesquad === "random"
+          ? (index % 3) + 1
+          : ({ bravery: 1, brilliance: 2, balance: 3 })[options.hypesquad];
+        const update = await sendHumanizerDiscordRequest("hypesquad/online", account.proxyUrl, account.token, "POST", { house_id: houseId });
+        if (update.response.ok) result.changed.push("HypeSquad");
+        else failures.push(getHumanizerDiscordError(update, "HypeSquad could not be updated."));
+      }
+
+      result.state = failures.length ? (result.changed.length ? "partial" : "failed") : "success";
+      result.error = failures.join(" ") || null;
+      if (result.state === "success") job.succeeded += 1;
+      else job.failed += 1;
+    } catch (error) {
+      result.state = "failed";
+      result.error = error instanceof Error ? error.message : "Profile update failed.";
+      job.failed += 1;
+    } finally {
+      result.completedAt = new Date().toISOString();
+      job.completed += 1;
+    }
+  });
+
+  job.status = "completed";
+  job.completedAt = new Date().toISOString();
 }
 
 const discordOnlinerSettingKey = "discord_onliner_config";
@@ -6728,6 +6874,189 @@ const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "10mb" }));
 
+app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
+  try {
+    const communityConfig = await getCommunityOAuthConfig();
+    if (!communityConfig.configured) {
+      return res.status(503).json({ message: "Configure Members Stock before using Humanizer." });
+    }
+    const [members, categories, onlinerConfig] = await Promise.all([
+      pool.query(
+        `SELECT discord_user_id, username, display_name, avatar_url, stock_type, status,
+                reserved_order_id, encrypted_account_token IS NOT NULL AS has_token
+         FROM community_oauth_joins
+         WHERE guild_id = $1
+         ORDER BY stock_type ASC, sort_position ASC, authorized_at ASC`,
+        [communityConfig.guildId]
+      ),
+      pool.query(
+        "SELECT id, name FROM community_stock_categories WHERE guild_id = $1 ORDER BY created_at ASC",
+        [communityConfig.guildId]
+      ),
+      getDiscordOnlinerConfig()
+    ]);
+    const categoryNames = new Map(categories.rows.map((category) => [String(category.id), String(category.name)]));
+    const onlinerByUserId = new Map(
+      onlinerConfig.accounts
+        .filter((account) => isDiscordGuildId(account.discordUserId))
+        .map((account) => [String(account.discordUserId), account])
+    );
+    res.set("Cache-Control", "no-store").json({
+      categories: categories.rows.map((category) => ({ id: category.id, name: category.name })),
+      accounts: members.rows.map((member) => {
+        const onliner = onlinerByUserId.get(String(member.discord_user_id));
+        return {
+          id: member.discord_user_id,
+          username: member.username,
+          displayName: member.display_name,
+          avatarUrl: member.avatar_url,
+          categoryId: member.stock_type,
+          categoryName: categoryNames.get(String(member.stock_type)) ?? member.stock_type,
+          status: member.status,
+          reserved: Boolean(member.reserved_order_id),
+          hasToken: member.has_token === true,
+          hasProxy: Boolean(normalizeDiscordOnlinerProxyUrl(onliner?.proxyUrl)),
+          onlinerState: onliner ? "linked" : "not_linked"
+        };
+      })
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/humanizer/jobs/latest", requireSession, (_req, res) => {
+  const latest = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  res.set("Cache-Control", "no-store").json(latest ? getHumanizerJobSnapshot(latest) : null);
+});
+
+app.get("/api/humanizer/jobs/:jobId", requireSession, (req, res) => {
+  const job = humanizerJobs.get(String(req.params.jobId ?? ""));
+  if (!job) return res.status(404).json({ message: "Humanizer job was not found." });
+  res.set("Cache-Control", "no-store").json(getHumanizerJobSnapshot(job));
+});
+
+app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
+  try {
+    const requestedAccountIds = [...new Set(
+      (Array.isArray(req.body?.accountIds) ? req.body.accountIds : [])
+        .map((value) => String(value ?? "").trim())
+        .filter(isDiscordGuildId)
+    )].slice(0, 500);
+    if (!requestedAccountIds.length) {
+      return res.status(400).json({ message: "Select at least one Members Stock account." });
+    }
+
+    const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
+    const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
+    const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
+    const submittedAvatars = Array.isArray(req.body?.avatars) ? req.body.avatars.slice(0, 20) : [];
+    const avatars = submittedAvatars.map(normalizeHumanizerAvatar).filter(Boolean);
+    if (submittedAvatars.length && avatars.length !== submittedAvatars.length) {
+      return res.status(400).json({ message: "One or more avatars are invalid or larger than 1 MB." });
+    }
+    const hypesquad = ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
+      ? req.body.hypesquad
+      : null;
+    const concurrency = Math.min(Math.max(Number.parseInt(req.body?.concurrency, 10) || 1, 1), 5);
+    if (!displayNames.length && !bios.length && !pronouns.length && !avatars.length && !hypesquad) {
+      return res.status(400).json({ message: "Enable at least one profile change and add its content." });
+    }
+
+    const communityConfig = await getCommunityOAuthConfig();
+    if (!communityConfig.configured) {
+      return res.status(503).json({ message: "Configure Members Stock before using Humanizer." });
+    }
+    const [members, onlinerConfig] = await Promise.all([
+      pool.query(
+        `SELECT discord_user_id, username, display_name, avatar_url, stock_type, encrypted_account_token
+         FROM community_oauth_joins
+         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+        [communityConfig.guildId, requestedAccountIds]
+      ),
+      getDiscordOnlinerConfig()
+    ]);
+    const rowsById = new Map(members.rows.map((member) => [String(member.discord_user_id), member]));
+    const onlinerByUserId = new Map(
+      onlinerConfig.accounts
+        .filter((account) => isDiscordGuildId(account.discordUserId))
+        .map((account) => [String(account.discordUserId), account])
+    );
+    const accounts = [];
+    const unavailable = [];
+    for (const accountId of requestedAccountIds) {
+      const member = rowsById.get(accountId);
+      if (!member?.encrypted_account_token) {
+        unavailable.push(`${member?.username ?? accountId}: user token missing`);
+        continue;
+      }
+      let token;
+      try {
+        token = decryptCredential(member.encrypted_account_token);
+      } catch {
+        unavailable.push(`${member.username}: user token could not be decrypted`);
+        continue;
+      }
+      const onliner = onlinerByUserId.get(accountId)
+        ?? onlinerConfig.accounts.find((account) => account.botToken === token);
+      const proxyUrl = normalizeDiscordOnlinerProxyUrl(onliner?.proxyUrl);
+      if (!proxyUrl) {
+        unavailable.push(`${member.username}: assigned Onliner proxy missing`);
+        continue;
+      }
+      accounts.push({
+        id: accountId,
+        username: member.username,
+        displayName: member.display_name,
+        avatarUrl: member.avatar_url,
+        categoryId: member.stock_type,
+        guildId: communityConfig.guildId,
+        token,
+        proxyUrl
+      });
+    }
+    if (!accounts.length) {
+      return res.status(409).json({ message: unavailable[0] ?? "None of the selected accounts can use Humanizer." });
+    }
+
+    const job = {
+      id: crypto.randomUUID(),
+      status: "queued",
+      createdAt: new Date().toISOString(),
+      startedAt: null,
+      completedAt: null,
+      total: accounts.length,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      results: accounts.map((account) => ({
+        id: account.id,
+        username: account.username,
+        displayName: account.displayName,
+        avatarUrl: account.avatarUrl,
+        categoryId: account.categoryId,
+        state: "pending",
+        changed: [],
+        error: null,
+        startedAt: null,
+        completedAt: null
+      })),
+      unavailable
+    };
+    humanizerJobs.set(job.id, job);
+    const staleJobs = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(20);
+    for (const stale of staleJobs) humanizerJobs.delete(stale.id);
+    void runHumanizerJob(job, accounts, { displayNames, bios, pronouns, avatars, hypesquad, concurrency }).catch((error) => {
+      job.status = "failed";
+      job.completedAt = new Date().toISOString();
+      console.error("Humanizer job failed:", error instanceof Error ? error.message : error);
+    });
+    res.status(202).set("Cache-Control", "no-store").json(getHumanizerJobSnapshot(job));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/onliner", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
@@ -8116,88 +8445,6 @@ app.get("/api/community/members/:discordUserId/account-token", requireSession, a
       "Cache-Control": "no-store, no-cache, must-revalidate, private",
       Pragma: "no-cache"
     }).json({ accountToken: decryptCredential(record.encrypted_account_token) });
-  } catch (error) {
-    next(error);
-  }
-});
-
-app.patch("/api/community/members/:discordUserId/display-name", requireSession, async (req, res, next) => {
-  try {
-    const discordUserId = String(req.params.discordUserId ?? "").trim();
-    const displayName = String(req.body?.displayName ?? "").trim();
-    if (!isDiscordGuildId(discordUserId)) {
-      return res.status(400).json({ message: "A valid Members Stock user is required." });
-    }
-    if (!displayName || displayName.length > 32) {
-      return res.status(400).json({ message: "Display name must contain between 1 and 32 characters." });
-    }
-
-    const communityConfig = await getCommunityOAuthConfig();
-    if (!communityConfig.configured) {
-      return res.status(503).json({ message: "Configure Members Stock before changing display names." });
-    }
-    const memberResult = await pool.query(
-      `SELECT username, display_name, encrypted_account_token
-       FROM community_oauth_joins
-       WHERE guild_id = $1 AND discord_user_id = $2
-       LIMIT 1`,
-      [communityConfig.guildId, discordUserId]
-    );
-    const member = memberResult.rows[0];
-    if (!member) return res.status(404).json({ message: "This user is no longer in Members Stock." });
-    if (!member.encrypted_account_token) {
-      return res.status(409).json({ message: "This stock record has no saved user token. Add the account again before changing its display name." });
-    }
-
-    const accountToken = decryptCredential(member.encrypted_account_token);
-    const onlinerConfig = await getDiscordOnlinerConfig();
-    const onlinerAccount = onlinerConfig.accounts.find((account) => account.discordUserId === discordUserId)
-      ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
-    const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
-    if (!proxyUrl) {
-      return res.status(409).json({ message: "Connect this account to Onliner so its assigned proxy can be used before changing the display name." });
-    }
-
-    const requestOptions = {
-      method: "PATCH",
-      cache: "no-store",
-      headers: { Authorization: accountToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ global_name: displayName })
-    };
-    let updated = await requestDiscordThroughProxy("users/@me", proxyUrl, requestOptions);
-    if (updated.response.status === 429) {
-      const retrySeconds = Math.min(Math.max(Number(updated.payload?.retry_after) || 1, 1), 10);
-      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-      updated = await requestDiscordThroughProxy("users/@me", proxyUrl, requestOptions);
-    }
-    if (!updated.response.ok) {
-      const status = updated.response.status === 401 ? 401 : updated.response.status === 429 ? 429 : 400;
-      return res.status(status).json({ message: getDiscordRequestFailureDetails("Discord display name update", updated) });
-    }
-    if (String(updated.payload?.id ?? "") !== discordUserId) {
-      return res.status(409).json({ message: "Discord returned a different account after the display name update." });
-    }
-
-    const confirmedDisplayName = String(updated.payload?.global_name ?? displayName).trim().slice(0, 32) || displayName;
-    await pool.query(
-      "UPDATE community_oauth_joins SET display_name = $2 WHERE discord_user_id = $1",
-      [discordUserId, confirmedDisplayName]
-    );
-    if (onlinerAccount?.id) {
-      const runtime = discordOnlinerRuntimes.get(onlinerAccount.id);
-      if (runtime?.bot) {
-        runtime.bot = { ...runtime.bot, username: confirmedDisplayName };
-        queueDiscordOnlinerRuntimePersist(runtime);
-      }
-    }
-    res.set("Cache-Control", "no-store").json({
-      updated: true,
-      member: {
-        id: discordUserId,
-        username: String(updated.payload?.username ?? member.username),
-        displayName: confirmedDisplayName
-      }
-    });
   } catch (error) {
     next(error);
   }
