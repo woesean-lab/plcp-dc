@@ -3,14 +3,24 @@ import {
   BadgeCheck,
   Check,
   CircleAlert,
+  FileText,
+  Gauge,
   ImageIcon,
+  Images,
+  ListFilter,
   LoaderCircle,
   Play,
   RefreshCw,
   Search,
+  ShieldCheck,
   Sparkles,
+  Type,
+  Upload,
+  UserRoundCheck,
   Users,
-  WandSparkles
+  WandSparkles,
+  Workflow,
+  X
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
@@ -123,6 +133,7 @@ export default function HumanizerPage() {
   const configuredChanges = [splitLines(displayNames).length, splitLines(bios).length, splitLines(pronouns).length, avatarData.length, hypesquad === "none" ? 0 : 1]
     .filter(Boolean).length;
   const progress = job?.total ? Math.round((job.completed / job.total) * 100) : 0;
+  const eligibleAccountCount = (catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).length;
 
   function toggleAccount(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -171,36 +182,40 @@ export default function HumanizerPage() {
   }
 
   return (
-    <div className="grid gap-5 pb-10">
-      <section className="app-panel overflow-hidden p-5 sm:p-6">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex min-w-0 items-start gap-4">
-            <span className="stat-icon mt-0.5"><WandSparkles className="h-5 w-5" /></span>
-            <div>
-              <p className="app-kicker text-[var(--app-accent)]">Account workspace</p>
-              <h1 className="mt-2 text-2xl font-semibold tracking-[-0.035em] sm:text-3xl">Humanizer</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[var(--app-text-secondary)]">
-                Apply controlled profile changes to selected Members Stock accounts through each account&apos;s assigned Onliner proxy.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">{catalog?.accounts.length ?? 0} accounts</Badge>
-            <Badge variant={selectedIds.length ? "success" : "outline"}>{selectedIds.length} selected</Badge>
-            <Button type="button" variant="secondary" size="sm" disabled={refreshing} onClick={() => void loadCatalog(true)}>
-              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
-            </Button>
-          </div>
+    <div className="humanizer-page grid gap-5 pb-10 tab-slide-in">
+      <header className="page-heading humanizer-page-heading">
+        <div>
+          <p className="app-kicker">Account workspace</p>
+          <h1 className="page-title">Humanizer</h1>
+          <p className="app-copy page-copy">Build a profile recipe, choose eligible Members Stock accounts, and apply every update through its assigned Onliner proxy.</p>
         </div>
+        <div className="page-heading-meta humanizer-heading-actions">
+          <Badge variant={eligibleAccountCount ? "success" : "destructive"}>{eligibleAccountCount} ready</Badge>
+          <Badge variant={selectedIds.length ? "default" : "outline"}>{selectedIds.length} selected</Badge>
+          <Button type="button" variant="secondary" size="sm" disabled={refreshing} onClick={() => void loadCatalog(true)}>
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
+          </Button>
+        </div>
+      </header>
+
+      <section className="app-panel humanizer-overview" aria-label="Humanizer overview">
+        <div className="humanizer-overview-lead">
+          <span className="humanizer-overview-icon"><Workflow className="h-5 w-5" /></span>
+          <div><small>Profile operations</small><strong>{jobActive ? "Run in progress" : "Ready to compose"}</strong><span>{jobActive ? `${progress}% complete across ${job?.total ?? 0} accounts` : "One recipe, safely distributed account by account"}</span></div>
+        </div>
+        <div className="humanizer-overview-metric"><small>Available</small><strong>{catalog?.accounts.length ?? 0}</strong><span>Members Stock accounts</span></div>
+        <div className="humanizer-overview-metric"><small>Selected</small><strong>{selectedIds.length}</strong><span>Queued targets</span></div>
+        <div className="humanizer-overview-metric"><small>Recipe</small><strong>{configuredChanges}</strong><span>Configured change types</span></div>
       </section>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(420px,.95fr)]">
-        <section className="app-panel min-w-0 p-5 sm:p-6">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="app-kicker">Target accounts</p>
-              <h2 className="mt-2 text-lg font-semibold">Members Stock selection</h2>
-            </div>
+      <section className="app-panel humanizer-workspace">
+        <div className="humanizer-workspace-grid">
+          <section className="humanizer-pane humanizer-target-pane" aria-labelledby="humanizer-target-title">
+            <header className="humanizer-pane-head">
+              <div className="onliner-section-heading">
+                <span className="onliner-section-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+                <span><strong id="humanizer-target-title">Target accounts</strong><small>Select profiles that have both a saved user token and an assigned proxy.</small></span>
+              </div>
             <Button
               type="button"
               size="xs"
@@ -212,9 +227,9 @@ export default function HumanizerPage() {
             >
               <Check className="h-3.5 w-3.5" /> {allVisibleSelected ? "Clear visible" : "Select eligible"}
             </Button>
-          </div>
+            </header>
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_190px]">
+            <div className="humanizer-filterbar">
             <label className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-muted)]" />
               <Input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or ID" />
@@ -223,9 +238,9 @@ export default function HumanizerPage() {
               <option value="all">All categories</option>
               {(catalog?.categories ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
             </select>
-          </div>
+            </div>
 
-          <div className="humanizer-account-list mt-4">
+            <div className="humanizer-account-list">
             {loading ? (
               <div className="flex min-h-48 items-center justify-center text-sm text-[var(--app-muted)]"><LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Loading accounts…</div>
             ) : visibleAccounts.length ? visibleAccounts.map((account) => {
@@ -253,95 +268,91 @@ export default function HumanizerPage() {
                 <Users className="h-5 w-5" /><span>No account matches this filter.</span>
               </div>
             )}
-          </div>
-        </section>
-
-        <section className="app-panel min-w-0 p-5 sm:p-6">
-          <div>
-            <p className="app-kicker">Profile recipe</p>
-            <h2 className="mt-2 text-lg font-semibold">Choose what changes</h2>
-            <p className="mt-1 text-xs leading-5 text-[var(--app-muted)]">Values are distributed line-by-line across the selected accounts.</p>
-          </div>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-2">
-            <label className="grid gap-2">
-              <span className="field-label">Display names · one per line</span>
-              <textarea className="onliner-game-textarea min-h-28" value={displayNames} maxLength={16_500} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
-              <small className="text-[10px] text-[var(--app-muted)]">{splitLines(displayNames).length} values</small>
-            </label>
-            <label className="grid gap-2">
-              <span className="field-label">Pronouns · one per line</span>
-              <textarea className="onliner-game-textarea min-h-28" value={pronouns} maxLength={20_500} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
-              <small className="text-[10px] text-[var(--app-muted)]">{splitLines(pronouns).length} values</small>
-            </label>
-            <label className="grid gap-2 sm:col-span-2">
-              <span className="field-label">Bios · one per line</span>
-              <textarea className="onliner-game-textarea min-h-28" value={bios} maxLength={95_500} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
-              <small className="text-[10px] text-[var(--app-muted)]">{splitLines(bios).length} values</small>
-            </label>
-          </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="humanizer-option-card">
-              <span className="humanizer-option-icon"><ImageIcon className="h-4 w-4" /></span>
-              <span className="min-w-0 flex-1"><strong>Avatar pool</strong><small>PNG, JPG, WEBP or GIF · max 1 MB</small></span>
-              <Button type="button" variant="secondary" size="xs" onClick={() => avatarInputRef.current?.click()}>Choose</Button>
-              <input ref={avatarInputRef} className="hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleAvatarFiles(event.target.files)} />
             </div>
-            <label className="humanizer-option-card">
-              <span className="humanizer-option-icon"><Sparkles className="h-4 w-4" /></span>
-              <span className="min-w-0 flex-1"><strong>HypeSquad</strong><small>Leave unchanged or assign a house</small></span>
-              <select value={hypesquad} onChange={(event) => setHypesquad(event.target.value as typeof hypesquad)}>
-                <option value="none">Unchanged</option>
-                <option value="random">Balanced rotation</option>
-                <option value="bravery">Bravery</option>
-                <option value="brilliance">Brilliance</option>
-                <option value="balance">Balance</option>
-              </select>
-            </label>
-          </div>
-          {avatarData.length ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {avatarData.map((avatar, index) => (
-                <button key={`${avatar.name}-${index}`} type="button" className="humanizer-file-chip" onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))} title="Remove avatar">
-                  {avatar.name}<span>×</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+            <footer className="humanizer-pane-foot"><ListFilter className="h-3.5 w-3.5" /><span>{visibleAccounts.length} visible · {eligibleVisibleIds.length} eligible</span></footer>
+          </section>
 
-          <div className="mt-5 flex flex-col gap-3 border-t border-[var(--app-border)] pt-5 sm:flex-row sm:items-end sm:justify-between">
-            <label className="grid gap-2">
-              <span className="field-label">Parallel accounts</span>
-              <select className="humanizer-select w-28" value={concurrency} onChange={(event) => setConcurrency(Number(event.target.value))}>
-                {[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}
-              </select>
-            </label>
+          <section className="humanizer-pane humanizer-recipe-pane" aria-labelledby="humanizer-recipe-title">
+            <header className="humanizer-pane-head">
+              <div className="onliner-section-heading">
+                <span className="onliner-section-icon" aria-hidden="true"><WandSparkles className="h-4 w-4" /></span>
+                <span><strong id="humanizer-recipe-title">Profile recipe</strong><small>Each list is distributed line-by-line across the selected accounts.</small></span>
+              </div>
+              <Badge variant={configuredChanges ? "default" : "outline"}>{configuredChanges} active</Badge>
+            </header>
+
+            <div className="humanizer-recipe-grid">
+              <label className="humanizer-recipe-card" data-recipe="name">
+                <span className="humanizer-recipe-head"><i><Type className="h-4 w-4" /></i><span><strong>Display names</strong><small>One value per line</small></span><b>{splitLines(displayNames).length}</b></span>
+                <textarea className="onliner-game-textarea" value={displayNames} maxLength={16_500} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
+              </label>
+              <label className="humanizer-recipe-card" data-recipe="pronouns">
+                <span className="humanizer-recipe-head"><i><UserRoundCheck className="h-4 w-4" /></i><span><strong>Pronouns</strong><small>One value per line</small></span><b>{splitLines(pronouns).length}</b></span>
+                <textarea className="onliner-game-textarea" value={pronouns} maxLength={20_500} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
+              </label>
+              <label className="humanizer-recipe-card is-wide" data-recipe="bio">
+                <span className="humanizer-recipe-head"><i><FileText className="h-4 w-4" /></i><span><strong>Profile bios</strong><small>One value per line</small></span><b>{splitLines(bios).length}</b></span>
+                <textarea className="onliner-game-textarea" value={bios} maxLength={95_500} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
+              </label>
+            </div>
+
+            <div className="humanizer-options-grid">
+              <div className="humanizer-option-card">
+                <span className="humanizer-option-icon"><Images className="h-4 w-4" /></span>
+                <span className="min-w-0 flex-1"><strong>Avatar pool</strong><small>PNG, JPG, WEBP or GIF · max 1 MB</small></span>
+                <Button type="button" variant="secondary" size="xs" onClick={() => avatarInputRef.current?.click()}><Upload className="h-3.5 w-3.5" /> Choose</Button>
+                <input ref={avatarInputRef} className="hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleAvatarFiles(event.target.files)} />
+              </div>
+              <label className="humanizer-option-card">
+                <span className="humanizer-option-icon"><Sparkles className="h-4 w-4" /></span>
+                <span className="min-w-0 flex-1"><strong>HypeSquad</strong><small>Leave unchanged or assign a house</small></span>
+                <select value={hypesquad} onChange={(event) => setHypesquad(event.target.value as typeof hypesquad)}>
+                  <option value="none">Unchanged</option><option value="random">Balanced rotation</option><option value="bravery">Bravery</option><option value="brilliance">Brilliance</option><option value="balance">Balance</option>
+                </select>
+              </label>
+            </div>
+            {avatarData.length ? (
+              <div className="humanizer-file-list">
+                {avatarData.map((avatar, index) => (
+                  <button key={`${avatar.name}-${index}`} type="button" className="humanizer-file-chip" onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))} title="Remove avatar">
+                    <ImageIcon className="h-3.5 w-3.5" />{avatar.name}<X className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </div>
+
+        <footer className="humanizer-commandbar">
+          <div className="humanizer-command-summary">
+            <span className="humanizer-command-icon"><ShieldCheck className="h-4 w-4" /></span>
+            <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "Select at least one eligible account"} · {configuredChanges ? `${configuredChanges} change type${configuredChanges === 1 ? "" : "s"}` : "Recipe is empty"}</small></span>
+          </div>
+          <div className="humanizer-command-actions">
+            <label><span><Gauge className="h-3.5 w-3.5" /> Parallel</span><select className="humanizer-select" value={concurrency} onChange={(event) => setConcurrency(Number(event.target.value))}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
             <Button type="button" disabled={starting || jobActive || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
               {starting || jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {jobActive ? "Humanizer running" : `Run for ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
+              {jobActive ? "Humanizer running" : `Run ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
             </Button>
           </div>
-        </section>
-      </div>
+        </footer>
+      </section>
 
       {job ? (
-        <section className="app-panel overflow-hidden p-5 sm:p-6">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="app-kicker">Latest run</p>
-              <h2 className="mt-2 flex items-center gap-2 text-lg font-semibold">
-                {jobActive ? <LoaderCircle className="h-4 w-4 animate-spin text-[var(--app-accent)]" /> : <BadgeCheck className="h-5 w-5 text-[var(--app-success)]" />}
-                {jobActive ? "Updating account profiles" : "Humanizer run finished"}
-              </h2>
+        <section className="app-panel humanizer-run-panel">
+          <header className="humanizer-run-head">
+            <div className="onliner-section-heading">
+              <span className="onliner-section-icon" aria-hidden="true">{jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}</span>
+              <span><strong>{jobActive ? "Updating account profiles" : "Latest run completed"}</strong><small>{jobActive ? "Results update live as each account finishes." : "Review every applied change and account requiring attention."}</small></span>
             </div>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">{job.completed}/{job.total} processed</Badge>
               <Badge variant="success">{job.succeeded} successful</Badge>
               {job.failed ? <Badge variant="destructive">{job.failed} attention</Badge> : null}
             </div>
-          </div>
-          <div className="humanizer-progress mt-4"><span style={{ width: `${progress}%` }} /></div>
+          </header>
+          <div className="humanizer-run-body">
+          <div className="humanizer-progress"><span style={{ width: `${progress}%` }} /></div>
           {job.skipped?.length ? (
             <div className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--app-danger)_8%,transparent)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
               <strong className="text-[var(--app-danger)]">{job.skipped.length} account skipped before start.</strong>{" "}
@@ -365,6 +376,7 @@ export default function HumanizerPage() {
                 <Badge variant={result.state === "success" ? "success" : result.state === "failed" || result.state === "partial" ? "destructive" : "secondary"}>{result.state}</Badge>
               </div>
             ))}
+          </div>
           </div>
         </section>
       ) : null}
