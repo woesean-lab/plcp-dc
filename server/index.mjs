@@ -333,13 +333,24 @@ function getHumanizerDiscordError(result, fallback) {
   return `${message || fallback}${code == null ? "" : ` (Discord code ${code})`}`;
 }
 
+function getHumanizerDiscordClientHeaders(token) {
+  const properties = createDiscordGatewayIdentityProperties();
+  return {
+    Authorization: token,
+    "Content-Type": "application/json",
+    "User-Agent": properties.browser_user_agent,
+    "Accept-Language": `${properties.system_locale},en;q=0.9`,
+    "X-Discord-Locale": properties.system_locale,
+    "X-Discord-Timezone": "Europe/Istanbul",
+    "X-Debug-Options": "bugReporterEnabled",
+    "X-Super-Properties": Buffer.from(JSON.stringify(properties)).toString("base64")
+  };
+}
+
 async function sendHumanizerDiscordRequest(pathname, proxyUrl, token, method, payload) {
   const perform = () => requestDiscordThroughProxy(pathname, proxyUrl, {
     method,
-    headers: {
-      Authorization: token,
-      "Content-Type": "application/json"
-    },
+    headers: getHumanizerDiscordClientHeaders(token),
     body: JSON.stringify(payload)
   });
   let result = await perform();
@@ -359,6 +370,17 @@ function isHumanizerUnknownSession(result) {
 }
 
 async function runWithHumanizerGatewaySession(account, task) {
+  const existingRuntime = account.onlinerAccountId
+    ? discordOnlinerRuntimes.get(account.onlinerAccountId)
+    : null;
+  if (
+    existingRuntime?.state === "connected"
+    && existingRuntime.socket?.readyState === WebSocket.OPEN
+    && existingRuntime.bot?.id === account.id
+  ) {
+    return task();
+  }
+
   const gatewayUrl = "wss://gateway.discord.gg/?v=10&encoding=json";
   const socket = new WebSocket(gatewayUrl, {
     agent: createDiscordOnlinerProxyAgent(account.proxyUrl)
@@ -433,8 +455,26 @@ async function runWithHumanizerGatewaySession(account, task) {
 }
 
 async function sendHumanizerAccountUpdate(account, payload) {
+  if (payload.avatar) {
+    try {
+      const updated = await runWithHumanizerGatewaySession(account, () =>
+        sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", payload)
+      );
+      return { result: updated, gatewayFallback: true };
+    } catch (error) {
+      return {
+        result: {
+          response: { status: 0, ok: false, headers: {} },
+          payload: { message: error instanceof Error ? error.message : "Onliner Gateway session failed." },
+          rawText: ""
+        },
+        gatewayFallback: true
+      };
+    }
+  }
+
   const direct = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", payload);
-  if (!payload.avatar || !isHumanizerUnknownSession(direct)) return { result: direct, gatewayFallback: false };
+  if (!isHumanizerUnknownSession(direct)) return { result: direct, gatewayFallback: false };
   try {
     const retried = await runWithHumanizerGatewaySession(account, () =>
       sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", payload)
@@ -7114,6 +7154,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
         avatarUrl: member.avatar_url,
         categoryId: member.stock_type,
         guildId: communityConfig.guildId,
+        onlinerAccountId: onliner?.id ?? null,
         token,
         proxyUrl
       });

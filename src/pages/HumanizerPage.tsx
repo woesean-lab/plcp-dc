@@ -358,7 +358,7 @@ export default function HumanizerPage() {
                   <strong className="block truncate text-sm">{result.displayName || result.username}</strong>
                   <small className="mt-1 block text-[11px] leading-4 text-[var(--app-muted)]">
                     {result.error || (result.changed.length
-                      ? `${result.changed.join(" · ")}${result.gatewayFallback ? " · Gateway fallback used" : ""}`
+                      ? `${result.changed.join(" · ")}${result.gatewayFallback ? " · Onliner Gateway session used" : ""}`
                       : result.state === "pending" ? "Waiting" : "No changes reported")}
                   </small>
                 </span>
