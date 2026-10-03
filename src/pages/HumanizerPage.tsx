@@ -357,7 +357,9 @@ export default function HumanizerPage() {
                 <span className="min-w-0 flex-1">
                   <strong className="block truncate text-sm">{result.displayName || result.username}</strong>
                   <small className="mt-1 block text-[11px] leading-4 text-[var(--app-muted)]">
-                    {result.error || (result.changed.length ? result.changed.join(" · ") : result.state === "pending" ? "Waiting" : "No changes reported")}
+                    {result.error || (result.changed.length
+                      ? `${result.changed.join(" · ")}${result.gatewayFallback ? " · Gateway fallback used" : ""}`
+                      : result.state === "pending" ? "Waiting" : "No changes reported")}
                   </small>
                 </span>
                 <Badge variant={result.state === "success" ? "success" : result.state === "failed" || result.state === "partial" ? "destructive" : "secondary"}>{result.state}</Badge>

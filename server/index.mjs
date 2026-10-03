@@ -351,6 +351,107 @@ async function sendHumanizerDiscordRequest(pathname, proxyUrl, token, method, pa
   return result;
 }
 
+function isHumanizerUnknownSession(result) {
+  return result?.response?.status === 400 && (
+    Number(result?.payload?.code) === 10020
+    || /unknown session/i.test(String(result?.payload?.message ?? ""))
+  );
+}
+
+async function runWithHumanizerGatewaySession(account, task) {
+  const gatewayUrl = "wss://gateway.discord.gg/?v=10&encoding=json";
+  const socket = new WebSocket(gatewayUrl, {
+    agent: createDiscordOnlinerProxyAgent(account.proxyUrl)
+  });
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let heartbeatTimer = null;
+    let sequence = null;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(readyTimeout);
+      if (heartbeatTimer) clearInterval(heartbeatTimer);
+      try { socket.close(1000, "Humanizer profile update complete"); } catch {}
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const readyTimeout = setTimeout(() => finish(new Error("Gateway session fallback timed out.")), 20_000);
+
+    socket.on("message", (raw) => {
+      let payload;
+      try {
+        payload = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (Number.isInteger(payload?.s)) sequence = payload.s;
+      if (payload?.op === 10) {
+        const heartbeatInterval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
+        heartbeatTimer = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 1, d: sequence }));
+        }, heartbeatInterval);
+        heartbeatTimer.unref?.();
+        socket.send(JSON.stringify({
+          op: 2,
+          d: {
+            token: account.token,
+            properties: createDiscordGatewayIdentityProperties(),
+            presence: { status: "online", since: 0, activities: [], afk: false },
+            capabilities: 16381,
+            compress: false,
+            client_state: createDiscordGatewayClientState()
+          }
+        }));
+        return;
+      }
+      if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ op: 1, d: sequence }));
+        return;
+      }
+      if (payload?.op === 9) {
+        finish(new Error("Discord rejected the temporary Gateway session."));
+        return;
+      }
+      if (payload?.op === 0 && payload?.t === "READY") {
+        Promise.resolve(task()).then(
+          (value) => finish(null, value),
+          (error) => finish(error instanceof Error ? error : new Error("Gateway profile retry failed."))
+        );
+      }
+    });
+    socket.once("error", (error) => finish(error));
+    socket.once("unexpected-response", (_request, response) => {
+      finish(new Error(`Gateway session fallback was rejected (HTTP ${response.statusCode ?? "unknown"}).`));
+      response.resume();
+    });
+    socket.once("close", (code) => {
+      if (!settled) finish(new Error(`Gateway session fallback closed before READY (code ${code}).`));
+    });
+  });
+}
+
+async function sendHumanizerAccountUpdate(account, payload) {
+  const direct = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", payload);
+  if (!payload.avatar || !isHumanizerUnknownSession(direct)) return { result: direct, gatewayFallback: false };
+  try {
+    const retried = await runWithHumanizerGatewaySession(account, () =>
+      sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", payload)
+    );
+    return { result: retried, gatewayFallback: true };
+  } catch (error) {
+    return {
+      result: {
+        response: { status: 0, ok: false, headers: {} },
+        payload: { message: error instanceof Error ? error.message : "Gateway session fallback failed." },
+        rawText: ""
+      },
+      gatewayFallback: true
+    };
+  }
+}
+
 async function runHumanizerJob(job, accounts, options) {
   job.status = "running";
   job.startedAt = new Date().toISOString();
@@ -374,7 +475,9 @@ async function runHumanizerJob(job, accounts, options) {
 
       const failures = [];
       if (Object.keys(accountPayload).length) {
-        const update = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.token, "PATCH", accountPayload);
+        const accountUpdate = await sendHumanizerAccountUpdate(account, accountPayload);
+        const update = accountUpdate.result;
+        result.gatewayFallback = accountUpdate.gatewayFallback;
         if (update.response.ok) {
           if (displayName) result.changed.push("Display name");
           if (avatar) result.changed.push("Avatar");
@@ -7038,6 +7141,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
         state: "pending",
         changed: [],
         error: null,
+        gatewayFallback: false,
         startedAt: null,
         completedAt: null
       })),

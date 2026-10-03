@@ -26,6 +26,7 @@ export type HumanizerResult = {
   state: "pending" | "running" | "success" | "partial" | "failed";
   changed: string[];
   error: string | null;
+  gatewayFallback: boolean;
   startedAt: string | null;
   completedAt: string | null;
 };
