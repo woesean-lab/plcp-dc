@@ -19,7 +19,9 @@ npm run dev
 Humanizer REST transportu icin Python 3.10+ ve `primp==2.0.1` gerekir. Varsayilan
 Python komutu Windows'ta `python`, diger platformlarda `python3` olur; gerekirse
 `PRIMP_PYTHON` ile tam executable yolu verilebilir. Production image bu ortami
-`/opt/primp-venv` altinda otomatik kurar.
+`/opt/primp-venv` altinda otomatik kurar. Humanizer, Discord web build numarasini
+dinamik olarak cozer ve REST isteklerinde `/experiments` fingerprint'i ile Apex
+installation kimligini kullanir; Onliner Gateway IDENTIFY akisi bundan bagimsizdir.
 
 ## Build
 

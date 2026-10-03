@@ -54,6 +54,8 @@ const communityOrderLeaveAllActive = new Set();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 const humanizerJobs = new Map();
+const humanizerDiscordIdentityCache = new Map();
+let humanizerDiscordBuildCache = { value: null, expiresAt: 0, pending: null };
 let dcordCircuitOpenUntil = 0;
 let dcordCircuitFailureCount = 0;
 
@@ -336,8 +338,11 @@ function getHumanizerDiscordError(result, fallback) {
   return `${message || fallback}${code == null ? "" : ` (Discord code ${code})`}`;
 }
 
-function getHumanizerDiscordClientHeaders(token) {
-  const properties = createDiscordGatewayIdentityProperties();
+function getHumanizerDiscordClientHeaders(token, identity) {
+  const properties = {
+    ...createDiscordGatewayIdentityProperties(),
+    client_build_number: identity.buildNumber
+  };
   return {
     Authorization: token,
     "Content-Type": "application/json",
@@ -346,80 +351,155 @@ function getHumanizerDiscordClientHeaders(token) {
     "X-Discord-Locale": properties.system_locale,
     "X-Discord-Timezone": "Europe/Istanbul",
     "X-Debug-Options": "bugReporterEnabled",
-    "X-Super-Properties": Buffer.from(JSON.stringify(properties)).toString("base64")
+    "X-Super-Properties": Buffer.from(JSON.stringify(properties)).toString("base64"),
+    "X-Fingerprint": identity.fingerprint,
+    "X-Installation-ID": identity.installationId
   };
+}
+
+async function runHumanizerPrimpHelper(payload, secrets = []) {
+  const requestPayload = JSON.stringify(payload);
+  return new Promise((resolve, reject) => {
+    const child = spawn(humanizerPrimpPython, [humanizerPrimpScript], {
+      stdio: ["pipe", "pipe", "pipe"],
+      windowsHide: true
+    });
+    const stdout = [];
+    const stderr = [];
+    let stdoutSize = 0;
+    let stderrSize = 0;
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const timeout = setTimeout(() => {
+      child.kill();
+      finish(new Error("Humanizer primp request timed out."));
+    }, payload.operation === "identity" ? 35_000 : 20_000);
+
+    child.stdout.on("data", (chunk) => {
+      stdoutSize += chunk.length;
+      if (stdoutSize > 3 * 1024 * 1024) {
+        child.kill();
+        finish(new Error("Humanizer primp response was too large."));
+        return;
+      }
+      stdout.push(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderrSize += chunk.length;
+      if (stderrSize <= 64 * 1024) stderr.push(chunk);
+    });
+    child.once("error", () => finish(new Error("Humanizer primp transport could not be started.")));
+    child.once("close", (code) => {
+      if (settled) return;
+      const raw = Buffer.concat(stdout).toString("utf8").trim();
+      if (code !== 0) {
+        const detail = Buffer.concat(stderr).toString("utf8").trim();
+        const safeDetail = secrets
+          .filter(Boolean)
+          .map(String)
+          .reduce((value, secret) => value.split(secret).join("[redacted]"), detail);
+        finish(new Error(safeDetail ? `Humanizer primp transport failed: ${safeDetail}` : "Humanizer primp transport failed."));
+        return;
+      }
+      try {
+        finish(null, JSON.parse(raw));
+      } catch {
+        finish(new Error("Humanizer primp transport returned an invalid response."));
+      }
+    });
+    child.stdin.once("error", (error) => finish(error));
+    child.stdin.end(requestPayload);
+  });
+}
+
+async function getHumanizerDiscordBuildNumber(proxyUrl) {
+  if (humanizerDiscordBuildCache.value && humanizerDiscordBuildCache.expiresAt > Date.now()) {
+    return humanizerDiscordBuildCache.value;
+  }
+  if (!humanizerDiscordBuildCache.pending) {
+    humanizerDiscordBuildCache.pending = runHumanizerPrimpHelper({
+      operation: "build-number",
+      proxy: proxyUrl
+    }, [proxyUrl]).then((result) => {
+      const buildNumber = Number(result?.buildNumber);
+      if (!Number.isInteger(buildNumber) || buildNumber <= 0) {
+        throw new Error("Discord returned an invalid client build number.");
+      }
+      humanizerDiscordBuildCache = {
+        value: buildNumber,
+        expiresAt: Date.now() + 15 * 60_000,
+        pending: null
+      };
+      return buildNumber;
+    }).catch((error) => {
+      humanizerDiscordBuildCache.pending = null;
+      throw error;
+    });
+  }
+  return humanizerDiscordBuildCache.pending;
+}
+
+async function getHumanizerDiscordIdentity(proxyUrl, token) {
+  const normalizedProxyUrl = normalizeDiscordOnlinerProxyUrl(proxyUrl);
+  if (!normalizedProxyUrl) throw new Error("The account's Onliner proxy is missing or invalid.");
+  const cacheKey = crypto.createHash("sha256").update(`${normalizedProxyUrl}\0${token}`).digest("hex");
+  const cached = humanizerDiscordIdentityCache.get(cacheKey);
+  const buildNumber = await getHumanizerDiscordBuildNumber(normalizedProxyUrl);
+  if (cached?.expiresAt > Date.now()) return { ...cached, buildNumber };
+  if (cached?.pending) return cached.pending;
+
+  const properties = {
+    ...createDiscordGatewayIdentityProperties(),
+    client_build_number: buildNumber
+  };
+  const pending = runHumanizerPrimpHelper({
+    operation: "identity",
+    proxy: normalizedProxyUrl,
+    properties
+  }, [normalizedProxyUrl, token]).then((result) => {
+    const fingerprint = String(result?.fingerprint ?? "").trim();
+    const installationId = String(result?.installationId ?? "").trim();
+    const discordIdentityPattern = /^\d+\.[A-Za-z0-9_-]+$/;
+    if (!discordIdentityPattern.test(fingerprint) || !discordIdentityPattern.test(installationId)) {
+      throw new Error("Discord experiments did not return a fingerprint and installation ID.");
+    }
+    const identity = {
+      fingerprint,
+      installationId,
+      buildNumber,
+      expiresAt: Date.now() + 12 * 60 * 60_000,
+      pending: null
+    };
+    humanizerDiscordIdentityCache.set(cacheKey, identity);
+    return identity;
+  }).catch((error) => {
+    humanizerDiscordIdentityCache.delete(cacheKey);
+    throw error;
+  });
+  humanizerDiscordIdentityCache.set(cacheKey, { pending, expiresAt: 0 });
+  return pending;
 }
 
 async function requestHumanizerDiscordWithPrimp(pathname, proxyUrl, init = {}) {
   const normalizedProxyUrl = normalizeDiscordOnlinerProxyUrl(proxyUrl);
   if (!normalizedProxyUrl) throw new Error("The account's Onliner proxy is missing or invalid.");
 
-  const requestPayload = JSON.stringify({
-    url: `${discordApiBase}/${String(pathname).replace(/^\/+/, "")}`,
-    proxy: normalizedProxyUrl,
-    method: init.method ?? "GET",
-    headers: init.headers ?? {},
-    body: init.body == null ? null : String(init.body)
-  });
-
   let result;
   try {
-    result = await new Promise((resolve, reject) => {
-      const child = spawn(humanizerPrimpPython, [humanizerPrimpScript], {
-        stdio: ["pipe", "pipe", "pipe"],
-        windowsHide: true
-      });
-      const stdout = [];
-      const stderr = [];
-      let stdoutSize = 0;
-      let stderrSize = 0;
-      let settled = false;
-      const finish = (error, value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        if (error) reject(error);
-        else resolve(value);
-      };
-      const timeout = setTimeout(() => {
-        child.kill();
-        finish(new Error("Humanizer primp request timed out."));
-      }, 20_000);
-
-      child.stdout.on("data", (chunk) => {
-        stdoutSize += chunk.length;
-        if (stdoutSize > 3 * 1024 * 1024) {
-          child.kill();
-          finish(new Error("Humanizer primp response was too large."));
-          return;
-        }
-        stdout.push(chunk);
-      });
-      child.stderr.on("data", (chunk) => {
-        stderrSize += chunk.length;
-        if (stderrSize <= 64 * 1024) stderr.push(chunk);
-      });
-      child.once("error", () => finish(new Error("Humanizer primp transport could not be started.")));
-      child.once("close", (code) => {
-        if (settled) return;
-        const raw = Buffer.concat(stdout).toString("utf8").trim();
-        if (code !== 0) {
-          const detail = Buffer.concat(stderr).toString("utf8").trim();
-          const safeDetail = [normalizedProxyUrl, String(init.headers?.Authorization ?? "")]
-            .filter(Boolean)
-            .reduce((value, secret) => value.split(secret).join("[redacted]"), detail);
-          finish(new Error(safeDetail ? `Humanizer primp transport failed: ${safeDetail}` : "Humanizer primp transport failed."));
-          return;
-        }
-        try {
-          finish(null, JSON.parse(raw));
-        } catch {
-          finish(new Error("Humanizer primp transport returned an invalid response."));
-        }
-      });
-      child.stdin.once("error", (error) => finish(error));
-      child.stdin.end(requestPayload);
-    });
+    result = await runHumanizerPrimpHelper({
+      operation: "request",
+      url: `${discordApiBase}/${String(pathname).replace(/^\/+/, "")}`,
+      proxy: normalizedProxyUrl,
+      method: init.method ?? "GET",
+      headers: init.headers ?? {},
+      body: init.body == null ? null : String(init.body)
+    }, [normalizedProxyUrl, String(init.headers?.Authorization ?? "")]);
   } catch (error) {
     recordDiscordOnlinerProxyHealth(normalizedProxyUrl, false);
     throw error;
@@ -448,9 +528,10 @@ async function requestHumanizerDiscordWithPrimp(pathname, proxyUrl, init = {}) {
 }
 
 async function sendHumanizerDiscordRequest(pathname, proxyUrl, token, method, payload) {
+  const identity = await getHumanizerDiscordIdentity(proxyUrl, token);
   const perform = () => requestHumanizerDiscordWithPrimp(pathname, proxyUrl, {
     method,
-    headers: getHumanizerDiscordClientHeaders(token),
+    headers: getHumanizerDiscordClientHeaders(token, identity),
     body: JSON.stringify(payload)
   });
   let result = await perform();
