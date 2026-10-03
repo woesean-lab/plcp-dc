@@ -26,6 +26,7 @@ import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   getHumanizerCatalog,
   getHumanizerJob,
@@ -55,6 +56,144 @@ function readAvatar(file: File) {
     reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
     reader.readAsDataURL(file);
   });
+}
+
+function HumanizerPageSkeleton() {
+  return (
+    <div
+      className="humanizer-page grid gap-5 pb-10 tab-slide-in"
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+      aria-label="Loading Humanizer"
+    >
+      <span className="sr-only">Loading Humanizer</span>
+
+      <header className="page-heading humanizer-page-heading" aria-hidden="true">
+        <div className="min-w-0 flex-1">
+          <Skeleton className="mb-3 h-3 w-32" />
+          <Skeleton className="h-10 w-52" />
+          <Skeleton className="mt-3 h-4 w-full max-w-[680px]" />
+        </div>
+        <div className="page-heading-meta humanizer-heading-actions">
+          <Skeleton className="h-6 w-20 rounded-full" />
+          <Skeleton className="h-6 w-24 rounded-full" />
+          <Skeleton className="h-8 w-24" />
+        </div>
+      </header>
+
+      <section className="app-panel humanizer-overview" aria-hidden="true">
+        <div className="humanizer-overview-lead">
+          <Skeleton className="h-10 w-10 shrink-0 rounded-xl" />
+          <div className="min-w-0 flex-1">
+            <Skeleton className="h-3 w-28" />
+            <Skeleton className="mt-2 h-5 w-40" />
+            <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+          </div>
+        </div>
+        {[0, 1, 2].map((item) => (
+          <div key={item} className="humanizer-overview-metric">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="mt-2 h-7 w-10" />
+            <Skeleton className="mt-2 h-3 w-28 max-w-full" />
+          </div>
+        ))}
+      </section>
+
+      <section className="app-panel humanizer-workspace" aria-hidden="true">
+        <div className="humanizer-workspace-grid">
+          <section className="humanizer-pane humanizer-target-pane">
+            <header className="humanizer-pane-head">
+              <div className="onliner-section-heading min-w-0 flex-1">
+                <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+                </span>
+              </div>
+              <Skeleton className="h-7 w-28" />
+            </header>
+
+            <div className="humanizer-filterbar">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+
+            <div className="humanizer-account-list">
+              {Array.from({ length: 7 }, (_, index) => (
+                <div key={index} className="humanizer-account-row">
+                  <Skeleton className="h-4 w-4 shrink-0 rounded" />
+                  <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                  <span className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-36 max-w-full" />
+                    <Skeleton className="mt-2 h-3 w-48 max-w-full" />
+                  </span>
+                  <Skeleton className="h-6 w-14 shrink-0 rounded-full" />
+                </div>
+              ))}
+            </div>
+            <footer className="humanizer-pane-foot"><Skeleton className="h-3 w-32" /></footer>
+          </section>
+
+          <section className="humanizer-pane humanizer-recipe-pane">
+            <header className="humanizer-pane-head">
+              <div className="onliner-section-heading min-w-0 flex-1">
+                <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+                <span className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="mt-2 h-3 w-64 max-w-full" />
+                </span>
+              </div>
+              <Skeleton className="h-6 w-16 rounded-full" />
+            </header>
+
+            <div className="humanizer-recipe-grid">
+              {["name", "pronouns", "bio"].map((recipe) => (
+                <div key={recipe} className={`humanizer-recipe-card ${recipe === "bio" ? "is-wide" : ""}`}>
+                  <span className="humanizer-recipe-head">
+                    <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                    <span className="min-w-0 flex-1">
+                      <Skeleton className="h-4 w-24" />
+                      <Skeleton className="mt-2 h-3 w-28" />
+                    </span>
+                    <Skeleton className="h-5 w-5 rounded-full" />
+                  </span>
+                  <Skeleton className="h-[82px] w-full" />
+                </div>
+              ))}
+            </div>
+
+            <div className="humanizer-options-grid">
+              {[0, 1].map((item) => (
+                <div key={item} className="humanizer-option-card">
+                  <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                  <span className="min-w-0 flex-1">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="mt-2 h-3 w-40 max-w-full" />
+                  </span>
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        <footer className="humanizer-commandbar">
+          <div className="humanizer-command-summary min-w-0 flex-1">
+            <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
+            <span className="min-w-0 flex-1">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="mt-2 h-3 w-56 max-w-full" />
+            </span>
+          </div>
+          <div className="humanizer-command-actions">
+            <Skeleton className="h-10 w-28" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </footer>
+      </section>
+    </div>
+  );
 }
 
 export default function HumanizerPage() {
@@ -180,6 +319,8 @@ export default function HumanizerPage() {
       setStarting(false);
     }
   }
+
+  if (loading && !catalog) return <HumanizerPageSkeleton />;
 
   return (
     <div className="humanizer-page grid gap-5 pb-10 tab-slide-in">
