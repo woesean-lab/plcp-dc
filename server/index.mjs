@@ -258,7 +258,8 @@ async function requestDiscordThroughProxy(pathname, proxyUrl, init = {}) {
         }
         resolve({
           response: { status, ok: status >= 200 && status < 300, headers: response.headers },
-          payload
+          payload,
+          rawText: raw
         });
       });
     });
@@ -4854,11 +4855,23 @@ async function joinCommunityDirectly(config, inviteValue, member) {
     throw error;
   }
 
+  const onlinerRuntime = onlinerAccount?.id ? discordOnlinerRuntimes.get(onlinerAccount.id) : null;
+  const sessionId = String(onlinerRuntime?.sessionId ?? "").trim() || null;
+  const joinContext = Buffer.from(JSON.stringify({ location: "Join Guild" })).toString("base64");
+
   const requestOptions = {
     method: "POST",
     cache: "no-store",
-    headers: { Authorization: accountToken, "Content-Type": "application/json" },
-    body: JSON.stringify({})
+    headers: {
+      Authorization: accountToken,
+      "Content-Type": "application/json",
+      Origin: "https://discord.com",
+      Referer: `https://discord.com/invite/${encodeURIComponent(inviteCode)}`,
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+      "X-Context-Properties": joinContext,
+      "X-Discord-Locale": "en-US"
+    },
+    body: JSON.stringify({ session_id: sessionId })
   };
   let joined = await requestDiscordThroughProxy(`invites/${encodeURIComponent(inviteCode)}`, proxyUrl, requestOptions);
   if (joined.response.status === 429) {
@@ -4888,7 +4901,13 @@ async function joinCommunityDirectly(config, inviteValue, member) {
 function getDiscordRequestFailureDetails(label, result) {
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
-  const message = String(result?.payload?.message ?? "Discord rejected the request.").trim();
+  const captchaRequired = Boolean(result?.payload?.captcha_sitekey)
+    || (Array.isArray(result?.payload?.captcha_key) && result.payload.captcha_key.length > 0);
+  const rawMessage = String(result?.payload?.message ?? "").trim();
+  const rawText = String(result?.rawText ?? "").replace(/\s+/g, " ").trim();
+  const message = captchaRequired
+    ? "Discord requires CAPTCHA verification for this account or network."
+    : rawMessage || (rawText && rawText !== "{}" ? rawText.slice(0, 300) : "Discord rejected the request.");
   return `${label} failed (HTTP ${status || "unknown"}${code ? `, Discord code ${code}` : ""}): ${message}`;
 }
 
