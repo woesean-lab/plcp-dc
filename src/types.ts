@@ -3,7 +3,7 @@ export type BoostServiceType = "DCORD-BOOSTS";
 export type ServiceType = CommunityServiceType | BoostServiceType;
 export type OrderProvider = "community" | "dcord";
 export type BoostDuration = 1 | 3;
-export type CommunityJoinMethod = "create_invite" | "experimental_join";
+export type CommunityJoinMethod = "create_invite" | "experimental_join" | "directly";
 
 export interface CommunityCategoryAllocation {
   categoryId: string;

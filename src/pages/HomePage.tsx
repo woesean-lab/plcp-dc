@@ -3557,7 +3557,7 @@ export default function HomePage() {
                             <div className="community-join-method-field">
                               <div className="community-speed-profile-copy">
                                 <span className="boost-order-label">Join method</span>
-                                <small>Choose the bot setup used for this order.</small>
+                                <small>Choose how accounts join this order.</small>
                               </div>
                               <div className="community-join-method-options" role="radiogroup" aria-label="Join method">
                                 <button
@@ -3582,11 +3582,28 @@ export default function HomePage() {
                                   <span><strong>Experimental Join</strong><small>Apply to Join · Bot approves requests</small></span>
                                   {form.communityJoinMethod === "experimental_join" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
+                                <button
+                                  type="button"
+                                  role="radio"
+                                  aria-checked={form.communityJoinMethod === "directly"}
+                                  className={form.communityJoinMethod === "directly" ? "is-selected" : ""}
+                                  onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "directly" }))}
+                                >
+                                  <UserPlus className="h-4 w-4" aria-hidden="true" />
+                                  <span><strong>Directly</strong><small>User token · No bot required</small></span>
+                                  {form.communityJoinMethod === "directly" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+                                </button>
                               </div>
                               {form.communityJoinMethod === "experimental_join" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
                                   The bot enables Apply to Join, creates the delivery invite, and needs Manage Server, Kick Members, plus Create Invite.
+                                </p>
+                              ) : null}
+                              {form.communityJoinMethod === "directly" ? (
+                                <p className="community-experimental-join-note">
+                                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Accounts accept the invite with their saved user tokens through their assigned Onliner proxies. The bot is not used.
                                 </p>
                               ) : null}
                             </div>
@@ -5049,7 +5066,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
-                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : "Create Invite"}</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>

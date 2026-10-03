@@ -4829,6 +4829,62 @@ async function submitCommunityJoinRequest(config, inviteValue, member) {
   return { ...application, alreadyMember: false };
 }
 
+async function joinCommunityDirectly(config, inviteValue, member) {
+  const inviteCode = extractDiscordInviteCode(inviteValue);
+  if (!inviteCode) {
+    const error = new Error("Directly requires a valid Discord invite link.");
+    error.discordDirectJoin = true;
+    throw error;
+  }
+  if (!member?.encrypted_account_token) {
+    const error = new Error("This stock account has no saved user token. Add the account again before using Directly.");
+    error.accountTokenInvalid = true;
+    throw error;
+  }
+
+  const accountToken = decryptCredential(member.encrypted_account_token);
+  const onlinerConfig = await getDiscordOnlinerConfig();
+  const onlinerAccount = onlinerConfig.accounts.find((account) =>
+    String(account.discordUserId ?? "") === String(member.discord_user_id)
+  ) ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
+  const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
+  if (!proxyUrl) {
+    const error = new Error("Directly requires this account to have an assigned Onliner proxy.");
+    error.discordDirectJoin = true;
+    throw error;
+  }
+
+  const requestOptions = {
+    method: "POST",
+    cache: "no-store",
+    headers: { Authorization: accountToken, "Content-Type": "application/json" },
+    body: JSON.stringify({})
+  };
+  let joined = await requestDiscordThroughProxy(`invites/${encodeURIComponent(inviteCode)}`, proxyUrl, requestOptions);
+  if (joined.response.status === 429) {
+    const retrySeconds = Math.min(Math.max(Number(joined.payload?.retry_after) || 1, 1), 10);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    joined = await requestDiscordThroughProxy(`invites/${encodeURIComponent(inviteCode)}`, proxyUrl, requestOptions);
+  }
+  if (!joined.response.ok) {
+    const error = new Error(getDiscordRequestFailureDetails("Discord direct invite acceptance", joined));
+    error.accountTokenInvalid = joined.response.status === 401 || Number(joined.payload?.code) === 40002;
+    error.discordDirectJoin = true;
+    throw error;
+  }
+  const joinedGuildId = String(joined.payload?.guild?.id ?? joined.payload?.guild_id ?? "");
+  if (joinedGuildId && joinedGuildId !== String(config.guildId)) {
+    const error = new Error("Discord accepted an invite for a different server than this order.");
+    error.discordDirectJoin = true;
+    throw error;
+  }
+  return {
+    ...joined,
+    alreadyMember: joined.payload?.new_member === false,
+    pendingScreening: joined.payload?.show_verification_form === true
+  };
+}
+
 function getDiscordRequestFailureDetails(label, result) {
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
@@ -5121,7 +5177,11 @@ function normalizeCommunitySpeedProfile(value) {
 
 function normalizeCommunityJoinMethod(value, fallback = "create_invite") {
   const method = String(value ?? fallback).trim().toLowerCase();
-  return method === "experimental_join" ? "experimental_join" : "create_invite";
+  return ["experimental_join", "directly"].includes(method) ? method : "create_invite";
+}
+
+function communityJoinMethodUsesAccountToken(value) {
+  return ["experimental_join", "directly"].includes(normalizeCommunityJoinMethod(value));
 }
 
 function getCommunityOrderJoinMethod(order) {
@@ -5252,6 +5312,7 @@ async function runCommunityOrder(order, members, config) {
   }
 
   async function detectMissingCommunityBot() {
+    if (joinMethod === "directly") return null;
     try {
       const access = await checkCommunityBotDirectGuildAccess(config, config.guildId);
       if (access.accessible) return null;
@@ -5362,7 +5423,7 @@ async function runCommunityOrder(order, members, config) {
 
   for (let index = 0; index < members.length; index += 1) {
     const member = members[index];
-    const missingBotStatus = await detectMissingCommunityBot();
+    const missingBotStatus = joinMethod === "directly" ? null : await detectMissingCommunityBot();
     if (missingBotStatus) {
       await pauseForCommunityBotIssue(index, {
         waitingCode: `discord_${missingBotStatus}`,
@@ -5390,7 +5451,19 @@ async function runCommunityOrder(order, members, config) {
     let botPauseIssue = null;
     let memberAuthorizationInvalid = false;
     try {
-      if (joinMethod === "experimental_join") {
+      if (joinMethod === "directly") {
+        const directJoin = await joinCommunityDirectly(config, order.serverInvite, member);
+        if (directJoin.alreadyMember) {
+          state = "already_member";
+          details = "User was already in the server.";
+        } else {
+          state = "joined";
+          details = directJoin.pendingScreening
+            ? "Member joined directly and is pending Discord's server-rules screening."
+            : "Member joined directly with its user token and assigned Onliner proxy.";
+          added += 1;
+        }
+      } else if (joinMethod === "experimental_join") {
         const application = await submitCommunityJoinRequest(config, order.serverInvite, member);
         if (application.alreadyMember) {
           state = "already_member";
@@ -5448,7 +5521,7 @@ async function runCommunityOrder(order, members, config) {
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
-      memberAuthorizationInvalid = joinMethod === "experimental_join"
+      memberAuthorizationInvalid = communityJoinMethodUsesAccountToken(joinMethod)
         ? isCommunityAccountTokenInvalid(error)
         : isDiscordMemberAuthorizationInactive(error);
       if (joinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
@@ -5556,7 +5629,18 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
   let botPauseIssue = null;
   let memberAuthorizationInvalid = false;
   try {
-    if (normalizedJoinMethod === "experimental_join") {
+    if (normalizedJoinMethod === "directly") {
+      const directJoin = await joinCommunityDirectly(config, serverInvite, member);
+      if (directJoin.alreadyMember) {
+        state = "already_member";
+        details = "Replacement user was already in the server.";
+      } else {
+        state = "joined";
+        details = directJoin.pendingScreening
+          ? "Replacement member joined directly and is pending Discord's server-rules screening."
+          : "Replacement member joined directly with its user token and assigned Onliner proxy.";
+      }
+    } else if (normalizedJoinMethod === "experimental_join") {
       const application = await submitCommunityJoinRequest(config, serverInvite, member);
       if (application.alreadyMember) {
         state = "already_member";
@@ -5611,7 +5695,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
-    memberAuthorizationInvalid = normalizedJoinMethod === "experimental_join"
+    memberAuthorizationInvalid = communityJoinMethodUsesAccountToken(normalizedJoinMethod)
       ? isCommunityAccountTokenInvalid(error)
       : isDiscordMemberAuthorizationInactive(error);
     if (normalizedJoinMethod === "experimental_join" && error?.discordJoinRequest && /permission|cannot verify|server access/i.test(details)) {
@@ -8384,7 +8468,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
   const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod);
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
-    const error = new Error("Configure the Members bot before creating an order.");
+    const error = new Error("Configure the Members integration before creating an order.");
     error.statusCode = 503;
     throw error;
   }
@@ -8395,6 +8479,23 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     throw error;
   }
   const serverInfo = await resolveDiscordInvite(invite);
+  if (normalizedJoinMethod === "directly") {
+    const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
+    if (serverInfo.guildId !== config.guildId) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        await copyCommunityStockForGuild(client, config.guildId, directConfig.guildId);
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+    return { config: directConfig, invite, serverInfo, waitingForBot: false };
+  }
   let targetGuildAccess = null;
   if (serverInfo.guildId !== config.guildId) {
     const invitedGuildAccess = await checkCommunityBotGuildAccess(config, serverInfo.guildId);
@@ -8513,11 +8614,12 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
-       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+       WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
          AND reserved_order_id IS NULL
-         AND ($4::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+         AND (($4::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+           OR ($4::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
          AND NOT (discord_user_id = ANY($3::text[]))`,
-      [config.guildId, stockType, previouslyDeliveredUserIds, normalizeCommunityJoinMethod(req.query?.joinMethod) === "experimental_join"]
+      [config.guildId, stockType, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(req.query?.joinMethod)]
     );
     const available = Number(result.rows[0]?.available ?? 0);
     res.set("Cache-Control", "no-store").json({ available, maximum: available });
@@ -8607,14 +8709,15 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       const selected = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
-         WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
+         WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
            AND reserved_order_id IS NULL
-           AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+           AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+             OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
            AND NOT (discord_user_id = ANY($4::text[]))
          ORDER BY random()
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, joinMethod === "experimental_join"]
+        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
       );
       if (selected.rowCount < allocation.amount) {
         await client.query("ROLLBACK");
@@ -8757,7 +8860,7 @@ async function activateWaitingCommunityOrder(order) {
   const latestConfig = await getCommunityOAuthConfig();
   const targetGuildId = String(order.serverId ?? "").trim();
   const joinMethod = getCommunityOrderJoinMethod(order);
-  if (latestConfig.configured && isDiscordGuildId(targetGuildId)) {
+  if (joinMethod !== "directly" && latestConfig.configured && isDiscordGuildId(targetGuildId)) {
     const currentBotInvite = createCommunityBotInvite(latestConfig, targetGuildId, joinMethod);
     if (order.botInvite !== currentBotInvite || order.botApplicationId !== latestConfig.clientId) {
       order = {
@@ -8791,7 +8894,7 @@ async function activateWaitingCommunityOrder(order) {
   let storedGuildAccess = null;
   const waitingCode = String(order.waitingCode ?? "");
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
-  const shouldUseStoredGuildRecovery = targetConfig.configured && (
+  const shouldUseStoredGuildRecovery = joinMethod !== "directly" && targetConfig.configured && (
     activationStatus === "RECOVERING"
     || ["server_restart_resume", "inventory_recovery_retry", "restriction_check"].includes(String(order.waitingCode ?? ""))
     || ["discord_403", "discord_404", "discord_unknown", "discord_missing"].includes(waitingCode)
@@ -8922,11 +9025,12 @@ async function activateWaitingCommunityOrder(order) {
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
        FROM community_oauth_joins
-        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status = 'authorized' AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-         AND ($3::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+        WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status = 'authorized'
+         AND (($3::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, pendingUserIds, joinMethod === "experimental_join"]
+      [resolved.config.guildId, pendingUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -8956,13 +9060,14 @@ async function activateWaitingCommunityOrder(order) {
         const extra = await client.query(
           `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
            FROM community_oauth_joins
-           WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND reserved_order_id IS NULL AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()
-             AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+           WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND reserved_order_id IS NULL
+             AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+               OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
              AND NOT (discord_user_id = ANY($4::text[]))
            ORDER BY random()
            LIMIT $3
            FOR UPDATE SKIP LOCKED`,
-          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds), joinMethod === "experimental_join"]
+          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds), communityJoinMethodUsesAccountToken(joinMethod)]
         );
         for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
         members = [...members, ...extra.rows];
@@ -9178,7 +9283,7 @@ async function reconcileCommunityPendingJoinResults(order) {
 
 function sanitizePublicCommunityOrder(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.communityResults)) return order;
-  const generatedBotInvite = !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
+  const generatedBotInvite = getCommunityOrderJoinMethod(order) !== "directly" && !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
     ? createCommunityBotInvite({ clientId: String(order.botApplicationId) }, String(order.serverId), getCommunityOrderJoinMethod(order))
     : order.botInvite;
   return {
@@ -9715,20 +9820,23 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
 
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
+    const joinMethod = getCommunityOrderJoinMethod(order);
     if (!config.configured) {
       await client.query("ROLLBACK");
-      return res.status(503).json({ message: "Configure the Members bot before replacing members." });
+      return res.status(503).json({ message: "Configure the Members integration before replacing members." });
     }
     await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
-    const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
-    if (!botAccess.accessible) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "To replace these members, please add the bot to the order's Discord server.",
-        botInvite: createCommunityBotInvite(config, targetGuildId, getCommunityOrderJoinMethod(order))
-      });
+    if (joinMethod !== "directly") {
+      const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
+      if (!botAccess.accessible) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message: "To replace these members, please add the bot to the order's Discord server.",
+          botInvite: createCommunityBotInvite(config, targetGuildId, joinMethod)
+        });
+      }
     }
-    if (getCommunityOrderJoinMethod(order) === "experimental_join") {
+    if (joinMethod === "experimental_join") {
       try {
         await ensureCommunityApplyToJoin(config, targetGuildId);
         if (order.serverInviteCreatedByBot !== true) {
@@ -9791,15 +9899,14 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
            AND stock_type = $4
            AND status = 'authorized'
            AND reserved_order_id IS NULL
-           AND encrypted_access_token IS NOT NULL
-           AND access_token_expires_at > NOW()
-           AND ($6::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+           AND (($6::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+             OR ($6::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
            AND NOT (discord_user_id = ANY($2::text[]))
            AND NOT (username = ANY($3::text[]))
          ORDER BY random()
          LIMIT $5
          FOR UPDATE SKIP LOCKED`,
-        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length, getCommunityOrderJoinMethod(order) === "experimental_join"]
+        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
       );
       replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
     }
@@ -9916,20 +10023,23 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
+    const joinMethod = getCommunityOrderJoinMethod(order);
     if (!config.configured) {
       await client.query("ROLLBACK");
-      return res.status(503).json({ message: "Configure the Members bot before replacing a member." });
+      return res.status(503).json({ message: "Configure the Members integration before replacing a member." });
     }
     await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
-    const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
-    if (!botAccess.accessible) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({
-        message: "To replace this member, please add the bot to the order's Discord server.",
-        botInvite: createCommunityBotInvite(config, targetGuildId, getCommunityOrderJoinMethod(order))
-      });
+    if (joinMethod !== "directly") {
+      const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
+      if (!botAccess.accessible) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({
+          message: "To replace this member, please add the bot to the order's Discord server.",
+          botInvite: createCommunityBotInvite(config, targetGuildId, joinMethod)
+        });
+      }
     }
-    if (getCommunityOrderJoinMethod(order) === "experimental_join") {
+    if (joinMethod === "experimental_join") {
       try {
         await ensureCommunityApplyToJoin(config, targetGuildId);
         if (order.serverInviteCreatedByBot !== true) {
@@ -10034,15 +10144,14 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
          AND stock_type = $4
          AND status = 'authorized'
          AND reserved_order_id IS NULL
-         AND encrypted_access_token IS NOT NULL
-         AND access_token_expires_at > NOW()
-         AND ($5::boolean = FALSE OR encrypted_account_token IS NOT NULL)
+         AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+           OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult), getCommunityOrderJoinMethod(order) === "experimental_join"]
+      [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult), communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
