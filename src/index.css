@@ -10626,7 +10626,7 @@
 .humanizer-avatar-empty strong { color: var(--app-text-secondary); font-size: 10px; }
 .humanizer-avatar-empty small { max-width: 330px; color: var(--app-muted); font-size: 9px; line-height: 1.45; }
 .humanizer-avatar-preview-section { display: grid; gap: 8px; }
-.humanizer-avatar-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 9px; }
+.humanizer-avatar-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
 .humanizer-avatar-preview {
   display: grid;
   min-width: 0;
