@@ -10577,7 +10577,7 @@
 .humanizer-avatar-preview {
   display: grid;
   min-width: 0;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 46px minmax(0, 1fr);
   align-items: center;
   gap: 9px;
   overflow: hidden;
@@ -10586,17 +10586,39 @@
   background: rgba(5, 6, 13, .34);
   color: var(--app-text-secondary);
   padding: 7px;
-  text-align: left;
-  transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+  transition: border-color .15s ease, background-color .15s ease;
 }
-.humanizer-avatar-preview:hover { border-color: var(--app-accent-border); background: var(--app-accent-soft); transform: translateY(-1px); }
-.humanizer-avatar-preview > img { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; background: var(--app-control-bg); }
+.humanizer-avatar-preview:hover { border-color: var(--app-accent-border); background: var(--app-accent-soft); }
+.humanizer-avatar-preview-image { position: relative; width: 46px; height: 46px; }
+.humanizer-avatar-preview-image > img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; background: var(--app-control-bg); }
+.humanizer-avatar-remove {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  display: grid;
+  width: 19px;
+  height: 19px;
+  place-items: center;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-surface) 92%, transparent);
+  color: var(--app-muted);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, .32);
+  transition: border-color .15s ease, background-color .15s ease, color .15s ease, transform .15s ease;
+}
+.humanizer-avatar-remove:hover,
+.humanizer-avatar-remove:focus-visible {
+  border-color: color-mix(in srgb, var(--app-danger) 55%, transparent);
+  background: color-mix(in srgb, var(--app-danger) 18%, var(--app-surface));
+  color: var(--app-danger);
+  outline: none;
+  transform: scale(1.08);
+}
 .humanizer-avatar-preview > span { min-width: 0; }
 .humanizer-avatar-preview strong,
 .humanizer-avatar-preview small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .humanizer-avatar-preview strong { color: var(--app-text); font-size: 9px; }
 .humanizer-avatar-preview small { margin-top: 3px; color: var(--app-muted); font-size: 8px; }
-.humanizer-avatar-preview > svg { color: var(--app-muted); }
 
 .humanizer-commandbar {
   justify-content: space-between;

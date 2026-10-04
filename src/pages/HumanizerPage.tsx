@@ -611,11 +611,21 @@ export default function HumanizerPage() {
             {avatarData.length ? (
               <div className="humanizer-avatar-preview-grid" aria-label="Selected avatar previews">
                 {avatarData.map((avatar, index) => (
-                  <button key={`${avatar.name}-${index}`} type="button" className="humanizer-avatar-preview" onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))} title={`Remove ${avatar.name}`}>
-                    <img src={avatar.data} alt={`Preview of ${avatar.name}`} />
-                    <span><strong>{avatar.name}</strong><small>Click to remove</small></span>
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
-                  </button>
+                  <div key={`${avatar.name}-${index}`} className="humanizer-avatar-preview">
+                    <div className="humanizer-avatar-preview-image">
+                      <img src={avatar.data} alt={`Preview of ${avatar.name}`} />
+                      <button
+                        type="button"
+                        className="humanizer-avatar-remove"
+                        aria-label={`Remove ${avatar.name}`}
+                        title="Remove avatar"
+                        onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      >
+                        <X className="h-3 w-3" aria-hidden="true" />
+                      </button>
+                    </div>
+                    <span><strong>{avatar.name}</strong><small>Ready to use</small></span>
+                  </div>
                 ))}
               </div>
             ) : null}
