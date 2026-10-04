@@ -676,6 +676,31 @@ export default function HumanizerPage() {
               </div>
             </div>
 
+            <section className="humanizer-hypesquad-panel" aria-labelledby="humanizer-hypesquad-title">
+              <div className="humanizer-hypesquad-copy">
+                <span className="humanizer-option-icon" aria-hidden="true"><Sparkles className="h-4 w-4" /></span>
+                <span>
+                  <strong id="humanizer-hypesquad-title">HypeSquad</strong>
+                  <small>Leave unchanged or assign a specific house across selected accounts.</small>
+                </span>
+              </div>
+              <FilterDropdown
+                label="HypeSquad house"
+                showLabel={false}
+                placement="top"
+                className="humanizer-hypesquad-dropdown"
+                value={hypesquad}
+                options={[
+                  { value: "none", label: "Unchanged" },
+                  { value: "random", label: "Random house" },
+                  { value: "bravery", label: "Bravery" },
+                  { value: "brilliance", label: "Brilliance" },
+                  { value: "balance", label: "Balance" }
+                ]}
+                onChange={(value) => updateHypesquad(value as typeof hypesquad)}
+              />
+            </section>
+
             <section className={`humanizer-avatar-pool-panel ${activeFields.includes("avatar") ? "is-enabled" : ""}`} aria-labelledby="humanizer-avatar-pool-title">
               <header className="humanizer-avatar-pool-head">
                 <div className="humanizer-avatar-pool-copy">
@@ -685,25 +710,6 @@ export default function HumanizerPage() {
                   <button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("avatar")} disabled={!fieldContent.avatar} onClick={() => setFieldEnabled("avatar", !activeFields.includes("avatar"))}><Check className="h-3 w-3" />{activeFields.includes("avatar") ? "Selected" : "Select"}</button>
                 </div>
                 <div className="humanizer-avatar-pool-actions">
-                  <div className="humanizer-hypesquad-control">
-                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>HypeSquad</span>
-                    <FilterDropdown
-                      label="HypeSquad house"
-                      showLabel={false}
-                      placement="top"
-                      className="humanizer-hypesquad-dropdown"
-                      value={hypesquad}
-                      options={[
-                        { value: "none", label: "Unchanged" },
-                        { value: "random", label: "Balanced rotation" },
-                        { value: "bravery", label: "Bravery" },
-                        { value: "brilliance", label: "Brilliance" },
-                        { value: "balance", label: "Balance" }
-                      ]}
-                      onChange={(value) => updateHypesquad(value as typeof hypesquad)}
-                    />
-                  </div>
                   <Button type="button" variant="secondary" size="xs" disabled={Boolean(uploadingAvatars) || avatarData.length >= 1000} onClick={() => avatarInputRef.current?.click()}>
                     {uploadingAvatars ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
                     {uploadingAvatars ? `Uploading ${uploadingAvatars}` : "Choose avatars"}
