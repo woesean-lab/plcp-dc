@@ -295,12 +295,18 @@ export default function HumanizerPage() {
 
   const visibleAccounts = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (catalog?.accounts ?? []).filter((account) => {
-      if (categoryId !== "all" && account.categoryId !== categoryId) return false;
-      if (!query) return true;
-      return [account.username, account.displayName, account.id, account.categoryName]
-        .some((value) => String(value ?? "").toLowerCase().includes(query));
-    });
+    return (catalog?.accounts ?? [])
+      .filter((account) => {
+        if (categoryId !== "all" && account.categoryId !== categoryId) return false;
+        if (!query) return true;
+        return [account.username, account.displayName, account.id, account.categoryName]
+          .some((value) => String(value ?? "").toLowerCase().includes(query));
+      })
+      .sort((left, right) => (
+        accountLabel(left).localeCompare(accountLabel(right), undefined, { sensitivity: "base", numeric: true })
+        || left.username.localeCompare(right.username, undefined, { sensitivity: "base", numeric: true })
+        || left.id.localeCompare(right.id)
+      ));
   }, [catalog, categoryId, search]);
 
   const eligibleVisibleIds = visibleAccounts
