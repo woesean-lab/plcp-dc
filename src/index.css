@@ -8691,8 +8691,6 @@
   color: var(--app-subtle);
   background: var(--app-control-bg);
   white-space: nowrap;
-  cursor: pointer;
-  transition: color .15s ease, background-color .15s ease, box-shadow .15s ease, opacity .15s ease;
 }
 
 .community-rich-presence-chip svg { color: currentColor; }
@@ -8703,14 +8701,13 @@
   background: color-mix(in srgb, #9b8cff 10%, var(--app-control-bg));
   box-shadow: none;
 }
-.community-rich-presence-chip:not(:disabled):hover,
-.community-rich-presence-chip:not(:disabled):focus-visible {
+.community-rich-presence-action { color: #b8adff; }
+.community-rich-presence-action:not(:disabled):hover,
+.community-rich-presence-action:not(:disabled):focus-visible {
+  border-color: color-mix(in srgb, #9b8cff 34%, var(--app-border));
   color: #c9c1ff;
   background: color-mix(in srgb, #9b8cff 14%, var(--app-control-bg));
-  box-shadow: 0 0 0 1px color-mix(in srgb, #9b8cff 24%, transparent);
-  outline: none;
 }
-.community-rich-presence-chip:disabled { cursor: wait; opacity: .58; }
 
 .community-member-auth-state {
   min-height: 28px;

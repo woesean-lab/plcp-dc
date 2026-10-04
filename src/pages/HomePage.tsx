@@ -3054,23 +3054,31 @@ export default function HomePage() {
                     </span>
                   ) : null}
                   {record.onlinerConnected ? (
-                    <button
+                    <span className="community-rich-presence-chip" data-enabled={record.onlinerRichPresenceEnabled === true} title={`Rich Presence ${record.onlinerRichPresenceEnabled === true ? "enabled" : "disabled"}`}>
+                      <Star className="h-3 w-3" aria-hidden="true" />
+                      <span>Rich Presence</span>
+                      <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
+                    </span>
+                  ) : null}
+                  <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
+                </span>
+                <span className="community-member-row-actions">
+                  {record.onlinerConnected ? (
+                    <Button
                       type="button"
-                      className="community-rich-presence-chip"
-                      data-enabled={record.onlinerRichPresenceEnabled === true}
+                      size="icon-sm"
+                      variant={record.onlinerRichPresenceEnabled === true ? "secondary" : "ghost"}
+                      className="community-rich-presence-action"
                       title={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} without reconnecting`}
                       aria-label={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} for ${record.username}`}
                       disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
                       onClick={() => void toggleCommunityMemberRichPresence(record)}
                     >
-                      {communityRichPresenceActionId === record.id ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Star className="h-3 w-3" aria-hidden="true" />}
-                      <span>Rich Presence</span>
-                      <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
-                    </button>
+                      {communityRichPresenceActionId === record.id
+                        ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                        : <Star className={`h-3.5 w-3.5 ${record.onlinerRichPresenceEnabled === true ? "fill-current" : ""}`} aria-hidden="true" />}
+                    </Button>
                   ) : null}
-                  <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
-                </span>
-                <span className="community-member-row-actions">
                   <Button
                     type="button"
                     size="icon-sm"
