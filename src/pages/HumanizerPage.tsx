@@ -22,8 +22,7 @@ import {
   UserRoundCheck,
   Users,
   WandSparkles,
-  Workflow,
-  X
+  Workflow
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
@@ -671,7 +670,7 @@ export default function HumanizerPage() {
                         title="Remove avatar"
                         onClick={() => handleRemoveAvatar(avatar)}
                       >
-                        <X className="h-3 w-3" aria-hidden="true" />
+                        <Trash2 className="h-3 w-3" aria-hidden="true" />
                       </button>
                     </div>
                     <span><strong>{avatar.name}</strong><small>Ready to use</small></span>
