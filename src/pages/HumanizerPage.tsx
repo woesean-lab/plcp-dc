@@ -44,6 +44,7 @@ import {
   type HumanizerAccount,
   type HumanizerAvatar,
   type HumanizerCatalog,
+  type HumanizerField,
   type HumanizerJob,
   type HumanizerPackage
 } from "@/lib/humanizer";
@@ -233,6 +234,7 @@ export default function HumanizerPage() {
   const [bios, setBios] = useState("");
   const [pronouns, setPronouns] = useState("");
   const [avatarData, setAvatarData] = useState<HumanizerAvatar[]>([]);
+  const [selectedFields, setSelectedFields] = useState<HumanizerField[]>([]);
   const [uploadingAvatars, setUploadingAvatars] = useState(0);
   const [avatarPreviewLimit, setAvatarPreviewLimit] = useState(60);
   const [hypesquad, setHypesquad] = useState<"none" | "random" | "bravery" | "brilliance" | "balance">("none");
@@ -326,8 +328,16 @@ export default function HumanizerPage() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allVisibleSelected = eligibleVisibleIds.length > 0 && eligibleVisibleIds.every((id) => selectedSet.has(id));
   const jobActive = job?.status === "queued" || job?.status === "running";
-  const configuredChanges = [splitLines(usernames).length, splitLines(displayNames).length, splitLines(bios).length, splitLines(pronouns).length, avatarData.length, hypesquad === "none" ? 0 : 1]
-    .filter(Boolean).length;
+  const fieldContent: Record<HumanizerField, boolean> = {
+    username: splitLines(usernames).length > 0,
+    displayName: splitLines(displayNames).length > 0,
+    bio: splitLines(bios).length > 0,
+    pronouns: splitLines(pronouns).length > 0,
+    avatar: avatarData.length > 0,
+    hypesquad: hypesquad !== "none"
+  };
+  const activeFields = selectedFields.filter((field) => fieldContent[field]);
+  const configuredChanges = activeFields.length;
   const progress = job?.total ? Math.round((job.completed / job.total) * 100) : 0;
   const eligibleAccountCount = (catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).length;
   const selectedPackage = packages.find((item) => item.id === selectedPackageId) ?? null;
@@ -335,6 +345,22 @@ export default function HumanizerPage() {
 
   function toggleAccount(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  }
+
+  function setFieldEnabled(field: HumanizerField, enabled: boolean) {
+    setSelectedFields((current) => enabled
+      ? current.includes(field) ? current : [...current, field]
+      : current.filter((item) => item !== field));
+  }
+
+  function updateLineField(field: HumanizerField, value: string, setter: (next: string) => void) {
+    setter(value);
+    setFieldEnabled(field, splitLines(value).length > 0);
+  }
+
+  function updateHypesquad(value: typeof hypesquad) {
+    setHypesquad(value);
+    setFieldEnabled("hypesquad", value !== "none");
   }
 
   async function handleAvatarFiles(files: FileList | null) {
@@ -369,6 +395,7 @@ export default function HumanizerPage() {
     await Promise.all(workers);
     const successfulUploads = uploaded.filter((avatar): avatar is HumanizerAvatar => avatar !== null);
     setAvatarData((current) => [...current, ...successfulUploads].slice(0, 1000));
+    if (successfulUploads.length) setFieldEnabled("avatar", true);
     setUploadingAvatars(0);
     if (successfulUploads.length) toast.success(`${successfulUploads.length} avatar${successfulUploads.length === 1 ? "" : "s"} uploaded.`);
     if (rejectedCount || failures.length) {
@@ -390,6 +417,7 @@ export default function HumanizerPage() {
       setStarting(true);
       const next = await startHumanizerJob({
         accountIds: selectedIds,
+        enabledFields: activeFields,
         usernames: splitLines(usernames),
         displayNames: splitLines(displayNames),
         bios: splitLines(bios),
@@ -428,6 +456,7 @@ export default function HumanizerPage() {
       setSavingPackage(true);
       const saved = await saveHumanizerPackage({
         name: packageName.trim(),
+        enabledFields: activeFields,
         usernames: splitLines(usernames),
         displayNames: splitLines(displayNames),
         bios: splitLines(bios),
@@ -455,6 +484,7 @@ export default function HumanizerPage() {
     setBios(selectedPackage.bios.join("\n"));
     setPronouns(selectedPackage.pronouns.join("\n"));
     setAvatarData(selectedPackage.avatars);
+    setSelectedFields(selectedPackage.enabledFields);
     setAvatarPreviewLimit(60);
     setHypesquad(selectedPackage.hypesquad);
     setConcurrency(selectedPackage.concurrency);
@@ -463,7 +493,9 @@ export default function HumanizerPage() {
   }
 
   function handleRemoveAvatar(avatar: HumanizerAvatar) {
-    setAvatarData((current) => current.filter((item) => item.id !== avatar.id));
+    const next = avatarData.filter((item) => item.id !== avatar.id);
+    setAvatarData(next);
+    if (!next.length) setFieldEnabled("avatar", false);
     void deleteHumanizerAvatar(avatar.id).catch(() => {
       // Package-owned avatars remain stored and can still be restored from that package.
     });
@@ -626,30 +658,31 @@ export default function HumanizerPage() {
             </div>
 
             <div className="humanizer-recipe-grid">
-              <label className="humanizer-recipe-card" data-recipe="username">
-                <span className="humanizer-recipe-head"><i><AtSign className="h-4 w-4" /></i><span><strong>Usernames</strong><small>One value per line</small></span><b>{splitLines(usernames).length}</b></span>
-                <textarea className="onliner-game-textarea" value={usernames} maxLength={33_000} onChange={(event) => setUsernames(event.target.value)} placeholder={"alex_01\ntaylor_02\njordan_03"} />
-              </label>
-              <label className="humanizer-recipe-card" data-recipe="name">
-                <span className="humanizer-recipe-head"><i><Type className="h-4 w-4" /></i><span><strong>Display names</strong><small>One value per line</small></span><b>{splitLines(displayNames).length}</b></span>
-                <textarea className="onliner-game-textarea" value={displayNames} maxLength={33_000} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
-              </label>
-              <label className="humanizer-recipe-card" data-recipe="pronouns">
-                <span className="humanizer-recipe-head"><i><UserRoundCheck className="h-4 w-4" /></i><span><strong>Pronouns</strong><small>One value per line</small></span><b>{splitLines(pronouns).length}</b></span>
-                <textarea className="onliner-game-textarea" value={pronouns} maxLength={41_000} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
-              </label>
-              <label className="humanizer-recipe-card" data-recipe="bio">
-                <span className="humanizer-recipe-head"><i><FileText className="h-4 w-4" /></i><span><strong>Profile bios</strong><small>One value per line</small></span><b>{splitLines(bios).length}</b></span>
-                <textarea className="onliner-game-textarea" value={bios} maxLength={191_000} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
-              </label>
+              <div className={`humanizer-recipe-card ${activeFields.includes("username") ? "is-enabled" : ""}`} data-recipe="username">
+                <span className="humanizer-recipe-head"><i><AtSign className="h-4 w-4" /></i><span><strong>Usernames</strong><small>One value per line</small></span><span className="humanizer-recipe-head-actions"><b>{splitLines(usernames).length}</b><button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("username")} disabled={!fieldContent.username} onClick={() => setFieldEnabled("username", !activeFields.includes("username"))}><Check className="h-3 w-3" />{activeFields.includes("username") ? "Selected" : "Select"}</button></span></span>
+                <textarea aria-label="Usernames" className="onliner-game-textarea" value={usernames} maxLength={33_000} onChange={(event) => updateLineField("username", event.target.value, setUsernames)} placeholder={"alex_01\ntaylor_02\njordan_03"} />
+              </div>
+              <div className={`humanizer-recipe-card ${activeFields.includes("displayName") ? "is-enabled" : ""}`} data-recipe="name">
+                <span className="humanizer-recipe-head"><i><Type className="h-4 w-4" /></i><span><strong>Display names</strong><small>One value per line</small></span><span className="humanizer-recipe-head-actions"><b>{splitLines(displayNames).length}</b><button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("displayName")} disabled={!fieldContent.displayName} onClick={() => setFieldEnabled("displayName", !activeFields.includes("displayName"))}><Check className="h-3 w-3" />{activeFields.includes("displayName") ? "Selected" : "Select"}</button></span></span>
+                <textarea aria-label="Display names" className="onliner-game-textarea" value={displayNames} maxLength={33_000} onChange={(event) => updateLineField("displayName", event.target.value, setDisplayNames)} placeholder={"Alex\nTaylor\nJordan"} />
+              </div>
+              <div className={`humanizer-recipe-card ${activeFields.includes("pronouns") ? "is-enabled" : ""}`} data-recipe="pronouns">
+                <span className="humanizer-recipe-head"><i><UserRoundCheck className="h-4 w-4" /></i><span><strong>Pronouns</strong><small>One value per line</small></span><span className="humanizer-recipe-head-actions"><b>{splitLines(pronouns).length}</b><button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("pronouns")} disabled={!fieldContent.pronouns} onClick={() => setFieldEnabled("pronouns", !activeFields.includes("pronouns"))}><Check className="h-3 w-3" />{activeFields.includes("pronouns") ? "Selected" : "Select"}</button></span></span>
+                <textarea aria-label="Pronouns" className="onliner-game-textarea" value={pronouns} maxLength={41_000} onChange={(event) => updateLineField("pronouns", event.target.value, setPronouns)} placeholder={"they/them\nshe/her\nhe/him"} />
+              </div>
+              <div className={`humanizer-recipe-card ${activeFields.includes("bio") ? "is-enabled" : ""}`} data-recipe="bio">
+                <span className="humanizer-recipe-head"><i><FileText className="h-4 w-4" /></i><span><strong>Profile bios</strong><small>One value per line</small></span><span className="humanizer-recipe-head-actions"><b>{splitLines(bios).length}</b><button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("bio")} disabled={!fieldContent.bio} onClick={() => setFieldEnabled("bio", !activeFields.includes("bio"))}><Check className="h-3 w-3" />{activeFields.includes("bio") ? "Selected" : "Select"}</button></span></span>
+                <textarea aria-label="Profile bios" className="onliner-game-textarea" value={bios} maxLength={191_000} onChange={(event) => updateLineField("bio", event.target.value, setBios)} placeholder={"Building something interesting.\nProbably listening to music."} />
+              </div>
             </div>
 
-            <section className="humanizer-avatar-pool-panel" aria-labelledby="humanizer-avatar-pool-title">
+            <section className={`humanizer-avatar-pool-panel ${activeFields.includes("avatar") ? "is-enabled" : ""}`} aria-labelledby="humanizer-avatar-pool-title">
               <header className="humanizer-avatar-pool-head">
                 <div className="humanizer-avatar-pool-copy">
                   <span className="humanizer-option-icon"><Images className="h-4 w-4" /></span>
                   <span className="min-w-0"><strong id="humanizer-avatar-pool-title">Avatar pool</strong><small>PNG, JPG, WEBP or GIF · maximum 1 MB each</small></span>
                   <Badge variant={avatarData.length ? "secondary" : "outline"}>{avatarData.length}/1,000</Badge>
+                  <button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("avatar")} disabled={!fieldContent.avatar} onClick={() => setFieldEnabled("avatar", !activeFields.includes("avatar"))}><Check className="h-3 w-3" />{activeFields.includes("avatar") ? "Selected" : "Select"}</button>
                 </div>
                 <div className="humanizer-avatar-pool-actions">
                   <div className="humanizer-hypesquad-control">
@@ -668,8 +701,9 @@ export default function HumanizerPage() {
                         { value: "brilliance", label: "Brilliance" },
                         { value: "balance", label: "Balance" }
                       ]}
-                      onChange={(value) => setHypesquad(value as typeof hypesquad)}
+                      onChange={(value) => updateHypesquad(value as typeof hypesquad)}
                     />
+                    <button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("hypesquad")} disabled={!fieldContent.hypesquad} onClick={() => setFieldEnabled("hypesquad", !activeFields.includes("hypesquad"))}><Check className="h-3 w-3" />{activeFields.includes("hypesquad") ? "Selected" : "Select"}</button>
                   </div>
                   <Button type="button" variant="secondary" size="xs" disabled={Boolean(uploadingAvatars) || avatarData.length >= 1000} onClick={() => avatarInputRef.current?.click()}>
                     {uploadingAvatars ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
@@ -728,7 +762,7 @@ export default function HumanizerPage() {
         <footer className="humanizer-commandbar">
           <div className="humanizer-command-summary">
             <span className="humanizer-command-icon"><ShieldCheck className="h-4 w-4" /></span>
-            <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "Select at least one eligible account"} · {configuredChanges ? `${configuredChanges} change type${configuredChanges === 1 ? "" : "s"}` : "Recipe is empty"}</small></span>
+            <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "Select at least one eligible account"} · {configuredChanges ? `${configuredChanges} update field${configuredChanges === 1 ? "" : "s"} selected` : "Select at least one configured field"}</small></span>
           </div>
           <div className="humanizer-command-actions">
             <div className="humanizer-parallel-control">

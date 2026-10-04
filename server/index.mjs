@@ -321,6 +321,24 @@ function cleanHumanizerLines(value, maximum, maximumLength) {
   return normalized;
 }
 
+const humanizerFieldNames = ["username", "displayName", "bio", "pronouns", "avatar", "hypesquad"];
+const humanizerFieldNameSet = new Set(humanizerFieldNames);
+
+function normalizeHumanizerEnabledFields(value, fallbackPayload = null) {
+  if (Array.isArray(value)) {
+    return [...new Set(value.map((field) => String(field ?? "").trim()).filter((field) => humanizerFieldNameSet.has(field)))];
+  }
+  if (!fallbackPayload) return [];
+  return humanizerFieldNames.filter((field) => {
+    if (field === "username") return Array.isArray(fallbackPayload.usernames) && fallbackPayload.usernames.length > 0;
+    if (field === "displayName") return Array.isArray(fallbackPayload.displayNames) && fallbackPayload.displayNames.length > 0;
+    if (field === "bio") return Array.isArray(fallbackPayload.bios) && fallbackPayload.bios.length > 0;
+    if (field === "pronouns") return Array.isArray(fallbackPayload.pronouns) && fallbackPayload.pronouns.length > 0;
+    if (field === "avatar") return Array.isArray(fallbackPayload.avatars) && fallbackPayload.avatars.length > 0;
+    return ["random", "bravery", "brilliance", "balance"].includes(fallbackPayload.hypesquad);
+  });
+}
+
 function normalizeHumanizerAvatar(value) {
   const avatar = String(value ?? "").trim();
   if (!avatar) return "";
@@ -344,6 +362,7 @@ function getHumanizerPackageSnapshot(row) {
   return {
     id: String(row.id),
     name: String(row.name),
+    enabledFields: normalizeHumanizerEnabledFields(payload.enabledFields, payload),
     usernames: Array.isArray(payload.usernames) ? payload.usernames : [],
     displayNames: Array.isArray(payload.displayNames) ? payload.displayNames : [],
     bios: Array.isArray(payload.bios) ? payload.bios : [],
@@ -7432,7 +7451,20 @@ app.post("/api/humanizer/packages", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Add at least one profile change before saving a package." });
     }
 
-    const payload = { usernames, displayNames, bios, pronouns, avatars, hypesquad, concurrency };
+    const enabledFields = normalizeHumanizerEnabledFields(req.body?.enabledFields);
+    const configuredEnabledFields = enabledFields.filter((field) => {
+      if (field === "username") return usernames.length > 0;
+      if (field === "displayName") return displayNames.length > 0;
+      if (field === "bio") return bios.length > 0;
+      if (field === "pronouns") return pronouns.length > 0;
+      if (field === "avatar") return avatars.length > 0;
+      return hypesquad !== "none";
+    });
+    if (!configuredEnabledFields.length) {
+      return res.status(400).json({ message: "Select at least one configured profile field before saving a package." });
+    }
+
+    const payload = { enabledFields: configuredEnabledFields, usernames, displayNames, bios, pronouns, avatars, hypesquad, concurrency };
     const result = await pool.query(
       `INSERT INTO humanizer_packages (id, name, payload, created_at, updated_at)
        VALUES ($1, $2, $3::jsonb, NOW(), NOW())
@@ -7479,15 +7511,16 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Select at least one Members Stock account." });
     }
 
-    const usernames = cleanHumanizerLines(req.body?.usernames, 1000, 32);
-    const displayNames = cleanHumanizerLines(req.body?.displayNames, 1000, 32);
-    const bios = cleanHumanizerLines(req.body?.bios, 1000, 190);
-    const pronouns = cleanHumanizerLines(req.body?.pronouns, 1000, 40);
-    const avatarIds = [...new Set(
+    const enabledFields = new Set(normalizeHumanizerEnabledFields(req.body?.enabledFields));
+    const usernames = enabledFields.has("username") ? cleanHumanizerLines(req.body?.usernames, 1000, 32) : [];
+    const displayNames = enabledFields.has("displayName") ? cleanHumanizerLines(req.body?.displayNames, 1000, 32) : [];
+    const bios = enabledFields.has("bio") ? cleanHumanizerLines(req.body?.bios, 1000, 190) : [];
+    const pronouns = enabledFields.has("pronouns") ? cleanHumanizerLines(req.body?.pronouns, 1000, 40) : [];
+    const avatarIds = enabledFields.has("avatar") ? [...new Set(
       (Array.isArray(req.body?.avatarIds) ? req.body.avatarIds : [])
         .map((value) => String(value ?? "").trim())
         .filter(Boolean)
-    )].slice(0, 1000);
+    )].slice(0, 1000) : [];
     if (avatarIds.length) {
       const avatarCount = await pool.query(
         "SELECT COUNT(*)::int AS count FROM humanizer_avatar_assets WHERE id = ANY($1::text[])",
@@ -7497,7 +7530,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
         return res.status(400).json({ message: "One or more avatars are no longer available." });
       }
     }
-    const hypesquad = ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
+    const hypesquad = enabledFields.has("hypesquad") && ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
       ? req.body.hypesquad
       : null;
     const concurrency = Math.min(Math.max(Number.parseInt(req.body?.concurrency, 10) || 1, 1), 5);

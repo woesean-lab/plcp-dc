@@ -45,8 +45,11 @@ export type HumanizerJob = {
   results: HumanizerResult[];
 };
 
+export type HumanizerField = "username" | "displayName" | "bio" | "pronouns" | "avatar" | "hypesquad";
+
 export type HumanizerJobInput = {
   accountIds: string[];
+  enabledFields: HumanizerField[];
   usernames: string[];
   displayNames: string[];
   bios: string[];
@@ -66,6 +69,7 @@ export type HumanizerAvatar = {
 export type HumanizerPackage = {
   id: string;
   name: string;
+  enabledFields: HumanizerField[];
   usernames: string[];
   displayNames: string[];
   bios: string[];
