@@ -215,6 +215,16 @@ export function connectCommunityMemberToOnliner(discordUserId: string, richPrese
   }).then(parseResponse<{ connected: boolean; accountId: string; alreadyExisted: boolean }>);
 }
 
+export function updateCommunityMemberRichPresence(discordUserId: string, richPresenceEnabled: boolean) {
+  return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner/rich-presence`, {
+    method: "PATCH",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ richPresenceEnabled })
+  }).then(parseResponse<{ updated: boolean; enabled: boolean; appliedLive: boolean }>);
+}
+
 export function disconnectCommunityMemberFromOnliner(discordUserId: string) {
   return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
     method: "DELETE",

@@ -1974,6 +1974,21 @@ function scheduleDiscordOnlinerActivityRotation(config, account, runtime, genera
   runtime.activityTimer.unref?.();
 }
 
+function applyDiscordOnlinerAccountPresenceLive(config, account, message = "Rich Presence updated without reconnecting.") {
+  const runtime = discordOnlinerRuntimes.get(account.id);
+  if (!runtime) return false;
+  runtime.config = config;
+  if (runtime.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN) return false;
+  runtime.socket.send(JSON.stringify({
+    op: 3,
+    d: buildDiscordOnlinerAccountPresence(config, account, runtime, true)
+  }));
+  scheduleDiscordOnlinerActivityRotation(config, account, runtime, runtime.generation);
+  queueDiscordOnlinerRuntimePersist(runtime);
+  appendDiscordOnlinerLog("info", message, account.id);
+  return true;
+}
+
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
@@ -2447,12 +2462,17 @@ async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
   const candidateById = new Map(candidate.accounts.map((account) => [account.id, account]));
   const removedIds = current.accounts.filter((account) => !candidateById.has(account.id)).map((account) => account.id);
   const addedAccounts = candidate.accounts.filter((account) => !currentById.has(account.id));
-  const changedAccounts = candidate.accounts.filter((account) => {
+  const connectionChangedAccounts = candidate.accounts.filter((account) => {
     const previous = currentById.get(account.id);
     return previous && (previous.botToken !== account.botToken
-      || previous.proxyUrl !== account.proxyUrl
-      || previous.richPresenceEnabled !== account.richPresenceEnabled);
+      || previous.proxyUrl !== account.proxyUrl);
   });
+  const richPresenceChangedIds = new Set(candidate.accounts
+    .filter((account) => {
+      const previous = currentById.get(account.id);
+      return previous && previous.richPresenceEnabled !== account.richPresenceEnabled;
+    })
+    .map((account) => account.id));
 
   for (const accountId of removedIds) {
     const runtime = discordOnlinerRuntimes.get(accountId);
@@ -2463,7 +2483,7 @@ async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
   if (removedIds.length) await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [removedIds]);
 
   if (candidate.enabled) {
-    for (const account of changedAccounts) {
+    for (const account of connectionChangedAccounts) {
       const runtime = discordOnlinerRuntimes.get(account.id);
       if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
       startDiscordOnlinerAccounts(candidate, [account]);
@@ -2475,11 +2495,18 @@ async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
     }
   }
 
-  const changedIds = new Set(changedAccounts.map((account) => account.id));
+  const changedIds = new Set(connectionChangedAccounts.map((account) => account.id));
   for (const account of candidate.accounts) {
     if (changedIds.has(account.id)) continue;
     const runtime = discordOnlinerRuntimes.get(account.id);
     if (runtime) runtime.config = candidate;
+    if (candidate.enabled && richPresenceChangedIds.has(account.id)) {
+      applyDiscordOnlinerAccountPresenceLive(
+        candidate,
+        account,
+        `Rich Presence ${account.richPresenceEnabled === false ? "disabled" : "enabled"} on the active Gateway connection.`
+      );
+    }
   }
   applyDiscordOnlinerSettings(current, candidate);
   discordOnlinerWorkerCurrentConfig = candidate;
@@ -7866,15 +7893,24 @@ app.put("/api/onliner/accounts/:accountId", requireSession, async (req, res, nex
     });
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
 
-    const profileChanged = current.accounts[accountIndex].botToken !== botToken
-      || current.accounts[accountIndex].proxyUrl !== proxyUrl
-      || current.accounts[accountIndex].richPresenceEnabled !== richPresenceEnabled;
-    if (serviceRunsOnliner && profileChanged) {
+    const credentialsChanged = current.accounts[accountIndex].botToken !== botToken
+      || current.accounts[accountIndex].proxyUrl !== proxyUrl;
+    const richPresenceChanged = current.accounts[accountIndex].richPresenceEnabled !== richPresenceEnabled;
+    if (serviceRunsOnliner && credentialsChanged) {
       const runtime = discordOnlinerRuntimes.get(accountId);
       if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
       const savedAccount = candidate.accounts.find((account) => account.id === accountId);
       if (savedAccount) startDiscordOnlinerAccounts(candidate, [savedAccount]);
       appendDiscordOnlinerLog("info", "Bot profile updated; restarting only this Gateway connection.", accountId);
+    } else if (serviceRunsOnliner && richPresenceChanged) {
+      const savedAccount = candidate.accounts.find((account) => account.id === accountId);
+      if (savedAccount) {
+        applyDiscordOnlinerAccountPresenceLive(
+          candidate,
+          savedAccount,
+          `Rich Presence ${richPresenceEnabled ? "enabled" : "disabled"} on the active Gateway connection.`
+        );
+      }
     }
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
     res.json(await getDiscordOnlinerSnapshotForApi(candidate));
@@ -9108,6 +9144,45 @@ app.post("/api/community/members/:discordUserId/onliner", requireSession, async 
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
     appendDiscordOnlinerLog("success", `Members Stock account ${member.rows[0].username} was connected to Onliner.`, accountId);
     res.status(tokenMatch ? 200 : 201).json({ connected: true, accountId, alreadyExisted: Boolean(tokenMatch) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/api/community/members/:discordUserId/onliner/rich-presence", requireSession, async (req, res, next) => {
+  try {
+    const discordUserId = String(req.params.discordUserId ?? "").trim();
+    if (!isDiscordGuildId(discordUserId)) return res.status(400).json({ message: "A valid Members Stock user is required." });
+    const richPresenceEnabled = req.body?.richPresenceEnabled === true;
+    const current = await getDiscordOnlinerConfig();
+    const linkedAccount = current.accounts.find((account) => account.discordUserId === discordUserId);
+    if (!linkedAccount) return res.status(404).json({ message: "This member is not connected to Onliner." });
+
+    if (linkedAccount.richPresenceEnabled === richPresenceEnabled) {
+      return res.json({ updated: false, enabled: richPresenceEnabled, appliedLive: false });
+    }
+
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      accounts: current.accounts.map((account) => account.id === linkedAccount.id
+        ? { ...account, richPresenceEnabled }
+        : account)
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+
+    let appliedLive = false;
+    if (serviceRunsOnliner) {
+      const savedAccount = candidate.accounts.find((account) => account.id === linkedAccount.id);
+      if (savedAccount) {
+        appliedLive = applyDiscordOnlinerAccountPresenceLive(
+          candidate,
+          savedAccount,
+          `Members Stock changed Rich Presence ${richPresenceEnabled ? "on" : "off"} without reconnecting.`
+        );
+      }
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    res.json({ updated: true, enabled: richPresenceEnabled, appliedLive });
   } catch (error) {
     next(error);
   }

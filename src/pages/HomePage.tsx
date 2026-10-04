@@ -86,6 +86,7 @@ import {
   saveCommunityConfig,
   syncCommunityAuthorizations,
   transferCommunityAuthorizations,
+  updateCommunityMemberRichPresence,
   updateCommunityStockCategory,
   type CommunityAdminStatus,
   type CommunityBotGuild,
@@ -766,6 +767,7 @@ export default function HomePage() {
   const [communityOnlinerMember, setCommunityOnlinerMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [communityOnlinerRichPresence, setCommunityOnlinerRichPresence] = useState(true);
   const [communityOnlinerActionId, setCommunityOnlinerActionId] = useState<string | null>(null);
+  const [communityRichPresenceActionId, setCommunityRichPresenceActionId] = useState<string | null>(null);
   const [importingCommunityStock, setImportingCommunityStock] = useState(false);
   const [communityImportProgress, setCommunityImportProgress] = useState<{ processed: number; total: number } | null>(null);
   const [exportingCommunityStock, setExportingCommunityStock] = useState(false);
@@ -2000,6 +2002,26 @@ export default function HomePage() {
     }
   }
 
+  async function toggleCommunityMemberRichPresence(record: CommunityAdminStatus["recent"][number]) {
+    if (communityOnlinerActionId || communityRichPresenceActionId || !record.onlinerConnected) return;
+    const enabled = record.onlinerRichPresenceEnabled !== true;
+    try {
+      setCommunityRichPresenceActionId(record.id);
+      const result = await updateCommunityMemberRichPresence(record.id, enabled);
+      setCommunityStatus((current) => current ? {
+        ...current,
+        recent: current.recent.map((item) => item.id === record.id
+          ? { ...item, onlinerRichPresenceEnabled: result.enabled }
+          : item)
+      } : current);
+      notifySuccess(`Rich Presence turned ${result.enabled ? "on" : "off"} without reconnecting ${record.displayName || record.username}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Rich Presence could not be updated.");
+    } finally {
+      setCommunityRichPresenceActionId(null);
+    }
+  }
+
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
     setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, iconName: "Users", colorKey: "violet" });
@@ -3032,11 +3054,19 @@ export default function HomePage() {
                     </span>
                   ) : null}
                   {record.onlinerConnected ? (
-                    <span className="community-rich-presence-chip" data-enabled={record.onlinerRichPresenceEnabled === true} title={`Rich Presence ${record.onlinerRichPresenceEnabled === true ? "enabled" : "disabled"}`}>
-                      <Star className="h-3 w-3" aria-hidden="true" />
+                    <button
+                      type="button"
+                      className="community-rich-presence-chip"
+                      data-enabled={record.onlinerRichPresenceEnabled === true}
+                      title={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} without reconnecting`}
+                      aria-label={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} for ${record.username}`}
+                      disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+                      onClick={() => void toggleCommunityMemberRichPresence(record)}
+                    >
+                      {communityRichPresenceActionId === record.id ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Star className="h-3 w-3" aria-hidden="true" />}
                       <span>Rich Presence</span>
                       <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
-                    </span>
+                    </button>
                   ) : null}
                   <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
                 </span>
@@ -3047,7 +3077,7 @@ export default function HomePage() {
                     variant={record.onlinerConnected ? "dangerGhost" : "secondary"}
                     title={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
                     aria-label={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
-                    disabled={communityOnlinerActionId !== null}
+                    disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
                     onClick={() => record.onlinerConnected ? void disconnectCommunityMemberOnliner(record) : beginConnectingCommunityMemberToOnliner(record)}
                   >
                     {communityOnlinerActionId === record.id
