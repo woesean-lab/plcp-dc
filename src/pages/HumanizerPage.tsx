@@ -792,10 +792,20 @@ export default function HumanizerPage() {
               <span className="onliner-section-icon" aria-hidden="true">{jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}</span>
               <span><strong>{jobActive ? "Updating account profiles" : "Latest run completed"}</strong><small>{jobActive ? "Results update live as each account finishes." : "Review every applied change and account requiring attention."}</small></span>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">{job.completed}/{job.total} processed</Badge>
-              <Badge variant="success">{job.succeeded} successful</Badge>
-              {job.failed ? <Badge variant="destructive">{job.failed} attention</Badge> : null}
+            <div className="humanizer-run-outcome" data-state={jobActive ? "running" : job.failed ? "attention" : "success"} role="status">
+              <span className="humanizer-run-outcome-icon" aria-hidden="true">
+                {jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : job.failed ? <CircleAlert className="h-4 w-4" /> : <Check className="h-4 w-4" />}
+              </span>
+              <span className="humanizer-run-outcome-copy">
+                <strong>{jobActive ? "Run in progress" : job.failed ? "Completed with attention" : "All updates complete"}</strong>
+                <small>
+                  {jobActive
+                    ? `${job.completed} of ${job.total} processed · ${progress}%`
+                    : job.failed
+                      ? `${job.succeeded} successful · ${job.failed} need review`
+                      : `${job.succeeded} account${job.succeeded === 1 ? "" : "s"} updated successfully`}
+                </small>
+              </span>
             </div>
           </header>
           <div className="humanizer-run-body">

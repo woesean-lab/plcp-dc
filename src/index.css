@@ -10756,6 +10756,40 @@
 
 .humanizer-run-panel { overflow: hidden; }
 .humanizer-run-head { border-bottom: 1px solid var(--app-divider); padding: 16px 20px; }
+.humanizer-run-outcome {
+  display: flex;
+  min-width: 230px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, var(--app-surface-soft) 84%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+}
+.humanizer-run-outcome-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--app-accent-bright);
+  background: var(--app-accent-soft);
+}
+.humanizer-run-outcome-copy { display: grid; min-width: 0; gap: 3px; }
+.humanizer-run-outcome-copy strong { color: var(--app-text); font-size: 11px; font-weight: 750; }
+.humanizer-run-outcome-copy small { color: var(--app-muted); font-size: 9px; line-height: 1.35; }
+.humanizer-run-outcome[data-state="success"] {
+  border-color: color-mix(in srgb, var(--app-success) 28%, var(--app-border));
+  background: color-mix(in srgb, var(--app-success) 6%, var(--app-surface-soft));
+}
+.humanizer-run-outcome[data-state="success"] .humanizer-run-outcome-icon { color: var(--app-success); background: var(--app-success-soft); }
+.humanizer-run-outcome[data-state="attention"] {
+  border-color: color-mix(in srgb, var(--app-danger) 28%, var(--app-border));
+  background: color-mix(in srgb, var(--app-danger) 6%, var(--app-surface-soft));
+}
+.humanizer-run-outcome[data-state="attention"] .humanizer-run-outcome-icon { color: var(--app-danger); background: var(--app-danger-soft); }
 .humanizer-run-body { padding: 18px 20px 20px; }
 .humanizer-progress {
   height: 5px;
@@ -10834,5 +10868,6 @@
   .humanizer-command-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
   .humanizer-command-actions .ui-button { width: 100%; }
   .humanizer-run-head { align-items: flex-start; flex-direction: column; padding: 15px; }
+  .humanizer-run-outcome { width: 100%; min-width: 0; }
   .humanizer-run-body { padding: 15px; }
 }
