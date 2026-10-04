@@ -195,7 +195,7 @@ function HumanizerPageSkeleton() {
               </div>
               <div className="humanizer-avatar-pool-body">
                 <div className="humanizer-avatar-preview-grid">
-                  {[0, 1, 2].map((item) => <Skeleton key={item} className="h-[62px] w-full" />)}
+                  {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-[154px] w-full" />)}
                 </div>
               </div>
             </div>
@@ -662,7 +662,13 @@ export default function HumanizerPage() {
                 {avatarData.slice(0, avatarPreviewLimit).map((avatar, index) => (
                   <div key={`${avatar.name}-${index}`} className="humanizer-avatar-preview">
                     <div className="humanizer-avatar-preview-image">
-                    <img src={avatar.url} alt={`Preview of ${avatar.name}`} loading="lazy" decoding="async" />
+                      <img src={avatar.url} alt={`Preview of ${avatar.name}`} loading="lazy" decoding="async" />
+                    </div>
+                    <div className="humanizer-avatar-preview-footer">
+                      <span className="humanizer-avatar-preview-meta">
+                        <strong title={avatar.name}>{avatar.name}</strong>
+                        <small>Ready to use</small>
+                      </span>
                       <button
                         type="button"
                         className="humanizer-avatar-remove"
@@ -673,7 +679,6 @@ export default function HumanizerPage() {
                         <Trash2 className="h-3 w-3" aria-hidden="true" />
                       </button>
                     </div>
-                    <span><strong>{avatar.name}</strong><small>Ready to use</small></span>
                   </div>
                 ))}
                 </div>
