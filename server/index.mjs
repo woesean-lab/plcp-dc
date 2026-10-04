@@ -7404,10 +7404,10 @@ app.post("/api/humanizer/packages", requireSession, async (req, res, next) => {
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
     if (!name) return res.status(400).json({ message: "Enter a package name." });
 
-    const usernames = cleanHumanizerLines(req.body?.usernames, 500, 32);
-    const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
-    const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
-    const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
+    const usernames = cleanHumanizerLines(req.body?.usernames, 1000, 32);
+    const displayNames = cleanHumanizerLines(req.body?.displayNames, 1000, 32);
+    const bios = cleanHumanizerLines(req.body?.bios, 1000, 190);
+    const pronouns = cleanHumanizerLines(req.body?.pronouns, 1000, 40);
     const submittedAvatarIds = [...new Set(
       (Array.isArray(req.body?.avatars) ? req.body.avatars : [])
         .map((avatar) => String(avatar?.id ?? "").trim())
@@ -7479,10 +7479,10 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Select at least one Members Stock account." });
     }
 
-    const usernames = cleanHumanizerLines(req.body?.usernames, 500, 32);
-    const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
-    const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
-    const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
+    const usernames = cleanHumanizerLines(req.body?.usernames, 1000, 32);
+    const displayNames = cleanHumanizerLines(req.body?.displayNames, 1000, 32);
+    const bios = cleanHumanizerLines(req.body?.bios, 1000, 190);
+    const pronouns = cleanHumanizerLines(req.body?.pronouns, 1000, 40);
     const avatarIds = [...new Set(
       (Array.isArray(req.body?.avatarIds) ? req.body.avatarIds : [])
         .map((value) => String(value ?? "").trim())

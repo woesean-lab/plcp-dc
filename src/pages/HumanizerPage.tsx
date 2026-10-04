@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   AtSign,
   BadgeCheck,
@@ -244,6 +245,7 @@ export default function HumanizerPage() {
   const [packageName, setPackageName] = useState("");
   const [savingPackage, setSavingPackage] = useState(false);
   const [deletingPackage, setDeletingPackage] = useState(false);
+  const [packageModal, setPackageModal] = useState<"save" | "delete" | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   async function loadCatalog(showToast = false) {
@@ -293,6 +295,15 @@ export default function HumanizerPage() {
     };
   }, [job?.id, job?.status]);
 
+  useEffect(() => {
+    if (!packageModal) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !savingPackage && !deletingPackage) setPackageModal(null);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [packageModal, savingPackage, deletingPackage]);
+
   const visibleAccounts = useMemo(() => {
     const query = search.trim().toLowerCase();
     return (catalog?.accounts ?? [])
@@ -320,6 +331,7 @@ export default function HumanizerPage() {
   const progress = job?.total ? Math.round((job.completed / job.total) * 100) : 0;
   const eligibleAccountCount = (catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).length;
   const selectedPackage = packages.find((item) => item.id === selectedPackageId) ?? null;
+  const packageToOverwrite = packages.find((item) => item.name.localeCompare(packageName.trim(), undefined, { sensitivity: "accent" }) === 0) ?? null;
 
   function toggleAccount(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -395,7 +407,7 @@ export default function HumanizerPage() {
     }
   }
 
-  async function handleSavePackage() {
+  function requestSavePackage() {
     if (uploadingAvatars) {
       toast.error("Wait for avatar uploads to finish.");
       return;
@@ -408,6 +420,10 @@ export default function HumanizerPage() {
       toast.error("Add at least one profile change before saving a package.");
       return;
     }
+    setPackageModal("save");
+  }
+
+  async function handleSavePackage() {
     try {
       setSavingPackage(true);
       const saved = await saveHumanizerPackage({
@@ -423,6 +439,7 @@ export default function HumanizerPage() {
       setPackages((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
       setSelectedPackageId(saved.id);
       setPackageName(saved.name);
+      setPackageModal(null);
       toast.success(`“${saved.name}” package saved.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Package could not be saved.");
@@ -453,7 +470,7 @@ export default function HumanizerPage() {
   }
 
   async function handleDeletePackage() {
-    if (!selectedPackage || !window.confirm(`Delete the “${selectedPackage.name}” package?`)) return;
+    if (!selectedPackage) return;
     try {
       setDeletingPackage(true);
       await deleteHumanizerPackage(selectedPackage.id);
@@ -461,6 +478,7 @@ export default function HumanizerPage() {
       setPackages(remaining);
       setSelectedPackageId(remaining[0]?.id ?? "");
       if (packageName === selectedPackage.name) setPackageName("");
+      setPackageModal(null);
       toast.success("Package deleted.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Package could not be deleted.");
@@ -586,7 +604,7 @@ export default function HumanizerPage() {
               </div>
               <div className="humanizer-package-controls">
                 <Input value={packageName} maxLength={60} onChange={(event) => setPackageName(event.target.value)} placeholder="Package name" />
-                <Button type="button" size="xs" variant="secondary" disabled={savingPackage || Boolean(uploadingAvatars) || !configuredChanges} onClick={() => void handleSavePackage()}>
+                <Button type="button" size="xs" variant="secondary" disabled={savingPackage || Boolean(uploadingAvatars) || !configuredChanges} onClick={requestSavePackage}>
                   {savingPackage ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save
                 </Button>
                 <FilterDropdown
@@ -601,7 +619,7 @@ export default function HumanizerPage() {
                   onChange={setSelectedPackageId}
                 />
                 <Button type="button" size="xs" disabled={!selectedPackage} onClick={handleUsePackage}><PackageOpen className="h-3.5 w-3.5" /> Use</Button>
-                <Button type="button" size="icon-sm" variant="ghost" aria-label="Delete selected package" title="Delete package" disabled={!selectedPackage || deletingPackage} onClick={() => void handleDeletePackage()}>
+                <Button type="button" size="icon-sm" variant="ghost" aria-label="Delete selected package" title="Delete package" disabled={!selectedPackage || deletingPackage} onClick={() => setPackageModal("delete")}>
                   {deletingPackage ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                 </Button>
               </div>
@@ -610,19 +628,19 @@ export default function HumanizerPage() {
             <div className="humanizer-recipe-grid">
               <label className="humanizer-recipe-card" data-recipe="username">
                 <span className="humanizer-recipe-head"><i><AtSign className="h-4 w-4" /></i><span><strong>Usernames</strong><small>One value per line</small></span><b>{splitLines(usernames).length}</b></span>
-                <textarea className="onliner-game-textarea" value={usernames} maxLength={16_500} onChange={(event) => setUsernames(event.target.value)} placeholder={"alex_01\ntaylor_02\njordan_03"} />
+                <textarea className="onliner-game-textarea" value={usernames} maxLength={33_000} onChange={(event) => setUsernames(event.target.value)} placeholder={"alex_01\ntaylor_02\njordan_03"} />
               </label>
               <label className="humanizer-recipe-card" data-recipe="name">
                 <span className="humanizer-recipe-head"><i><Type className="h-4 w-4" /></i><span><strong>Display names</strong><small>One value per line</small></span><b>{splitLines(displayNames).length}</b></span>
-                <textarea className="onliner-game-textarea" value={displayNames} maxLength={16_500} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
+                <textarea className="onliner-game-textarea" value={displayNames} maxLength={33_000} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
               </label>
               <label className="humanizer-recipe-card" data-recipe="pronouns">
                 <span className="humanizer-recipe-head"><i><UserRoundCheck className="h-4 w-4" /></i><span><strong>Pronouns</strong><small>One value per line</small></span><b>{splitLines(pronouns).length}</b></span>
-                <textarea className="onliner-game-textarea" value={pronouns} maxLength={20_500} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
+                <textarea className="onliner-game-textarea" value={pronouns} maxLength={41_000} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
               </label>
               <label className="humanizer-recipe-card" data-recipe="bio">
                 <span className="humanizer-recipe-head"><i><FileText className="h-4 w-4" /></i><span><strong>Profile bios</strong><small>One value per line</small></span><b>{splitLines(bios).length}</b></span>
-                <textarea className="onliner-game-textarea" value={bios} maxLength={95_500} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
+                <textarea className="onliner-game-textarea" value={bios} maxLength={191_000} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
               </label>
             </div>
 
@@ -774,6 +792,65 @@ export default function HumanizerPage() {
           </div>
           </div>
         </section>
+      ) : null}
+
+      {packageModal ? createPortal(
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !savingPackage && !deletingPackage) setPackageModal(null);
+          }}
+        >
+          <div
+            className="confirm-modal"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="humanizer-package-modal-title"
+            aria-describedby="humanizer-package-modal-description"
+          >
+            <span className={`confirm-modal-icon ${packageModal === "save" ? "is-success" : ""}`} aria-hidden="true">
+              {packageModal === "save" ? <PackageOpen className="h-5 w-5" /> : <Trash2 className="h-5 w-5" />}
+            </span>
+            <p className={`app-kicker ${packageModal === "delete" ? "text-[var(--app-danger)]" : "text-[var(--app-success)]"}`}>
+              {packageModal === "save" ? (packageToOverwrite ? "Update ready package" : "Create ready package") : "Delete ready package"}
+            </p>
+            <h2 id="humanizer-package-modal-title">
+              {packageModal === "save"
+                ? packageToOverwrite ? `Replace “${packageToOverwrite.name}”?` : `Save “${packageName.trim()}”?`
+                : selectedPackage ? `Delete “${selectedPackage.name}”?` : "Delete this package?"}
+            </h2>
+            <p id="humanizer-package-modal-description">
+              {packageModal === "save"
+                ? packageToOverwrite
+                  ? "The saved usernames, display names, bios, pronouns, avatars and Humanizer settings in this package will be replaced with the current recipe."
+                  : "The current usernames, display names, bios, pronouns, avatars and Humanizer settings will be stored together as a reusable package."
+                : "This removes the saved package. Avatars currently loaded in the editor and your account profiles will not be changed."}
+            </p>
+            <div className="confirm-modal-actions">
+              <Button
+                autoFocus
+                type="button"
+                variant="secondary"
+                disabled={savingPackage || deletingPackage}
+                onClick={() => setPackageModal(null)}
+              >
+                Cancel
+              </Button>
+              {packageModal === "save" ? (
+                <Button type="button" disabled={savingPackage} onClick={() => void handleSavePackage()}>
+                  {savingPackage ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  {savingPackage ? "Saving…" : packageToOverwrite ? "Replace package" : "Save package"}
+                </Button>
+              ) : (
+                <Button type="button" variant="destructive" disabled={deletingPackage || !selectedPackage} onClick={() => void handleDeletePackage()}>
+                  {deletingPackage ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  {deletingPackage ? "Deleting…" : "Delete package"}
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       ) : null}
     </div>
   );
