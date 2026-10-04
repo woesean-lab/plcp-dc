@@ -1570,6 +1570,11 @@
     padding: 0.35rem;
   }
 
+  .filter-dropdown.is-top .filter-dropdown-menu {
+    top: auto;
+    bottom: calc(100% + 0.45rem);
+  }
+
   .filter-dropdown-option {
     display: flex;
     width: 100%;
@@ -10368,22 +10373,13 @@
   padding-top: 16px;
 }
 
-.humanizer-select {
+.humanizer-category-dropdown .filter-dropdown-trigger {
   min-height: 42px;
-  border: 1px solid var(--app-border);
   border-radius: 10px;
-  background: var(--app-input-bg, rgba(8, 9, 18, .72));
-  color: var(--app-text-secondary);
-  padding: 0 34px 0 12px;
+  padding: 0 11px 0 12px;
   font-size: 11px;
-  outline: none;
-  transition: border-color .15s ease, box-shadow .15s ease;
 }
-.humanizer-select:hover { border-color: var(--app-border-strong); }
-.humanizer-select:focus {
-  border-color: color-mix(in srgb, var(--app-accent) 58%, var(--app-border));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--app-accent) 12%, transparent);
-}
+.humanizer-category-dropdown .filter-dropdown-menu { font-size: 11px; }
 
 .humanizer-account-list,
 .humanizer-results {
@@ -10521,8 +10517,14 @@
 .humanizer-option-card small { display: block; }
 .humanizer-option-card strong { color: var(--app-text); font-size: 11px; }
 .humanizer-option-card small { margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.35; }
-.humanizer-option-card select { max-width: 124px; border: 0; background: transparent; color: var(--app-text-secondary); font-size: 10px; outline: 0; }
-.humanizer-option-card select option { background: var(--app-surface); color: var(--app-text); }
+.humanizer-hypesquad-dropdown { width: 136px; flex: 0 0 136px; }
+.humanizer-hypesquad-dropdown .filter-dropdown-trigger {
+  min-height: 34px;
+  border-radius: 9px;
+  padding: 0 8px 0 10px;
+  font-size: 10px;
+}
+.humanizer-hypesquad-dropdown .filter-dropdown-menu { left: auto; width: 168px; }
 .humanizer-option-icon {
   display: grid;
   width: 32px;
@@ -10575,9 +10577,10 @@
   background: var(--app-success-soft);
 }
 .humanizer-command-actions { flex: 0 0 auto; gap: 10px; }
-.humanizer-command-actions label { gap: 7px; }
-.humanizer-command-actions label > span { display: flex; align-items: center; gap: 5px; color: var(--app-muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
-.humanizer-command-actions .humanizer-select { width: 68px; min-height: 40px; }
+.humanizer-parallel-control { display: flex; align-items: center; gap: 7px; }
+.humanizer-parallel-control > span { display: flex; align-items: center; gap: 5px; color: var(--app-muted); font-size: 9px; font-weight: 750; text-transform: uppercase; }
+.humanizer-parallel-dropdown { width: 68px; }
+.humanizer-parallel-dropdown .filter-dropdown-trigger { min-height: 40px; border-radius: 10px; padding: 0 8px 0 11px; font-size: 11px; }
 
 .humanizer-run-panel { overflow: hidden; }
 .humanizer-run-head { border-bottom: 1px solid var(--app-divider); padding: 16px 20px; }
@@ -10647,7 +10650,7 @@
   .humanizer-account-row > span:last-child { width: 100%; padding-left: 62px; justify-content: flex-start; }
   .humanizer-option-card { align-items: flex-start; flex-wrap: wrap; }
   .humanizer-option-card .ui-button,
-  .humanizer-option-card select { margin-left: 42px; }
+  .humanizer-hypesquad-dropdown { margin-left: 42px; }
   .humanizer-commandbar { align-items: stretch; flex-direction: column; padding: 14px 15px; }
   .humanizer-command-summary small { white-space: normal; }
   .humanizer-command-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEven
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
@@ -337,76 +338,6 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
 
 const BOOST_MEMBERSHIP_SCREENING_MESSAGE = "Membership screening is enabled on this server. Disable the join form before boosting.";
 const BOOST_BYPASS_INVITE_MESSAGE = "Create a new invite with Bypass Join Application enabled and send us that new invite link.";
-
-type FilterOption = {
-  value: string;
-  label: string;
-};
-
-function FilterDropdown({
-  label,
-  value,
-  options,
-  onChange,
-  showLabel = true,
-  className = "",
-  disabled = false
-}: {
-  label: string;
-  value: string;
-  options: FilterOption[];
-  onChange: (value: string) => void;
-  showLabel?: boolean;
-  className?: string;
-  disabled?: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((option) => option.value === value) ?? options[0];
-
-  return (
-    <div className={`filter-dropdown ${className}`.trim()}>
-      {showLabel ? <span className={fieldLabelClass}>{label}</span> : null}
-      <button
-        type="button"
-        className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
-        aria-label={label}
-        disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
-        onBlur={(event) => {
-          if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null)) {
-            setOpen(false);
-          }
-        }}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-      >
-        <span>{selected?.label ?? value}</span>
-        <ChevronDown className="h-4 w-4" aria-hidden="true" />
-      </button>
-      {open ? (
-        <div className="filter-dropdown-menu" role="listbox" tabIndex={-1}>
-          {options.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              className={`filter-dropdown-option ${option.value === value ? "is-selected" : ""}`}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                onChange(option.value);
-                setOpen(false);
-              }}
-              role="option"
-              aria-selected={option.value === value}
-            >
-              {option.label}
-              {option.value === value ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";

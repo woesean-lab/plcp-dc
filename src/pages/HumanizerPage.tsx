@@ -25,6 +25,7 @@ import {
 import toast from "react-hot-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -375,10 +376,17 @@ export default function HumanizerPage() {
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--app-muted)]" />
               <Input className="pl-10" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or ID" />
             </label>
-            <select className="humanizer-select" value={categoryId} onChange={(event) => setCategoryId(event.target.value)}>
-              <option value="all">All categories</option>
-              {(catalog?.categories ?? []).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-            </select>
+            <FilterDropdown
+              label="Account category"
+              showLabel={false}
+              className="humanizer-category-dropdown"
+              value={categoryId}
+              options={[
+                { value: "all", label: "All categories" },
+                ...(catalog?.categories ?? []).map((category) => ({ value: category.id, label: category.name }))
+              ]}
+              onChange={setCategoryId}
+            />
             </div>
 
             <div className="humanizer-account-list">
@@ -444,13 +452,25 @@ export default function HumanizerPage() {
                 <Button type="button" variant="secondary" size="xs" onClick={() => avatarInputRef.current?.click()}><Upload className="h-3.5 w-3.5" /> Choose</Button>
                 <input ref={avatarInputRef} className="hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleAvatarFiles(event.target.files)} />
               </div>
-              <label className="humanizer-option-card">
+              <div className="humanizer-option-card">
                 <span className="humanizer-option-icon"><Sparkles className="h-4 w-4" /></span>
                 <span className="min-w-0 flex-1"><strong>HypeSquad</strong><small>Leave unchanged or assign a house</small></span>
-                <select value={hypesquad} onChange={(event) => setHypesquad(event.target.value as typeof hypesquad)}>
-                  <option value="none">Unchanged</option><option value="random">Balanced rotation</option><option value="bravery">Bravery</option><option value="brilliance">Brilliance</option><option value="balance">Balance</option>
-                </select>
-              </label>
+                <FilterDropdown
+                  label="HypeSquad house"
+                  showLabel={false}
+                  placement="top"
+                  className="humanizer-hypesquad-dropdown"
+                  value={hypesquad}
+                  options={[
+                    { value: "none", label: "Unchanged" },
+                    { value: "random", label: "Balanced rotation" },
+                    { value: "bravery", label: "Bravery" },
+                    { value: "brilliance", label: "Brilliance" },
+                    { value: "balance", label: "Balance" }
+                  ]}
+                  onChange={(value) => setHypesquad(value as typeof hypesquad)}
+                />
+              </div>
             </div>
             {avatarData.length ? (
               <div className="humanizer-file-list">
@@ -470,7 +490,18 @@ export default function HumanizerPage() {
             <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "Select at least one eligible account"} · {configuredChanges ? `${configuredChanges} change type${configuredChanges === 1 ? "" : "s"}` : "Recipe is empty"}</small></span>
           </div>
           <div className="humanizer-command-actions">
-            <label><span><Gauge className="h-3.5 w-3.5" /> Parallel</span><select className="humanizer-select" value={concurrency} onChange={(event) => setConcurrency(Number(event.target.value))}>{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+            <div className="humanizer-parallel-control">
+              <span><Gauge className="h-3.5 w-3.5" /> Parallel</span>
+              <FilterDropdown
+                label="Parallel accounts"
+                showLabel={false}
+                placement="top"
+                className="humanizer-parallel-dropdown"
+                value={String(concurrency)}
+                options={[1, 2, 3, 4, 5].map((value) => ({ value: String(value), label: String(value) }))}
+                onChange={(value) => setConcurrency(Number(value))}
+              />
+            </div>
             <Button type="button" disabled={starting || jobActive || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
               {starting || jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {jobActive ? "Humanizer running" : `Run ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
