@@ -703,7 +703,6 @@ export default function HumanizerPage() {
                       ]}
                       onChange={(value) => updateHypesquad(value as typeof hypesquad)}
                     />
-                    <button type="button" className="humanizer-field-toggle" aria-pressed={activeFields.includes("hypesquad")} disabled={!fieldContent.hypesquad} onClick={() => setFieldEnabled("hypesquad", !activeFields.includes("hypesquad"))}><Check className="h-3 w-3" />{activeFields.includes("hypesquad") ? "Selected" : "Select"}</button>
                   </div>
                   <Button type="button" variant="secondary" size="xs" disabled={Boolean(uploadingAvatars) || avatarData.length >= 1000} onClick={() => avatarInputRef.current?.click()}>
                     {uploadingAvatars ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
