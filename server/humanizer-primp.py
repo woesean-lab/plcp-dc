@@ -64,14 +64,18 @@ def get_identity(client, properties):
     if not fingerprint:
         raise RuntimeError("Discord experiments did not return a fingerprint")
 
-    apex_headers = {**headers, "X-Fingerprint": fingerprint}
-    apex = require_json(
-        client.get(f"{DISCORD_API_BASE}/apex/experiments?surface=2", headers=apex_headers),
-        "Discord Apex experiments",
-    )
-    installation_id = str(apex.get("installation") or "").strip()
+    # Discord may issue the signed installation ID with the legacy experiments
+    # response. Only ask Apex to mint one when the first response omitted it.
+    installation_id = str(experiments.get("installation") or "").strip()
     if not installation_id:
-        raise RuntimeError("Discord Apex experiments did not return an installation ID")
+        apex_headers = {**headers, "X-Fingerprint": fingerprint}
+        apex = require_json(
+            client.get(f"{DISCORD_API_BASE}/apex/experiments?surface=2", headers=apex_headers),
+            "Discord Apex experiments",
+        )
+        installation_id = str(apex.get("installation") or "").strip()
+    if not installation_id:
+        raise RuntimeError("Discord experiments did not return an installation ID")
     return fingerprint, installation_id
 
 
