@@ -10450,6 +10450,42 @@
   border-top: 1px solid var(--app-divider);
   padding-top: 16px;
 }
+.humanizer-package-panel {
+  display: grid;
+  gap: 11px;
+  border: 1px solid var(--app-border);
+  border-radius: 13px;
+  padding: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--app-accent) 7%, transparent), rgba(5, 6, 13, .3));
+}
+.humanizer-package-copy,
+.humanizer-package-controls {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+.humanizer-package-copy { gap: 9px; }
+.humanizer-package-copy > span:nth-child(2) { min-width: 0; flex: 1; }
+.humanizer-package-copy strong,
+.humanizer-package-copy small { display: block; }
+.humanizer-package-copy strong { color: var(--app-text); font-size: 11px; }
+.humanizer-package-copy small { margin-top: 3px; color: var(--app-muted); font-size: 9px; }
+.humanizer-package-icon {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 9px;
+  background: var(--app-accent-soft);
+  color: var(--app-accent-bright);
+}
+.humanizer-package-controls { display: grid; grid-template-columns: minmax(105px, 1fr) auto minmax(120px, 1fr) auto auto; gap: 7px; }
+.humanizer-package-controls .ui-input,
+.humanizer-package-dropdown .filter-dropdown-trigger { min-height: 34px; height: 34px; border-radius: 9px; font-size: 10px; }
+.humanizer-package-dropdown .filter-dropdown-trigger { padding: 0 8px 0 10px; }
+.humanizer-package-dropdown .filter-dropdown-menu { min-width: 150px; }
 .humanizer-recipe-card {
   --recipe-color: var(--app-accent-bright);
   position: relative;
@@ -10471,6 +10507,7 @@
   opacity: .65;
 }
 .humanizer-recipe-card[data-recipe="name"] { --recipe-color: #8095ff; }
+.humanizer-recipe-card[data-recipe="username"] { --recipe-color: #61c9ef; }
 .humanizer-recipe-card[data-recipe="pronouns"] { --recipe-color: #c78cff; }
 .humanizer-recipe-card[data-recipe="bio"] { --recipe-color: #67d8a0; }
 .humanizer-recipe-card.is-wide { grid-column: 1 / -1; }
@@ -10536,24 +10573,30 @@
   background: var(--app-accent-soft);
   color: var(--app-accent-bright);
 }
-.humanizer-file-list { display: flex; flex-wrap: wrap; gap: 7px; }
-.humanizer-file-chip {
-  display: inline-flex;
-  max-width: 210px;
+.humanizer-avatar-preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; }
+.humanizer-avatar-preview {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
+  gap: 9px;
   overflow: hidden;
   border: 1px solid var(--app-border);
-  border-radius: 8px;
-  background: var(--app-control-bg);
+  border-radius: 11px;
+  background: rgba(5, 6, 13, .34);
   color: var(--app-text-secondary);
-  padding: 6px 8px;
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  padding: 7px;
+  text-align: left;
+  transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
 }
-.humanizer-file-chip svg:first-child { flex: 0 0 auto; color: var(--app-accent-bright); }
-.humanizer-file-chip svg:last-child { flex: 0 0 auto; color: var(--app-muted); }
+.humanizer-avatar-preview:hover { border-color: var(--app-accent-border); background: var(--app-accent-soft); transform: translateY(-1px); }
+.humanizer-avatar-preview > img { width: 42px; height: 42px; border-radius: 9px; object-fit: cover; background: var(--app-control-bg); }
+.humanizer-avatar-preview > span { min-width: 0; }
+.humanizer-avatar-preview strong,
+.humanizer-avatar-preview small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.humanizer-avatar-preview strong { color: var(--app-text); font-size: 9px; }
+.humanizer-avatar-preview small { margin-top: 3px; color: var(--app-muted); font-size: 8px; }
+.humanizer-avatar-preview > svg { color: var(--app-muted); }
 
 .humanizer-commandbar {
   justify-content: space-between;
@@ -10644,6 +10687,9 @@
   .humanizer-filterbar,
   .humanizer-recipe-grid,
   .humanizer-options-grid { grid-template-columns: 1fr; }
+  .humanizer-package-controls { grid-template-columns: minmax(0, 1fr) auto; }
+  .humanizer-package-dropdown { grid-column: 1 / -1; }
+  .humanizer-package-controls > .ui-button:last-child { width: 32px; }
   .humanizer-recipe-card.is-wide { grid-column: auto; }
   .humanizer-account-list { height: 360px; }
   .humanizer-account-row { align-items: flex-start; flex-wrap: wrap; }

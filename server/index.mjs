@@ -328,6 +328,23 @@ function normalizeHumanizerAvatar(value) {
   return avatar.length <= 1_500_000 ? avatar : "";
 }
 
+function getHumanizerPackageSnapshot(row) {
+  const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    usernames: Array.isArray(payload.usernames) ? payload.usernames : [],
+    displayNames: Array.isArray(payload.displayNames) ? payload.displayNames : [],
+    bios: Array.isArray(payload.bios) ? payload.bios : [],
+    pronouns: Array.isArray(payload.pronouns) ? payload.pronouns : [],
+    avatars: Array.isArray(payload.avatars) ? payload.avatars : [],
+    hypesquad: ["random", "bravery", "brilliance", "balance"].includes(payload.hypesquad) ? payload.hypesquad : "none",
+    concurrency: Math.min(Math.max(Number.parseInt(payload.concurrency, 10) || 2, 1), 5),
+    createdAt: new Date(row.created_at).toISOString(),
+    updatedAt: new Date(row.updated_at).toISOString()
+  };
+}
+
 function getHumanizerDiscordError(result, fallback) {
   const message = String(result?.payload?.message ?? "").trim();
   const code = result?.payload?.code;
@@ -685,10 +702,12 @@ async function runHumanizerJob(job, accounts, options) {
     try {
       const accountPayload = {};
       const profilePayload = {};
+      const username = pick(options.usernames, index);
       const displayName = pick(options.displayNames, index);
       const bio = pick(options.bios, index);
       const pronouns = pick(options.pronouns, index);
       const avatar = pick(options.avatars, index);
+      if (username) accountPayload.username = username;
       if (displayName) accountPayload.global_name = displayName;
       if (avatar) accountPayload.avatar = avatar;
       if (bio) profilePayload.bio = bio;
@@ -700,18 +719,20 @@ async function runHumanizerJob(job, accounts, options) {
         const update = accountUpdate.result;
         result.gatewayFallback = accountUpdate.gatewayFallback;
         if (update.response.ok) {
+          if (username) result.changed.push("Username");
           if (displayName) result.changed.push("Display name");
           if (avatar) result.changed.push("Avatar");
           await pool.query(
             `UPDATE community_oauth_joins
-             SET display_name = COALESCE($3, display_name),
+             SET username = COALESCE($3, username),
+                 display_name = COALESCE($4, display_name),
                  avatar_url = CASE
-                   WHEN $4::text IS NOT NULL AND NULLIF($5::text, '') IS NOT NULL
-                   THEN 'https://cdn.discordapp.com/avatars/' || discord_user_id || '/' || $5 || '.png?size=128'
+                   WHEN $5::text IS NOT NULL AND NULLIF($6::text, '') IS NOT NULL
+                   THEN 'https://cdn.discordapp.com/avatars/' || discord_user_id || '/' || $6 || '.png?size=128'
                    ELSE avatar_url
                  END
              WHERE guild_id = $1 AND discord_user_id = $2`,
-            [account.guildId, account.id, displayName, avatar || null, String(update.payload?.avatar ?? "")]
+            [account.guildId, account.id, username, displayName, avatar || null, String(update.payload?.avatar ?? "")]
           );
         } else {
           failures.push(getHumanizerDiscordError(update, "Account profile could not be updated."));
@@ -7006,6 +7027,16 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS humanizer_packages (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS humanizer_packages_name_idx ON humanizer_packages (LOWER(name))");
   await initializeDiscordOnlinerDatabase();
   await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
@@ -7196,6 +7227,7 @@ async function hasActiveSession(req) {
 
 const app = express();
 app.set("trust proxy", 1);
+app.use("/api/humanizer", express.json({ limit: "32mb" }));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
@@ -7249,6 +7281,67 @@ app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
   }
 });
 
+app.get("/api/humanizer/packages", requireSession, async (_req, res, next) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, name, payload, created_at, updated_at FROM humanizer_packages ORDER BY updated_at DESC, name ASC"
+    );
+    res.set("Cache-Control", "no-store").json(result.rows.map(getHumanizerPackageSnapshot));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/humanizer/packages", requireSession, async (req, res, next) => {
+  try {
+    const name = String(req.body?.name ?? "").trim().slice(0, 60);
+    if (!name) return res.status(400).json({ message: "Enter a package name." });
+
+    const usernames = cleanHumanizerLines(req.body?.usernames, 500, 32);
+    const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
+    const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
+    const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
+    const submittedAvatars = Array.isArray(req.body?.avatars) ? req.body.avatars.slice(0, 20) : [];
+    const avatars = submittedAvatars.map((avatar, index) => ({
+      name: String(avatar?.name ?? `Avatar ${index + 1}`).trim().slice(0, 120) || `Avatar ${index + 1}`,
+      data: normalizeHumanizerAvatar(avatar?.data)
+    })).filter((avatar) => avatar.data);
+    if (submittedAvatars.length && avatars.length !== submittedAvatars.length) {
+      return res.status(400).json({ message: "One or more package avatars are invalid or larger than 1 MB." });
+    }
+    const hypesquad = ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
+      ? req.body.hypesquad
+      : "none";
+    const concurrency = Math.min(Math.max(Number.parseInt(req.body?.concurrency, 10) || 2, 1), 5);
+    if (!usernames.length && !displayNames.length && !bios.length && !pronouns.length && !avatars.length && hypesquad === "none") {
+      return res.status(400).json({ message: "Add at least one profile change before saving a package." });
+    }
+
+    const payload = { usernames, displayNames, bios, pronouns, avatars, hypesquad, concurrency };
+    const result = await pool.query(
+      `INSERT INTO humanizer_packages (id, name, payload, created_at, updated_at)
+       VALUES ($1, $2, $3::jsonb, NOW(), NOW())
+       ON CONFLICT (LOWER(name)) DO UPDATE
+       SET name = EXCLUDED.name, payload = EXCLUDED.payload, updated_at = NOW()
+       RETURNING id, name, payload, created_at, updated_at`,
+      [crypto.randomUUID(), name, JSON.stringify(payload)]
+    );
+    res.status(201).set("Cache-Control", "no-store").json(getHumanizerPackageSnapshot(result.rows[0]));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/humanizer/packages/:packageId", requireSession, async (req, res, next) => {
+  try {
+    const result = await pool.query("DELETE FROM humanizer_packages WHERE id = $1", [String(req.params.packageId ?? "")]);
+    if (!result.rowCount) return res.status(404).json({ message: "Humanizer package was not found." });
+    res.json({ deleted: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/humanizer/jobs/latest", requireSession, (_req, res) => {
   const latest = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   res.set("Cache-Control", "no-store").json(latest ? getHumanizerJobSnapshot(latest) : null);
@@ -7271,6 +7364,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Select at least one Members Stock account." });
     }
 
+    const usernames = cleanHumanizerLines(req.body?.usernames, 500, 32);
     const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
     const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
     const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
@@ -7283,7 +7377,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       ? req.body.hypesquad
       : null;
     const concurrency = Math.min(Math.max(Number.parseInt(req.body?.concurrency, 10) || 1, 1), 5);
-    if (!displayNames.length && !bios.length && !pronouns.length && !avatars.length && !hypesquad) {
+    if (!usernames.length && !displayNames.length && !bios.length && !pronouns.length && !avatars.length && !hypesquad) {
       return res.status(400).json({ message: "Enable at least one profile change and add its content." });
     }
 
@@ -7372,7 +7466,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
     humanizerJobs.set(job.id, job);
     const staleJobs = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(20);
     for (const stale of staleJobs) humanizerJobs.delete(stale.id);
-    void runHumanizerJob(job, accounts, { displayNames, bios, pronouns, avatars, hypesquad, concurrency }).catch((error) => {
+    void runHumanizerJob(job, accounts, { usernames, displayNames, bios, pronouns, avatars, hypesquad, concurrency }).catch((error) => {
       job.status = "failed";
       job.completedAt = new Date().toISOString();
       console.error("Humanizer job failed:", error instanceof Error ? error.message : error);

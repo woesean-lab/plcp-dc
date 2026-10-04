@@ -1,20 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AtSign,
   BadgeCheck,
   Check,
   CircleAlert,
   FileText,
   Gauge,
-  ImageIcon,
   Images,
   ListFilter,
   LoaderCircle,
+  PackageOpen,
   Play,
   RefreshCw,
   Search,
+  Save,
   ShieldCheck,
   Sparkles,
   Type,
+  Trash2,
   Upload,
   UserRoundCheck,
   Users,
@@ -29,13 +32,17 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  deleteHumanizerPackage,
   getHumanizerCatalog,
   getHumanizerJob,
   getLatestHumanizerJob,
+  getHumanizerPackages,
+  saveHumanizerPackage,
   startHumanizerJob,
   type HumanizerAccount,
   type HumanizerCatalog,
-  type HumanizerJob
+  type HumanizerJob,
+  type HumanizerPackage
 } from "@/lib/humanizer";
 
 function splitLines(value: string) {
@@ -148,9 +155,27 @@ function HumanizerPageSkeleton() {
               <Skeleton className="h-6 w-16 rounded-full" />
             </header>
 
+            <div className="humanizer-package-panel">
+              <div className="humanizer-package-copy">
+                <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+                <span className="min-w-0 flex-1">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="mt-2 h-3 w-48 max-w-full" />
+                </span>
+                <Skeleton className="h-6 w-8 rounded-full" />
+              </div>
+              <div className="humanizer-package-controls">
+                <Skeleton className="h-[34px] w-full" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-[34px] w-full" />
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-8" />
+              </div>
+            </div>
+
             <div className="humanizer-recipe-grid">
-              {["name", "pronouns", "bio"].map((recipe) => (
-                <div key={recipe} className={`humanizer-recipe-card ${recipe === "bio" ? "is-wide" : ""}`}>
+              {["username", "name", "pronouns", "bio"].map((recipe) => (
+                <div key={recipe} className="humanizer-recipe-card">
                   <span className="humanizer-recipe-head">
                     <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
                     <span className="min-w-0 flex-1">
@@ -204,6 +229,7 @@ export default function HumanizerPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState("all");
   const [search, setSearch] = useState("");
+  const [usernames, setUsernames] = useState("");
   const [displayNames, setDisplayNames] = useState("");
   const [bios, setBios] = useState("");
   const [pronouns, setPronouns] = useState("");
@@ -212,6 +238,12 @@ export default function HumanizerPage() {
   const [concurrency, setConcurrency] = useState(2);
   const [starting, setStarting] = useState(false);
   const [job, setJob] = useState<HumanizerJob | null>(null);
+  const [packages, setPackages] = useState<HumanizerPackage[]>([]);
+  const [packagesLoading, setPackagesLoading] = useState(true);
+  const [selectedPackageId, setSelectedPackageId] = useState("");
+  const [packageName, setPackageName] = useState("");
+  const [savingPackage, setSavingPackage] = useState(false);
+  const [deletingPackage, setDeletingPackage] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   async function loadCatalog(showToast = false) {
@@ -231,6 +263,13 @@ export default function HumanizerPage() {
   useEffect(() => {
     void loadCatalog();
     void getLatestHumanizerJob().then(setJob).catch(() => {});
+    void getHumanizerPackages()
+      .then((next) => {
+        setPackages(next);
+        if (next[0]) setSelectedPackageId(next[0].id);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : "Saved packages could not be loaded."))
+      .finally(() => setPackagesLoading(false));
   }, []);
 
   useEffect(() => {
@@ -270,10 +309,11 @@ export default function HumanizerPage() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allVisibleSelected = eligibleVisibleIds.length > 0 && eligibleVisibleIds.every((id) => selectedSet.has(id));
   const jobActive = job?.status === "queued" || job?.status === "running";
-  const configuredChanges = [splitLines(displayNames).length, splitLines(bios).length, splitLines(pronouns).length, avatarData.length, hypesquad === "none" ? 0 : 1]
+  const configuredChanges = [splitLines(usernames).length, splitLines(displayNames).length, splitLines(bios).length, splitLines(pronouns).length, avatarData.length, hypesquad === "none" ? 0 : 1]
     .filter(Boolean).length;
   const progress = job?.total ? Math.round((job.completed / job.total) * 100) : 0;
   const eligibleAccountCount = (catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).length;
+  const selectedPackage = packages.find((item) => item.id === selectedPackageId) ?? null;
 
   function toggleAccount(id: string) {
     setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
@@ -305,6 +345,7 @@ export default function HumanizerPage() {
       setStarting(true);
       const next = await startHumanizerJob({
         accountIds: selectedIds,
+        usernames: splitLines(usernames),
         displayNames: splitLines(displayNames),
         bios: splitLines(bios),
         pronouns: splitLines(pronouns),
@@ -318,6 +359,68 @@ export default function HumanizerPage() {
       toast.error(error instanceof Error ? error.message : "Humanizer could not be started.");
     } finally {
       setStarting(false);
+    }
+  }
+
+  async function handleSavePackage() {
+    if (!packageName.trim()) {
+      toast.error("Enter a package name.");
+      return;
+    }
+    if (!configuredChanges) {
+      toast.error("Add at least one profile change before saving a package.");
+      return;
+    }
+    try {
+      setSavingPackage(true);
+      const saved = await saveHumanizerPackage({
+        name: packageName.trim(),
+        usernames: splitLines(usernames),
+        displayNames: splitLines(displayNames),
+        bios: splitLines(bios),
+        pronouns: splitLines(pronouns),
+        avatars: avatarData,
+        hypesquad,
+        concurrency
+      });
+      setPackages((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      setSelectedPackageId(saved.id);
+      setPackageName(saved.name);
+      toast.success(`“${saved.name}” package saved.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Package could not be saved.");
+    } finally {
+      setSavingPackage(false);
+    }
+  }
+
+  function handleUsePackage() {
+    if (!selectedPackage) return;
+    setUsernames(selectedPackage.usernames.join("\n"));
+    setDisplayNames(selectedPackage.displayNames.join("\n"));
+    setBios(selectedPackage.bios.join("\n"));
+    setPronouns(selectedPackage.pronouns.join("\n"));
+    setAvatarData(selectedPackage.avatars);
+    setHypesquad(selectedPackage.hypesquad);
+    setConcurrency(selectedPackage.concurrency);
+    setPackageName(selectedPackage.name);
+    toast.success(`“${selectedPackage.name}” package loaded.`);
+  }
+
+  async function handleDeletePackage() {
+    if (!selectedPackage || !window.confirm(`Delete the “${selectedPackage.name}” package?`)) return;
+    try {
+      setDeletingPackage(true);
+      await deleteHumanizerPackage(selectedPackage.id);
+      const remaining = packages.filter((item) => item.id !== selectedPackage.id);
+      setPackages(remaining);
+      setSelectedPackageId(remaining[0]?.id ?? "");
+      if (packageName === selectedPackage.name) setPackageName("");
+      toast.success("Package deleted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Package could not be deleted.");
+    } finally {
+      setDeletingPackage(false);
     }
   }
 
@@ -430,7 +533,40 @@ export default function HumanizerPage() {
               <Badge variant={configuredChanges ? "default" : "outline"}>{configuredChanges} active</Badge>
             </header>
 
+            <div className="humanizer-package-panel">
+              <div className="humanizer-package-copy">
+                <span className="humanizer-package-icon"><PackageOpen className="h-4 w-4" /></span>
+                <span><strong>Ready packages</strong><small>Save this complete recipe or restore a saved setup.</small></span>
+                <Badge variant={packages.length ? "secondary" : "outline"}>{packages.length}</Badge>
+              </div>
+              <div className="humanizer-package-controls">
+                <Input value={packageName} maxLength={60} onChange={(event) => setPackageName(event.target.value)} placeholder="Package name" />
+                <Button type="button" size="xs" variant="secondary" disabled={savingPackage || !configuredChanges} onClick={() => void handleSavePackage()}>
+                  {savingPackage ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save
+                </Button>
+                <FilterDropdown
+                  label="Saved package"
+                  showLabel={false}
+                  className="humanizer-package-dropdown"
+                  value={selectedPackageId}
+                  options={packages.length
+                    ? packages.map((item) => ({ value: item.id, label: item.name }))
+                    : [{ value: "", label: packagesLoading ? "Loading packages…" : "No saved package" }]}
+                  disabled={!packages.length}
+                  onChange={setSelectedPackageId}
+                />
+                <Button type="button" size="xs" disabled={!selectedPackage} onClick={handleUsePackage}><PackageOpen className="h-3.5 w-3.5" /> Use</Button>
+                <Button type="button" size="icon-sm" variant="ghost" aria-label="Delete selected package" title="Delete package" disabled={!selectedPackage || deletingPackage} onClick={() => void handleDeletePackage()}>
+                  {deletingPackage ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+
             <div className="humanizer-recipe-grid">
+              <label className="humanizer-recipe-card" data-recipe="username">
+                <span className="humanizer-recipe-head"><i><AtSign className="h-4 w-4" /></i><span><strong>Usernames</strong><small>One value per line</small></span><b>{splitLines(usernames).length}</b></span>
+                <textarea className="onliner-game-textarea" value={usernames} maxLength={16_500} onChange={(event) => setUsernames(event.target.value)} placeholder={"alex_01\ntaylor_02\njordan_03"} />
+              </label>
               <label className="humanizer-recipe-card" data-recipe="name">
                 <span className="humanizer-recipe-head"><i><Type className="h-4 w-4" /></i><span><strong>Display names</strong><small>One value per line</small></span><b>{splitLines(displayNames).length}</b></span>
                 <textarea className="onliner-game-textarea" value={displayNames} maxLength={16_500} onChange={(event) => setDisplayNames(event.target.value)} placeholder={"Alex\nTaylor\nJordan"} />
@@ -439,7 +575,7 @@ export default function HumanizerPage() {
                 <span className="humanizer-recipe-head"><i><UserRoundCheck className="h-4 w-4" /></i><span><strong>Pronouns</strong><small>One value per line</small></span><b>{splitLines(pronouns).length}</b></span>
                 <textarea className="onliner-game-textarea" value={pronouns} maxLength={20_500} onChange={(event) => setPronouns(event.target.value)} placeholder={"they/them\nshe/her\nhe/him"} />
               </label>
-              <label className="humanizer-recipe-card is-wide" data-recipe="bio">
+              <label className="humanizer-recipe-card" data-recipe="bio">
                 <span className="humanizer-recipe-head"><i><FileText className="h-4 w-4" /></i><span><strong>Profile bios</strong><small>One value per line</small></span><b>{splitLines(bios).length}</b></span>
                 <textarea className="onliner-game-textarea" value={bios} maxLength={95_500} onChange={(event) => setBios(event.target.value)} placeholder={"Building something interesting.\nProbably listening to music."} />
               </label>
@@ -473,10 +609,12 @@ export default function HumanizerPage() {
               </div>
             </div>
             {avatarData.length ? (
-              <div className="humanizer-file-list">
+              <div className="humanizer-avatar-preview-grid" aria-label="Selected avatar previews">
                 {avatarData.map((avatar, index) => (
-                  <button key={`${avatar.name}-${index}`} type="button" className="humanizer-file-chip" onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))} title="Remove avatar">
-                    <ImageIcon className="h-3.5 w-3.5" />{avatar.name}<X className="h-3 w-3" />
+                  <button key={`${avatar.name}-${index}`} type="button" className="humanizer-avatar-preview" onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))} title={`Remove ${avatar.name}`}>
+                    <img src={avatar.data} alt={`Preview of ${avatar.name}`} />
+                    <span><strong>{avatar.name}</strong><small>Click to remove</small></span>
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
                   </button>
                 ))}
               </div>

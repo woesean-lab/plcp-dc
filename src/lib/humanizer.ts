@@ -47,6 +47,7 @@ export type HumanizerJob = {
 
 export type HumanizerJobInput = {
   accountIds: string[];
+  usernames: string[];
   displayNames: string[];
   bios: string[];
   pronouns: string[];
@@ -54,6 +55,22 @@ export type HumanizerJobInput = {
   hypesquad: null | "random" | "bravery" | "brilliance" | "balance";
   concurrency: number;
 };
+
+export type HumanizerPackage = {
+  id: string;
+  name: string;
+  usernames: string[];
+  displayNames: string[];
+  bios: string[];
+  pronouns: string[];
+  avatars: Array<{ name: string; data: string }>;
+  hypesquad: "none" | "random" | "bravery" | "brilliance" | "balance";
+  concurrency: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type HumanizerPackageInput = Omit<HumanizerPackage, "id" | "createdAt" | "updatedAt">;
 
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as T & { message?: string };
@@ -64,6 +81,27 @@ async function parseResponse<T>(response: Response): Promise<T> {
 export function getHumanizerCatalog() {
   return fetch("/api/humanizer/catalog", { cache: "no-store", credentials: "same-origin" })
     .then(parseResponse<HumanizerCatalog>);
+}
+
+export function getHumanizerPackages() {
+  return fetch("/api/humanizer/packages", { cache: "no-store", credentials: "same-origin" })
+    .then(parseResponse<HumanizerPackage[]>);
+}
+
+export function saveHumanizerPackage(input: HumanizerPackageInput) {
+  return fetch("/api/humanizer/packages", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input)
+  }).then(parseResponse<HumanizerPackage>);
+}
+
+export function deleteHumanizerPackage(packageId: string) {
+  return fetch(`/api/humanizer/packages/${encodeURIComponent(packageId)}`, {
+    method: "DELETE",
+    credentials: "same-origin"
+  }).then(parseResponse<{ deleted: boolean }>);
 }
 
 export function getLatestHumanizerJob() {
