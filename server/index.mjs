@@ -727,6 +727,21 @@ async function sendHumanizerAccountUpdate(account, payload) {
 async function runHumanizerJob(job, accounts, options) {
   job.status = "running";
   job.startedAt = new Date().toISOString();
+  const shuffle = (values) => {
+    const shuffled = [...values];
+    for (let index = shuffled.length - 1; index > 0; index -= 1) {
+      const randomIndex = crypto.randomInt(index + 1);
+      [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+    }
+    return shuffled;
+  };
+  const pools = {
+    usernames: shuffle(options.usernames),
+    displayNames: shuffle(options.displayNames),
+    bios: shuffle(options.bios),
+    pronouns: shuffle(options.pronouns),
+    avatarIds: shuffle(options.avatarIds)
+  };
   const pick = (values, index) => values.length ? values[index % values.length] : null;
 
   await forEachWithConcurrency(accounts, options.concurrency, async (account, index) => {
@@ -736,11 +751,11 @@ async function runHumanizerJob(job, accounts, options) {
     try {
       const accountPayload = {};
       const profilePayload = {};
-      const username = pick(options.usernames, index);
-      const displayName = pick(options.displayNames, index);
-      const bio = pick(options.bios, index);
-      const pronouns = pick(options.pronouns, index);
-      const avatarId = pick(options.avatarIds, index);
+      const username = pick(pools.usernames, index);
+      const displayName = pick(pools.displayNames, index);
+      const bio = pick(pools.bios, index);
+      const pronouns = pick(pools.pronouns, index);
+      const avatarId = pick(pools.avatarIds, index);
       let avatar = null;
       if (avatarId) {
         const avatarResult = await pool.query(
@@ -795,7 +810,7 @@ async function runHumanizerJob(job, accounts, options) {
 
       if (options.hypesquad) {
         const houseId = options.hypesquad === "random"
-          ? (index % 3) + 1
+          ? crypto.randomInt(1, 4)
           : ({ bravery: 1, brilliance: 2, balance: 3 })[options.hypesquad];
         const update = await sendHumanizerDiscordRequest("hypesquad/online", account.proxyUrl, account.token, "POST", { house_id: houseId });
         if (update.response.ok) result.changed.push("HypeSquad");
