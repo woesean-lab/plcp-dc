@@ -75,8 +75,6 @@ function HumanizerPageSkeleton() {
           <Skeleton className="mt-3 h-4 w-full max-w-[680px]" />
         </div>
         <div className="page-heading-meta humanizer-heading-actions">
-          <Skeleton className="h-6 w-20 rounded-full" />
-          <Skeleton className="h-6 w-24 rounded-full" />
           <Skeleton className="h-8 w-24" />
         </div>
       </header>
@@ -339,7 +337,6 @@ export default function HumanizerPage() {
   const activeFields = selectedFields.filter((field) => fieldContent[field]);
   const configuredChanges = activeFields.length;
   const progress = job?.total ? Math.round((job.completed / job.total) * 100) : 0;
-  const eligibleAccountCount = (catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).length;
   const selectedPackage = packages.find((item) => item.id === selectedPackageId) ?? null;
   const packageToOverwrite = packages.find((item) => item.name.localeCompare(packageName.trim(), undefined, { sensitivity: "accent" }) === 0) ?? null;
 
@@ -530,8 +527,6 @@ export default function HumanizerPage() {
           <p className="app-copy page-copy">Build a profile recipe, choose eligible Members Stock accounts, and apply every update through its assigned Onliner proxy.</p>
         </div>
         <div className="page-heading-meta humanizer-heading-actions">
-          <Badge variant={eligibleAccountCount ? "success" : "destructive"}>{eligibleAccountCount} ready</Badge>
-          <Badge variant={selectedIds.length ? "default" : "outline"}>{selectedIds.length} selected</Badge>
           <Button type="button" variant="secondary" size="sm" disabled={refreshing} onClick={() => void loadCatalog(true)}>
             <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} /> Refresh
           </Button>
