@@ -509,8 +509,7 @@ async function getHumanizerDiscordIdentity(proxyUrl, token) {
   const pending = runHumanizerPrimpHelper({
     operation: "identity",
     proxy: normalizedProxyUrl,
-    properties,
-    token
+    properties
   }, [normalizedProxyUrl, token]).then((result) => {
     const fingerprint = String(result?.fingerprint ?? "").trim();
     const installationId = String(result?.installationId ?? "").trim();
