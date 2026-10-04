@@ -42,7 +42,7 @@ def get_build_number(client):
     return int(match.group(1))
 
 
-def get_identity(client, properties):
+def get_identity(client, properties, token=None):
     encoded_properties = base64.b64encode(
         json.dumps(properties, separators=(",", ":")).encode("utf-8")
     ).decode("ascii")
@@ -74,8 +74,25 @@ def get_identity(client, properties):
             "Discord Apex experiments",
         )
         installation_id = str(apex.get("installation") or "").strip()
-    if not installation_id:
-        raise RuntimeError("Discord experiments did not return an installation ID")
+    if not installation_id and token:
+        authenticated_apex_headers = {
+            **headers,
+            "Authorization": token,
+            "X-Fingerprint": fingerprint,
+        }
+        try:
+            authenticated_apex = require_json(
+                client.get(
+                    f"{DISCORD_API_BASE}/apex/experiments?surface=2",
+                    headers=authenticated_apex_headers,
+                ),
+                "Authenticated Discord Apex experiments",
+            )
+            installation_id = str(authenticated_apex.get("installation") or "").strip()
+        except RuntimeError:
+            # Installation metadata is optional for profile requests. The real
+            # fingerprint remains usable even when this retry is rejected.
+            pass
     return fingerprint, installation_id
 
 
@@ -95,10 +112,14 @@ def main():
             print(json.dumps({"buildNumber": get_build_number(client)}, separators=(",", ":")))
             return
         if operation == "identity":
-            fingerprint, installation_id = get_identity(client, request["properties"])
+            fingerprint, installation_id = get_identity(
+                client,
+                request["properties"],
+                request.get("token"),
+            )
             print(json.dumps({
                 "fingerprint": fingerprint,
-                "installationId": installation_id,
+                "installationId": installation_id or None,
             }, separators=(",", ":")))
             return
         if operation != "request":

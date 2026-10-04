@@ -390,7 +390,7 @@ function getHumanizerDiscordClientHeaders(token, identity) {
     ...createDiscordGatewayIdentityProperties(),
     client_build_number: identity.buildNumber
   };
-  return {
+  const headers = {
     Authorization: token,
     "Content-Type": "application/json",
     "User-Agent": properties.browser_user_agent,
@@ -399,9 +399,10 @@ function getHumanizerDiscordClientHeaders(token, identity) {
     "X-Discord-Timezone": "Europe/Istanbul",
     "X-Debug-Options": "bugReporterEnabled",
     "X-Super-Properties": Buffer.from(JSON.stringify(properties)).toString("base64"),
-    "X-Fingerprint": identity.fingerprint,
-    "X-Installation-ID": identity.installationId
+    "X-Fingerprint": identity.fingerprint
   };
+  if (identity.installationId) headers["X-Installation-ID"] = identity.installationId;
+  return headers;
 }
 
 async function runHumanizerPrimpHelper(payload, secrets = []) {
@@ -508,19 +509,23 @@ async function getHumanizerDiscordIdentity(proxyUrl, token) {
   const pending = runHumanizerPrimpHelper({
     operation: "identity",
     proxy: normalizedProxyUrl,
-    properties
+    properties,
+    token
   }, [normalizedProxyUrl, token]).then((result) => {
     const fingerprint = String(result?.fingerprint ?? "").trim();
     const installationId = String(result?.installationId ?? "").trim();
     const discordIdentityPattern = /^\d+\.[A-Za-z0-9_-]+$/;
-    if (!discordIdentityPattern.test(fingerprint) || !discordIdentityPattern.test(installationId)) {
-      throw new Error("Discord experiments did not return a fingerprint and installation ID.");
+    if (!discordIdentityPattern.test(fingerprint)) {
+      throw new Error("Discord experiments did not return a valid fingerprint.");
+    }
+    if (installationId && !discordIdentityPattern.test(installationId)) {
+      throw new Error("Discord experiments returned an invalid installation ID.");
     }
     const identity = {
       fingerprint,
-      installationId,
+      installationId: installationId || null,
       buildNumber,
-      expiresAt: Date.now() + 12 * 60 * 60_000,
+      expiresAt: Date.now() + (installationId ? 12 * 60 * 60_000 : 15 * 60_000),
       pending: null
     };
     humanizerDiscordIdentityCache.set(cacheKey, identity);
