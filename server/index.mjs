@@ -328,6 +328,17 @@ function normalizeHumanizerAvatar(value) {
   return avatar.length <= 1_500_000 ? avatar : "";
 }
 
+const humanizerAvatarMimeTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+
+function getHumanizerAvatarSnapshot(row) {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    url: `/api/humanizer/avatars/${encodeURIComponent(row.id)}`,
+    size: Number(row.size_bytes) || 0
+  };
+}
+
 function getHumanizerPackageSnapshot(row) {
   const payload = row?.payload && typeof row.payload === "object" ? row.payload : {};
   return {
@@ -706,7 +717,17 @@ async function runHumanizerJob(job, accounts, options) {
       const displayName = pick(options.displayNames, index);
       const bio = pick(options.bios, index);
       const pronouns = pick(options.pronouns, index);
-      const avatar = pick(options.avatars, index);
+      const avatarId = pick(options.avatarIds, index);
+      let avatar = null;
+      if (avatarId) {
+        const avatarResult = await pool.query(
+          "SELECT mime_type, image_data FROM humanizer_avatar_assets WHERE id = $1 LIMIT 1",
+          [avatarId]
+        );
+        const asset = avatarResult.rows[0];
+        if (!asset) throw new Error("A selected avatar is no longer available.");
+        avatar = `data:${asset.mime_type};base64,${Buffer.from(asset.image_data).toString("base64")}`;
+      }
       if (username) accountPayload.username = username;
       if (displayName) accountPayload.global_name = displayName;
       if (avatar) accountPayload.avatar = avatar;
@@ -7037,6 +7058,26 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("CREATE UNIQUE INDEX IF NOT EXISTS humanizer_packages_name_idx ON humanizer_packages (LOWER(name))");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS humanizer_avatar_assets (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      mime_type TEXT NOT NULL,
+      image_data BYTEA NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    DELETE FROM humanizer_avatar_assets AS asset
+    WHERE asset.created_at < NOW() - INTERVAL '24 hours'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM humanizer_packages AS pkg,
+             JSONB_ARRAY_ELEMENTS(COALESCE(pkg.payload->'avatars', '[]'::jsonb)) AS avatar
+        WHERE avatar->>'id' = asset.id
+      )
+  `);
   await initializeDiscordOnlinerDatabase();
   await pool.query("DROP TABLE IF EXISTS community_oauth_states");
   await pool.query(`
@@ -7227,7 +7268,6 @@ async function hasActiveSession(req) {
 
 const app = express();
 app.set("trust proxy", 1);
-app.use("/api/humanizer", express.json({ limit: "32mb" }));
 app.use(express.json({ limit: "10mb" }));
 
 app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
@@ -7281,6 +7321,73 @@ app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post(
+  "/api/humanizer/avatars",
+  requireSession,
+  express.raw({ type: [...humanizerAvatarMimeTypes], limit: "1mb" }),
+  async (req, res, next) => {
+    try {
+      const mimeType = String(req.headers["content-type"] ?? "").split(";", 1)[0].trim().toLowerCase();
+      if (!humanizerAvatarMimeTypes.has(mimeType)) {
+        return res.status(415).json({ message: "Avatar must be PNG, JPG, WEBP or GIF." });
+      }
+      if (!Buffer.isBuffer(req.body) || !req.body.length) {
+        return res.status(400).json({ message: "Avatar file is empty." });
+      }
+      const name = String(req.query?.name ?? "Avatar").trim().slice(0, 120) || "Avatar";
+      const id = crypto.randomUUID();
+      const result = await pool.query(
+        `INSERT INTO humanizer_avatar_assets (id, name, mime_type, image_data, size_bytes, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         RETURNING id, name, size_bytes`,
+        [id, name, mimeType, req.body, req.body.length]
+      );
+      res.status(201).set("Cache-Control", "no-store").json(getHumanizerAvatarSnapshot(result.rows[0]));
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+app.get("/api/humanizer/avatars/:avatarId", requireSession, async (req, res, next) => {
+  try {
+    const result = await pool.query(
+      "SELECT mime_type, image_data FROM humanizer_avatar_assets WHERE id = $1 LIMIT 1",
+      [String(req.params.avatarId ?? "")]
+    );
+    const asset = result.rows[0];
+    if (!asset) return res.status(404).end();
+    res.set({
+      "Content-Type": asset.mime_type,
+      "Cache-Control": "private, max-age=31536000, immutable",
+      "X-Content-Type-Options": "nosniff"
+    }).send(asset.image_data);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/humanizer/avatars/:avatarId", requireSession, async (req, res, next) => {
+  try {
+    const avatarId = String(req.params.avatarId ?? "");
+    const result = await pool.query(
+      `DELETE FROM humanizer_avatar_assets AS asset
+       WHERE asset.id = $1
+         AND NOT EXISTS (
+           SELECT 1
+           FROM humanizer_packages AS pkg,
+                JSONB_ARRAY_ELEMENTS(COALESCE(pkg.payload->'avatars', '[]'::jsonb)) AS avatar
+           WHERE avatar->>'id' = asset.id
+         )
+       RETURNING asset.id`,
+      [avatarId]
+    );
+    res.json({ deleted: Boolean(result.rowCount) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/humanizer/packages", requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query(
@@ -7301,13 +7408,21 @@ app.post("/api/humanizer/packages", requireSession, async (req, res, next) => {
     const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
     const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
     const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
-    const submittedAvatars = Array.isArray(req.body?.avatars) ? req.body.avatars.slice(0, 20) : [];
-    const avatars = submittedAvatars.map((avatar, index) => ({
-      name: String(avatar?.name ?? `Avatar ${index + 1}`).trim().slice(0, 120) || `Avatar ${index + 1}`,
-      data: normalizeHumanizerAvatar(avatar?.data)
-    })).filter((avatar) => avatar.data);
-    if (submittedAvatars.length && avatars.length !== submittedAvatars.length) {
-      return res.status(400).json({ message: "One or more package avatars are invalid or larger than 1 MB." });
+    const submittedAvatarIds = [...new Set(
+      (Array.isArray(req.body?.avatars) ? req.body.avatars : [])
+        .map((avatar) => String(avatar?.id ?? "").trim())
+        .filter(Boolean)
+    )].slice(0, 1000);
+    const avatarResult = submittedAvatarIds.length
+      ? await pool.query(
+        "SELECT id, name, size_bytes FROM humanizer_avatar_assets WHERE id = ANY($1::text[])",
+        [submittedAvatarIds]
+      )
+      : { rows: [] };
+    const avatarById = new Map(avatarResult.rows.map((avatar) => [String(avatar.id), getHumanizerAvatarSnapshot(avatar)]));
+    const avatars = submittedAvatarIds.map((id) => avatarById.get(id)).filter(Boolean);
+    if (avatars.length !== submittedAvatarIds.length) {
+      return res.status(400).json({ message: "One or more package avatars are no longer available." });
     }
     const hypesquad = ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
       ? req.body.hypesquad
@@ -7368,16 +7483,25 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
     const displayNames = cleanHumanizerLines(req.body?.displayNames, 500, 32);
     const bios = cleanHumanizerLines(req.body?.bios, 500, 190);
     const pronouns = cleanHumanizerLines(req.body?.pronouns, 500, 40);
-    const submittedAvatars = Array.isArray(req.body?.avatars) ? req.body.avatars.slice(0, 20) : [];
-    const avatars = submittedAvatars.map(normalizeHumanizerAvatar).filter(Boolean);
-    if (submittedAvatars.length && avatars.length !== submittedAvatars.length) {
-      return res.status(400).json({ message: "One or more avatars are invalid or larger than 1 MB." });
+    const avatarIds = [...new Set(
+      (Array.isArray(req.body?.avatarIds) ? req.body.avatarIds : [])
+        .map((value) => String(value ?? "").trim())
+        .filter(Boolean)
+    )].slice(0, 1000);
+    if (avatarIds.length) {
+      const avatarCount = await pool.query(
+        "SELECT COUNT(*)::int AS count FROM humanizer_avatar_assets WHERE id = ANY($1::text[])",
+        [avatarIds]
+      );
+      if (Number(avatarCount.rows[0]?.count) !== avatarIds.length) {
+        return res.status(400).json({ message: "One or more avatars are no longer available." });
+      }
     }
     const hypesquad = ["random", "bravery", "brilliance", "balance"].includes(req.body?.hypesquad)
       ? req.body.hypesquad
       : null;
     const concurrency = Math.min(Math.max(Number.parseInt(req.body?.concurrency, 10) || 1, 1), 5);
-    if (!usernames.length && !displayNames.length && !bios.length && !pronouns.length && !avatars.length && !hypesquad) {
+    if (!usernames.length && !displayNames.length && !bios.length && !pronouns.length && !avatarIds.length && !hypesquad) {
       return res.status(400).json({ message: "Enable at least one profile change and add its content." });
     }
 
@@ -7466,7 +7590,7 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
     humanizerJobs.set(job.id, job);
     const staleJobs = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(20);
     for (const stale of staleJobs) humanizerJobs.delete(stale.id);
-    void runHumanizerJob(job, accounts, { usernames, displayNames, bios, pronouns, avatars, hypesquad, concurrency }).catch((error) => {
+    void runHumanizerJob(job, accounts, { usernames, displayNames, bios, pronouns, avatarIds, hypesquad, concurrency }).catch((error) => {
       job.status = "failed";
       job.completedAt = new Date().toISOString();
       console.error("Humanizer job failed:", error instanceof Error ? error.message : error);

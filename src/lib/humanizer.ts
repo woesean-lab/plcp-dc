@@ -51,9 +51,16 @@ export type HumanizerJobInput = {
   displayNames: string[];
   bios: string[];
   pronouns: string[];
-  avatars: string[];
+  avatarIds: string[];
   hypesquad: null | "random" | "bravery" | "brilliance" | "balance";
   concurrency: number;
+};
+
+export type HumanizerAvatar = {
+  id: string;
+  name: string;
+  url: string;
+  size: number;
 };
 
 export type HumanizerPackage = {
@@ -63,7 +70,7 @@ export type HumanizerPackage = {
   displayNames: string[];
   bios: string[];
   pronouns: string[];
-  avatars: Array<{ name: string; data: string }>;
+  avatars: HumanizerAvatar[];
   hypesquad: "none" | "random" | "bravery" | "brilliance" | "balance";
   concurrency: number;
   createdAt: string;
@@ -86,6 +93,22 @@ export function getHumanizerCatalog() {
 export function getHumanizerPackages() {
   return fetch("/api/humanizer/packages", { cache: "no-store", credentials: "same-origin" })
     .then(parseResponse<HumanizerPackage[]>);
+}
+
+export function uploadHumanizerAvatar(file: File) {
+  return fetch(`/api/humanizer/avatars?name=${encodeURIComponent(file.name)}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": file.type },
+    body: file
+  }).then(parseResponse<HumanizerAvatar>);
+}
+
+export function deleteHumanizerAvatar(avatarId: string) {
+  return fetch(`/api/humanizer/avatars/${encodeURIComponent(avatarId)}`, {
+    method: "DELETE",
+    credentials: "same-origin"
+  }).then(parseResponse<{ deleted: boolean }>);
 }
 
 export function saveHumanizerPackage(input: HumanizerPackageInput) {

@@ -32,6 +32,7 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
+  deleteHumanizerAvatar,
   deleteHumanizerPackage,
   getHumanizerCatalog,
   getHumanizerJob,
@@ -39,7 +40,9 @@ import {
   getHumanizerPackages,
   saveHumanizerPackage,
   startHumanizerJob,
+  uploadHumanizerAvatar,
   type HumanizerAccount,
+  type HumanizerAvatar,
   type HumanizerCatalog,
   type HumanizerJob,
   type HumanizerPackage
@@ -51,19 +54,6 @@ function splitLines(value: string) {
 
 function accountLabel(account: HumanizerAccount) {
   return account.displayName || account.username;
-}
-
-function readAvatar(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    if (file.size > 1_000_000) {
-      reject(new Error(`${file.name} is larger than 1 MB.`));
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-    reader.readAsDataURL(file);
-  });
 }
 
 function HumanizerPageSkeleton() {
@@ -189,17 +179,26 @@ function HumanizerPageSkeleton() {
               ))}
             </div>
 
-            <div className="humanizer-options-grid">
-              {[0, 1].map((item) => (
-                <div key={item} className="humanizer-option-card">
+            <div className="humanizer-avatar-pool-panel">
+              <div className="humanizer-avatar-pool-head">
+                <div className="humanizer-avatar-pool-copy">
                   <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
                   <span className="min-w-0 flex-1">
                     <Skeleton className="h-4 w-24" />
-                    <Skeleton className="mt-2 h-3 w-40 max-w-full" />
+                    <Skeleton className="mt-2 h-3 w-44 max-w-full" />
                   </span>
-                  <Skeleton className="h-8 w-20" />
+                  <Skeleton className="h-6 w-14 rounded-full" />
                 </div>
-              ))}
+                <div className="humanizer-avatar-pool-actions">
+                  <Skeleton className="h-8 w-36" />
+                  <Skeleton className="h-8 w-28" />
+                </div>
+              </div>
+              <div className="humanizer-avatar-pool-body">
+                <div className="humanizer-avatar-preview-grid">
+                  {[0, 1, 2].map((item) => <Skeleton key={item} className="h-[62px] w-full" />)}
+                </div>
+              </div>
             </div>
           </section>
         </div>
@@ -233,7 +232,9 @@ export default function HumanizerPage() {
   const [displayNames, setDisplayNames] = useState("");
   const [bios, setBios] = useState("");
   const [pronouns, setPronouns] = useState("");
-  const [avatarData, setAvatarData] = useState<Array<{ name: string; data: string }>>([]);
+  const [avatarData, setAvatarData] = useState<HumanizerAvatar[]>([]);
+  const [uploadingAvatars, setUploadingAvatars] = useState(0);
+  const [avatarPreviewLimit, setAvatarPreviewLimit] = useState(60);
   const [hypesquad, setHypesquad] = useState<"none" | "random" | "bravery" | "brilliance" | "balance">("none");
   const [concurrency, setConcurrency] = useState(2);
   const [starting, setStarting] = useState(false);
@@ -321,15 +322,42 @@ export default function HumanizerPage() {
 
   async function handleAvatarFiles(files: FileList | null) {
     if (!files?.length) return;
-    try {
-      const nextFiles = [...files].slice(0, Math.max(0, 20 - avatarData.length));
-      const next = await Promise.all(nextFiles.map(async (file) => ({ name: file.name, data: await readAvatar(file) })));
-      setAvatarData((current) => [...current, ...next].slice(0, 20));
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Avatar could not be loaded.");
-    } finally {
+    const allowedTypes = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+    const availableSlots = Math.max(0, 1000 - avatarData.length);
+    const submitted = [...files];
+    const eligible = submitted.filter((file) => allowedTypes.has(file.type) && file.size > 0 && file.size <= 1_000_000).slice(0, availableSlots);
+    const rejectedCount = submitted.length - eligible.length;
+    if (!eligible.length) {
+      toast.error(availableSlots ? "Choose PNG, JPG, WEBP or GIF files up to 1 MB." : "The avatar pool already contains 1,000 images.");
       if (avatarInputRef.current) avatarInputRef.current.value = "";
+      return;
     }
+
+    setUploadingAvatars(eligible.length);
+    const uploaded: Array<HumanizerAvatar | null> = Array.from({ length: eligible.length }, () => null);
+    const failures: string[] = [];
+    let nextIndex = 0;
+    const workers = Array.from({ length: Math.min(4, eligible.length) }, async () => {
+      while (nextIndex < eligible.length) {
+        const fileIndex = nextIndex;
+        const file = eligible[fileIndex];
+        nextIndex += 1;
+        try {
+          uploaded[fileIndex] = await uploadHumanizerAvatar(file);
+        } catch (error) {
+          failures.push(error instanceof Error ? error.message : `${file.name} could not be uploaded.`);
+        }
+      }
+    });
+    await Promise.all(workers);
+    const successfulUploads = uploaded.filter((avatar): avatar is HumanizerAvatar => avatar !== null);
+    setAvatarData((current) => [...current, ...successfulUploads].slice(0, 1000));
+    setUploadingAvatars(0);
+    if (successfulUploads.length) toast.success(`${successfulUploads.length} avatar${successfulUploads.length === 1 ? "" : "s"} uploaded.`);
+    if (rejectedCount || failures.length) {
+      toast.error(`${rejectedCount + failures.length} file${rejectedCount + failures.length === 1 ? "" : "s"} skipped.`);
+    }
+    if (avatarInputRef.current) avatarInputRef.current.value = "";
   }
 
   async function handleStart() {
@@ -349,7 +377,7 @@ export default function HumanizerPage() {
         displayNames: splitLines(displayNames),
         bios: splitLines(bios),
         pronouns: splitLines(pronouns),
-        avatars: avatarData.map((avatar) => avatar.data),
+        avatarIds: avatarData.map((avatar) => avatar.id),
         hypesquad: hypesquad === "none" ? null : hypesquad,
         concurrency
       });
@@ -363,6 +391,10 @@ export default function HumanizerPage() {
   }
 
   async function handleSavePackage() {
+    if (uploadingAvatars) {
+      toast.error("Wait for avatar uploads to finish.");
+      return;
+    }
     if (!packageName.trim()) {
       toast.error("Enter a package name.");
       return;
@@ -401,10 +433,18 @@ export default function HumanizerPage() {
     setBios(selectedPackage.bios.join("\n"));
     setPronouns(selectedPackage.pronouns.join("\n"));
     setAvatarData(selectedPackage.avatars);
+    setAvatarPreviewLimit(60);
     setHypesquad(selectedPackage.hypesquad);
     setConcurrency(selectedPackage.concurrency);
     setPackageName(selectedPackage.name);
     toast.success(`“${selectedPackage.name}” package loaded.`);
+  }
+
+  function handleRemoveAvatar(avatar: HumanizerAvatar) {
+    setAvatarData((current) => current.filter((item) => item.id !== avatar.id));
+    void deleteHumanizerAvatar(avatar.id).catch(() => {
+      // Package-owned avatars remain stored and can still be restored from that package.
+    });
   }
 
   async function handleDeletePackage() {
@@ -541,7 +581,7 @@ export default function HumanizerPage() {
               </div>
               <div className="humanizer-package-controls">
                 <Input value={packageName} maxLength={60} onChange={(event) => setPackageName(event.target.value)} placeholder="Package name" />
-                <Button type="button" size="xs" variant="secondary" disabled={savingPackage || !configuredChanges} onClick={() => void handleSavePackage()}>
+                <Button type="button" size="xs" variant="secondary" disabled={savingPackage || Boolean(uploadingAvatars) || !configuredChanges} onClick={() => void handleSavePackage()}>
                   {savingPackage ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />} Save
                 </Button>
                 <FilterDropdown
@@ -581,45 +621,55 @@ export default function HumanizerPage() {
               </label>
             </div>
 
-            <div className="humanizer-options-grid">
-              <div className="humanizer-option-card">
-                <span className="humanizer-option-icon"><Images className="h-4 w-4" /></span>
-                <span className="min-w-0 flex-1"><strong>Avatar pool</strong><small>PNG, JPG, WEBP or GIF · max 1 MB</small></span>
-                <Button type="button" variant="secondary" size="xs" onClick={() => avatarInputRef.current?.click()}><Upload className="h-3.5 w-3.5" /> Choose</Button>
-                <input ref={avatarInputRef} className="hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleAvatarFiles(event.target.files)} />
-              </div>
-              <div className="humanizer-option-card">
-                <span className="humanizer-option-icon"><Sparkles className="h-4 w-4" /></span>
-                <span className="min-w-0 flex-1"><strong>HypeSquad</strong><small>Leave unchanged or assign a house</small></span>
-                <FilterDropdown
-                  label="HypeSquad house"
-                  showLabel={false}
-                  placement="top"
-                  className="humanizer-hypesquad-dropdown"
-                  value={hypesquad}
-                  options={[
-                    { value: "none", label: "Unchanged" },
-                    { value: "random", label: "Balanced rotation" },
-                    { value: "bravery", label: "Bravery" },
-                    { value: "brilliance", label: "Brilliance" },
-                    { value: "balance", label: "Balance" }
-                  ]}
-                  onChange={(value) => setHypesquad(value as typeof hypesquad)}
-                />
-              </div>
-            </div>
-            {avatarData.length ? (
-              <div className="humanizer-avatar-preview-grid" aria-label="Selected avatar previews">
-                {avatarData.map((avatar, index) => (
+            <section className="humanizer-avatar-pool-panel" aria-labelledby="humanizer-avatar-pool-title">
+              <header className="humanizer-avatar-pool-head">
+                <div className="humanizer-avatar-pool-copy">
+                  <span className="humanizer-option-icon"><Images className="h-4 w-4" /></span>
+                  <span className="min-w-0"><strong id="humanizer-avatar-pool-title">Avatar pool</strong><small>PNG, JPG, WEBP or GIF · maximum 1 MB each</small></span>
+                  <Badge variant={avatarData.length ? "secondary" : "outline"}>{avatarData.length}/1,000</Badge>
+                </div>
+                <div className="humanizer-avatar-pool-actions">
+                  <div className="humanizer-hypesquad-control">
+                    <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                    <span>HypeSquad</span>
+                    <FilterDropdown
+                      label="HypeSquad house"
+                      showLabel={false}
+                      placement="top"
+                      className="humanizer-hypesquad-dropdown"
+                      value={hypesquad}
+                      options={[
+                        { value: "none", label: "Unchanged" },
+                        { value: "random", label: "Balanced rotation" },
+                        { value: "bravery", label: "Bravery" },
+                        { value: "brilliance", label: "Brilliance" },
+                        { value: "balance", label: "Balance" }
+                      ]}
+                      onChange={(value) => setHypesquad(value as typeof hypesquad)}
+                    />
+                  </div>
+                  <Button type="button" variant="secondary" size="xs" disabled={Boolean(uploadingAvatars) || avatarData.length >= 1000} onClick={() => avatarInputRef.current?.click()}>
+                    {uploadingAvatars ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />}
+                    {uploadingAvatars ? `Uploading ${uploadingAvatars}` : "Choose avatars"}
+                  </Button>
+                  <input ref={avatarInputRef} className="hidden" type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" onChange={(event) => void handleAvatarFiles(event.target.files)} />
+                </div>
+              </header>
+
+              <div className={`humanizer-avatar-pool-body ${avatarData.length ? "" : "is-empty"}`}>
+              {avatarData.length ? (
+                <div className="humanizer-avatar-preview-section">
+                <div className="humanizer-avatar-preview-grid" aria-label="Selected avatar previews">
+                {avatarData.slice(0, avatarPreviewLimit).map((avatar, index) => (
                   <div key={`${avatar.name}-${index}`} className="humanizer-avatar-preview">
                     <div className="humanizer-avatar-preview-image">
-                      <img src={avatar.data} alt={`Preview of ${avatar.name}`} />
+                    <img src={avatar.url} alt={`Preview of ${avatar.name}`} loading="lazy" decoding="async" />
                       <button
                         type="button"
                         className="humanizer-avatar-remove"
                         aria-label={`Remove ${avatar.name}`}
                         title="Remove avatar"
-                        onClick={() => setAvatarData((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        onClick={() => handleRemoveAvatar(avatar)}
                       >
                         <X className="h-3 w-3" aria-hidden="true" />
                       </button>
@@ -627,8 +677,22 @@ export default function HumanizerPage() {
                     <span><strong>{avatar.name}</strong><small>Ready to use</small></span>
                   </div>
                 ))}
+                </div>
+                {avatarData.length > avatarPreviewLimit ? (
+                  <Button type="button" size="xs" variant="ghost" className="humanizer-avatar-show-more" onClick={() => setAvatarPreviewLimit((current) => Math.min(current + 60, avatarData.length))}>
+                    Show 60 more <span>{avatarPreviewLimit}/{avatarData.length}</span>
+                  </Button>
+                ) : null}
+                </div>
+              ) : (
+                <div className="humanizer-avatar-empty">
+                  <span><Images className="h-5 w-5" /></span>
+                  <strong>No avatars in this pool yet</strong>
+                  <small>Choose one or more images; previews will stay together in this panel.</small>
+                </div>
+              )}
               </div>
-            ) : null}
+            </section>
           </section>
         </div>
 
@@ -650,7 +714,7 @@ export default function HumanizerPage() {
                 onChange={(value) => setConcurrency(Number(value))}
               />
             </div>
-            <Button type="button" disabled={starting || jobActive || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
+            <Button type="button" disabled={starting || jobActive || Boolean(uploadingAvatars) || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
               {starting || jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
               {jobActive ? "Humanizer running" : `Run ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
             </Button>
