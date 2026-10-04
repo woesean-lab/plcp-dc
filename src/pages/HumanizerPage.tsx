@@ -195,7 +195,7 @@ function HumanizerPageSkeleton() {
               </div>
               <div className="humanizer-avatar-pool-body">
                 <div className="humanizer-avatar-preview-grid">
-                  {[0, 1, 2, 3].map((item) => <Skeleton key={item} className="h-[154px] w-full" />)}
+                  {[0, 1, 2].map((item) => <Skeleton key={item} className="h-[182px] w-full" />)}
                 </div>
               </div>
             </div>
@@ -669,15 +669,16 @@ export default function HumanizerPage() {
                         <strong title={avatar.name}>{avatar.name}</strong>
                         <small>Ready to use</small>
                       </span>
-                      <button
+                      <Button
                         type="button"
-                        className="humanizer-avatar-remove"
+                        size="xs"
+                        variant="dangerGhost"
                         aria-label={`Remove ${avatar.name}`}
                         title="Remove avatar"
                         onClick={() => handleRemoveAvatar(avatar)}
                       >
-                        <Trash2 className="h-3 w-3" aria-hidden="true" />
-                      </button>
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden="true" /> Remove
+                      </Button>
                     </div>
                   </div>
                 ))}
