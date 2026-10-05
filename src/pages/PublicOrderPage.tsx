@@ -4,11 +4,11 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CheckCircle2, CircleHelp, Clock3, Copy, ExternalLink, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Smile, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -52,6 +52,11 @@ type CommunityMemberResult = {
   onlinerConnectionState?: string;
   onlinerDetails?: string;
   onlinerCheckedAt?: string;
+  reactionEligible?: boolean;
+  reactionEmoji?: string;
+  reactionState?: string;
+  reactionDetails?: string;
+  reactionCompletedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -99,6 +104,11 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,
       onlinerCheckedAt: typeof row.onlinerCheckedAt === "string" ? row.onlinerCheckedAt : undefined,
+      reactionEligible: row.reactionEligible === true,
+      reactionEmoji: typeof row.reactionEmoji === "string" ? row.reactionEmoji : undefined,
+      reactionState: typeof row.reactionState === "string" ? row.reactionState : undefined,
+      reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
+      reactionCompletedAt: typeof row.reactionCompletedAt === "string" ? row.reactionCompletedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -252,6 +262,8 @@ export default function PublicOrderPage() {
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
+  const [reactionMessageDraft, setReactionMessageDraft] = useState("");
+  const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -486,6 +498,21 @@ export default function PublicOrderPage() {
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
+  const reactionMembers = communityMemberResults.filter((item) => item.reactionEligible === true);
+  const configuredReactionLimit = categoryAllocations.reduce((total, allocation) => {
+    if (allocation?.reactionUseEnabled !== true) return total;
+    const amount = Number.isFinite(allocation.amount) ? Math.max(0, allocation.amount) : 0;
+    const limit = Number.isFinite(allocation.reactionLimit) ? Math.max(1, Number(allocation.reactionLimit)) : 5;
+    return total + Math.min(amount, limit);
+  }, 0);
+  const reactionOrderLimit = reactionMembers.length || configuredReactionLimit;
+  const reactionCompletedCount = reactionMembers.filter((item) => item.reactionState === "completed").length;
+  const reactionFailedCount = reactionMembers.filter((item) => item.reactionState === "failed").length;
+  const reactionPendingCount = reactionMembers.filter((item) => item.reactionState === "pending").length;
+  const reactionWaitingCount = Math.max(0, reactionMembers.length - reactionCompletedCount - reactionFailedCount - reactionPendingCount);
+  const reactionProgress = reactionOrderLimit ? Math.round((reactionCompletedCount / reactionOrderLimit) * 100) : 0;
+  const reactionMessageLink = typeof status?.reactionMessageLink === "string" ? status.reactionMessageLink : "";
+  const reactionEmojis = Array.from(new Set(reactionMembers.map((item) => item.reactionEmoji).filter((emoji): emoji is string => Boolean(emoji))));
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -517,10 +544,29 @@ export default function PublicOrderPage() {
     ? `${status.duration} ${status.duration === 1 ? "Month" : "Months"}`
     : "-";
   useEffect(() => {
+    if (reactionMessageLink) setReactionMessageDraft((current) => current || reactionMessageLink);
+  }, [reactionMessageLink]);
+  useEffect(() => {
     if (expiredAt === undefined || expiredAt <= supportClock) return;
     const timer = window.setTimeout(() => setSupportClock(Date.now()), Math.min(expiredAt - supportClock + 50, 30_000));
     return () => window.clearTimeout(timer);
   }, [expiredAt, supportClock]);
+
+  async function handleSaveReactionMessage() {
+    const messageLink = reactionMessageDraft.trim();
+    if (!uniqid || !messageLink || savingReactionMessage) return;
+    try {
+      setSavingReactionMessage(true);
+      const updated = await updatePublicCommunityOrderReactionMessage(uniqid, messageLink);
+      setStatus((current) => mergeOrderStatus(current, updated));
+      setReactionMessageDraft(typeof updated.reactionMessageLink === "string" ? updated.reactionMessageLink : messageLink);
+      toast.success("Reaction message saved. Eligible members were queued.");
+    } catch (saveError) {
+      toast.error(saveError instanceof Error ? saveError.message : "Reaction message could not be saved.");
+    } finally {
+      setSavingReactionMessage(false);
+    }
+  }
   useEffect(() => {
     if (normalizedStatus !== "PROCESS" || nextMemberTimestamp === undefined || nextMemberTimestamp <= Date.now()) return;
     setDeliveryClock(Date.now());
@@ -992,6 +1038,60 @@ export default function PublicOrderPage() {
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`}>
                 {delayUpdatePanel}
+
+                {isCommunityOrder && reactionOrderLimit > 0 ? (
+                  <section className="monitor-reaction-panel" aria-labelledby="monitor-reaction-title">
+                    <div className="monitor-reaction-glow" aria-hidden="true" />
+                    <div className="monitor-reaction-heading">
+                      <span className="monitor-reaction-icon" aria-hidden="true"><MessageSquareText /></span>
+                      <div>
+                        <p className="app-kicker">Reaction delivery</p>
+                        <h2 id="monitor-reaction-title">Discord reaction panel</h2>
+                        <p>{reactionMessageLink ? "Reactions are sent after each selected member is live on the Onliner Gateway." : "Waiting for a Discord message link from the Orders page."}</p>
+                      </div>
+                      <span className="monitor-reaction-status" data-state={reactionFailedCount ? "warning" : reactionCompletedCount === reactionOrderLimit ? "complete" : "active"}>
+                        {reactionFailedCount ? `${reactionFailedCount} failed` : reactionCompletedCount === reactionOrderLimit ? "Complete" : reactionMessageLink ? "Live" : "Link needed"}
+                      </span>
+                    </div>
+
+                    <div className="monitor-reaction-metrics">
+                      <span><Smile aria-hidden="true" /><small>Order limit</small><strong>{reactionOrderLimit}</strong></span>
+                      <span><CheckCircle2 aria-hidden="true" /><small>Reacted</small><strong>{reactionCompletedCount}</strong></span>
+                      <span><Clock3 aria-hidden="true" /><small>Pending</small><strong>{reactionPendingCount + reactionWaitingCount}</strong></span>
+                    </div>
+
+                    <div className="monitor-reaction-progress" aria-label={`${reactionCompletedCount} of ${reactionOrderLimit} reactions completed`}>
+                      <div><span>Reaction progress</span><strong>{reactionProgress}%</strong></div>
+                      <span className="monitor-reaction-progress-track"><i style={{ width: `${reactionProgress}%` }} /></span>
+                    </div>
+
+                    <div className="monitor-reaction-form">
+                      <Input
+                        type="url"
+                        value={reactionMessageDraft}
+                        onChange={(event) => setReactionMessageDraft(event.target.value)}
+                        placeholder="https://discord.com/channels/server/channel/message"
+                        aria-label="Discord message link"
+                      />
+                      <Button type="button" size="sm" onClick={() => void handleSaveReactionMessage()} disabled={savingReactionMessage || !reactionMessageDraft.trim()}>
+                        <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
+                        {savingReactionMessage ? "Saving..." : reactionMessageLink ? "Update message" : "Start reactions"}
+                      </Button>
+                    </div>
+
+                    <div className="monitor-reaction-footer">
+                      <div className="monitor-reaction-emojis" aria-label="Assigned reaction emojis">
+                        {reactionEmojis.slice(0, 12).map((emoji) => <span key={emoji}>{emoji}</span>)}
+                        {reactionEmojis.length > 12 ? <span>+{reactionEmojis.length - 12}</span> : null}
+                      </div>
+                      {reactionMessageLink ? (
+                        <a className="monitor-reaction-link" href={reactionMessageLink} target="_blank" rel="noreferrer">
+                          Open message <ExternalLink aria-hidden="true" />
+                        </a>
+                      ) : <span className="monitor-reaction-hint">Add the target message above to begin</span>}
+                    </div>
+                  </section>
+                ) : null}
 
                 {isCommunityOrder ? (
                   <div className="monitor-token-panel community-order-log">

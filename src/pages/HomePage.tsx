@@ -745,11 +745,12 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; reactionLimit: number; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     isPeriodic: false,
     checkReplacementEnabled: true,
     reactionUseEnabled: false,
+    reactionLimit: 5,
     iconName: "Users",
     colorKey: "violet"
   });
@@ -1876,6 +1877,7 @@ export default function HomePage() {
       isPeriodic: category.isPeriodic,
       checkReplacementEnabled: category.checkReplacementEnabled,
       reactionUseEnabled: category.reactionUseEnabled,
+      reactionLimit: category.reactionLimit || 5,
       iconName: category.iconName || (category.isPeriodic ? "Timer" : "Users"),
       colorKey: category.colorKey || "violet"
     });
@@ -1884,7 +1886,7 @@ export default function HomePage() {
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, reactionLimit: 5, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
@@ -2027,7 +2029,7 @@ export default function HomePage() {
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, reactionLimit: 5, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -2038,6 +2040,7 @@ export default function HomePage() {
       isPeriodic: communityCategoryDraft.isPeriodic,
       checkReplacementEnabled: communityCategoryDraft.checkReplacementEnabled,
       reactionUseEnabled: communityCategoryDraft.reactionUseEnabled,
+      reactionLimit: communityCategoryDraft.reactionLimit,
       iconName: communityCategoryDraft.iconName.trim(),
       colorKey: communityCategoryDraft.colorKey
     };
@@ -2880,7 +2883,7 @@ export default function HomePage() {
                         </span>
                       ) : null}
                       {category.reactionUseEnabled ? (
-                        <span className="community-category-rule-indicator" title="Reaction use enabled" aria-label="Reaction use enabled">
+                        <span className="community-category-rule-indicator" title={`Reaction use enabled · limit ${category.reactionLimit || 5}`} aria-label={`Reaction use enabled, limit ${category.reactionLimit || 5}`}>
                           <MessageSquareText aria-hidden="true" />
                         </span>
                       ) : null}
@@ -4959,8 +4962,22 @@ export default function HomePage() {
             </div>
             <label className={`onliner-enabled-card ${communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}`}>
               <input type="checkbox" checked={communityCategoryDraft.reactionUseEnabled} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: event.target.checked }))} />
-              <span><strong>Reaction use</strong><small>Orders using this category require a Discord message link. Joined members react with different emojis after Onliner connects.</small></span>
+              <span><strong>Reaction use</strong><small>Set the Discord message from Orders or Monitor. Selected members react with different emojis after Onliner connects.</small></span>
             </label>
+            {communityCategoryDraft.reactionUseEnabled ? (
+              <label className="community-reaction-limit-field">
+                <span><strong>Reaction limit</strong><small>Maximum number of members from this category that react in one order.</small></span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  step={1}
+                  value={communityCategoryDraft.reactionLimit}
+                  onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionLimit: Math.min(1000, Math.max(1, Number.parseInt(event.target.value, 10) || 1)) }))}
+                  aria-label="Reaction limit"
+                />
+              </label>
+            ) : null}
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={resetCommunityCategoryDraft}>Cancel</Button>
               <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>

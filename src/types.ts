@@ -14,6 +14,7 @@ export interface CommunityCategoryAllocation {
   isPeriodic?: boolean;
   checkReplacementEnabled?: boolean;
   reactionUseEnabled?: boolean;
+  reactionLimit?: number;
   durationMonths?: number | null;
   expiredAt?: string | null;
 }

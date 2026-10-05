@@ -3654,7 +3654,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories AS category
        WHERE guild_id = $1
          AND NOT EXISTS (
@@ -3673,6 +3673,7 @@ async function loadCommunityStockCategories(config) {
     isPeriodic: row.is_periodic === true,
     checkReplacementEnabled: row.check_replacement_enabled !== false,
     reactionUseEnabled: row.reaction_use_enabled === true,
+    reactionLimit: Number.parseInt(row.reaction_limit, 10) || 5,
     iconName: row.icon_name,
     colorKey: row.color_key,
     createdAt: row.created_at,
@@ -3686,8 +3687,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
 
   await queryable.query(
     `INSERT INTO community_stock_categories
-       (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at)
-     SELECT $2, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, NOW()
+       (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, NOW()
      FROM community_stock_categories AS category
      WHERE guild_id = $1
        AND NOT EXISTS (
@@ -7390,6 +7391,7 @@ async function initializeDatabase() {
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
       check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      reaction_limit INTEGER NOT NULL DEFAULT 5,
       icon_name TEXT NOT NULL DEFAULT 'Users',
       color_key TEXT NOT NULL DEFAULT 'violet',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -7403,6 +7405,8 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS reaction_limit INTEGER NOT NULL DEFAULT 5");
+  await pool.query("UPDATE community_stock_categories SET reaction_limit = 5 WHERE reaction_limit IS NULL OR reaction_limit < 1 OR reaction_limit > 1000");
   await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
   await pool.query("UPDATE community_stock_categories SET color_key = CASE WHEN id = 'offline' THEN 'emerald' ELSE 'violet' END WHERE color_key IS NULL OR BTRIM(color_key) = ''");
   await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET DEFAULT 'Users'");
@@ -8603,19 +8607,23 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
+    const reactionLimit = Number(req.body?.reactionLimit ?? 5);
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
+    if (!Number.isInteger(reactionLimit) || reactionLimit < 1 || reactionLimit > 1000) {
+      return res.status(400).json({ message: "Choose a reaction limit between 1 and 1000." });
+    }
     if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, reactionLimit, iconName, colorKey]
     );
     invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
@@ -8635,29 +8643,33 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
+    const reactionLimit = Number(req.body?.reactionLimit ?? 5);
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
+    }
+    if (!Number.isInteger(reactionLimit) || reactionLimit < 1 || reactionLimit > 1000) {
+      return res.status(400).json({ message: "Choose a reaction limit between 1 and 1000." });
     }
     if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const updated = await pool.query(
       `WITH updated AS (
          UPDATE community_stock_categories
-         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, reaction_use_enabled = $6, icon_name = $7, color_key = $8, updated_at = NOW()
+         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, reaction_use_enabled = $6, reaction_limit = $7, icon_name = $8, color_key = $9, updated_at = NOW()
          WHERE id = $2
            AND NOT EXISTS (
              SELECT 1
              FROM community_stock_category_tombstones AS tombstone
              WHERE tombstone.id = community_stock_categories.id
            )
-         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, updated_at
        )
-       SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+       SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit, icon_name, color_key, created_at, updated_at
        FROM updated
        WHERE guild_id = $1`,
-      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, reactionLimit, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
@@ -9917,7 +9929,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const requestedCategoryIds = requestedAllocations.map((allocation) => allocation.categoryId);
     const categoryResult = await pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled
+      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, reaction_limit
        FROM community_stock_categories
        WHERE guild_id = $1 AND id = ANY($2::text[])`,
       [config.guildId, requestedCategoryIds]
@@ -9926,7 +9938,9 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "One or more Members 2 categories could not be found." });
     }
     const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
-    const reactionCategoryIds = new Set(categoryResult.rows.filter((category) => category.reaction_use_enabled === true).map((category) => category.id));
+    const reactionLimitByCategory = new Map(categoryResult.rows
+      .filter((category) => category.reaction_use_enabled === true)
+      .map((category) => [category.id, Math.min(1000, Math.max(1, Number.parseInt(category.reaction_limit, 10) || 5))]));
     const hasPeriodicCategory = categoryResult.rows.some((category) => category.is_periodic === true);
     const durationMonths = hasPeriodicCategory ? Number.parseInt(req.body?.durationMonths, 10) : null;
     if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
@@ -9967,6 +9981,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         isPeriodic: category.is_periodic === true,
         checkReplacementEnabled: category.check_replacement_enabled !== false,
         reactionUseEnabled: category.reaction_use_enabled === true,
+        reactionLimit: Math.min(allocation.amount, Math.min(1000, Math.max(1, Number.parseInt(category.reaction_limit, 10) || 5))),
         durationMonths: category.is_periodic === true ? durationMonths : null,
         expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null
       });
@@ -10013,21 +10028,30 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       experimentalJoin: joinMethod === "experimental_join",
       botApplicationId: config.clientId,
       botInvite,
-      communityResults: selectedMembers.map((row, index) => ({
-        discordUserId: row.discord_user_id,
-        username: row.username,
-        avatarUrl: row.avatar_url ?? null,
-        categoryId: row.category_id,
-        categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
-        state: "queued",
-        details: "Waiting for delivery.",
-        ...(reactionCategoryIds.has(row.category_id) ? {
-          reactionEligible: true,
-          reactionEmoji: communityReactionEmojis[index % communityReactionEmojis.length],
-          reactionState: "waiting_for_message",
-          reactionDetails: "Add a Discord message link from the Orders page to enable this reaction."
-        } : {})
-      }))
+      communityResults: (() => {
+        const assignedByCategory = new Map();
+        return selectedMembers.map((row, index) => {
+          const categoryLimit = reactionLimitByCategory.get(row.category_id) ?? 0;
+          const assigned = assignedByCategory.get(row.category_id) ?? 0;
+          const reactionEligible = assigned < categoryLimit;
+          if (reactionEligible) assignedByCategory.set(row.category_id, assigned + 1);
+          return {
+            discordUserId: row.discord_user_id,
+            username: row.username,
+            avatarUrl: row.avatar_url ?? null,
+            categoryId: row.category_id,
+            categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
+            state: "queued",
+            details: "Waiting for delivery.",
+            ...(reactionEligible ? {
+              reactionEligible: true,
+              reactionEmoji: communityReactionEmojis[index % communityReactionEmojis.length],
+              reactionState: "waiting_for_message",
+              reactionDetails: "Add a Discord message link from the Orders page to enable this reaction."
+            } : {})
+          };
+        });
+      })()
     };
     await client.query(
       `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -10983,7 +11007,7 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   }
 });
 
-app.put("/api/community/orders/:uniqid/reaction-message", requireSession, async (req, res, next) => {
+async function updateCommunityReactionMessage(req, res, next) {
   const client = await pool.connect();
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
@@ -11002,19 +11026,35 @@ app.put("/api/community/orders/:uniqid/reaction-message", requireSession, async 
       await client.query("ROLLBACK");
       return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });
     }
-    const reactionEnabledCategoryIds = new Set((Array.isArray(order.categoryAllocations) ? order.categoryAllocations : [])
+    const reactionLimitByCategory = new Map((Array.isArray(order.categoryAllocations) ? order.categoryAllocations : [])
       .filter((allocation) => allocation?.reactionUseEnabled === true)
-      .map((allocation) => String(allocation.categoryId ?? "")));
+      .map((allocation) => [
+        String(allocation.categoryId ?? ""),
+        Math.min(
+          Math.max(1, Number.parseInt(allocation?.amount, 10) || 1),
+          Math.min(1000, Math.max(1, Number.parseInt(allocation?.reactionLimit, 10) || 5))
+        )
+      ]));
     const reactionEnabled = order.communityResults.some((item) => item?.reactionEligible === true)
-      || reactionEnabledCategoryIds.size > 0;
+      || reactionLimitByCategory.size > 0;
     if (!reactionEnabled) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "Reaction use is not enabled for any category in this order." });
     }
 
+    const assignedByCategory = new Map();
     const communityResults = order.communityResults.map((item, index) => {
-      const eligible = item?.reactionEligible === true || reactionEnabledCategoryIds.has(String(item?.categoryId ?? order.categoryId ?? ""));
-      if (!item || !eligible) return item;
+      if (!item) return item;
+      const categoryId = String(item?.categoryId ?? order.categoryId ?? "");
+      const categoryLimit = reactionLimitByCategory.get(categoryId)
+        ?? (item?.reactionEligible === true ? 5 : 0);
+      const assigned = assignedByCategory.get(categoryId) ?? 0;
+      const eligible = assigned < categoryLimit;
+      if (!eligible) {
+        const { reactionEligible, reactionEmoji, reactionState, reactionDetails, reactionCompletedAt, ...withoutReaction } = item;
+        return withoutReaction;
+      }
+      assignedByCategory.set(categoryId, assigned + 1);
       const joined = String(item.state ?? "").toLowerCase() === "joined";
       return {
         ...item,
@@ -11026,6 +11066,7 @@ app.put("/api/community/orders/:uniqid/reaction-message", requireSession, async 
           : "Reaction will be added after this member joins and Onliner is connected."
       };
     });
+    await client.query("DELETE FROM community_reaction_jobs WHERE order_id = $1", [uniqid]);
     for (const item of communityResults) {
       if (item?.reactionEligible !== true || !item.reactionEmoji || String(item.state ?? "").toLowerCase() !== "joined") continue;
       await client.query(
@@ -11051,14 +11092,18 @@ app.put("/api/community/orders/:uniqid/reaction-message", requireSession, async 
     };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
-    res.set("Cache-Control", "no-store").json(updatedOrder);
+    const isPublicRequest = req.path.startsWith("/api/public/");
+    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : updatedOrder);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);
   } finally {
     client.release();
   }
-});
+}
+
+app.put("/api/community/orders/:uniqid/reaction-message", requireSession, updateCommunityReactionMessage);
+app.put("/api/public/orders/:uniqid/reaction-message", updateCommunityReactionMessage);
 
 app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res, next) => {
   const client = await pool.connect();

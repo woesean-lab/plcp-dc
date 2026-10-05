@@ -81,7 +81,7 @@ export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "reaction-message", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -117,6 +117,14 @@ export function pausePublicCommunityOrder(uniqid: string) {
 
 export function resumePublicCommunityOrder(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "resume", { method: "POST" });
+}
+
+export function updatePublicCommunityOrderReactionMessage(uniqid: string, messageLink: string) {
+  return requestPublicOrderApi<OrderStatusResponse>(uniqid, "reaction-message", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messageLink })
+  });
 }
 
 export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
