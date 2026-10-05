@@ -404,6 +404,7 @@ export default function OrderPage() {
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
+  const [orderUtilityTab, setOrderUtilityTab] = useState<"reactions" | "payload">("reactions");
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
@@ -593,6 +594,10 @@ export default function OrderPage() {
     try {
       const data = await getOrderStatus(target, provider);
       setResult(data);
+      setOrderUtilityTab((typeof data.reactionCapacity === "number" && data.reactionCapacity > 0)
+        || (Array.isArray(data.categoryAllocations) && data.categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true))
+        ? "reactions"
+        : "payload");
       setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
       setReactionMessageDraft("");
@@ -1311,24 +1316,6 @@ export default function OrderPage() {
                 </span>
               </div>
 
-              {reactionUseEnabled && reactionCapacity > 0 ? (
-                <ReactionPanel
-                  className="is-orders"
-                  limit={reactionCapacity}
-                  completed={reactionCompletedCount}
-                  failed={reactionFailedCount}
-                  remaining={reactionRemainingCount}
-                  latestMessageLink={reactionMessageLink}
-                  messageDraft={reactionMessageDraft}
-                  countDraft={reactionCountDraft}
-                  saving={savingReactionMessage}
-                  requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
-                  onMessageChange={setReactionMessageDraft}
-                  onCountChange={setReactionCountDraft}
-                  onSubmit={() => void handleSaveReactionMessage()}
-                />
-              ) : null}
-
               {communityCheckNeedsBot && botInvite ? (
                 <div className="monitor-member-check-bot-alert" role="alert">
                   <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check or replace members.</strong></span>
@@ -1408,15 +1395,42 @@ export default function OrderPage() {
             </div>
           </details>
 
-          <details className="lookup-raw-payload">
-            <summary>
-              <span><FileJson className="h-4 w-4" aria-hidden="true" /> Raw order payload</span>
-              <small>JSON</small>
-            </summary>
-            <div className="payload-panel overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
+          <section className="lookup-order-utility">
+            <div className="lookup-order-utility-tabs" role="tablist" aria-label="Order tools">
+              {reactionUseEnabled && reactionCapacity > 0 ? (
+                <button type="button" role="tab" aria-selected={orderUtilityTab === "reactions"} className={orderUtilityTab === "reactions" ? "is-active" : ""} onClick={() => setOrderUtilityTab("reactions")}>
+                  <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" /> Reactions
+                  <small>{reactionRemainingCount}</small>
+                </button>
+              ) : null}
+              <button type="button" role="tab" aria-selected={orderUtilityTab === "payload" || !reactionUseEnabled || reactionCapacity <= 0} className={orderUtilityTab === "payload" || !reactionUseEnabled || reactionCapacity <= 0 ? "is-active" : ""} onClick={() => setOrderUtilityTab("payload")}>
+                <FileJson className="h-3.5 w-3.5" aria-hidden="true" /> Raw order payload
+              </button>
             </div>
-          </details>
+            <div className="lookup-order-utility-content" role="tabpanel">
+              {reactionUseEnabled && reactionCapacity > 0 && orderUtilityTab === "reactions" ? (
+                <ReactionPanel
+                  className="is-orders"
+                  limit={reactionCapacity}
+                  completed={reactionCompletedCount}
+                  failed={reactionFailedCount}
+                  remaining={reactionRemainingCount}
+                  latestMessageLink={reactionMessageLink}
+                  messageDraft={reactionMessageDraft}
+                  countDraft={reactionCountDraft}
+                  saving={savingReactionMessage}
+                  requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                  onMessageChange={setReactionMessageDraft}
+                  onCountChange={setReactionCountDraft}
+                  onSubmit={() => void handleSaveReactionMessage()}
+                />
+              ) : (
+                <div className="payload-panel overflow-auto p-4">
+                  <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
+                </div>
+              )}
+            </div>
+          </section>
         </article>
       ) : (
         <div className={`${shell} lookup-empty-state`}>
