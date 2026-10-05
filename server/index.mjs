@@ -2643,25 +2643,36 @@ async function processCommunityReactionJobsUnlocked() {
     const localGatewayConnected = runtime?.state === "connected" && runtime.socket?.readyState === WebSocket.OPEN;
     const persistedGatewayConnected = persistedGatewayAvailable
       && persistedRuntime?.payload?.connectionState === "connected";
-    if (!account || (!localGatewayConnected && !persistedGatewayConnected)) {
-      const waitingDetails = account
-        ? `Waiting for the Onliner Gateway connection (${runtime?.state ?? persistedRuntime?.payload?.connectionState ?? "not started"}).`
-        : "The active Onliner account could not be matched to this Discord member.";
+    if (!account) {
+      const waitingDetails = "The Onliner account could not be matched to this Discord member.";
       await pool.query(
         "UPDATE community_reaction_jobs SET account_id = COALESCE($3, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $4 WHERE order_id = $1 AND discord_user_id = $2",
-        [job.order_id, job.discord_user_id, account?.id ?? null, waitingDetails]
+        [job.order_id, job.discord_user_id, null, waitingDetails]
       );
       await updateCommunityReactionResult(job, { reactionState: "pending", reactionEmoji: job.emoji, reactionDetails: waitingDetails });
       continue;
     }
     try {
-      const result = await sendHumanizerDiscordRequest(
-        `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}/reactions/${encodeURIComponent(job.emoji)}/@me`,
-        account.proxyUrl,
-        account.botToken,
-        "PUT",
-        undefined
-      );
+      const sendReaction = () => sendHumanizerDiscordRequest(
+          `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}/reactions/${encodeURIComponent(job.emoji)}/@me`,
+          account.proxyUrl,
+          account.botToken,
+          "PUT",
+          undefined
+        );
+      let result;
+      if (localGatewayConnected || persistedGatewayConnected) {
+        result = await sendReaction();
+      } else {
+        const connectingDetails = "Connecting this member to the Onliner Gateway before reacting.";
+        await updateCommunityReactionResult(job, { reactionState: "pending", reactionEmoji: job.emoji, reactionDetails: connectingDetails });
+        result = await runWithHumanizerGatewaySession({
+          id: String(job.discord_user_id),
+          token: account.botToken,
+          proxyUrl: account.proxyUrl,
+          onlinerAccountId: account.id
+        }, sendReaction);
+      }
       if (result.response.ok) {
         const completedAt = new Date().toISOString();
         await pool.query(
