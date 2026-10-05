@@ -13,6 +13,7 @@ export interface CommunityCategoryAllocation {
   added?: number;
   isPeriodic?: boolean;
   checkReplacementEnabled?: boolean;
+  reactionUseEnabled?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
 }
@@ -41,6 +42,7 @@ export interface CreateOrderPayload {
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
   isEldoradoSale?: boolean;
+  reactionMessageLink?: string;
 }
 
 export interface CreateOrderResponse {
@@ -52,6 +54,7 @@ export interface CreateOrderResponse {
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   categoryCheckReplacementEnabled?: boolean;
+  reactionMessageLink?: string;
   durationMonths?: number | null;
   joinMethod?: CommunityJoinMethod;
   createdAt?: string;
@@ -80,6 +83,7 @@ export interface OrderStatusResponse {
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   categoryCheckReplacementEnabled?: boolean;
+  reactionMessageLink?: string;
   durationMonths?: number | null;
   error?: string;
   canManageDcordTokens?: boolean;
@@ -129,6 +133,7 @@ export interface TrackedOrder {
   durationMonths?: number | null;
   expiredAt?: string | null;
   isEldoradoSale?: boolean;
+  reactionMessageLink?: string;
 }
 
 export interface BoostStock {

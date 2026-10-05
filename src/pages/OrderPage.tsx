@@ -53,6 +53,9 @@ type CommunityMemberResult = {
   onlinerConnectionState?: string;
   onlinerDetails?: string;
   onlinerCheckedAt?: string;
+  reactionState?: string;
+  reactionEmoji?: string;
+  reactionDetails?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -95,6 +98,9 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,
       onlinerCheckedAt: typeof row.onlinerCheckedAt === "string" ? row.onlinerCheckedAt : undefined,
+      reactionState: typeof row.reactionState === "string" ? row.reactionState : undefined,
+      reactionEmoji: typeof row.reactionEmoji === "string" ? row.reactionEmoji : undefined,
+      reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -452,6 +458,7 @@ export default function OrderPage() {
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
+  const reactionMessageLink = getStringField(result, ["reactionMessageLink"]);
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -1170,6 +1177,11 @@ export default function OrderPage() {
                   <h3>Per-token boost log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
+                  {reactionMessageLink ? (
+                    <Button asChild className="member-log-action-button" variant="secondary" size="xs">
+                      <a href={reactionMessageLink} target="_blank" rel="noreferrer"><MessageSquareText className="h-3.5 w-3.5" /> Reaction message</a>
+                    </Button>
+                  ) : null}
                   {replaceableDcordTokenIndices.length || dcordReplaceQueue.length ? (
                     <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllDcordTokens} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS" || dcordReplaceQueue.length > 0}>
                       <RefreshCw className={`h-3.5 w-3.5 ${dcordReplaceQueue.length > 0 || replacingTokenIndex !== null ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -1298,6 +1310,11 @@ export default function OrderPage() {
                         {typeof item.onlinerLive === "boolean" ? (
                           <span className="public-token-result-pill" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
                             {item.onlinerLive ? "Onliner Live" : "Onliner Not Live"}
+                          </span>
+                        ) : null}
+                        {item.reactionState ? (
+                          <span className="public-token-result-pill" data-state={item.reactionState === "completed" ? "active" : item.reactionState === "failed" ? "inactive" : "pending"} title={item.reactionDetails}>
+                            {item.reactionEmoji} {item.reactionState === "completed" ? "Reacted" : item.reactionState === "failed" ? "Reaction failed" : "Reaction pending"}
                           </span>
                         ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>

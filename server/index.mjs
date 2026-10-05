@@ -83,6 +83,22 @@ function extractDiscordInviteCode(value) {
   return /^[A-Za-z0-9_-]{3,}$/.test(trimmed) ? trimmed : null;
 }
 
+function parseDiscordMessageLink(value) {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    const hostname = url.hostname.replace(/^www\./i, "").toLowerCase();
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (!["discord.com", "discordapp.com"].includes(hostname) || segments[0] !== "channels") return null;
+    const [guildId, channelId, messageId] = segments.slice(1, 4);
+    if (![guildId, channelId, messageId].every((id) => isDiscordGuildId(String(id ?? "")))) return null;
+    return { guildId, channelId, messageId, url: `https://discord.com/channels/${guildId}/${channelId}/${messageId}` };
+  } catch {
+    return null;
+  }
+}
+
 const discordInviteResolutionCache = new Map();
 const discordInviteResolutionCacheTtlMs = 30_000;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
@@ -849,6 +865,9 @@ const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
 const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues, "none", "mixed"]);
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
+// Discord messages support a limited number of distinct reaction types. Rotate
+// through a varied pool while allowing larger orders to share those reactions.
+const communityReactionEmojis = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎"];
 const discordOnlinerProxyHealth = new Map();
 let discordOnlinerProxySelectionSequence = 0;
 function createDiscordGatewayIdentityProperties() {
@@ -2564,6 +2583,95 @@ async function processDiscordOnlinerWorkerCommands() {
   await pool.query("DELETE FROM discord_onliner_commands WHERE completed_at < NOW() - INTERVAL '1 day'");
 }
 
+async function updateCommunityReactionResult(job, fields) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [job.order_id]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    const communityResults = order.communityResults.map((item) => String(item?.discordUserId ?? "") === String(job.discord_user_id)
+      ? { ...item, ...fields }
+      : item);
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [job.order_id, JSON.stringify({ ...order, communityResults })]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function processCommunityReactionJobs() {
+  const jobs = await pool.query(
+    `SELECT order_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
+     FROM community_reaction_jobs
+     WHERE status = 'pending' AND next_attempt_at <= NOW()
+     ORDER BY created_at ASC
+     LIMIT 20`
+  );
+  if (!jobs.rowCount) return;
+  const config = discordOnlinerWorkerCurrentConfig ?? await getDiscordOnlinerConfig();
+  for (const job of jobs.rows) {
+    const account = config.accounts.find((item) => item.id === job.account_id)
+      ?? config.accounts.find((item) => String(item.discordUserId ?? "") === String(job.discord_user_id));
+    const runtime = account ? discordOnlinerRuntimes.get(account.id) : null;
+    if (!account || !runtime || runtime.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN) {
+      await pool.query(
+        "UPDATE community_reaction_jobs SET account_id = COALESCE($3, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $4 WHERE order_id = $1 AND discord_user_id = $2",
+        [job.order_id, job.discord_user_id, account?.id ?? null, account ? "Waiting for the Onliner Gateway connection." : "Waiting for this member to be added to Onliner."]
+      );
+      continue;
+    }
+    try {
+      const result = await requestDiscordThroughProxy(
+        `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}/reactions/${encodeURIComponent(job.emoji)}/@me`,
+        account.proxyUrl,
+        { method: "PUT", headers: { Authorization: account.botToken } }
+      );
+      if (result.response.ok) {
+        const completedAt = new Date().toISOString();
+        await pool.query(
+          "UPDATE community_reaction_jobs SET status = 'completed', account_id = $3, attempts = attempts + 1, completed_at = NOW(), last_error = NULL WHERE order_id = $1 AND discord_user_id = $2",
+          [job.order_id, job.discord_user_id, account.id]
+        );
+        await updateCommunityReactionResult(job, { reactionState: "completed", reactionEmoji: job.emoji, reactionCompletedAt: completedAt, reactionDetails: "Reaction added after the Onliner connection became ready." });
+        appendDiscordOnlinerLog("success", `Reaction ${job.emoji} added for Members order ${job.order_id}.`, account.id);
+        continue;
+      }
+      const message = String(result.payload?.message ?? `Discord returned HTTP ${result.response.status}.`).slice(0, 400);
+      const terminal = [401, 403, 404].includes(result.response.status) || Number(job.attempts) >= 5;
+      await pool.query(
+        `UPDATE community_reaction_jobs
+         SET status = $3, account_id = $4, attempts = attempts + 1,
+             next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $5,
+             completed_at = CASE WHEN $3 = 'failed' THEN NOW() ELSE completed_at END
+         WHERE order_id = $1 AND discord_user_id = $2`,
+        [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
+      );
+      if (terminal) await updateCommunityReactionResult(job, { reactionState: "failed", reactionEmoji: job.emoji, reactionDetails: message });
+    } catch (error) {
+      const message = String(error instanceof Error ? error.message : error).slice(0, 400);
+      const terminal = Number(job.attempts) >= 5;
+      await pool.query(
+        `UPDATE community_reaction_jobs SET status = $3, account_id = $4, attempts = attempts + 1,
+         next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $5,
+         completed_at = CASE WHEN $3 = 'failed' THEN NOW() ELSE completed_at END
+         WHERE order_id = $1 AND discord_user_id = $2`,
+        [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
+      );
+      if (terminal) await updateCommunityReactionResult(job, { reactionState: "failed", reactionEmoji: job.emoji, reactionDetails: message });
+    }
+  }
+}
+
 async function pollDiscordOnlinerWorker() {
   if (discordOnlinerWorkerPollActive || !discordOnlinerWorkerLockClient) return;
   discordOnlinerWorkerPollActive = true;
@@ -2580,6 +2688,7 @@ async function pollDiscordOnlinerWorker() {
       if (nextAt > 0 && nextAt <= Date.now()) triggerNextDiscordOnlinerQueuedConnection(runtime);
     }
     await processDiscordOnlinerWorkerCommands();
+    await processCommunityReactionJobs();
   } catch (error) {
     console.error("Onliner worker poll failed:", error instanceof Error ? error.message : error);
     await pool.query("UPDATE discord_onliner_worker_state SET last_error = $1 WHERE singleton = TRUE AND worker_id = $2", [String(error instanceof Error ? error.message : error).slice(0, 500), discordOnlinerWorkerId]).catch(() => {});
@@ -3488,7 +3597,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
+      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories AS category
        WHERE guild_id = $1
          AND NOT EXISTS (
@@ -3506,6 +3615,7 @@ async function loadCommunityStockCategories(config) {
     name: row.name,
     isPeriodic: row.is_periodic === true,
     checkReplacementEnabled: row.check_replacement_enabled !== false,
+    reactionUseEnabled: row.reaction_use_enabled === true,
     iconName: row.icon_name,
     colorKey: row.color_key,
     createdAt: row.created_at,
@@ -3519,8 +3629,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
 
   await queryable.query(
     `INSERT INTO community_stock_categories
-       (guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at)
-     SELECT $2, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, NOW()
+       (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, NOW()
      FROM community_stock_categories AS category
      WHERE guild_id = $1
        AND NOT EXISTS (
@@ -5825,7 +5935,7 @@ async function runCommunityOrder(order, members, config) {
         if (!stored) return incoming;
         const incomingReplacementAttempt = Number(incoming?.replacementAttempt ?? 0);
         const storedReplacementAttempt = Number(stored?.replacementAttempt ?? 0);
-        return storedReplacementAttempt > incomingReplacementAttempt ? stored : incoming;
+        return storedReplacementAttempt > incomingReplacementAttempt ? stored : { ...stored, ...incoming };
       }).filter(Boolean);
       const mergedAdded = mergedResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
       const amount = Number(payload.amount ?? currentPayload.amount ?? order.amount) || mergedResults.length;
@@ -6118,6 +6228,20 @@ async function runCommunityOrder(order, members, config) {
         expiresAt: Date.now() + 60_000
       });
     }
+    if (state === "joined" && results[resultIndex]?.reactionEmoji && order.reactionMessage) {
+      const reactionEmoji = String(results[resultIndex].reactionEmoji);
+      results[resultIndex] = {
+        ...results[resultIndex],
+        reactionState: "pending",
+        reactionDetails: "Waiting for the Onliner Gateway connection before reacting."
+      };
+      await pool.query(
+        `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+        [order.uniqid, member.discord_user_id, order.reactionMessage.channelId, order.reactionMessage.messageId, reactionEmoji]
+      );
+    }
     const memberFailed = state === "failed";
     const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
     results[resultIndex] = resetCommunityResultVerification(results[resultIndex], {
@@ -6340,10 +6464,22 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         expiresAt: Date.now() + 60_000
       });
     }
+    if (state === "joined" && current?.reactionEmoji && order.reactionMessage) {
+      await client.query(
+        `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+        [orderId, member.discord_user_id, order.reactionMessage.channelId, order.reactionMessage.messageId, String(current.reactionEmoji)]
+      );
+    }
     results[resultIndex] = resetCommunityResultVerification(current, {
       state,
       details,
       completedAt: new Date().toISOString(),
+      ...(state === "joined" && current?.reactionEmoji && order.reactionMessage ? {
+        reactionState: "pending",
+        reactionDetails: "Waiting for the Onliner Gateway connection before reacting."
+      } : {}),
       ...(state === "failed" && memberAuthorizationInvalid ? {
         authorizationStatus: "inactive",
         authorizationDetails: "Discord reported that this replacement account cannot authorize delivery, so it was disabled in Members Stock.",
@@ -7078,6 +7214,24 @@ async function initializeDiscordOnlinerDatabase() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS discord_onliner_persisted_logs_timestamp_idx ON discord_onliner_persisted_logs (timestamp DESC)");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS community_reaction_jobs (
+      order_id TEXT NOT NULL,
+      discord_user_id TEXT NOT NULL,
+      account_id TEXT,
+      channel_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      last_error TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      completed_at TIMESTAMPTZ,
+      PRIMARY KEY (order_id, discord_user_id)
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS community_reaction_jobs_pending_idx ON community_reaction_jobs (status, next_attempt_at)");
 }
 
 async function initializeDatabase() {
@@ -7158,6 +7312,7 @@ async function initializeDatabase() {
       name TEXT NOT NULL,
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
       check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+      reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       icon_name TEXT NOT NULL DEFAULT 'Users',
       color_key TEXT NOT NULL DEFAULT 'violet',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -7170,6 +7325,7 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS icon_name TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE");
   await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
   await pool.query("UPDATE community_stock_categories SET color_key = CASE WHEN id = 'offline' THEN 'emerald' ELSE 'violet' END WHERE color_key IS NULL OR BTRIM(color_key) = ''");
   await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET DEFAULT 'Users'");
@@ -8369,6 +8525,7 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
+    const reactionUseEnabled = req.body?.reactionUseEnabled === true;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -8378,10 +8535,10 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
-       RETURNING id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, iconName, colorKey]
+      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
     );
     invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
@@ -8400,6 +8557,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const name = String(req.body?.name ?? "").trim();
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
+    const reactionUseEnabled = req.body?.reactionUseEnabled === true;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -8410,19 +8568,19 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const updated = await pool.query(
       `WITH updated AS (
          UPDATE community_stock_categories
-         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, icon_name = $6, color_key = $7, updated_at = NOW()
+         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, reaction_use_enabled = $6, icon_name = $7, color_key = $8, updated_at = NOW()
          WHERE id = $2
            AND NOT EXISTS (
              SELECT 1
              FROM community_stock_category_tombstones AS tombstone
              WHERE tombstone.id = community_stock_categories.id
            )
-         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
+         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        )
-       SELECT id, name, is_periodic, check_replacement_enabled, icon_name, color_key, created_at, updated_at
+       SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        FROM updated
        WHERE guild_id = $1`,
-      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, iconName, colorKey]
+      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
@@ -9682,7 +9840,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const requestedCategoryIds = requestedAllocations.map((allocation) => allocation.categoryId);
     const categoryResult = await pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled
+      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled
        FROM community_stock_categories
        WHERE guild_id = $1 AND id = ANY($2::text[])`,
       [config.guildId, requestedCategoryIds]
@@ -9691,6 +9849,14 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "One or more Members 2 categories could not be found." });
     }
     const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
+    const reactionCategoryIds = new Set(categoryResult.rows.filter((category) => category.reaction_use_enabled === true).map((category) => category.id));
+    const reactionMessage = reactionCategoryIds.size ? parseDiscordMessageLink(req.body?.reactionMessageLink) : null;
+    if (reactionCategoryIds.size && !reactionMessage) {
+      return res.status(400).json({ message: "A valid Discord message link is required because Reaction use is enabled for a selected category." });
+    }
+    if (reactionMessage && reactionMessage.guildId !== serverInfo.guildId) {
+      return res.status(400).json({ message: "The reaction message must belong to the order's Discord server." });
+    }
     const hasPeriodicCategory = categoryResult.rows.some((category) => category.is_periodic === true);
     const durationMonths = hasPeriodicCategory ? Number.parseInt(req.body?.durationMonths, 10) : null;
     if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
@@ -9730,6 +9896,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         added: 0,
         isPeriodic: category.is_periodic === true,
         checkReplacementEnabled: category.check_replacement_enabled !== false,
+        reactionUseEnabled: category.reaction_use_enabled === true,
         durationMonths: category.is_periodic === true ? durationMonths : null,
         expiredAt: category.is_periodic === true ? addUtcMonths(createdAt, durationMonths).toISOString() : null
       });
@@ -9752,6 +9919,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryAllocations,
       categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
       categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
+      reactionMessageLink: reactionMessage?.url ?? null,
+      reactionMessage: reactionMessage ? { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId } : null,
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -9774,14 +9943,19 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       experimentalJoin: joinMethod === "experimental_join",
       botApplicationId: config.clientId,
       botInvite,
-      communityResults: selectedMembers.map((row) => ({
+      communityResults: selectedMembers.map((row, index) => ({
         discordUserId: row.discord_user_id,
         username: row.username,
         avatarUrl: row.avatar_url ?? null,
         categoryId: row.category_id,
         categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
         state: "queued",
-        details: "Waiting for delivery."
+        details: "Waiting for delivery.",
+        ...(reactionMessage && reactionCategoryIds.has(row.category_id) ? {
+          reactionEmoji: communityReactionEmojis[index % communityReactionEmojis.length],
+          reactionState: "waiting_for_join",
+          reactionDetails: "Reaction will be added after this member joins and Onliner is connected."
+        } : {})
       }))
     };
     await client.query(
@@ -9804,6 +9978,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryName: order.categoryName,
       categoryAllocations: order.categoryAllocations,
       categoryIsPeriodic: order.categoryIsPeriodic,
+      reactionMessageLink: order.reactionMessageLink,
       durationMonths: order.durationMonths,
       joinMethod: order.joinMethod,
       createdAt: order.createdAt,
@@ -10248,9 +10423,24 @@ async function reconcileCommunityPendingJoinResults(order) {
       details: pendingUserIds.has(discordUserId)
         ? "Member joined the server and is pending Discord's server-rules screening."
         : "Member joined the server.",
-      completedAt
+      completedAt,
+      ...(item?.reactionEmoji && order.reactionMessage ? {
+        reactionState: "pending",
+        reactionDetails: "Waiting for the Onliner Gateway connection before reacting."
+      } : {})
     });
   });
+  if (order.reactionMessage) {
+    for (const item of communityResults) {
+      if (!joinedUserIds.has(String(item?.discordUserId ?? "")) || !item?.reactionEmoji) continue;
+      await pool.query(
+        `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+        [order.uniqid, item.discordUserId, order.reactionMessage.channelId, order.reactionMessage.messageId, String(item.reactionEmoji)]
+      );
+    }
+  }
   await pool.query(
     `UPDATE community_oauth_joins
      SET reserved_order_id = NULL
@@ -10493,6 +10683,7 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
     };
 
     await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]);
+    await client.query("UPDATE community_reaction_jobs SET status = 'cancelled', completed_at = NOW(), last_error = 'Order cancelled.' WHERE order_id = $1 AND status = 'pending'", [uniqid]);
     await client.query(
       "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
       [uniqid, JSON.stringify(cancelledOrder)]
@@ -12174,6 +12365,7 @@ app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
 
     if (payload?.provider === "community") {
       await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]);
+      await client.query("DELETE FROM community_reaction_jobs WHERE order_id = $1", [uniqid]);
     }
     await client.query("DELETE FROM tracked_orders WHERE uniqid = $1", [uniqid]);
     await client.query(

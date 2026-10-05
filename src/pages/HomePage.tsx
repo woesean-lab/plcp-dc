@@ -32,6 +32,7 @@ import {
   ListChecks,
   LoaderCircle,
   LogOut,
+  MessageSquareText,
   Minus,
   Pencil,
   Pause,
@@ -157,6 +158,7 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
+  reactionMessageLink: "",
   isEldoradoSale: true
 };
 
@@ -744,10 +746,11 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     isPeriodic: false,
     checkReplacementEnabled: true,
+    reactionUseEnabled: false,
     iconName: "Users",
     colorKey: "violet"
   });
@@ -1873,6 +1876,7 @@ export default function HomePage() {
       name: category.name,
       isPeriodic: category.isPeriodic,
       checkReplacementEnabled: category.checkReplacementEnabled,
+      reactionUseEnabled: category.reactionUseEnabled,
       iconName: category.iconName || (category.isPeriodic ? "Timer" : "Users"),
       colorKey: category.colorKey || "violet"
     });
@@ -1881,7 +1885,7 @@ export default function HomePage() {
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
@@ -2024,7 +2028,7 @@ export default function HomePage() {
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -2034,6 +2038,7 @@ export default function HomePage() {
       name: communityCategoryDraft.name.trim(),
       isPeriodic: communityCategoryDraft.isPeriodic,
       checkReplacementEnabled: communityCategoryDraft.checkReplacementEnabled,
+      reactionUseEnabled: communityCategoryDraft.reactionUseEnabled,
       iconName: communityCategoryDraft.iconName.trim(),
       colorKey: communityCategoryDraft.colorKey
     };
@@ -2659,6 +2664,7 @@ export default function HomePage() {
       speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
       joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
       isEldoradoSale: payload.isEldoradoSale,
+      reactionMessageLink: created.reactionMessageLink ?? payload.reactionMessageLink,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
@@ -2707,8 +2713,16 @@ export default function HomePage() {
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
-      isEldoradoSale: form.isEldoradoSale
+      isEldoradoSale: form.isEldoradoSale,
+      reactionMessageLink: selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled)
+        ? form.reactionMessageLink.trim()
+        : undefined
     };
+
+    if (selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled) && !form.reactionMessageLink.trim()) {
+      notifyError("Discord message link is required for Reaction use categories.");
+      return;
+    }
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
       notifyError("Boost amount must be an even number.");
@@ -2873,6 +2887,11 @@ export default function HomePage() {
                       {category.checkReplacementEnabled ? (
                         <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled">
                           <RefreshCw aria-hidden="true" />
+                        </span>
+                      ) : null}
+                      {category.reactionUseEnabled ? (
+                        <span className="community-category-rule-indicator" title="Reaction use enabled" aria-label="Reaction use enabled">
+                          <MessageSquareText aria-hidden="true" />
                         </span>
                       ) : null}
                     </small>
@@ -3228,6 +3247,7 @@ export default function HomePage() {
                             <span className="service-option-description">{option.description}</span>
                             <span className="service-option-code">{option.value}</span>
                           </label>
+
                         );
                       })}
                     </div>
@@ -3657,6 +3677,20 @@ export default function HomePage() {
                               />
                             </div>
                           </label>
+
+                          {selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled) ? (
+                            <label className="boost-order-field md:col-span-2">
+                              <span className="boost-order-label">Reaction message link</span>
+                              <Input
+                                type="url"
+                                value={form.reactionMessageLink}
+                                onChange={(event) => setForm((current) => ({ ...current, reactionMessageLink: event.target.value }))}
+                                placeholder="https://discord.com/channels/server/channel/message"
+                                required
+                              />
+                              <small className="text-[var(--app-muted)]">Each eligible member uses a different emoji after joining and connecting to Onliner.</small>
+                            </label>
+                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">
@@ -4947,6 +4981,10 @@ export default function HomePage() {
                 <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check Members is informational only</small></span>
               </label>
             </div>
+            <label className={`onliner-enabled-card ${communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}`}>
+              <input type="checkbox" checked={communityCategoryDraft.reactionUseEnabled} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: event.target.checked }))} />
+              <span><strong>Reaction use</strong><small>Orders using this category require a Discord message link. Joined members react with different emojis after Onliner connects.</small></span>
+            </label>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={resetCommunityCategoryDraft}>Cancel</Button>
               <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>
