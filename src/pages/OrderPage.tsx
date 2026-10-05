@@ -57,6 +57,7 @@ type CommunityMemberResult = {
   reactionEmoji?: string;
   reactionDetails?: string;
   reactionEligible?: boolean;
+  reactionRequestId?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -75,6 +76,12 @@ function formatDcordTiming(value: unknown) {
   const milliseconds = typeof value === "number" && Number.isFinite(value) ? value : null;
   if (milliseconds === null) return "";
   return milliseconds < 1_000 ? `${Math.round(milliseconds)}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
+}
+
+function formatDateTime(value?: string | number) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
 }
 
 function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
@@ -103,6 +110,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       reactionEmoji: typeof row.reactionEmoji === "string" ? row.reactionEmoji : undefined,
       reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
       reactionEligible: row.reactionEligible === true,
+      reactionRequestId: typeof row.reactionRequestId === "string" ? row.reactionRequestId : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -399,6 +407,7 @@ export default function OrderPage() {
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
+  const [reactionCountDraft, setReactionCountDraft] = useState(1);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
@@ -465,6 +474,12 @@ export default function OrderPage() {
   const reactionMessageLink = getStringField(result, ["reactionMessageLink"]);
   const reactionUseEnabled = communityMemberResults.some((item) => item.reactionEligible)
     || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
+  const reactionCapacity = typeof result?.reactionCapacity === "number"
+    ? result.reactionCapacity
+    : categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + allocation.amount : total, 0);
+  const reactionAssignedCount = communityMemberResults.filter((item) => item.reactionEligible).length;
+  const reactionRemainingCount = Math.max(0, reactionCapacity - reactionAssignedCount);
+  const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
   const reactionWorkPending = Boolean(reactionMessageLink) && communityMemberResults.some((item) => item.reactionState === "pending");
   const refreshComplete = terminal && !reactionWorkPending;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
@@ -583,7 +598,7 @@ export default function OrderPage() {
       setResult(data);
       setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
-      setReactionMessageDraft(getStringField(data, ["reactionMessageLink"]));
+      setReactionMessageDraft("");
       toast.success(`Loaded ${target}.`);
       setParams({ uniqid: target, provider });
     } catch (error) {
@@ -604,10 +619,11 @@ export default function OrderPage() {
     }
     try {
       setSavingReactionMessage(true);
-      const updated = await updateCommunityOrderReactionMessage(target, messageLink);
+      const updated = await updateCommunityOrderReactionMessage(target, messageLink, Math.min(reactionCountDraft, reactionRemainingCount));
       setResult((current) => mergeOrderStatus(current, updated));
-      setReactionMessageDraft(getStringField(updated, ["reactionMessageLink"]));
-      toast.success("Reaction message saved. Eligible members were queued.");
+      setReactionMessageDraft("");
+      setReactionCountDraft(1);
+      toast.success("Reaction request added. Eligible members were queued.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Reaction message could not be saved.");
     } finally {
@@ -1298,23 +1314,34 @@ export default function OrderPage() {
                 </span>
               </div>
 
-              {reactionUseEnabled ? (
-                <div className="mb-3 grid gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-panel-soft)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+              {reactionUseEnabled && reactionRemainingCount > 0 ? (
+                <div className="mb-3 grid gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-panel-soft)] p-3 md:grid-cols-[minmax(0,1fr)_110px_auto] md:items-end">
                   <label className="grid gap-1.5">
-                    <span className={labelClass}>Reaction message link</span>
+                    <span className={labelClass}>New reaction request</span>
                     <Input
                       type="url"
                       value={reactionMessageDraft}
                       onChange={(event) => setReactionMessageDraft(event.target.value)}
                       placeholder="https://discord.com/channels/server/channel/message"
                     />
-                    <small className="text-[var(--app-muted)]">Joined members react with different emojis after their Onliner Gateway connection is ready.</small>
+                    <small className="text-[var(--app-muted)]">{reactionRemainingCount} reactions remain. Each member is used once.</small>
                   </label>
+                  <label className="grid gap-1.5"><span className={labelClass}>Amount</span><Input type="number" min={1} max={reactionRemainingCount} value={Math.min(reactionCountDraft, reactionRemainingCount)} onChange={(event) => setReactionCountDraft(Math.min(reactionRemainingCount, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} /></label>
                   <Button type="button" size="sm" disabled={savingReactionMessage || !reactionMessageDraft.trim()} onClick={() => void handleSaveReactionMessage()}>
                     {savingReactionMessage ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
-                    {savingReactionMessage ? "Saving..." : reactionMessageLink ? "Update message" : "Save message"}
+                    {savingReactionMessage ? "Sending..." : "Send request"}
                   </Button>
                 </div>
+              ) : null}
+
+              {reactionRequests.length ? (
+                <details className="monitor-reaction-history mb-3">
+                  <summary><span>Reaction history</span><small>{reactionAssignedCount}/{reactionCapacity}</small></summary>
+                  <div>{[...reactionRequests].reverse().map((request) => {
+                    const completed = communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length;
+                    return <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer"><span><MessageSquareText aria-hidden="true" /><strong>{request.requestedCount} reactions</strong></span><small>{completed}/{request.assignedCount} completed · {formatDateTime(request.createdAt)}</small><ExternalLink aria-hidden="true" /></a>;
+                  })}</div>
+                </details>
               ) : null}
 
               {communityCheckNeedsBot && botInvite ? (
