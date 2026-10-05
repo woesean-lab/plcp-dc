@@ -1250,11 +1250,13 @@
   }
 
   .lookup-technical-details,
+  .lookup-reaction-details,
   .lookup-raw-payload {
     border-bottom: 1px solid var(--app-divider);
   }
 
   .lookup-technical-details summary,
+  .lookup-reaction-details summary,
   .lookup-raw-payload summary {
     display: flex;
     align-items: center;
@@ -1269,12 +1271,16 @@
   }
 
   .lookup-technical-details summary::-webkit-details-marker,
+  .lookup-reaction-details summary::-webkit-details-marker,
   .lookup-raw-payload summary::-webkit-details-marker { display: none; }
   .lookup-technical-details summary span,
+  .lookup-reaction-details summary span,
   .lookup-raw-payload summary span { display: inline-flex; align-items: center; gap: .55rem; }
   .lookup-technical-details summary small,
+  .lookup-reaction-details summary small,
   .lookup-raw-payload summary small { color: var(--app-muted); font-size: 9px; font-weight: 800; }
   .lookup-technical-details[open] summary,
+  .lookup-reaction-details[open] summary,
   .lookup-raw-payload[open] summary { border-bottom: 1px solid var(--app-divider); }
 
   .lookup-technical-grid {
@@ -1293,17 +1299,8 @@
   .lookup-technical-grid span { display: block; color: var(--app-muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
   .lookup-technical-grid strong { display: block; overflow: hidden; margin-top: .3rem; color: var(--app-text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .lookup-technical-grid strong.is-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  .lookup-reaction-details-content { min-width: 0; padding: 12px; background: rgba(255,255,255,.012); }
   .lookup-raw-payload .payload-panel { max-height: 360px; margin: 1rem; border-radius: 7px; }
-
-  .lookup-order-utility { border-bottom: 1px solid var(--app-divider); }
-  .lookup-order-utility-tabs { display: flex; align-items: center; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--app-divider); }
-  .lookup-order-utility-tabs button { position: relative; display: inline-flex; min-height: 34px; align-items: center; gap: 7px; border: 0; border-radius: 8px 8px 0 0; padding: 0 11px; background: transparent; color: var(--app-muted); font-size: 11px; font-weight: 650; transition: color .18s ease, background .18s ease; }
-  .lookup-order-utility-tabs button:hover { background: rgba(255,255,255,.025); color: var(--app-text-secondary); }
-  .lookup-order-utility-tabs button.is-active { background: rgba(255,255,255,.04); color: var(--app-text); }
-  .lookup-order-utility-tabs button.is-active::after { content: ""; position: absolute; right: 9px; bottom: -1px; left: 9px; height: 2px; border-radius: 999px 999px 0 0; background: var(--app-accent); }
-  .lookup-order-utility-tabs button small { display: grid; min-width: 18px; height: 18px; place-items: center; border-radius: 999px; background: rgba(255,255,255,.055); color: var(--app-text-secondary); font-size: 8px; }
-  .lookup-order-utility-content { min-width: 0; padding: 12px; background: rgba(255,255,255,.012); }
-  .lookup-order-utility-content > .payload-panel { max-height: 360px; border-radius: 8px; }
 
   .lookup-empty-state {
     display: flex;
@@ -1384,6 +1381,7 @@
     .lookup-token-panel { padding: .85rem; }
     .lookup-section-heading { align-items: flex-start; }
     .lookup-technical-details summary,
+    .lookup-reaction-details summary,
     .lookup-raw-payload summary { padding: .8rem .85rem; }
     .lookup-technical-grid { grid-template-columns: 1fr; }
     .lookup-technical-grid > div { border-right: 0; border-bottom: 1px solid var(--app-divider); }
