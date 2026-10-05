@@ -1,5 +1,5 @@
-import { useId, type FormEvent } from "react";
-import { ExternalLink, LoaderCircle, MessageSquareText } from "lucide-react";
+import { useId, type CSSProperties, type FormEvent } from "react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -49,9 +49,12 @@ export function ReactionPanel({
   onSubmit
 }: ReactionPanelProps) {
   const titleId = useId();
+  const assigned = Math.max(0, limit - remaining);
+  const pending = Math.max(0, assigned - completed - failed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
-  const status = failed > 0 ? `${failed} failed` : completed === limit ? "Complete" : latestMessageLink ? "Active" : "Ready";
-  const statusState = failed > 0 ? "warning" : completed === limit ? "complete" : "active";
+  const status = failed > 0 ? `${failed} failed` : completed >= limit && limit > 0 ? "Complete" : assigned > 0 ? "In progress" : "Ready";
+  const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
+  const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -59,48 +62,112 @@ export function ReactionPanel({
   }
 
   return (
-    <section className={`monitor-reaction-panel ${className}`.trim()} aria-labelledby={titleId}>
+    <section className={`monitor-reaction-panel ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
       <div className="monitor-reaction-heading">
-        <span className="monitor-reaction-icon" aria-hidden="true"><MessageSquareText /></span>
-        <div>
-          <h2 id={titleId}>Message reactions</h2>
-          <p>{remaining > 0 ? `${remaining} reactions available` : "Reaction allowance fully assigned"}</p>
+        <div className="monitor-reaction-identity">
+          <span className="monitor-reaction-icon" aria-hidden="true"><Sparkles /></span>
+          <div>
+            <span className="monitor-reaction-kicker">Reaction delivery</span>
+            <h2 id={titleId}>Message reactions</h2>
+            <p>Send real account reactions to a Discord message.</p>
+          </div>
         </div>
-        <span className="monitor-reaction-status" data-state={statusState}>{status}</span>
+
+        <div className="monitor-reaction-heading-actions">
+          {latestMessageLink ? (
+            <a className="monitor-reaction-message-link" href={latestMessageLink} target="_blank" rel="noreferrer">
+              <Link2 aria-hidden="true" /> Latest message <ExternalLink aria-hidden="true" />
+            </a>
+          ) : null}
+          <span className="monitor-reaction-status" data-state={statusState}>
+            <i aria-hidden="true" /> {status}
+          </span>
+        </div>
       </div>
 
-      <div className="monitor-reaction-summary">
-        <span><small>Limit</small><strong>{limit}</strong></span>
-        <span><small>Reacted</small><strong>{completed}</strong></span>
-        <span><small>Remaining</small><strong>{remaining}</strong></span>
-        <div className="monitor-reaction-progress" aria-label={`${completed} of ${limit} reactions completed`}>
-          <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
-          <strong>{progress}%</strong>
+      <div className="monitor-reaction-dashboard">
+        <div className="monitor-reaction-overview">
+          <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={`${completed} of ${limit} reactions completed`}>
+            <span><strong>{progress}%</strong><small>complete</small></span>
+          </div>
+
+          <div className="monitor-reaction-overview-copy">
+            <span className="monitor-reaction-overline">Delivery progress</span>
+            <strong>{completed} of {limit} reactions delivered</strong>
+            <p>{remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
+            <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
+          </div>
+        </div>
+
+        <div className="monitor-reaction-metrics" aria-label="Reaction delivery summary">
+          <div data-tone="success">
+            <span><CheckCircle2 aria-hidden="true" /> Delivered</span>
+            <strong>{completed}</strong>
+            <small>successful reactions</small>
+          </div>
+          <div data-tone="pending">
+            <span><Clock3 aria-hidden="true" /> In queue</span>
+            <strong>{pending}</strong>
+            <small>assigned and pending</small>
+          </div>
+          <div data-tone="available">
+            <span><Sparkles aria-hidden="true" /> Available</span>
+            <strong>{remaining}</strong>
+            <small>ready to assign</small>
+          </div>
         </div>
       </div>
 
       {remaining > 0 ? (
         <form className="monitor-reaction-form" onSubmit={handleSubmit}>
-          <Input type="url" value={messageDraft} onChange={(event) => onMessageChange(event.target.value)} placeholder="Discord message URL" aria-label="Discord message link" />
-          <Input className="monitor-reaction-count" type="number" min={1} max={remaining} value={Math.min(countDraft, remaining)} onChange={(event) => onCountChange(Math.min(remaining, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} aria-label="Reaction amount" />
-          <Button type="submit" size="sm" disabled={saving || !messageDraft.trim()}>
-            {saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />}
-            {saving ? "Sending..." : "Send"}
+          <div className="monitor-reaction-form-copy">
+            <span className="monitor-reaction-form-icon" aria-hidden="true"><MessageSquareText /></span>
+            <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
+          </div>
+          <label className="monitor-reaction-field monitor-reaction-url-field">
+            <span>Message URL</span>
+            <span className="monitor-reaction-input-shell"><Link2 aria-hidden="true" /><Input type="url" value={messageDraft} onChange={(event) => onMessageChange(event.target.value)} placeholder="https://discord.com/channels/..." aria-label="Discord message link" /></span>
+          </label>
+          <label className="monitor-reaction-field">
+            <span>Amount</span>
+            <Input className="monitor-reaction-count" type="number" min={1} max={remaining} value={Math.min(countDraft, remaining)} onChange={(event) => onCountChange(Math.min(remaining, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} aria-label="Reaction amount" />
+          </label>
+          <Button type="submit" disabled={saving || !messageDraft.trim()}>
+            {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
+            {saving ? "Queuing..." : "Queue reactions"}
           </Button>
         </form>
-      ) : null}
+      ) : (
+        <div className="monitor-reaction-allowance-complete">
+          <CheckCircle2 aria-hidden="true" />
+          <span><strong>Reaction allowance assigned</strong><small>All available reactions are already connected to requests.</small></span>
+        </div>
+      )}
 
       {requests.length ? (
         <details className="monitor-reaction-history">
-          <summary><span>Request history</span><small>{requests.length}</small></summary>
+          <summary>
+            <span><Clock3 aria-hidden="true" /><strong>Request history</strong><small>{requests.length} total</small></span>
+            <ChevronDown aria-hidden="true" />
+          </summary>
           <div>
-            {[...requests].reverse().map((request) => (
-              <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer">
-                <span><MessageSquareText aria-hidden="true" /><strong>{request.requestedCount} reactions</strong></span>
-                <small>{request.completedCount}/{request.assignedCount} completed · {formatReactionDate(request.createdAt)}</small>
-                <ExternalLink aria-hidden="true" />
-              </a>
-            ))}
+            {[...requests].reverse().map((request, index) => {
+              const requestProgress = request.assignedCount > 0 ? Math.min(100, Math.round((request.completedCount / request.assignedCount) * 100)) : 0;
+              return (
+                <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer">
+                  <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
+                  <span className="monitor-reaction-history-copy">
+                    <strong>{request.requestedCount} reactions requested</strong>
+                    <small>{formatReactionDate(request.createdAt)}</small>
+                  </span>
+                  <span className="monitor-reaction-history-progress">
+                    <span><i style={{ width: `${requestProgress}%` }} /></span>
+                    <small>{request.completedCount}/{request.assignedCount}</small>
+                  </span>
+                  <ExternalLink aria-hidden="true" />
+                </a>
+              );
+            })}
           </div>
         </details>
       ) : null}

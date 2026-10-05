@@ -1035,12 +1035,11 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`}>
+              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""} ${isCommunityOrder && reactionOrderLimit > 0 ? "has-reaction" : ""}`.trim()}>
                 {delayUpdatePanel}
 
                 {isCommunityOrder && reactionOrderLimit > 0 ? (
                   <ReactionPanel
-                    className={!isTerminalStatus ? "is-side" : ""}
                     limit={reactionOrderLimit}
                     completed={reactionCompletedCount}
                     failed={reactionFailedCount}

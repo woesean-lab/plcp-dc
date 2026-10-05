@@ -1391,29 +1391,23 @@ export default function OrderPage() {
           </details>
 
           {reactionUseEnabled && reactionCapacity > 0 ? (
-            <details className="lookup-reaction-details">
-              <summary>
-                <span><MessageSquareText className="h-4 w-4" aria-hidden="true" /> Reactions</span>
-                <small>{reactionRemainingCount} remaining</small>
-              </summary>
-              <div className="lookup-reaction-details-content">
-                <ReactionPanel
-                  className="is-orders"
-                  limit={reactionCapacity}
-                  completed={reactionCompletedCount}
-                  failed={reactionFailedCount}
-                  remaining={reactionRemainingCount}
-                  latestMessageLink={reactionMessageLink}
-                  messageDraft={reactionMessageDraft}
-                  countDraft={reactionCountDraft}
-                  saving={savingReactionMessage}
-                  requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
-                  onMessageChange={setReactionMessageDraft}
-                  onCountChange={setReactionCountDraft}
-                  onSubmit={() => void handleSaveReactionMessage()}
-                />
-              </div>
-            </details>
+            <div className="lookup-reaction-section">
+              <ReactionPanel
+                className="is-orders"
+                limit={reactionCapacity}
+                completed={reactionCompletedCount}
+                failed={reactionFailedCount}
+                remaining={reactionRemainingCount}
+                latestMessageLink={reactionMessageLink}
+                messageDraft={reactionMessageDraft}
+                countDraft={reactionCountDraft}
+                saving={savingReactionMessage}
+                requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                onMessageChange={setReactionMessageDraft}
+                onCountChange={setReactionCountDraft}
+                onSubmit={() => void handleSaveReactionMessage()}
+              />
+            </div>
           ) : null}
 
           <details className="lookup-raw-payload">
