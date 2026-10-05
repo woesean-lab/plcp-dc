@@ -2631,10 +2631,12 @@ async function processCommunityReactionJobs() {
       continue;
     }
     try {
-      const result = await requestDiscordThroughProxy(
+      const result = await sendHumanizerDiscordRequest(
         `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}/reactions/${encodeURIComponent(job.emoji)}/@me`,
         account.proxyUrl,
-        { method: "PUT", headers: { Authorization: account.botToken } }
+        account.botToken,
+        "PUT",
+        undefined
       );
       if (result.response.ok) {
         const completedAt = new Date().toISOString();
