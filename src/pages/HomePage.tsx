@@ -158,7 +158,6 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
-  reactionMessageLink: "",
   isEldoradoSale: true
 };
 
@@ -2664,7 +2663,6 @@ export default function HomePage() {
       speedProfile: payloadIsCommunity ? payload.speedProfile : undefined,
       joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
       isEldoradoSale: payload.isEldoradoSale,
-      reactionMessageLink: created.reactionMessageLink ?? payload.reactionMessageLink,
       duration: payloadIsBoost ? payload.duration : undefined,
       useProxy: payloadIsBoost ? true : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
@@ -2713,16 +2711,8 @@ export default function HomePage() {
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
-      isEldoradoSale: form.isEldoradoSale,
-      reactionMessageLink: selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled)
-        ? form.reactionMessageLink.trim()
-        : undefined
+      isEldoradoSale: form.isEldoradoSale
     };
-
-    if (selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled) && !form.reactionMessageLink.trim()) {
-      notifyError("Discord message link is required for Reaction use categories.");
-      return;
-    }
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
       notifyError("Boost amount must be an even number.");
@@ -3677,20 +3667,6 @@ export default function HomePage() {
                               />
                             </div>
                           </label>
-
-                          {selectedIsCommunity && selectedCommunityAllocations.some(({ category }) => category.reactionUseEnabled) ? (
-                            <label className="boost-order-field md:col-span-2">
-                              <span className="boost-order-label">Reaction message link</span>
-                              <Input
-                                type="url"
-                                value={form.reactionMessageLink}
-                                onChange={(event) => setForm((current) => ({ ...current, reactionMessageLink: event.target.value }))}
-                                placeholder="https://discord.com/channels/server/channel/message"
-                                required
-                              />
-                              <small className="text-[var(--app-muted)]">Each eligible member uses a different emoji after joining and connecting to Onliner.</small>
-                            </label>
-                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">

@@ -279,6 +279,14 @@ export function extendCommunityOrderSupport(uniqid: string, months: number) {
   });
 }
 
+export function updateCommunityOrderReactionMessage(uniqid: string, messageLink: string) {
+  return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-message`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messageLink })
+  });
+}
+
 export function saveDcordApiKey(apiKey: string) {
   return requestJson<{ configured: true }>("/api/dcord/config", {
     method: "PUT",

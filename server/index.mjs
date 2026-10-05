@@ -5935,7 +5935,15 @@ async function runCommunityOrder(order, members, config) {
         if (!stored) return incoming;
         const incomingReplacementAttempt = Number(incoming?.replacementAttempt ?? 0);
         const storedReplacementAttempt = Number(stored?.replacementAttempt ?? 0);
-        return storedReplacementAttempt > incomingReplacementAttempt ? stored : { ...stored, ...incoming };
+        if (storedReplacementAttempt > incomingReplacementAttempt) return stored;
+        const merged = { ...stored, ...incoming };
+        const reactionPriority = { waiting_for_message: 0, waiting_for_join: 1, failed: 2, pending: 3, completed: 4 };
+        if ((reactionPriority[String(stored?.reactionState)] ?? -1) > (reactionPriority[String(incoming?.reactionState)] ?? -1)) {
+          merged.reactionState = stored.reactionState;
+          merged.reactionDetails = stored.reactionDetails;
+          if (stored.reactionCompletedAt) merged.reactionCompletedAt = stored.reactionCompletedAt;
+        }
+        return merged;
       }).filter(Boolean);
       const mergedAdded = mergedResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
       const amount = Number(payload.amount ?? currentPayload.amount ?? order.amount) || mergedResults.length;
@@ -5956,6 +5964,8 @@ async function runCommunityOrder(order, members, config) {
       const deliveryPaused = currentStatus === "PAUSED";
       const nextPayload = {
         ...payload,
+        reactionMessageLink: currentPayload.reactionMessageLink ?? payload.reactionMessageLink ?? null,
+        reactionMessage: currentPayload.reactionMessage ?? payload.reactionMessage ?? null,
         added: mergedAdded,
         status: deliveryPaused ? "PAUSED" : status,
         details: deliveryPaused ? "Delivery paused." : details,
@@ -6228,7 +6238,11 @@ async function runCommunityOrder(order, members, config) {
         expiresAt: Date.now() + 60_000
       });
     }
-    if (state === "joined" && results[resultIndex]?.reactionEmoji && order.reactionMessage) {
+    const reactionOrderResult = state === "joined" && results[resultIndex]?.reactionEligible
+      ? await pool.query("SELECT payload->'reactionMessage' AS reaction_message FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [order.uniqid])
+      : null;
+    const reactionMessage = reactionOrderResult?.rows[0]?.reaction_message;
+    if (state === "joined" && results[resultIndex]?.reactionEmoji && reactionMessage?.channelId && reactionMessage?.messageId) {
       const reactionEmoji = String(results[resultIndex].reactionEmoji);
       results[resultIndex] = {
         ...results[resultIndex],
@@ -6239,8 +6253,14 @@ async function runCommunityOrder(order, members, config) {
         `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
          VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
-        [order.uniqid, member.discord_user_id, order.reactionMessage.channelId, order.reactionMessage.messageId, reactionEmoji]
+        [order.uniqid, member.discord_user_id, reactionMessage.channelId, reactionMessage.messageId, reactionEmoji]
       );
+    } else if (state === "joined" && results[resultIndex]?.reactionEligible) {
+      results[resultIndex] = {
+        ...results[resultIndex],
+        reactionState: "waiting_for_message",
+        reactionDetails: "Add a Discord message link from the Orders page to enable this reaction."
+      };
     }
     const memberFailed = state === "failed";
     const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
@@ -9850,13 +9870,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
     const reactionCategoryIds = new Set(categoryResult.rows.filter((category) => category.reaction_use_enabled === true).map((category) => category.id));
-    const reactionMessage = reactionCategoryIds.size ? parseDiscordMessageLink(req.body?.reactionMessageLink) : null;
-    if (reactionCategoryIds.size && !reactionMessage) {
-      return res.status(400).json({ message: "A valid Discord message link is required because Reaction use is enabled for a selected category." });
-    }
-    if (reactionMessage && reactionMessage.guildId !== serverInfo.guildId) {
-      return res.status(400).json({ message: "The reaction message must belong to the order's Discord server." });
-    }
     const hasPeriodicCategory = categoryResult.rows.some((category) => category.is_periodic === true);
     const durationMonths = hasPeriodicCategory ? Number.parseInt(req.body?.durationMonths, 10) : null;
     if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
@@ -9919,8 +9932,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryAllocations,
       categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
       categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
-      reactionMessageLink: reactionMessage?.url ?? null,
-      reactionMessage: reactionMessage ? { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId } : null,
+      reactionMessageLink: null,
+      reactionMessage: null,
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -9951,10 +9964,11 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
         state: "queued",
         details: "Waiting for delivery.",
-        ...(reactionMessage && reactionCategoryIds.has(row.category_id) ? {
+        ...(reactionCategoryIds.has(row.category_id) ? {
+          reactionEligible: true,
           reactionEmoji: communityReactionEmojis[index % communityReactionEmojis.length],
-          reactionState: "waiting_for_join",
-          reactionDetails: "Reaction will be added after this member joins and Onliner is connected."
+          reactionState: "waiting_for_message",
+          reactionDetails: "Add a Discord message link from the Orders page to enable this reaction."
         } : {})
       }))
     };
@@ -9978,7 +9992,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryName: order.categoryName,
       categoryAllocations: order.categoryAllocations,
       categoryIsPeriodic: order.categoryIsPeriodic,
-      reactionMessageLink: order.reactionMessageLink,
       durationMonths: order.durationMonths,
       joinMethod: order.joinMethod,
       createdAt: order.createdAt,
@@ -10910,6 +10923,83 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
     res.json(updated.rows[0].payload);
   } catch (error) {
     next(error);
+  }
+});
+
+app.put("/api/community/orders/:uniqid/reaction-message", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+    if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (reactionMessage.guildId !== String(order.serverId ?? "")) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });
+    }
+    const reactionEnabledCategoryIds = new Set((Array.isArray(order.categoryAllocations) ? order.categoryAllocations : [])
+      .filter((allocation) => allocation?.reactionUseEnabled === true)
+      .map((allocation) => String(allocation.categoryId ?? "")));
+    const reactionEnabled = order.communityResults.some((item) => item?.reactionEligible === true)
+      || reactionEnabledCategoryIds.size > 0;
+    if (!reactionEnabled) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Reaction use is not enabled for any category in this order." });
+    }
+
+    const communityResults = order.communityResults.map((item, index) => {
+      const eligible = item?.reactionEligible === true || reactionEnabledCategoryIds.has(String(item?.categoryId ?? order.categoryId ?? ""));
+      if (!item || !eligible) return item;
+      const joined = String(item.state ?? "").toLowerCase() === "joined";
+      return {
+        ...item,
+        reactionEligible: true,
+        reactionEmoji: item.reactionEmoji || communityReactionEmojis[index % communityReactionEmojis.length],
+        reactionState: joined ? "pending" : "waiting_for_join",
+        reactionDetails: joined
+          ? "Waiting for the Onliner Gateway connection before reacting."
+          : "Reaction will be added after this member joins and Onliner is connected."
+      };
+    });
+    for (const item of communityResults) {
+      if (item?.reactionEligible !== true || !item.reactionEmoji || String(item.state ?? "").toLowerCase() !== "joined") continue;
+      await client.query(
+        `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (order_id, discord_user_id) DO UPDATE SET
+           channel_id = EXCLUDED.channel_id,
+           message_id = EXCLUDED.message_id,
+           emoji = EXCLUDED.emoji,
+           status = 'pending',
+           attempts = 0,
+           next_attempt_at = NOW(),
+           last_error = NULL,
+           completed_at = NULL`,
+        [uniqid, item.discordUserId, reactionMessage.channelId, reactionMessage.messageId, String(item.reactionEmoji)]
+      );
+    }
+    const updatedOrder = {
+      ...order,
+      reactionMessageLink: reactionMessage.url,
+      reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId },
+      communityResults
+    };
+    await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json(updatedOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 });
 

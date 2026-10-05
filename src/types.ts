@@ -42,7 +42,6 @@ export interface CreateOrderPayload {
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
   isEldoradoSale?: boolean;
-  reactionMessageLink?: string;
 }
 
 export interface CreateOrderResponse {
@@ -54,7 +53,6 @@ export interface CreateOrderResponse {
   categoryAllocations?: CommunityCategoryAllocation[];
   categoryIsPeriodic?: boolean;
   categoryCheckReplacementEnabled?: boolean;
-  reactionMessageLink?: string;
   durationMonths?: number | null;
   joinMethod?: CommunityJoinMethod;
   createdAt?: string;

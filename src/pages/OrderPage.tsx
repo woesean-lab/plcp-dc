@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -56,6 +56,7 @@ type CommunityMemberResult = {
   reactionState?: string;
   reactionEmoji?: string;
   reactionDetails?: string;
+  reactionEligible?: boolean;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -101,6 +102,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       reactionState: typeof row.reactionState === "string" ? row.reactionState : undefined,
       reactionEmoji: typeof row.reactionEmoji === "string" ? row.reactionEmoji : undefined,
       reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
+      reactionEligible: row.reactionEligible === true,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -396,6 +398,8 @@ export default function OrderPage() {
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
+  const [reactionMessageDraft, setReactionMessageDraft] = useState("");
+  const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
@@ -459,6 +463,10 @@ export default function OrderPage() {
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
   const reactionMessageLink = getStringField(result, ["reactionMessageLink"]);
+  const reactionUseEnabled = communityMemberResults.some((item) => item.reactionEligible)
+    || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
+  const reactionWorkPending = Boolean(reactionMessageLink) && communityMemberResults.some((item) => item.reactionState === "pending");
+  const refreshComplete = terminal && !reactionWorkPending;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -534,8 +542,8 @@ export default function OrderPage() {
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
     const refreshEvery = 2;
-    setSecondsUntilRefresh(terminal ? 0 : refreshEvery);
-    if (!target || terminal) return;
+    setSecondsUntilRefresh(refreshComplete ? 0 : refreshEvery);
+    if (!target || refreshComplete) return;
 
     let remaining = refreshEvery;
 
@@ -559,7 +567,7 @@ export default function OrderPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [provider, result?.uniqid, terminal, uniqid]);
+  }, [provider, reactionWorkPending, refreshComplete, result?.uniqid, uniqid]);
 
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
@@ -575,6 +583,7 @@ export default function OrderPage() {
       setResult(data);
       setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
+      setReactionMessageDraft(getStringField(data, ["reactionMessageLink"]));
       toast.success(`Loaded ${target}.`);
       setParams({ uniqid: target, provider });
     } catch (error) {
@@ -582,6 +591,27 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSaveReactionMessage() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    const messageLink = reactionMessageDraft.trim();
+    if (!target || !isCommunityProvider || !reactionUseEnabled || savingReactionMessage) return;
+    if (!messageLink) {
+      toast.error("Discord message link is required.");
+      return;
+    }
+    try {
+      setSavingReactionMessage(true);
+      const updated = await updateCommunityOrderReactionMessage(target, messageLink);
+      setResult((current) => mergeOrderStatus(current, updated));
+      setReactionMessageDraft(getStringField(updated, ["reactionMessageLink"]));
+      toast.success("Reaction message saved. Eligible members were queued.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Reaction message could not be saved.");
+    } finally {
+      setSavingReactionMessage(false);
     }
   }
 
@@ -1267,6 +1297,25 @@ export default function OrderPage() {
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
                 </span>
               </div>
+
+              {reactionUseEnabled ? (
+                <div className="mb-3 grid gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-panel-soft)] p-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+                  <label className="grid gap-1.5">
+                    <span className={labelClass}>Reaction message link</span>
+                    <Input
+                      type="url"
+                      value={reactionMessageDraft}
+                      onChange={(event) => setReactionMessageDraft(event.target.value)}
+                      placeholder="https://discord.com/channels/server/channel/message"
+                    />
+                    <small className="text-[var(--app-muted)]">Joined members react with different emojis after their Onliner Gateway connection is ready.</small>
+                  </label>
+                  <Button type="button" size="sm" disabled={savingReactionMessage || !reactionMessageDraft.trim()} onClick={() => void handleSaveReactionMessage()}>
+                    {savingReactionMessage ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
+                    {savingReactionMessage ? "Saving..." : reactionMessageLink ? "Update message" : "Save message"}
+                  </Button>
+                </div>
+              ) : null}
 
               {communityCheckNeedsBot && botInvite ? (
                 <div className="monitor-member-check-bot-alert" role="alert">
