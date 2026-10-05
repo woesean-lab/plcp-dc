@@ -4,7 +4,8 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { ReactionPanel } from "@/components/ReactionPanel";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -511,7 +512,6 @@ export default function PublicOrderPage() {
   const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionMembers.length);
   const reactionCompletedCount = reactionMembers.filter((item) => item.reactionState === "completed").length;
   const reactionFailedCount = reactionMembers.filter((item) => item.reactionState === "failed").length;
-  const reactionProgress = reactionOrderLimit ? Math.round((reactionCompletedCount / reactionOrderLimit) * 100) : 0;
   const reactionMessageLink = typeof status?.reactionMessageLink === "string" ? status.reactionMessageLink : "";
   const reactionRequests = Array.isArray(status?.reactionRequests) ? status.reactionRequests : [];
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
@@ -1039,51 +1039,21 @@ export default function PublicOrderPage() {
                 {delayUpdatePanel}
 
                 {isCommunityOrder && reactionOrderLimit > 0 ? (
-                  <section className={`monitor-reaction-panel ${!isTerminalStatus ? "is-side" : ""}`} aria-labelledby="monitor-reaction-title">
-                    <div className="monitor-reaction-heading">
-                      <span className="monitor-reaction-icon" aria-hidden="true"><MessageSquareText /></span>
-                      <div>
-                        <h2 id="monitor-reaction-title">Message reactions</h2>
-                        <p>{reactionRemainingCount > 0 ? `${reactionRemainingCount} available` : "Allowance fully assigned"}</p>
-                      </div>
-                      <span className="monitor-reaction-status" data-state={reactionFailedCount ? "warning" : reactionCompletedCount === reactionOrderLimit ? "complete" : "active"}>
-                        {reactionFailedCount ? `${reactionFailedCount} failed` : reactionCompletedCount === reactionOrderLimit ? "Complete" : reactionMessageLink ? "Live" : "Link needed"}
-                      </span>
-                    </div>
-
-                    <div className="monitor-reaction-summary">
-                      <span><small>Limit</small><strong>{reactionOrderLimit}</strong></span>
-                      <span><small>Reacted</small><strong>{reactionCompletedCount}</strong></span>
-                      <span><small>Remaining</small><strong>{reactionRemainingCount}</strong></span>
-                      <div className="monitor-reaction-progress" aria-label={`${reactionCompletedCount} of ${reactionOrderLimit} reactions completed`}>
-                        <span className="monitor-reaction-progress-track"><i style={{ width: `${reactionProgress}%` }} /></span>
-                        <strong>{reactionProgress}%</strong>
-                      </div>
-                    </div>
-
-                    {reactionRemainingCount > 0 ? (
-                      <div className="monitor-reaction-form">
-                        <Input type="url" value={reactionMessageDraft} onChange={(event) => setReactionMessageDraft(event.target.value)} placeholder="https://discord.com/channels/server/channel/message" aria-label="Discord message link" />
-                        <Input className="monitor-reaction-count" type="number" min={1} max={reactionRemainingCount} value={Math.min(reactionCountDraft, reactionRemainingCount)} onChange={(event) => setReactionCountDraft(Math.min(reactionRemainingCount, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} aria-label="Reaction amount" />
-                        <Button type="button" size="sm" onClick={() => void handleSaveReactionMessage()} disabled={savingReactionMessage || !reactionMessageDraft.trim()}>
-                          <MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" />
-                          {savingReactionMessage ? "Sending..." : "Send request"}
-                        </Button>
-                      </div>
-                    ) : null}
-
-                    {reactionRequests.length ? (
-                      <details className="monitor-reaction-history">
-                        <summary><span>Request history</span><small>{reactionRequests.length}</small></summary>
-                        <div>
-                          {[...reactionRequests].reverse().map((request) => {
-                            const completed = reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length;
-                            return <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer"><span><MessageSquareText aria-hidden="true" /><strong>{request.requestedCount} reactions</strong></span><small>{completed}/{request.assignedCount} completed · {formatDateTime(parseTimestamp(request.createdAt))}</small><ExternalLink aria-hidden="true" /></a>;
-                          })}
-                        </div>
-                      </details>
-                    ) : null}
-                  </section>
+                  <ReactionPanel
+                    className={!isTerminalStatus ? "is-side" : ""}
+                    limit={reactionOrderLimit}
+                    completed={reactionCompletedCount}
+                    failed={reactionFailedCount}
+                    remaining={reactionRemainingCount}
+                    latestMessageLink={reactionMessageLink}
+                    messageDraft={reactionMessageDraft}
+                    countDraft={reactionCountDraft}
+                    saving={savingReactionMessage}
+                    requests={reactionRequests.map((request) => ({ ...request, completedCount: reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                    onMessageChange={setReactionMessageDraft}
+                    onCountChange={setReactionCountDraft}
+                    onSubmit={() => void handleSaveReactionMessage()}
+                  />
                 ) : null}
 
                 {isCommunityOrder ? (

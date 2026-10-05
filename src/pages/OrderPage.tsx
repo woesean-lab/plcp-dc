@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
@@ -76,12 +77,6 @@ function formatDcordTiming(value: unknown) {
   const milliseconds = typeof value === "number" && Number.isFinite(value) ? value : null;
   if (milliseconds === null) return "";
   return milliseconds < 1_000 ? `${Math.round(milliseconds)}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
-}
-
-function formatDateTime(value?: string | number) {
-  if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
 }
 
 function getCommunityMemberResults(source: OrderStatusResponse | null): CommunityMemberResult[] {
@@ -478,6 +473,8 @@ export default function OrderPage() {
     ? result.reactionCapacity
     : categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + allocation.amount : total, 0);
   const reactionAssignedCount = communityMemberResults.filter((item) => item.reactionEligible).length;
+  const reactionCompletedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "completed").length;
+  const reactionFailedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "failed").length;
   const reactionRemainingCount = Math.max(0, reactionCapacity - reactionAssignedCount);
   const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
   const reactionWorkPending = Boolean(reactionMessageLink) && communityMemberResults.some((item) => item.reactionState === "pending");
@@ -1314,34 +1311,22 @@ export default function OrderPage() {
                 </span>
               </div>
 
-              {reactionUseEnabled && reactionRemainingCount > 0 ? (
-                <div className="mb-3 grid gap-2 rounded-lg border border-[var(--app-divider)] bg-[var(--app-panel-soft)] p-3 md:grid-cols-[minmax(0,1fr)_110px_auto] md:items-end">
-                  <label className="grid gap-1.5">
-                    <span className={labelClass}>New reaction request</span>
-                    <Input
-                      type="url"
-                      value={reactionMessageDraft}
-                      onChange={(event) => setReactionMessageDraft(event.target.value)}
-                      placeholder="https://discord.com/channels/server/channel/message"
-                    />
-                    <small className="text-[var(--app-muted)]">{reactionRemainingCount} reactions remain. Each member is used once.</small>
-                  </label>
-                  <label className="grid gap-1.5"><span className={labelClass}>Amount</span><Input type="number" min={1} max={reactionRemainingCount} value={Math.min(reactionCountDraft, reactionRemainingCount)} onChange={(event) => setReactionCountDraft(Math.min(reactionRemainingCount, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} /></label>
-                  <Button type="button" size="sm" disabled={savingReactionMessage || !reactionMessageDraft.trim()} onClick={() => void handleSaveReactionMessage()}>
-                    {savingReactionMessage ? <RefreshCw className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
-                    {savingReactionMessage ? "Sending..." : "Send request"}
-                  </Button>
-                </div>
-              ) : null}
-
-              {reactionRequests.length ? (
-                <details className="monitor-reaction-history mb-3">
-                  <summary><span>Reaction history</span><small>{reactionAssignedCount}/{reactionCapacity}</small></summary>
-                  <div>{[...reactionRequests].reverse().map((request) => {
-                    const completed = communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length;
-                    return <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer"><span><MessageSquareText aria-hidden="true" /><strong>{request.requestedCount} reactions</strong></span><small>{completed}/{request.assignedCount} completed · {formatDateTime(request.createdAt)}</small><ExternalLink aria-hidden="true" /></a>;
-                  })}</div>
-                </details>
+              {reactionUseEnabled && reactionCapacity > 0 ? (
+                <ReactionPanel
+                  className="is-orders"
+                  limit={reactionCapacity}
+                  completed={reactionCompletedCount}
+                  failed={reactionFailedCount}
+                  remaining={reactionRemainingCount}
+                  latestMessageLink={reactionMessageLink}
+                  messageDraft={reactionMessageDraft}
+                  countDraft={reactionCountDraft}
+                  saving={savingReactionMessage}
+                  requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                  onMessageChange={setReactionMessageDraft}
+                  onCountChange={setReactionCountDraft}
+                  onSubmit={() => void handleSaveReactionMessage()}
+                />
               ) : null}
 
               {communityCheckNeedsBot && botInvite ? (

@@ -158,7 +158,7 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
-  reactionLimit: 5,
+  reactionLimit: 100,
   isEldoradoSale: true
 };
 
@@ -794,6 +794,7 @@ export default function HomePage() {
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
+  const previousReactionMemberAmountRef = useRef(EMPTY_FORM.amount);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -886,6 +887,17 @@ export default function HomePage() {
     )
   );
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+  useEffect(() => {
+    const amountChanged = previousReactionMemberAmountRef.current !== form.amount;
+    previousReactionMemberAmountRef.current = form.amount;
+    if (!selectedIsCommunity || !selectedCommunityHasReaction || selectedCommunityReactionCapacity < 1) return;
+    setForm((current) => {
+      const nextLimit = amountChanged
+        ? Math.min(current.amount, selectedCommunityReactionCapacity)
+        : Math.min(current.reactionLimit, selectedCommunityReactionCapacity);
+      return current.reactionLimit === nextLimit ? current : { ...current, reactionLimit: Math.max(1, nextLimit) };
+    });
+  }, [form.amount, selectedCommunityHasReaction, selectedCommunityReactionCapacity, selectedIsCommunity]);
   const filteredUsedBoostTokens = useMemo(
     () => {
       const durationFiltered = usedTokenDurationFilter === "all"
