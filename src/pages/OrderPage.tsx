@@ -1344,6 +1344,9 @@ export default function OrderPage() {
                       <span className="community-order-result-copy">
                         <strong>{item.username}</strong>
                         <small>{item.details}</small>
+                        {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? (
+                          <small>{item.reactionEmoji} {item.reactionDetails}</small>
+                        ) : null}
                       </span>
                       <span className="community-order-result-state">
                         {item.authorizationStatus ? (

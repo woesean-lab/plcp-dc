@@ -2620,14 +2620,22 @@ async function processCommunityReactionJobs() {
   if (!jobs.rowCount) return;
   const config = discordOnlinerWorkerCurrentConfig ?? await getDiscordOnlinerConfig();
   for (const job of jobs.rows) {
+    const runtimeAccountId = [...discordOnlinerRuntimes.entries()].find(([, item]) =>
+      String(item?.bot?.id ?? "") === String(job.discord_user_id)
+    )?.[0];
     const account = config.accounts.find((item) => item.id === job.account_id)
-      ?? config.accounts.find((item) => String(item.discordUserId ?? "") === String(job.discord_user_id));
+      ?? config.accounts.find((item) => String(item.discordUserId ?? "") === String(job.discord_user_id))
+      ?? config.accounts.find((item) => item.id === runtimeAccountId);
     const runtime = account ? discordOnlinerRuntimes.get(account.id) : null;
     if (!account || !runtime || runtime.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN) {
+      const waitingDetails = account
+        ? `Waiting for the Onliner Gateway connection (${runtime?.state ?? "not started"}).`
+        : "The active Onliner account could not be matched to this Discord member.";
       await pool.query(
         "UPDATE community_reaction_jobs SET account_id = COALESCE($3, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $4 WHERE order_id = $1 AND discord_user_id = $2",
-        [job.order_id, job.discord_user_id, account?.id ?? null, account ? "Waiting for the Onliner Gateway connection." : "Waiting for this member to be added to Onliner."]
+        [job.order_id, job.discord_user_id, account?.id ?? null, waitingDetails]
       );
+      await updateCommunityReactionResult(job, { reactionState: "pending", reactionEmoji: job.emoji, reactionDetails: waitingDetails });
       continue;
     }
     try {
@@ -2658,7 +2666,7 @@ async function processCommunityReactionJobs() {
          WHERE order_id = $1 AND discord_user_id = $2`,
         [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
       );
-      if (terminal) await updateCommunityReactionResult(job, { reactionState: "failed", reactionEmoji: job.emoji, reactionDetails: message });
+      await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).slice(0, 400);
       const terminal = Number(job.attempts) >= 5;
@@ -2669,7 +2677,7 @@ async function processCommunityReactionJobs() {
          WHERE order_id = $1 AND discord_user_id = $2`,
         [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
       );
-      if (terminal) await updateCommunityReactionResult(job, { reactionState: "failed", reactionEmoji: job.emoji, reactionDetails: message });
+      await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
     }
   }
 }
