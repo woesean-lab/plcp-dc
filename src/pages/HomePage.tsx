@@ -3647,24 +3647,9 @@ export default function HomePage() {
                               </div>
                             </div>
 
-                            {selectedCommunityHasReaction ? (
-                              <div className="community-order-reaction-field">
-                                <div className="community-speed-profile-copy">
-                                  <span className="boost-order-label">Discord reactions</span>
-                                  <small>Set the total reaction allowance for this order. Message URLs are submitted from Orders or Monitor.</small>
-                                </div>
-                                <div className="community-order-reaction-inputs is-limit-only">
-                                  <label>
-                                    <span>Total reaction limit</span>
-                                    <input type="number" min={1} max={selectedCommunityReactionCapacity} value={Math.min(form.reactionLimit, selectedCommunityReactionCapacity)} onChange={(event) => setForm((current) => ({ ...current, reactionLimit: Math.min(selectedCommunityReactionCapacity, Math.max(1, Number.parseInt(event.target.value, 10) || 1)) }))} required />
-                                    <small>URL requests can use this allowance until it reaches zero · {selectedCommunityReactionCapacity} members available</small>
-                                  </label>
-                                </div>
-                              </div>
-                            ) : null}
                           </>
                         ) : null}
-                        <div className={`boost-order-grid members-order-grid ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""} ${selectedIsCommunity && selectedCommunityHasReaction ? "has-reaction" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -3698,6 +3683,13 @@ export default function HomePage() {
                               />
                             </div>
                           </label>
+
+                          {selectedIsCommunity && selectedCommunityHasReaction ? (
+                            <label className="boost-order-field community-order-reaction-limit-field">
+                              <span className="boost-order-label">Reaction limit</span>
+                              <input className="boost-number-input" type="number" min={1} max={selectedCommunityReactionCapacity} value={Math.min(form.reactionLimit, selectedCommunityReactionCapacity)} onChange={(event) => setForm((current) => ({ ...current, reactionLimit: Math.min(selectedCommunityReactionCapacity, Math.max(1, Number.parseInt(event.target.value, 10) || 1)) }))} required />
+                            </label>
+                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">
