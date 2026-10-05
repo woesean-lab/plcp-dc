@@ -1,5 +1,5 @@
 import { useId, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Minus, Plus, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -130,7 +130,15 @@ export function ReactionPanel({
           </label>
           <label className="monitor-reaction-field">
             <span>Amount</span>
-            <Input className="monitor-reaction-count" type="number" min={1} max={remaining} value={Math.min(countDraft, remaining)} onChange={(event) => onCountChange(Math.min(remaining, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))} aria-label="Reaction amount" />
+            <span className="boost-amount-control monitor-reaction-amount-control">
+              <button type="button" aria-label="Decrease reaction amount" disabled={countDraft <= 1} onClick={() => onCountChange(Math.max(1, countDraft - 1))}>
+                <Minus aria-hidden="true" />
+              </button>
+              <span className="boost-amount-value" aria-live="polite">{Math.min(countDraft, remaining)}</span>
+              <button type="button" aria-label="Increase reaction amount" disabled={countDraft >= remaining} onClick={() => onCountChange(Math.min(remaining, countDraft + 1))}>
+                <Plus aria-hidden="true" />
+              </button>
+            </span>
           </label>
           <Button type="submit" disabled={saving || !messageDraft.trim()}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}

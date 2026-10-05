@@ -7630,7 +7630,7 @@
 
 .monitor-reaction-form {
   display: grid;
-  grid-template-columns: minmax(190px, .7fr) minmax(220px, 1.2fr) 84px auto;
+  grid-template-columns: minmax(190px, .7fr) minmax(220px, 1.2fr) 170px auto;
   align-items: end;
   gap: 10px;
   margin: 0 20px 16px;
@@ -7650,7 +7650,10 @@
 .monitor-reaction-input-shell > svg { position: absolute; top: 50%; left: 11px; z-index: 1; width: 13px; height: 13px; color: var(--app-subtle); transform: translateY(-50%); }
 .monitor-reaction-form input { min-width: 0; height: 38px; border-color: var(--app-border); background: rgba(5,6,14,.56); font-size: 10px; }
 .monitor-reaction-url-field input { padding-left: 32px; }
-.monitor-reaction-form .monitor-reaction-count { text-align: center; font-weight: 800; }
+.monitor-reaction-amount-control { grid-template-columns: 38px minmax(58px, 1fr) 38px; }
+.monitor-reaction-amount-control button,
+.monitor-reaction-amount-control .boost-amount-value { height: 38px; min-height: 38px; }
+.monitor-reaction-amount-control button svg { width: 14px; height: 14px; }
 .monitor-reaction-form .ui-button { min-height: 38px; white-space: nowrap; }
 
 .monitor-reaction-allowance-complete { display: flex; align-items: center; gap: 10px; margin: 0 20px 16px; padding: 12px 14px; border: 1px solid rgba(105,221,178,.2); border-radius: 13px; background: var(--app-success-soft); color: var(--app-success); }
@@ -11148,7 +11151,7 @@
   .monitor-reaction-metrics > div { padding: 12px 9px; }
   .monitor-reaction-metrics > div > strong { font-size: 20px; }
   .monitor-reaction-metrics > div > small { display: none; }
-  .monitor-reaction-form { grid-template-columns: minmax(0, 1fr) 76px; margin: 0 12px 12px; padding: 12px; }
+  .monitor-reaction-form { grid-template-columns: minmax(0, 1fr); margin: 0 12px 12px; padding: 12px; }
   .monitor-reaction-form-copy,
   .monitor-reaction-url-field { grid-column: 1 / -1; }
   .monitor-reaction-form .ui-button { width: 100%; }

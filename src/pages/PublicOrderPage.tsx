@@ -1038,23 +1038,6 @@ export default function PublicOrderPage() {
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""} ${isCommunityOrder && reactionOrderLimit > 0 ? "has-reaction" : ""}`.trim()}>
                 {delayUpdatePanel}
 
-                {isCommunityOrder && reactionOrderLimit > 0 ? (
-                  <ReactionPanel
-                    limit={reactionOrderLimit}
-                    completed={reactionCompletedCount}
-                    failed={reactionFailedCount}
-                    remaining={reactionRemainingCount}
-                    latestMessageLink={reactionMessageLink}
-                    messageDraft={reactionMessageDraft}
-                    countDraft={reactionCountDraft}
-                    saving={savingReactionMessage}
-                    requests={reactionRequests.map((request) => ({ ...request, completedCount: reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
-                    onMessageChange={setReactionMessageDraft}
-                    onCountChange={setReactionCountDraft}
-                    onSubmit={() => void handleSaveReactionMessage()}
-                  />
-                ) : null}
-
                 {isCommunityOrder ? (
                   <div className="monitor-token-panel community-order-log">
                     <div className="monitor-token-heading">
@@ -1135,6 +1118,23 @@ export default function PublicOrderPage() {
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive. Members still present in the server are not replaceable.</p> : null}
                     {supportExpired ? <p className="public-token-results-empty">This order has expired. Member checks and replacements are no longer available.</p> : null}
                   </div>
+                ) : null}
+
+                {isCommunityOrder && reactionOrderLimit > 0 ? (
+                  <ReactionPanel
+                    limit={reactionOrderLimit}
+                    completed={reactionCompletedCount}
+                    failed={reactionFailedCount}
+                    remaining={reactionRemainingCount}
+                    latestMessageLink={reactionMessageLink}
+                    messageDraft={reactionMessageDraft}
+                    countDraft={reactionCountDraft}
+                    saving={savingReactionMessage}
+                    requests={reactionRequests.map((request) => ({ ...request, completedCount: reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                    onMessageChange={setReactionMessageDraft}
+                    onCountChange={setReactionCountDraft}
+                    onSubmit={() => void handleSaveReactionMessage()}
+                  />
                 ) : null}
 
                 {isBoostOrder && canManageDcordTokens ? (

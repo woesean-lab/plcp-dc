@@ -1376,20 +1376,6 @@ export default function OrderPage() {
             </section>
           ) : null}
 
-          <details className="lookup-technical-details">
-            <summary>
-              <span><Server className="h-4 w-4" aria-hidden="true" /> Order &amp; server details</span>
-              <small>IDs and timestamps</small>
-            </summary>
-            <div className="lookup-technical-grid">
-              <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
-              <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
-              <div><span>Current members</span><strong>{formatTemplateNumber(serverMemberCount)}</strong></div>
-              <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
-              <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
-            </div>
-          </details>
-
           {reactionUseEnabled && reactionCapacity > 0 ? (
             <div className="lookup-reaction-section">
               <ReactionPanel
@@ -1409,6 +1395,20 @@ export default function OrderPage() {
               />
             </div>
           ) : null}
+
+          <details className="lookup-technical-details">
+            <summary>
+              <span><Server className="h-4 w-4" aria-hidden="true" /> Order &amp; server details</span>
+              <small>IDs and timestamps</small>
+            </summary>
+            <div className="lookup-technical-grid">
+              <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
+              <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
+              <div><span>Current members</span><strong>{formatTemplateNumber(serverMemberCount)}</strong></div>
+              <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
+              <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
+            </div>
+          </details>
 
           <details className="lookup-raw-payload">
             <summary>
