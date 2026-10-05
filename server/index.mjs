@@ -2609,7 +2609,7 @@ async function updateCommunityReactionResult(job, fields) {
   }
 }
 
-async function processCommunityReactionJobs() {
+async function processCommunityReactionJobsUnlocked() {
   const jobs = await pool.query(
     `SELECT order_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
      FROM community_reaction_jobs
@@ -2619,17 +2619,33 @@ async function processCommunityReactionJobs() {
   );
   if (!jobs.rowCount) return;
   const config = discordOnlinerWorkerCurrentConfig ?? await getDiscordOnlinerConfig();
+  const [persistedRuntimeResult, workerStateResult] = await Promise.all([
+    pool.query("SELECT account_id, payload FROM discord_onliner_runtime"),
+    pool.query("SELECT status, heartbeat_at, connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+  ]);
+  const persistedRuntimes = persistedRuntimeResult.rows;
+  const workerState = workerStateResult.rows[0];
+  const workerHeartbeatAt = workerState?.heartbeat_at ? new Date(workerState.heartbeat_at).getTime() : 0;
+  const persistedGatewayAvailable = workerState?.status === "online"
+    && Number.isFinite(workerHeartbeatAt)
+    && workerHeartbeatAt >= Date.now() - discordOnlinerWorkerHeartbeatMs * 3;
   for (const job of jobs.rows) {
     const runtimeAccountId = [...discordOnlinerRuntimes.entries()].find(([, item]) =>
       String(item?.bot?.id ?? "") === String(job.discord_user_id)
     )?.[0];
+    const persistedRuntime = persistedRuntimes.find((item) => item.account_id === job.account_id)
+      ?? persistedRuntimes.find((item) => String(item.payload?.bot?.id ?? "") === String(job.discord_user_id));
     const account = config.accounts.find((item) => item.id === job.account_id)
       ?? config.accounts.find((item) => String(item.discordUserId ?? "") === String(job.discord_user_id))
-      ?? config.accounts.find((item) => item.id === runtimeAccountId);
+      ?? config.accounts.find((item) => item.id === runtimeAccountId)
+      ?? config.accounts.find((item) => item.id === persistedRuntime?.account_id);
     const runtime = account ? discordOnlinerRuntimes.get(account.id) : null;
-    if (!account || !runtime || runtime.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN) {
+    const localGatewayConnected = runtime?.state === "connected" && runtime.socket?.readyState === WebSocket.OPEN;
+    const persistedGatewayConnected = persistedGatewayAvailable
+      && persistedRuntime?.payload?.connectionState === "connected";
+    if (!account || (!localGatewayConnected && !persistedGatewayConnected)) {
       const waitingDetails = account
-        ? `Waiting for the Onliner Gateway connection (${runtime?.state ?? "not started"}).`
+        ? `Waiting for the Onliner Gateway connection (${runtime?.state ?? persistedRuntime?.payload?.connectionState ?? "not started"}).`
         : "The active Onliner account could not be matched to this Discord member.";
       await pool.query(
         "UPDATE community_reaction_jobs SET account_id = COALESCE($3, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $4 WHERE order_id = $1 AND discord_user_id = $2",
@@ -2679,6 +2695,26 @@ async function processCommunityReactionJobs() {
       );
       await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
     }
+  }
+}
+
+const communityReactionJobsLockKey = 1_746_203_914;
+let communityReactionJobsActive = false;
+async function processCommunityReactionJobs() {
+  if (communityReactionJobsActive) return;
+  communityReactionJobsActive = true;
+  let lockClient = null;
+  let acquired = false;
+  try {
+    lockClient = await pool.connect();
+    const lock = await lockClient.query("SELECT pg_try_advisory_lock($1) AS acquired", [communityReactionJobsLockKey]);
+    acquired = lock.rows[0]?.acquired === true;
+    if (!acquired) return;
+    await processCommunityReactionJobsUnlocked();
+  } finally {
+    if (acquired) await lockClient?.query("SELECT pg_advisory_unlock($1)", [communityReactionJobsLockKey]).catch(() => {});
+    lockClient?.release();
+    communityReactionJobsActive = false;
   }
 }
 
@@ -12558,6 +12594,14 @@ if (serviceRunsWeb) {
     });
   }, 10_000);
   communityRecoveryTimer.unref();
+
+  const runCommunityReactionJobs = () => void processCommunityReactionJobs().catch((error) => {
+    console.error("Members reaction scan failed:", error instanceof Error ? error.message : error);
+  });
+  const communityReactionTimer = setInterval(runCommunityReactionJobs, discordOnlinerWorkerPollMs);
+  communityReactionTimer.unref();
+  const communityReactionInitialTimer = setTimeout(runCommunityReactionJobs, 1_000);
+  communityReactionInitialTimer.unref();
 
   const refreshCommunityOAuthTokens = async () => {
     try {
