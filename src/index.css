@@ -7697,6 +7697,7 @@
 .monitor-reaction-metrics > div > small { display: block; margin-top: 3px; color: var(--app-subtle); font-size: 8px; line-height: 1.35; }
 
 .monitor-reaction-form {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(180px, .65fr) minmax(220px, 1.2fr) 120px 120px auto;
   align-items: end;
@@ -7707,6 +7708,41 @@
   border-radius: 15px;
   background: linear-gradient(115deg, rgba(155,140,255,.075), rgba(255,255,255,.018));
 }
+.monitor-reaction-form[data-locked="true"] { min-height: 86px; overflow: hidden; }
+.monitor-reaction-form[data-locked="true"] > *:not(.monitor-reaction-form-lock) {
+  filter: blur(2.5px);
+  opacity: .38;
+  pointer-events: none;
+  user-select: none;
+}
+.monitor-reaction-form-lock {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  background: rgba(8, 9, 18, .38);
+  text-align: left;
+  backdrop-filter: blur(1px);
+}
+.monitor-reaction-form-lock > span {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  place-items: center;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 10px;
+  color: var(--app-accent-bright);
+  background: rgba(13, 14, 28, .9);
+  box-shadow: 0 0 18px var(--app-accent-soft);
+}
+.monitor-reaction-form-lock svg { width: 15px; height: 15px; }
+.monitor-reaction-form-lock strong { display: block; color: var(--app-text); font-size: 11px; font-weight: 700; }
+.monitor-reaction-form-lock small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.45; }
 .monitor-reaction-form-copy { display: flex; min-width: 0; align-items: center; gap: 9px; align-self: center; }
 .monitor-reaction-form-icon { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid var(--app-accent-border); border-radius: 10px; background: var(--app-accent-soft); color: var(--app-accent-bright); }
 .monitor-reaction-form-icon svg { width: 15px; height: 15px; }

@@ -1,5 +1,5 @@
 import { useId, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -135,7 +135,7 @@ export function ReactionPanel({
       </div>
 
       {remaining > 0 ? (
-        <form className="monitor-reaction-form" onSubmit={handleSubmit}>
+        <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
           <div className="monitor-reaction-form-copy">
             <span className="monitor-reaction-form-icon" aria-hidden="true"><MessageSquareText /></span>
             <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
@@ -193,6 +193,15 @@ export function ReactionPanel({
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
           </Button>
+          {!requestEnabled ? (
+            <div className="monitor-reaction-form-lock" role="status">
+              <span aria-hidden="true"><LockKeyhole /></span>
+              <div>
+                <strong>Reaction requests are locked</strong>
+                <small>The order isn’t complete yet. You can use reactions when delivery is Partial or Completed.</small>
+              </div>
+            </div>
+          ) : null}
         </form>
       ) : (
         <div className="monitor-reaction-allowance-complete">
