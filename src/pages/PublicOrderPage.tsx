@@ -16,6 +16,7 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
+const ELDORADO_REACTION_LIMIT_URL = "https://www.eldorado.gg/discord-boosts-and-decorations/oi/89cc60ad-68d8-461b-1dc9-08df239a2c0d";
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 const MONITOR_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -1256,7 +1257,7 @@ export default function PublicOrderPage() {
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" onClick={() => setShowReactionPurchaseModal(false)}>Close</Button>
               <Button asChild>
-                <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                <a href={ELDORADO_REACTION_LIMIT_URL} target="_blank" rel="noreferrer">
                   Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               </Button>
