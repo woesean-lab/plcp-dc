@@ -6,6 +6,7 @@ export type ReactionPanelRequest = {
   id: string;
   messageLink: string;
   requestedCount: number;
+  emojiCount?: number;
   assignedCount: number;
   completedCount: number;
   createdAt: string;
@@ -20,10 +21,12 @@ type ReactionPanelProps = {
   latestMessageLink?: string;
   messageDraft: string;
   countDraft: number;
+  emojiCountDraft: number;
   saving: boolean;
   requests: ReactionPanelRequest[];
   onMessageChange: (value: string) => void;
   onCountChange: (value: number) => void;
+  onEmojiCountChange: (value: number) => void;
   onSubmit: () => void;
   onEditLimit?: () => void;
   limitActionLabel?: string;
@@ -43,10 +46,12 @@ export function ReactionPanel({
   latestMessageLink,
   messageDraft,
   countDraft,
+  emojiCountDraft,
   saving,
   requests,
   onMessageChange,
   onCountChange,
+  onEmojiCountChange,
   onSubmit,
   onEditLimit,
   limitActionLabel = "+ Add reaction limit"
@@ -163,6 +168,22 @@ export function ReactionPanel({
               }}
             />
           </label>
+          <label className="boost-order-field monitor-reaction-field">
+            <span className="boost-order-label">Emoji count</span>
+            <input
+              className="boost-number-input"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={Math.min(20, countDraft)}
+              value={Math.min(emojiCountDraft, countDraft, 20)}
+              aria-label="Distinct emoji count"
+              onChange={(event) => {
+                const next = Number.parseInt(event.target.value, 10);
+                onEmojiCountChange(Number.isFinite(next) ? Math.min(20, countDraft, Math.max(1, next)) : 1);
+              }}
+            />
+          </label>
           <Button className="monitor-reaction-submit" type="submit" disabled={saving || !messageDraft.trim()}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
@@ -188,7 +209,7 @@ export function ReactionPanel({
                 <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions requested</strong>
+                    <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                   </span>
                   <span className="monitor-reaction-history-progress">

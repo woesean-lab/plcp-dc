@@ -268,6 +268,7 @@ export default function PublicOrderPage() {
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
+  const [reactionEmojiCountDraft, setReactionEmojiCountDraft] = useState(8);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
@@ -564,10 +565,12 @@ export default function PublicOrderPage() {
     if (!uniqid || !messageLink || savingReactionMessage) return;
     try {
       setSavingReactionMessage(true);
-      const updated = await updatePublicCommunityOrderReactionMessage(uniqid, messageLink, Math.min(reactionCountDraft, reactionRemainingCount));
+      const reactionAmount = Math.min(reactionCountDraft, reactionRemainingCount);
+      const updated = await updatePublicCommunityOrderReactionMessage(uniqid, messageLink, reactionAmount, Math.min(reactionEmojiCountDraft, reactionAmount, 20));
       setStatus((current) => mergeOrderStatus(current, updated));
       setReactionMessageDraft("");
       setReactionCountDraft(1);
+      setReactionEmojiCountDraft(8);
       toast.success("Reaction request added. Eligible members were queued.");
     } catch (saveError) {
       toast.error(saveError instanceof Error ? saveError.message : "Reaction message could not be saved.");
@@ -1138,12 +1141,14 @@ export default function PublicOrderPage() {
                     latestMessageLink={reactionMessageLink}
                     messageDraft={reactionMessageDraft}
                     countDraft={reactionCountDraft}
+                    emojiCountDraft={reactionEmojiCountDraft}
                     saving={savingReactionMessage}
                     requests={reactionRequests.map((request) => ({ ...request, completedCount: Array.isArray(request.assignments)
                       ? request.assignments.filter((item) => item.reactionState === "completed").length
                       : reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
                     onMessageChange={setReactionMessageDraft}
                     onCountChange={setReactionCountDraft}
+                    onEmojiCountChange={setReactionEmojiCountDraft}
                     onSubmit={() => void handleSaveReactionMessage()}
                     onEditLimit={() => setShowReactionPurchaseModal(true)}
                     limitActionLabel="Buy reaction limit"

@@ -944,14 +944,16 @@ function shuffleReactionValues(values) {
   return shuffled;
 }
 
-function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs = new Set()) {
+function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs = new Set(), requestedEmojiCount = null) {
   const naturalPalette = shuffleReactionValues(communityNaturalReactionEmojis);
   const fallbackPalette = shuffleReactionValues(communityReactionEmojis.filter((emoji) => !communityNaturalReactionEmojis.includes(emoji)));
   const fullPalette = [...naturalPalette, ...fallbackPalette];
-  const aestheticCount = requestedCount <= 12 ? 2 : requestedCount <= 35 ? 3 : requestedCount <= 75 ? 8 : requestedCount <= 200 ? 9 : 10;
+  const automaticEmojiCount = requestedCount <= 12 ? 2 : requestedCount <= 35 ? 3 : requestedCount <= 75 ? 8 : requestedCount <= 200 ? 9 : 10;
+  const aestheticCount = Number.isInteger(requestedEmojiCount) ? requestedEmojiCount : automaticEmojiCount;
   const minimumCount = Math.ceil(requestedCount / deliveredMembers.length);
+  const maximumPaletteCount = Number.isInteger(requestedEmojiCount) ? aestheticCount : fullPalette.length;
 
-  for (let paletteCount = Math.max(aestheticCount, minimumCount); paletteCount <= fullPalette.length; paletteCount += 1) {
+  for (let paletteCount = Math.max(aestheticCount, minimumCount); paletteCount <= maximumPaletteCount; paletteCount += 1) {
     const palette = fullPalette.slice(0, paletteCount);
     const candidates = palette.map((emoji) => shuffleReactionValues(deliveredMembers.filter((member) =>
       !usedPairs.has(`${member.discordUserId}:${emoji}`)
@@ -11130,6 +11132,7 @@ async function updateCommunityReactionMessage(req, res, next) {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
     const requestedCount = Number.parseInt(req.body?.reactionCount, 10);
+    const requestedEmojiCount = Number.parseInt(req.body?.emojiCount, 10);
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
 
@@ -11161,15 +11164,19 @@ async function updateCommunityReactionMessage(req, res, next) {
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
         : "This order's reaction limit has been used." });
     }
+    if (!Number.isInteger(requestedEmojiCount) || requestedEmojiCount < 1 || requestedEmojiCount > Math.min(20, requestedCount)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: `Choose an emoji count between 1 and ${Math.min(20, requestedCount)}.` });
+    }
 
     const deliveredMembers = order.communityResults.filter((item) =>
       item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
     );
-    const maximumRequestSize = deliveredMembers.length * communityReactionEmojis.length;
+    const maximumRequestSize = deliveredMembers.length * requestedEmojiCount;
     if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: deliveredMembers.length
-        ? `This delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
+        ? `With ${requestedEmojiCount} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
         : "No delivered members are available for reactions yet." });
     }
 
@@ -11178,7 +11185,7 @@ async function updateCommunityReactionMessage(req, res, next) {
       .filter((request) => request?.messageLink === reactionMessage.url)
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
       .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
-    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs);
+    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, requestedEmojiCount);
     if (assignments.length !== requestedCount) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "This delivered member pool does not have enough unused member and emoji combinations for that message." });
@@ -11200,6 +11207,7 @@ async function updateCommunityReactionMessage(req, res, next) {
         id: requestId,
         messageLink: reactionMessage.url,
         requestedCount,
+        emojiCount: requestedEmojiCount,
         assignedCount: assignments.length,
         assignments,
         createdAt: new Date().toISOString()
