@@ -113,6 +113,14 @@ export interface OrderStatusResponse {
     startedAt?: string;
     completedAt?: string;
     error?: string;
+    results?: Array<{
+      index: number;
+      token: string;
+      state: "waiting" | "running" | "success" | "failed" | string;
+      joinStatus?: string;
+      message?: string;
+      dcordTaskId?: string;
+    }>;
   };
   canManageCommunityMembers?: boolean;
   delayUpdateCooldownSeconds?: number;

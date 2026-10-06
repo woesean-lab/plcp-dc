@@ -420,6 +420,7 @@ export default function OrderPage() {
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
+  const activeDcordRejoinStartedAtRef = useRef("");
   const isDcordProvider = provider === "dcord";
   const isCommunityProvider = provider === "community";
 
@@ -477,6 +478,7 @@ export default function OrderPage() {
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const dcordRejoinJob = result?.dcordRejoinJob;
   const dcordRejoinRunning = dcordRejoinJob?.status === "running";
+  const dcordRejoinResults = Array.isArray(dcordRejoinJob?.results) ? dcordRejoinJob.results : [];
   const storedHumanizerOrderJob = result?.humanizerJob && typeof result.humanizerJob === "object" && !Array.isArray(result.humanizerJob)
     ? result.humanizerJob as HumanizerJob
     : null;
@@ -628,6 +630,7 @@ export default function OrderPage() {
 
   useEffect(() => {
     if (!dcordRejoinRunning) return;
+    if (dcordRejoinJob?.startedAt) activeDcordRejoinStartedAtRef.current = dcordRejoinJob.startedAt;
     const target = String(result?.uniqid ?? uniqid).trim();
     if (!target) return;
     let active = true;
@@ -650,7 +653,18 @@ export default function OrderPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [dcordRejoinRunning, result?.uniqid, uniqid]);
+  }, [dcordRejoinJob?.startedAt, dcordRejoinRunning, result?.uniqid, uniqid]);
+
+  useEffect(() => {
+    if (!dcordRejoinJob?.completedAt || !activeDcordRejoinStartedAtRef.current) return;
+    if (activeDcordRejoinStartedAtRef.current !== dcordRejoinJob.startedAt) return;
+    activeDcordRejoinStartedAtRef.current = "";
+    if (dcordRejoinJob.failed > 0) {
+      toast.error(`Re-join finished: ${dcordRejoinJob.succeeded}/${dcordRejoinJob.total} joined, ${dcordRejoinJob.failed} failed.`);
+    } else {
+      toast.success(`Re-join completed: ${dcordRejoinJob.succeeded}/${dcordRejoinJob.total} joined.`);
+    }
+  }, [dcordRejoinJob?.completedAt, dcordRejoinJob?.failed, dcordRejoinJob?.startedAt, dcordRejoinJob?.succeeded, dcordRejoinJob?.total]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -904,6 +918,7 @@ export default function OrderPage() {
     try {
       setStartingDcordRejoin(true);
       const data = await rejoinDcordBoostOrder(target);
+      if (data.dcordRejoinJob?.startedAt) activeDcordRejoinStartedAtRef.current = data.dcordRejoinJob.startedAt;
       setResult((current) => mergeOrderStatus(current, data));
       toast.success("Re-join started. Boost delivery will not run.");
     } catch (error) {
@@ -1429,6 +1444,11 @@ export default function OrderPage() {
                           : "Re-join all"}
                     </Button>
                   ) : null}
+                  {dcordRejoinJob && !dcordRejoinRunning ? (
+                    <span className="public-token-result-pill" data-state={dcordRejoinJob.failed > 0 ? "failed" : "active"} title={dcordRejoinJob.failed > 0 ? `${dcordRejoinJob.failed} token(s) failed to re-join.` : "All assigned tokens re-joined successfully."}>
+                      Re-joined {dcordRejoinJob.succeeded}/{dcordRejoinJob.total}{dcordRejoinJob.failed > 0 ? ` · ${dcordRejoinJob.failed} failed` : ""}
+                    </span>
+                  ) : null}
                   {dcordTokenResults.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll || allOrderTokensHumanized}>
                       <Sparkles className={`h-3.5 w-3.5 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
@@ -1464,6 +1484,7 @@ export default function OrderPage() {
                   {dcordTokenResults.map((item, index) => {
                     const humanizerResult = effectiveHumanizerOrderJob?.results[index];
                     const humanizerState = humanizerResult?.state;
+                    const rejoinResult = dcordRejoinResults.find((entry) => entry.index === item.index);
                     return (
                     <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                       <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
@@ -1476,8 +1497,14 @@ export default function OrderPage() {
                               {humanizerState === "success" ? "Humanized" : humanizerState === "partial" ? "Partial" : humanizerState === "running" ? "Humanizing" : humanizerState === "failed" ? "Failed" : "Waiting"}
                             </span>
                           ) : null}
+                          {rejoinResult ? (
+                            <span className="public-token-humanizer-badge" data-state={rejoinResult.state} title={rejoinResult.message}>
+                              <LogIn className={rejoinResult.state === "running" ? "animate-pulse" : ""} aria-hidden="true" />
+                              {rejoinResult.state === "success" ? "Re-joined" : rejoinResult.state === "failed" ? "Re-join failed" : rejoinResult.state === "running" ? "Re-joining" : "Re-join waiting"}
+                            </span>
+                          ) : null}
                         </span>
-                        <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}</small>
+                        <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}{rejoinResult?.message ? ` · Re-join: ${rejoinResult.message}` : ""}</small>
                         {item.timing ? <small className="public-token-result-timing">{item.timing}</small> : null}
                       </span>
                       <span className="public-token-result-flow">
