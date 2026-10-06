@@ -854,17 +854,23 @@ async function runHumanizerJob(job, accounts, options) {
 async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow) {
   const payload = packageRow?.payload && typeof packageRow.payload === "object" ? packageRow.payload : {};
   const enabledFields = new Set(normalizeHumanizerEnabledFields(payload.enabledFields, payload));
-  const accounts = tokens.map((token, index) => ({
-    id: `${orderId}:${index + 1}`,
-    username: `Boost token ${index + 1}`,
-    displayName: null,
-    avatarUrl: null,
-    categoryId: "dcord-boost",
-    guildId: null,
-    onlinerAccountId: null,
-    token,
-    proxyUrl: proxies[index]
-  }));
+  const accounts = tokens.map((stockToken, index) => {
+    const token = extractDcordApiToken(stockToken);
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(proxies[index]);
+    if (!token) throw new Error(`Boost token ${index + 1} is invalid.`);
+    if (!proxyUrl) throw new Error(`The assigned proxy for boost token ${index + 1} is missing or invalid.`);
+    return {
+      id: `${orderId}:${index + 1}`,
+      username: `Boost token ${index + 1}`,
+      displayName: null,
+      avatarUrl: null,
+      categoryId: "dcord-boost",
+      guildId: null,
+      onlinerAccountId: null,
+      token,
+      proxyUrl
+    };
+  });
   const job = {
     id: crypto.randomUUID(),
     status: "queued",
