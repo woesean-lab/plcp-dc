@@ -11147,6 +11147,10 @@ async function updateCommunityReactionMessage(req, res, next) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
+    if (!["PARTIAL", "COMPLETED"].includes(String(order.status ?? "").toUpperCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Reaction requests become available after member delivery is completed or partial." });
+    }
     if (reactionMessage.guildId !== String(order.serverId ?? "")) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });

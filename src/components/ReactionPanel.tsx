@@ -23,6 +23,7 @@ type ReactionPanelProps = {
   countDraft: number;
   emojiCountDraft: number;
   saving: boolean;
+  requestEnabled?: boolean;
   requests: ReactionPanelRequest[];
   onMessageChange: (value: string) => void;
   onCountChange: (value: number) => void;
@@ -48,6 +49,7 @@ export function ReactionPanel({
   countDraft,
   emojiCountDraft,
   saving,
+  requestEnabled = true,
   requests,
   onMessageChange,
   onCountChange,
@@ -67,7 +69,7 @@ export function ReactionPanel({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!saving && isValidMessageUrl && remaining > 0) onSubmit();
+    if (requestEnabled && !saving && isValidMessageUrl && remaining > 0) onSubmit();
   }
 
   return (
@@ -149,6 +151,7 @@ export function ReactionPanel({
               pattern="https://discord[.]com/channels/.+"
               title="Link must start with https://discord.com/channels/"
               aria-label="Discord message URL"
+              disabled={!requestEnabled}
               required
             />
           </label>
@@ -162,6 +165,7 @@ export function ReactionPanel({
               max={remaining}
               value={Math.min(countDraft, remaining)}
               aria-label="Reaction amount"
+              disabled={!requestEnabled}
               onChange={(event) => {
                 const next = Number.parseInt(event.target.value, 10);
                 onCountChange(Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1);
@@ -178,13 +182,14 @@ export function ReactionPanel({
               max={Math.min(20, countDraft)}
               value={Math.min(emojiCountDraft, countDraft, 20)}
               aria-label="Distinct emoji count"
+              disabled={!requestEnabled}
               onChange={(event) => {
                 const next = Number.parseInt(event.target.value, 10);
                 onEmojiCountChange(Number.isFinite(next) ? Math.min(20, countDraft, Math.max(1, next)) : 1);
               }}
             />
           </label>
-          <Button className="monitor-reaction-submit" type="submit" disabled={saving || !messageDraft.trim()}>
+          <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim()}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
           </Button>

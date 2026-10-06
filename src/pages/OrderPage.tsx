@@ -1575,6 +1575,7 @@ export default function OrderPage() {
                 countDraft={reactionCountDraft}
                 emojiCountDraft={reactionEmojiCountDraft}
                 saving={savingReactionMessage}
+                requestEnabled={["PARTIAL", "COMPLETED"].includes(normalizedStatus)}
                 requests={reactionRequests.map((request) => ({ ...request, completedCount: Array.isArray(request.assignments)
                   ? request.assignments.filter((item) => item.reactionState === "completed").length
                   : communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
