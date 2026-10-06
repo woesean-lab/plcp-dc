@@ -11126,10 +11126,12 @@ async function updateCommunityReactionMessage(req, res, next) {
     const requestId = crypto.randomUUID();
     const assignments = Array.from({ length: requestedCount }, (_, index) => {
       const sequence = assignedCount + index;
-      const member = deliveredMembers[sequence % deliveredMembers.length];
+      const emojiIndex = sequence % communityReactionEmojis.length;
+      const emojiRound = Math.floor(sequence / communityReactionEmojis.length);
+      const member = deliveredMembers[(emojiRound + emojiIndex) % deliveredMembers.length];
       return {
         discordUserId: String(member.discordUserId),
-        reactionEmoji: communityReactionEmojis[Math.floor(sequence / deliveredMembers.length) % communityReactionEmojis.length],
+        reactionEmoji: communityReactionEmojis[emojiIndex],
         reactionState: "pending",
         reactionDetails: "Waiting for the delivered member's Onliner Gateway connection before reacting."
       };
