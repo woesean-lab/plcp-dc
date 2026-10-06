@@ -43,6 +43,7 @@ export interface CreateOrderPayload {
   joinMethod?: CommunityJoinMethod;
   isEldoradoSale?: boolean;
   reactionLimit?: number;
+  humanizerPackageId?: string;
 }
 
 export interface CreateOrderResponse {

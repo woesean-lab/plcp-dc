@@ -2467,6 +2467,49 @@
     white-space: nowrap;
   }
 
+  .boost-humanizer-package-field {
+    display: grid;
+    grid-column: 1 / -1;
+    gap: 9px;
+    border: 1px solid var(--app-accent-border);
+    border-radius: 14px;
+    padding: 13px;
+    background: var(--app-accent-soft);
+  }
+
+  .boost-humanizer-package-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 8px;
+  }
+
+  .boost-humanizer-package-grid button {
+    position: relative;
+    display: grid;
+    min-width: 0;
+    gap: 5px;
+    border: 1px solid var(--app-border);
+    border-radius: 11px;
+    padding: 10px 36px 10px 11px;
+    background: var(--app-input-bg);
+    color: var(--app-text-secondary);
+    text-align: left;
+    transition: border-color .15s ease, background .15s ease;
+  }
+
+  .boost-humanizer-package-grid button:hover,
+  .boost-humanizer-package-grid button.is-selected {
+    border-color: var(--app-accent);
+    background: var(--app-input-focus-bg);
+  }
+
+  .boost-humanizer-package-grid button > span { display: flex; align-items: center; gap: 7px; min-width: 0; }
+  .boost-humanizer-package-grid button > span svg { color: var(--app-accent-bright); }
+  .boost-humanizer-package-grid button strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .boost-humanizer-package-grid button small { color: var(--app-muted); font-size: 9px; }
+  .boost-humanizer-package-grid button > svg { position: absolute; top: 50%; right: 12px; color: var(--app-success); transform: translateY(-50%); }
+  .boost-humanizer-package-empty { display: flex; min-height: 42px; align-items: center; justify-content: center; gap: 7px; border: 1px dashed var(--app-border); border-radius: 10px; color: var(--app-muted); font-size: 11px; }
+
   .boost-amount-control {
     display: grid;
     grid-template-columns: 38px minmax(72px, 1fr) 38px;

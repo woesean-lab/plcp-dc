@@ -851,6 +851,58 @@ async function runHumanizerJob(job, accounts, options) {
   job.completedAt = new Date().toISOString();
 }
 
+async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow) {
+  const payload = packageRow?.payload && typeof packageRow.payload === "object" ? packageRow.payload : {};
+  const enabledFields = new Set(normalizeHumanizerEnabledFields(payload.enabledFields, payload));
+  const accounts = tokens.map((token, index) => ({
+    id: `${orderId}:${index + 1}`,
+    username: `Boost token ${index + 1}`,
+    displayName: null,
+    avatarUrl: null,
+    categoryId: "dcord-boost",
+    guildId: null,
+    onlinerAccountId: null,
+    token,
+    proxyUrl: proxies[index]
+  }));
+  const job = {
+    id: crypto.randomUUID(),
+    status: "queued",
+    createdAt: new Date().toISOString(),
+    startedAt: null,
+    completedAt: null,
+    total: accounts.length,
+    completed: 0,
+    succeeded: 0,
+    failed: 0,
+    results: accounts.map((account) => ({
+      id: account.id,
+      username: account.username,
+      displayName: null,
+      avatarUrl: null,
+      categoryId: account.categoryId,
+      state: "pending",
+      changed: [],
+      error: null,
+      gatewayFallback: false,
+      startedAt: null,
+      completedAt: null
+    })),
+    unavailable: []
+  };
+  humanizerJobs.set(job.id, job);
+  await runHumanizerJob(job, accounts, {
+    usernames: enabledFields.has("username") && Array.isArray(payload.usernames) ? payload.usernames : [],
+    displayNames: enabledFields.has("displayName") && Array.isArray(payload.displayNames) ? payload.displayNames : [],
+    bios: enabledFields.has("bio") && Array.isArray(payload.bios) ? payload.bios : [],
+    pronouns: enabledFields.has("pronouns") && Array.isArray(payload.pronouns) ? payload.pronouns : [],
+    avatarIds: enabledFields.has("avatar") && Array.isArray(payload.avatars) ? payload.avatars.map((avatar) => String(avatar?.id ?? "")).filter(Boolean) : [],
+    hypesquad: enabledFields.has("hypesquad") && ["random", "bravery", "brilliance", "balance"].includes(payload.hypesquad) ? payload.hypesquad : null,
+    concurrency: Math.min(Math.max(Number.parseInt(payload.concurrency, 10) || 1, 1), 5)
+  });
+  return getHumanizerJobSnapshot(job);
+}
+
 const discordOnlinerSettingKey = "discord_onliner_config";
 const discordOnlinerAccountLimit = 3000;
 const discordOnlinerWorkerId = `${process.pid}-${crypto.randomBytes(8).toString("hex")}`;
@@ -12257,6 +12309,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const useProxy = true;
     const requestedConcurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
     const allowMembershipScreening = req.body?.allowMembershipScreening === true;
+    const humanizerPackageId = String(req.body?.humanizerPackageId ?? "").trim();
 
     if (!invite || !Number.isFinite(amount) || amount <= 0 || amount % 2 !== 0 || ![1, 3].includes(duration)) {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
@@ -12275,6 +12328,16 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const concurrency = Math.min(requestedConcurrency, recommendedConcurrency);
     if (stock[stockKey].length < requiredTokens) {
       return res.status(409).json({ message: `Only ${stock[stockKey].length * 2} ${duration} month boosts are in stock.` });
+    }
+
+    let humanizerPackage = null;
+    if (humanizerPackageId) {
+      const packageResult = await pool.query(
+        "SELECT id, name, payload, created_at, updated_at FROM humanizer_packages WHERE id = $1 LIMIT 1",
+        [humanizerPackageId]
+      );
+      humanizerPackage = packageResult.rows[0] ?? null;
+      if (!humanizerPackage) return res.status(400).json({ message: "The selected Humanizer package could not be found." });
     }
 
     const assignedProxies = useProxy ? await reserveDcordProxies(requiredTokens) : [];
@@ -12299,19 +12362,44 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       useProxy,
       concurrency,
       isEldoradoSale: req.body?.isEldoradoSale !== false,
+      humanizerPackageId: humanizerPackage?.id ?? null,
+      humanizerPackageName: humanizerPackage?.name ?? null,
+      humanizerStatus: humanizerPackage ? "queued" : null,
       tokenCount: requiredTokens,
       createdAt: new Date().toISOString(),
-      status: "PROCESS",
-      details: `0/${amount} boosts completed.`,
+      status: humanizerPackage ? "HUMANIZING" : "PROCESS",
+      details: humanizerPackage ? `Humanizing ${requiredTokens} assigned boost token${requiredTokens === 1 ? "" : "s"}.` : `0/${amount} boosts completed.`,
       dcordResults: selectedTokens.map(createQueuedDcordResult)
     };
 
     await saveDcordOrderTokens(uniqid, selectedTokens);
     if (useProxy) await saveDcordOrderProxies(uniqid, assignedProxies);
     await saveTrackedOrderPayload(order);
-    void processDcordBoostOrder(order, selectedTokens, invite).catch((error) => {
-      console.error(error);
-    });
+    void (async () => {
+      let processingOrder = order;
+      if (humanizerPackage) {
+        try {
+          const humanizerJob = await runDcordOrderHumanizer(uniqid, selectedTokens, assignedProxies, humanizerPackage);
+          processingOrder = {
+            ...order,
+            status: "PROCESS",
+            details: `Humanizer finished: ${humanizerJob.succeeded}/${humanizerJob.total} tokens updated. Starting boost delivery.`,
+            humanizerStatus: humanizerJob.failed > 0 ? "partial" : "completed",
+            humanizerJob
+          };
+        } catch (error) {
+          processingOrder = {
+            ...order,
+            status: "PROCESS",
+            details: "Humanizer could not finish. Continuing boost delivery with the assigned tokens.",
+            humanizerStatus: "failed",
+            humanizerError: error instanceof Error ? error.message : "Humanizer failed."
+          };
+        }
+        await saveTrackedOrderPayload(processingOrder);
+      }
+      await processDcordBoostOrder(processingOrder, selectedTokens, invite);
+    })().catch((error) => console.error(error));
     res.json({
       uniqid,
       stock: summarizeBoostTokenStock(nextStock)
