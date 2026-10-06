@@ -729,7 +729,7 @@ export default function PublicOrderPage() {
       const data = await checkPublicCommunityOrderMembers(uniqid);
       setStatus(data.order);
       setCommunityCheckNeedsBot(false);
-      toast.success(`${data.summary.onliner.live} Onliner Live, ${data.summary.onliner.offline} Not Live${data.summary.onliner.skipped ? ` · ${data.summary.onliner.skipped} skipped by category` : ""}.`);
+      toast.success(`${data.summary.onliner.live} Online, ${data.summary.onliner.offline} Offline${data.summary.onliner.skipped ? ` · ${data.summary.onliner.skipped} skipped by category` : ""}.`);
       } finally {
         window.clearInterval(progressTimer);
       }
@@ -1067,7 +1067,7 @@ export default function PublicOrderPage() {
                               <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <span id="public-member-check-description" className="member-check-tooltip" role="tooltip">
-                              Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is Live in Onliner. Not Live members can be replaced when their category allows it and support is active.
+                              Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is online. Offline members can be replaced when their category allows it and support is active.
                             </span>
                           </span>
                         ) : null}
@@ -1117,7 +1117,7 @@ export default function PublicOrderPage() {
                               ) : null}
                               {typeof item.onlinerLive === "boolean" ? (
                                 <span className="public-token-result-pill" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
-                                  {item.onlinerLive ? "Onliner Live" : "Onliner Not Live"}
+                                  {item.onlinerLive ? "Online" : "Offline"}
                                 </span>
                               ) : null}
                               <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
