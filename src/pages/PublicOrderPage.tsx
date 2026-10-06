@@ -1250,7 +1250,7 @@ export default function PublicOrderPage() {
               <Button type="button" variant="secondary" onClick={() => setShowExtensionModal(false)}>Close</Button>
               <Button asChild>
                 <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-                  Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  Buy on Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               </Button>
             </div>
@@ -1275,7 +1275,7 @@ export default function PublicOrderPage() {
               <Button type="button" variant="secondary" onClick={() => setShowReactionPurchaseModal(false)}>Close</Button>
               <Button asChild>
                 <a href={ELDORADO_REACTION_LIMIT_URL} target="_blank" rel="noreferrer">
-                  Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                  Buy on Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               </Button>
             </div>
