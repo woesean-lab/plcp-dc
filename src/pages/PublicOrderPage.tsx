@@ -276,6 +276,7 @@ export default function PublicOrderPage() {
   const [supportClock, setSupportClock] = useState(() => Date.now());
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [showReactionPurchaseModal, setShowReactionPurchaseModal] = useState(false);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
@@ -292,13 +293,14 @@ export default function PublicOrderPage() {
   }, []);
 
   useEffect(() => {
-    if (!showExtensionModal) return;
+    if (!showExtensionModal && !showReactionPurchaseModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowExtensionModal(false);
+      if (event.key === "Escape") setShowReactionPurchaseModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showExtensionModal]);
+  }, [showExtensionModal, showReactionPurchaseModal]);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -1142,6 +1144,8 @@ export default function PublicOrderPage() {
                     onMessageChange={setReactionMessageDraft}
                     onCountChange={setReactionCountDraft}
                     onSubmit={() => void handleSaveReactionMessage()}
+                    onEditLimit={() => setShowReactionPurchaseModal(true)}
+                    limitActionLabel="Buy reaction limit"
                   />
                 ) : null}
 
@@ -1226,6 +1230,31 @@ export default function PublicOrderPage() {
             </div>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" onClick={() => setShowExtensionModal(false)}>Close</Button>
+              <Button asChild>
+                <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
+                  Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                </a>
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
+      {showReactionPurchaseModal ? createPortal(
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReactionPurchaseModal(false); }}>
+          <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-reaction-purchase-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Rocket className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
+            <h2 id="public-reaction-purchase-title">Buy reaction limit</h2>
+            <p>Copy the order ID below, then open Eldorado and send it to Pulcip Store with the amount of additional reactions you need.</p>
+            <div className="public-extension-order-id">
+              <span><small>Order ID</small><code>{uniqid}</code></span>
+              <Button type="button" variant="secondary" size="sm" onClick={() => void copyOrderIdForExtension()}>
+                <Copy className="h-4 w-4" aria-hidden="true" /> Copy ID
+              </Button>
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" onClick={() => setShowReactionPurchaseModal(false)}>Close</Button>
               <Button asChild>
                 <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
                   Go to Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />

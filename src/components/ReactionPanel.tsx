@@ -26,6 +26,7 @@ type ReactionPanelProps = {
   onCountChange: (value: number) => void;
   onSubmit: () => void;
   onEditLimit?: () => void;
+  limitActionLabel?: string;
 };
 
 function formatReactionDate(value: string) {
@@ -47,7 +48,8 @@ export function ReactionPanel({
   onMessageChange,
   onCountChange,
   onSubmit,
-  onEditLimit
+  onEditLimit,
+  limitActionLabel = "+ Add reaction limit"
 }: ReactionPanelProps) {
   const titleId = useId();
   const assigned = Math.max(0, limit - remaining);
@@ -78,7 +80,7 @@ export function ReactionPanel({
         <div className="monitor-reaction-heading-actions">
           {onEditLimit ? (
             <button className="monitor-reaction-message-link" type="button" onClick={onEditLimit}>
-              <MessageSquareText aria-hidden="true" /> + Add reaction limit
+              <MessageSquareText aria-hidden="true" /> {limitActionLabel}
             </button>
           ) : null}
           {latestMessageLink ? (
