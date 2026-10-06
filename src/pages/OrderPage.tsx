@@ -1454,7 +1454,7 @@ export default function OrderPage() {
                   <h3>Per-member delivery log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
-                  {normalizedStatus === "COMPLETED" ? (
+                  {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
                       <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || communityMembersStillInServerCount === 0}>
                         <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
@@ -1491,6 +1491,19 @@ export default function OrderPage() {
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
                 </span>
               </div>
+
+              {checkingCommunityMembers ? (
+                <div className="member-check-progress" role="status" aria-live="polite">
+                  <span className="member-check-progress-copy">
+                    <ShieldCheck className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
+                    <strong>Checking members</strong>
+                    <small>{communityMemberCheckProgress?.checked ?? 0}/{communityMemberCheckProgress?.total || communityMemberResults.length || 0}</small>
+                  </span>
+                  <span className="member-check-progress-track" aria-hidden="true">
+                    <i style={{ width: `${Math.min(100, Math.max(0, ((communityMemberCheckProgress?.checked ?? 0) / Math.max(communityMemberCheckProgress?.total || communityMemberResults.length || 1, 1)) * 100))}%` }} />
+                  </span>
+                </div>
+              ) : null}
 
               {communityCheckNeedsBot && botInvite ? (
                 <div className="monitor-member-check-bot-alert" role="alert">
