@@ -54,10 +54,11 @@ export function ReactionPanel({
   const status = failed > 0 ? `${failed} failed` : completed >= limit && limit > 0 ? "Complete" : assigned > 0 ? "In progress" : "Ready";
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
+  const isValidMessageUrl = /^https:\/\/discord\.com\/channels\/.+/.test(messageDraft.trim());
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (!saving && messageDraft.trim() && remaining > 0) onSubmit();
+    if (!saving && isValidMessageUrl && remaining > 0) onSubmit();
   }
 
   return (
@@ -131,7 +132,10 @@ export function ReactionPanel({
               value={messageDraft}
               onChange={(event) => onMessageChange(event.target.value)}
               placeholder="https://discord.com/channels/..."
+              pattern="https://discord[.]com/channels/.+"
+              title="Link must start with https://discord.com/channels/"
               aria-label="Discord message URL"
+              required
             />
           </label>
           <label className="boost-order-field monitor-reaction-field">

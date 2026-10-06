@@ -11090,6 +11090,60 @@ async function updateCommunityReactionMessage(req, res, next) {
   }
 }
 
+app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const reactionLimit = Number.parseInt(req.body?.reactionLimit, 10);
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    const maximumLimit = order.communityResults.length;
+    const assignedCount = order.communityResults.filter((item) => item?.reactionEligible === true).length;
+    if (!Number.isInteger(reactionLimit) || reactionLimit < Math.max(1, assignedCount) || reactionLimit > maximumLimit) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: assignedCount > 0
+          ? `Choose a reaction limit between ${assignedCount} and ${maximumLimit}.`
+          : `Choose a reaction limit between 1 and ${maximumLimit}.`
+      });
+    }
+
+    const availableIndices = new Set();
+    order.communityResults.forEach((item, index) => {
+      if (item?.reactionEligible === true) availableIndices.add(index);
+    });
+    order.communityResults.forEach((_item, index) => {
+      if (availableIndices.size < reactionLimit) availableIndices.add(index);
+    });
+    const communityResults = order.communityResults.map((item, index) => {
+      if (!item) return item;
+      if (availableIndices.has(index)) return { ...item, reactionAvailable: true };
+      const { reactionAvailable: _reactionAvailable, ...rest } = item;
+      return rest;
+    });
+    const updatedOrder = { ...order, reactionCapacity: reactionLimit, communityResults };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(updatedOrder)]
+    );
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json(updatedOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.put("/api/community/orders/:uniqid/reaction-message", requireSession, updateCommunityReactionMessage);
 app.put("/api/public/orders/:uniqid/reaction-message", updateCommunityReactionMessage);
 

@@ -8,7 +8,7 @@ import { ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -404,6 +404,9 @@ export default function OrderPage() {
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
+  const [showReactionLimitModal, setShowReactionLimitModal] = useState(false);
+  const [reactionLimitDraft, setReactionLimitDraft] = useState(1);
+  const [updatingReactionLimit, setUpdatingReactionLimit] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
@@ -467,11 +470,12 @@ export default function OrderPage() {
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
   const reactionMessageLink = getStringField(result, ["reactionMessageLink"]);
-  const reactionUseEnabled = communityMemberResults.some((item) => item.reactionEligible)
-    || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
   const reactionCapacity = typeof result?.reactionCapacity === "number"
     ? result.reactionCapacity
     : categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + allocation.amount : total, 0);
+  const reactionUseEnabled = reactionCapacity > 0
+    || communityMemberResults.some((item) => item.reactionEligible)
+    || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
   const reactionAssignedCount = communityMemberResults.filter((item) => item.reactionEligible).length;
   const reactionCompletedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "completed").length;
   const reactionFailedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "failed").length;
@@ -540,16 +544,17 @@ export default function OrderPage() {
   }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal && !showReactionLimitModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
       if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
       if (event.key === "Escape" && !leavingAllCommunityMembers) setShowLeaveAllCommunityModal(false);
+      if (event.key === "Escape" && !updatingReactionLimit) setShowReactionLimitModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, showReactionLimitModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers, updatingReactionLimit]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -625,6 +630,34 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Reaction message could not be saved.");
     } finally {
       setSavingReactionMessage(false);
+    }
+  }
+
+  function openReactionLimitModal() {
+    const maximum = Math.max(1, communityMemberResults.length);
+    setReactionLimitDraft(Math.min(maximum, Math.max(1, reactionCapacity || totalAmount || maximum)));
+    setShowReactionLimitModal(true);
+  }
+
+  async function handleUpdateReactionLimit() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    const maximum = communityMemberResults.length;
+    const minimum = Math.max(1, reactionAssignedCount);
+    if (!target || !isCommunityProvider || updatingReactionLimit) return;
+    if (!Number.isInteger(reactionLimitDraft) || reactionLimitDraft < minimum || reactionLimitDraft > maximum) {
+      toast.error(`Choose a reaction limit between ${minimum} and ${maximum}.`);
+      return;
+    }
+    try {
+      setUpdatingReactionLimit(true);
+      const updated = await updateCommunityOrderReactionLimit(target, reactionLimitDraft);
+      setResult((current) => mergeOrderStatus(current, updated));
+      setShowReactionLimitModal(false);
+      toast.success(reactionCapacity > 0 ? "Reaction limit updated." : "Reaction limit added to this order.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Reaction limit could not be updated.");
+    } finally {
+      setUpdatingReactionLimit(false);
     }
   }
 
@@ -1358,11 +1391,6 @@ export default function OrderPage() {
                             {item.onlinerLive ? "Onliner Live" : "Onliner Not Live"}
                           </span>
                         ) : null}
-                        {item.reactionState ? (
-                          <span className="public-token-result-pill" data-state={item.reactionState === "completed" ? "active" : item.reactionState === "failed" ? "inactive" : "pending"} title={item.reactionDetails}>
-                            {item.reactionEmoji} {item.reactionState === "completed" ? "Reacted" : item.reactionState === "failed" ? "Reaction failed" : "Reaction pending"}
-                          </span>
-                        ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                       </span>
                       <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
@@ -1373,6 +1401,21 @@ export default function OrderPage() {
                 <p className="public-token-results-empty">Waiting for member results.</p>
               )}
               {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
+            </section>
+          ) : null}
+
+          {isCommunityProvider && communityMemberResults.length > 0 ? (
+            <section className="lookup-reaction-limit-control">
+              <span className="lookup-reaction-limit-icon" aria-hidden="true"><MessageSquareText /></span>
+              <div>
+                <span className="app-kicker">Reaction allowance</span>
+                <strong>{reactionCapacity > 0 ? `${reactionCapacity} reactions enabled` : "No reaction limit added"}</strong>
+                <small>{reactionCapacity > 0 ? "Change how many members can be assigned to reaction requests." : "Enable reactions for this existing Members order."}</small>
+              </div>
+              <Button type="button" variant={reactionCapacity > 0 ? "secondary" : "default"} onClick={openReactionLimitModal}>
+                <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+                {reactionCapacity > 0 ? "Edit reaction limit" : "Add reaction limit"}
+              </Button>
             </section>
           ) : null}
 
@@ -1429,6 +1472,42 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showReactionLimitModal ? createPortal(
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !updatingReactionLimit) setShowReactionLimitModal(false);
+          }}
+        >
+          <div className="confirm-modal lookup-reaction-limit-modal" role="dialog" aria-modal="true" aria-labelledby="reaction-limit-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><MessageSquareText className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
+            <h2 id="reaction-limit-title">{reactionCapacity > 0 ? "Edit reaction limit" : "Add reaction limit"}</h2>
+            <p>Choose how many of this order’s <strong>{communityMemberResults.length}</strong> members can be assigned to reaction requests.</p>
+            <label className="boost-order-field lookup-reaction-limit-field">
+              <span className="boost-order-label">Reaction limit</span>
+              <input
+                autoFocus
+                className="boost-number-input"
+                type="number"
+                min={Math.max(1, reactionAssignedCount)}
+                max={communityMemberResults.length}
+                value={reactionLimitDraft}
+                onChange={(event) => setReactionLimitDraft(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
+              />
+            </label>
+            {reactionAssignedCount > 0 ? <small className="lookup-reaction-limit-note">At least {reactionAssignedCount} reactions are already assigned, so the limit cannot be lower.</small> : null}
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={updatingReactionLimit} onClick={() => setShowReactionLimitModal(false)}>Cancel</Button>
+              <Button type="button" disabled={updatingReactionLimit} onClick={() => void handleUpdateReactionLimit()}>
+                <MessageSquareText className={`h-4 w-4 ${updatingReactionLimit ? "animate-pulse" : ""}`} aria-hidden="true" />
+                {updatingReactionLimit ? "Saving..." : reactionCapacity > 0 ? "Save limit" : "Add limit"}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
       {showLeaveAllCommunityModal ? createPortal(
         <div
           className="confirm-modal-backdrop"

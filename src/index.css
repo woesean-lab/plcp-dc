@@ -7710,6 +7710,38 @@
 .monitor-reaction-panel.is-side .monitor-reaction-form-copy { padding-bottom: 3px; }
 .monitor-reaction-panel.is-side .monitor-reaction-form .ui-button { width: 100%; }
 
+.lookup-reaction-limit-control {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin: 0 18px 14px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  padding: 12px 13px;
+  background: linear-gradient(110deg, var(--app-accent-soft), rgba(255,255,255,.018));
+}
+.lookup-reaction-limit-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 12px;
+  color: var(--app-accent-bright);
+  background: rgba(8,9,18,.42);
+}
+.lookup-reaction-limit-icon svg { width: 18px; height: 18px; }
+.lookup-reaction-limit-control > div { min-width: 0; }
+.lookup-reaction-limit-control strong,
+.lookup-reaction-limit-control small { display: block; }
+.lookup-reaction-limit-control strong { margin-top: 3px; color: var(--app-text); font-size: 12px; }
+.lookup-reaction-limit-control small { margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.4; }
+.lookup-reaction-limit-control .ui-button { min-width: 154px; }
+.lookup-reaction-limit-modal { width: min(100%, 440px); }
+.lookup-reaction-limit-field { margin-top: 18px; }
+.lookup-reaction-limit-note { display: block; margin-top: 9px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
+
 .monitor-safety-note { align-items: flex-start; line-height: 1.55; }
 .monitor-progress-panel { padding: 22px; }
 .monitor-panel-heading h2,
@@ -11214,6 +11246,12 @@
   .monitor-reaction-form-copy,
   .monitor-reaction-url-field { grid-column: 1 / -1; }
   .monitor-reaction-form .ui-button { width: 100%; }
+  .lookup-reaction-limit-control {
+    grid-template-columns: 42px minmax(0, 1fr);
+    margin-right: 12px;
+    margin-left: 12px;
+  }
+  .lookup-reaction-limit-control .ui-button { grid-column: 1 / -1; width: 100%; }
   .monitor-reaction-allowance-complete,
   .monitor-reaction-history { margin-right: 12px; margin-left: 12px; }
   .monitor-reaction-history a { grid-template-columns: auto minmax(0, 1fr) auto; }

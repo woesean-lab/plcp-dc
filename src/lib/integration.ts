@@ -295,6 +295,14 @@ export function updateCommunityOrderReactionMessage(uniqid: string, messageLink:
   });
 }
 
+export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number) {
+  return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-limit`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ reactionLimit })
+  });
+}
+
 export function saveDcordApiKey(apiKey: string) {
   return requestJson<{ configured: true }>("/api/dcord/config", {
     method: "PUT",
