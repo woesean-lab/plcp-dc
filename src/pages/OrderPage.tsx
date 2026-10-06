@@ -476,12 +476,20 @@ export default function OrderPage() {
   const reactionUseEnabled = reactionCapacity > 0
     || communityMemberResults.some((item) => item.reactionEligible)
     || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
-  const reactionAssignedCount = communityMemberResults.filter((item) => item.reactionEligible).length;
-  const reactionCompletedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "completed").length;
-  const reactionFailedCount = communityMemberResults.filter((item) => item.reactionEligible && item.reactionState === "failed").length;
-  const reactionRemainingCount = Math.max(0, reactionCapacity - reactionAssignedCount);
   const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
-  const reactionWorkPending = Boolean(reactionMessageLink) && communityMemberResults.some((item) => item.reactionState === "pending");
+  const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
+  const legacyReactionMembers = communityMemberResults.filter((item) => item.reactionEligible);
+  const reactionAssignedCount = reactionAssignments.length || legacyReactionMembers.length;
+  const reactionCompletedCount = reactionAssignments.length
+    ? reactionAssignments.filter((item) => item.reactionState === "completed").length
+    : legacyReactionMembers.filter((item) => item.reactionState === "completed").length;
+  const reactionFailedCount = reactionAssignments.length
+    ? reactionAssignments.filter((item) => item.reactionState === "failed").length
+    : legacyReactionMembers.filter((item) => item.reactionState === "failed").length;
+  const reactionRemainingCount = Math.max(0, reactionCapacity - reactionAssignedCount);
+  const reactionWorkPending = Boolean(reactionMessageLink) && (reactionAssignments.length
+    ? reactionAssignments.some((item) => item.reactionState === "pending")
+    : communityMemberResults.some((item) => item.reactionState === "pending"));
   const refreshComplete = terminal && !reactionWorkPending;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
@@ -634,24 +642,23 @@ export default function OrderPage() {
   }
 
   function openReactionLimitModal() {
-    setReactionLimitDraft(Math.max(1, reactionCapacity || totalAmount || 1));
+    setReactionLimitDraft(1);
     setShowReactionLimitModal(true);
   }
 
   async function handleUpdateReactionLimit() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    const minimum = Math.max(1, reactionAssignedCount);
     if (!target || !isCommunityProvider || updatingReactionLimit) return;
-    if (!Number.isSafeInteger(reactionLimitDraft) || reactionLimitDraft < minimum) {
-      toast.error(`Choose a reaction limit of at least ${minimum}.`);
+    if (!Number.isSafeInteger(reactionLimitDraft) || reactionLimitDraft < 1) {
+      toast.error("Enter at least 1 reaction to add.");
       return;
     }
     try {
       setUpdatingReactionLimit(true);
-      const updated = await updateCommunityOrderReactionLimit(target, reactionLimitDraft);
+      const updated = await updateCommunityOrderReactionLimit(target, reactionCapacity + reactionLimitDraft);
       setResult((current) => mergeOrderStatus(current, updated));
       setShowReactionLimitModal(false);
-      toast.success(reactionCapacity > 0 ? "Reaction limit updated." : "Reaction limit added to this order.");
+      toast.success(`${reactionLimitDraft} reactions added to the limit.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Reaction limit could not be updated.");
     } finally {
@@ -1422,7 +1429,9 @@ export default function OrderPage() {
                 messageDraft={reactionMessageDraft}
                 countDraft={reactionCountDraft}
                 saving={savingReactionMessage}
-                requests={reactionRequests.map((request) => ({ ...request, completedCount: communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                requests={reactionRequests.map((request) => ({ ...request, completedCount: Array.isArray(request.assignments)
+                  ? request.assignments.filter((item) => item.reactionState === "completed").length
+                  : communityMemberResults.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
                 onMessageChange={setReactionMessageDraft}
                 onCountChange={setReactionCountDraft}
                 onSubmit={() => void handleSaveReactionMessage()}
@@ -1474,25 +1483,25 @@ export default function OrderPage() {
           <div className="confirm-modal lookup-reaction-limit-modal" role="dialog" aria-modal="true" aria-labelledby="reaction-limit-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><MessageSquareText className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
-            <h2 id="reaction-limit-title">{reactionCapacity > 0 ? "Edit reaction limit" : "Add reaction limit"}</h2>
-            <p>Set the total reaction allowance for this order. This limit is independent from the order’s member count.</p>
+            <h2 id="reaction-limit-title">Add reaction limit</h2>
+            <p>Add more reactions to this order’s allowance. Current limit: <strong>{reactionCapacity}</strong>.</p>
             <label className="boost-order-field lookup-reaction-limit-field">
-              <span className="boost-order-label">Reaction limit</span>
+              <span className="boost-order-label">Amount to add</span>
               <input
                 autoFocus
                 className="boost-number-input"
                 type="number"
-                min={Math.max(1, reactionAssignedCount)}
+                min={1}
                 value={reactionLimitDraft}
                 onChange={(event) => setReactionLimitDraft(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
               />
             </label>
-            {reactionAssignedCount > 0 ? <small className="lookup-reaction-limit-note">At least {reactionAssignedCount} reactions are already assigned, so the limit cannot be lower.</small> : null}
+            <small className="lookup-reaction-limit-note">New total: {reactionCapacity + reactionLimitDraft} reactions</small>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={updatingReactionLimit} onClick={() => setShowReactionLimitModal(false)}>Cancel</Button>
               <Button type="button" disabled={updatingReactionLimit} onClick={() => void handleUpdateReactionLimit()}>
                 <MessageSquareText className={`h-4 w-4 ${updatingReactionLimit ? "animate-pulse" : ""}`} aria-hidden="true" />
-                {updatingReactionLimit ? "Saving..." : reactionCapacity > 0 ? "Save limit" : "Add limit"}
+                {updatingReactionLimit ? "Adding..." : `Add ${reactionLimitDraft}`}
               </Button>
             </div>
           </div>

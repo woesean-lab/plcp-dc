@@ -509,11 +509,17 @@ export default function PublicOrderPage() {
     return total + amount;
   }, 0);
   const reactionOrderLimit = typeof status?.reactionCapacity === "number" ? status.reactionCapacity : configuredReactionCapacity;
-  const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionMembers.length);
-  const reactionCompletedCount = reactionMembers.filter((item) => item.reactionState === "completed").length;
-  const reactionFailedCount = reactionMembers.filter((item) => item.reactionState === "failed").length;
   const reactionMessageLink = typeof status?.reactionMessageLink === "string" ? status.reactionMessageLink : "";
   const reactionRequests = Array.isArray(status?.reactionRequests) ? status.reactionRequests : [];
+  const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
+  const reactionAssignedCount = reactionAssignments.length || reactionMembers.length;
+  const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionAssignedCount);
+  const reactionCompletedCount = reactionAssignments.length
+    ? reactionAssignments.filter((item) => item.reactionState === "completed").length
+    : reactionMembers.filter((item) => item.reactionState === "completed").length;
+  const reactionFailedCount = reactionAssignments.length
+    ? reactionAssignments.filter((item) => item.reactionState === "failed").length
+    : reactionMembers.filter((item) => item.reactionState === "failed").length;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -1130,7 +1136,9 @@ export default function PublicOrderPage() {
                     messageDraft={reactionMessageDraft}
                     countDraft={reactionCountDraft}
                     saving={savingReactionMessage}
-                    requests={reactionRequests.map((request) => ({ ...request, completedCount: reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                    requests={reactionRequests.map((request) => ({ ...request, completedCount: Array.isArray(request.assignments)
+                      ? request.assignments.filter((item) => item.reactionState === "completed").length
+                      : reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
                     onMessageChange={setReactionMessageDraft}
                     onCountChange={setReactionCountDraft}
                     onSubmit={() => void handleSaveReactionMessage()}

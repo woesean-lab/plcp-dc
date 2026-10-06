@@ -78,7 +78,7 @@ export function ReactionPanel({
         <div className="monitor-reaction-heading-actions">
           {onEditLimit ? (
             <button className="monitor-reaction-message-link" type="button" onClick={onEditLimit}>
-              <MessageSquareText aria-hidden="true" /> Edit reaction limit
+              <MessageSquareText aria-hidden="true" /> + Add reaction limit
             </button>
           ) : null}
           {latestMessageLink ? (

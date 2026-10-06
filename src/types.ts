@@ -92,6 +92,13 @@ export interface OrderStatusResponse {
     requestedCount: number;
     assignedCount: number;
     createdAt: string;
+    assignments?: Array<{
+      discordUserId: string;
+      reactionState?: string;
+      reactionEmoji?: string;
+      reactionDetails?: string;
+      reactionCompletedAt?: string;
+    }>;
   }>;
   durationMonths?: number | null;
   error?: string;

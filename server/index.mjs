@@ -2596,9 +2596,19 @@ async function updateCommunityReactionResult(job, fields) {
     const communityResults = order.communityResults.map((item) => String(item?.discordUserId ?? "") === String(job.discord_user_id)
       ? { ...item, ...fields }
       : item);
+    const reactionRequests = (Array.isArray(order.reactionRequests) ? order.reactionRequests : []).map((request) => ({
+      ...request,
+      assignments: Array.isArray(request?.assignments)
+        ? request.assignments.map((assignment) => request.id === job.request_id
+          && String(assignment?.discordUserId ?? "") === String(job.discord_user_id)
+          && String(assignment?.reactionEmoji ?? "") === String(job.emoji)
+          ? { ...assignment, ...fields }
+          : assignment)
+        : request?.assignments
+    }));
     await client.query(
       "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
-      [job.order_id, JSON.stringify({ ...order, communityResults })]
+      [job.order_id, JSON.stringify({ ...order, communityResults, reactionRequests })]
     );
     await client.query("COMMIT");
   } catch (error) {
@@ -2611,7 +2621,7 @@ async function updateCommunityReactionResult(job, fields) {
 
 async function processCommunityReactionJobsUnlocked() {
   const jobs = await pool.query(
-    `SELECT order_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
+    `SELECT order_id, request_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
      FROM community_reaction_jobs
      WHERE status = 'pending' AND next_attempt_at <= NOW()
      ORDER BY created_at ASC
@@ -2646,8 +2656,8 @@ async function processCommunityReactionJobsUnlocked() {
     if (!account) {
       const waitingDetails = "The Onliner account could not be matched to this Discord member.";
       await pool.query(
-        "UPDATE community_reaction_jobs SET account_id = COALESCE($3, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $4 WHERE order_id = $1 AND discord_user_id = $2",
-        [job.order_id, job.discord_user_id, null, waitingDetails]
+        "UPDATE community_reaction_jobs SET account_id = COALESCE($5, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $6 WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4",
+        [job.order_id, job.request_id, job.discord_user_id, job.emoji, null, waitingDetails]
       );
       await updateCommunityReactionResult(job, { reactionState: "pending", reactionEmoji: job.emoji, reactionDetails: waitingDetails });
       continue;
@@ -2676,8 +2686,8 @@ async function processCommunityReactionJobsUnlocked() {
       if (result.response.ok) {
         const completedAt = new Date().toISOString();
         await pool.query(
-          "UPDATE community_reaction_jobs SET status = 'completed', account_id = $3, attempts = attempts + 1, completed_at = NOW(), last_error = NULL WHERE order_id = $1 AND discord_user_id = $2",
-          [job.order_id, job.discord_user_id, account.id]
+          "UPDATE community_reaction_jobs SET status = 'completed', account_id = $5, attempts = attempts + 1, completed_at = NOW(), last_error = NULL WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4",
+          [job.order_id, job.request_id, job.discord_user_id, job.emoji, account.id]
         );
         await updateCommunityReactionResult(job, { reactionState: "completed", reactionEmoji: job.emoji, reactionCompletedAt: completedAt, reactionDetails: "Reaction added after the Onliner connection became ready." });
         appendDiscordOnlinerLog("success", `Reaction ${job.emoji} added for Members order ${job.order_id}.`, account.id);
@@ -2687,22 +2697,22 @@ async function processCommunityReactionJobsUnlocked() {
       const terminal = [401, 403, 404].includes(result.response.status) || Number(job.attempts) >= 5;
       await pool.query(
         `UPDATE community_reaction_jobs
-         SET status = $3, account_id = $4, attempts = attempts + 1,
-             next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $5,
-             completed_at = CASE WHEN $3 = 'failed' THEN NOW() ELSE completed_at END
-         WHERE order_id = $1 AND discord_user_id = $2`,
-        [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
+         SET status = $5, account_id = $6, attempts = attempts + 1,
+             next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $7,
+             completed_at = CASE WHEN $5 = 'failed' THEN NOW() ELSE completed_at END
+         WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4`,
+        [job.order_id, job.request_id, job.discord_user_id, job.emoji, terminal ? "failed" : "pending", account.id, message]
       );
       await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).slice(0, 400);
       const terminal = Number(job.attempts) >= 5;
       await pool.query(
-        `UPDATE community_reaction_jobs SET status = $3, account_id = $4, attempts = attempts + 1,
-         next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $5,
-         completed_at = CASE WHEN $3 = 'failed' THEN NOW() ELSE completed_at END
-         WHERE order_id = $1 AND discord_user_id = $2`,
-        [job.order_id, job.discord_user_id, terminal ? "failed" : "pending", account.id, message]
+        `UPDATE community_reaction_jobs SET status = $5, account_id = $6, attempts = attempts + 1,
+         next_attempt_at = NOW() + INTERVAL '1 minute', last_error = $7,
+         completed_at = CASE WHEN $5 = 'failed' THEN NOW() ELSE completed_at END
+         WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4`,
+        [job.order_id, job.request_id, job.discord_user_id, job.emoji, terminal ? "failed" : "pending", account.id, message]
       );
       await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
     }
@@ -6308,7 +6318,7 @@ async function runCommunityOrder(order, members, config) {
       await pool.query(
         `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [order.uniqid, member.discord_user_id, reactionMessage.channelId, reactionMessage.messageId, reactionEmoji]
       );
     } else if (state === "joined" && results[resultIndex]?.reactionEligible) {
@@ -6544,7 +6554,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
       await client.query(
         `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [orderId, member.discord_user_id, current.reactionMessage.channelId, current.reactionMessage.messageId, String(current.reactionEmoji)]
       );
     }
@@ -7293,6 +7303,7 @@ async function initializeDiscordOnlinerDatabase() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_reaction_jobs (
       order_id TEXT NOT NULL,
+      request_id TEXT NOT NULL DEFAULT 'legacy',
       discord_user_id TEXT NOT NULL,
       account_id TEXT,
       channel_id TEXT NOT NULL,
@@ -7304,9 +7315,12 @@ async function initializeDiscordOnlinerDatabase() {
       last_error TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       completed_at TIMESTAMPTZ,
-      PRIMARY KEY (order_id, discord_user_id)
+      PRIMARY KEY (order_id, request_id, discord_user_id, emoji)
     )
   `);
+  await pool.query("ALTER TABLE community_reaction_jobs ADD COLUMN IF NOT EXISTS request_id TEXT NOT NULL DEFAULT 'legacy'");
+  await pool.query("ALTER TABLE community_reaction_jobs DROP CONSTRAINT IF EXISTS community_reaction_jobs_pkey");
+  await pool.query("ALTER TABLE community_reaction_jobs ADD PRIMARY KEY (order_id, request_id, discord_user_id, emoji)");
   await pool.query("CREATE INDEX IF NOT EXISTS community_reaction_jobs_pending_idx ON community_reaction_jobs (status, next_attempt_at)");
 }
 
@@ -10519,7 +10533,7 @@ async function reconcileCommunityPendingJoinResults(order) {
       await pool.query(
         `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
          VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [order.uniqid, item.discordUserId, item.reactionMessage.channelId, item.reactionMessage.messageId, String(item.reactionEmoji)]
       );
   }
@@ -11015,21 +11029,16 @@ async function updateCommunityReactionMessage(req, res, next) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });
     }
-    const reactionEnabledCategoryIds = new Set((Array.isArray(order.categoryAllocations) ? order.categoryAllocations : [])
-      .filter((allocation) => allocation?.reactionUseEnabled === true)
-      .map((allocation) => String(allocation.categoryId ?? "")));
     const hasExplicitReactionCapacity = Number.isInteger(Number(order.reactionCapacity));
-    const isReactionAvailable = (item) => item?.reactionAvailable === true
-      || (!hasExplicitReactionCapacity && reactionEnabledCategoryIds.has(String(item?.categoryId ?? order.categoryId ?? "")));
-    const availableMemberCount = order.communityResults.filter(isReactionAvailable).length;
     const reactionCapacity = hasExplicitReactionCapacity
       ? Math.max(0, Number(order.reactionCapacity))
-      : availableMemberCount;
-    const assignedCount = order.communityResults.filter((item) => item?.reactionEligible === true).length;
+      : order.communityResults.filter((item) => item?.reactionAvailable === true).length;
+    const existingRequests = Array.isArray(order.reactionRequests) ? order.reactionRequests : [];
+    const assignedCount = existingRequests.reduce((total, request) => total + Math.max(0, Number(request?.assignedCount) || 0), 0);
     const remainingCount = Math.max(0, reactionCapacity - assignedCount);
-    if (!reactionCapacity || !availableMemberCount) {
+    if (!reactionCapacity) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Reaction use is not enabled for any category in this order." });
+      return res.status(409).json({ message: "Reaction use is not enabled for this order." });
     }
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > remainingCount) {
       await client.query("ROLLBACK");
@@ -11038,33 +11047,34 @@ async function updateCommunityReactionMessage(req, res, next) {
         : "This order's reaction limit has been used." });
     }
 
+    const deliveredMembers = order.communityResults.filter((item) =>
+      item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
+    );
+    const maximumRequestSize = deliveredMembers.length * communityReactionEmojis.length;
+    if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: deliveredMembers.length
+        ? `This delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
+        : "No delivered members are available for reactions yet." });
+    }
+
     const requestId = crypto.randomUUID();
-    let newlyAssigned = 0;
-    const communityResults = order.communityResults.map((item, index) => {
-      if (!item) return item;
-      if (item.reactionEligible === true || !isReactionAvailable(item) || newlyAssigned >= requestedCount) return item;
-      newlyAssigned += 1;
-      const joined = String(item.state ?? "").toLowerCase() === "joined";
+    const assignments = Array.from({ length: requestedCount }, (_, index) => {
+      const sequence = assignedCount + index;
+      const member = deliveredMembers[sequence % deliveredMembers.length];
       return {
-        ...item,
-        reactionAvailable: true,
-        reactionEligible: true,
-        reactionRequestId: requestId,
-        reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId, url: reactionMessage.url },
-        reactionEmoji: item.reactionEmoji || communityReactionEmojis[index % communityReactionEmojis.length],
-        reactionState: joined ? "pending" : "waiting_for_join",
-        reactionDetails: joined
-          ? "Waiting for the Onliner Gateway connection before reacting."
-          : "Reaction will be added after this member joins and Onliner is connected."
+        discordUserId: String(member.discordUserId),
+        reactionEmoji: communityReactionEmojis[Math.floor(sequence / deliveredMembers.length) % communityReactionEmojis.length],
+        reactionState: "pending",
+        reactionDetails: "Waiting for the delivered member's Onliner Gateway connection before reacting."
       };
     });
-    for (const item of communityResults) {
-      if (item?.reactionRequestId !== requestId || !item.reactionEmoji || String(item.state ?? "").toLowerCase() !== "joined") continue;
+    for (const assignment of assignments) {
       await client.query(
-        `INSERT INTO community_reaction_jobs (order_id, discord_user_id, channel_id, message_id, emoji)
-         VALUES ($1, $2, $3, $4, $5)
-         ON CONFLICT (order_id, discord_user_id) DO NOTHING`,
-        [uniqid, item.discordUserId, reactionMessage.channelId, reactionMessage.messageId, String(item.reactionEmoji)]
+        `INSERT INTO community_reaction_jobs (order_id, request_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT DO NOTHING`,
+        [uniqid, requestId, assignment.discordUserId, reactionMessage.channelId, reactionMessage.messageId, assignment.reactionEmoji]
       );
     }
     const updatedOrder = {
@@ -11072,14 +11082,15 @@ async function updateCommunityReactionMessage(req, res, next) {
       reactionCapacity,
       reactionMessageLink: reactionMessage.url,
       reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId },
-      reactionRequests: [...(Array.isArray(order.reactionRequests) ? order.reactionRequests : []), {
+      reactionRequests: [...existingRequests, {
         id: requestId,
         messageLink: reactionMessage.url,
         requestedCount,
-        assignedCount: newlyAssigned,
+        assignedCount: assignments.length,
+        assignments,
         createdAt: new Date().toISOString()
       }],
-      communityResults
+      communityResults: order.communityResults
     };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
