@@ -4920,82 +4920,73 @@ export default function HomePage() {
       {communityCategoryModalOpen ? (
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingCommunityCategory) resetCommunityCategoryDraft(); }}>
           <form className="confirm-modal community-category-modal" onSubmit={handleSaveCommunityCategory} role="dialog" aria-modal="true" aria-labelledby="community-category-title">
-            <span className="confirm-modal-icon is-success" aria-hidden="true"><Settings2 className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-accent)]">Members Stock</p>
-            <h2 id="community-category-title">{editingCommunityCategoryId ? "Edit category" : "Create category"}</h2>
-            <p>Give this member pool a clear name and choose whether orders from it have a support period.</p>
-            <label className="grid gap-2 text-left">
-              <span className={fieldLabelClass}>Category name</span>
-              <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
-            </label>
-            <div className="community-category-appearance" style={getCommunityCategoryAppearance(communityCategoryDraft.colorKey)}>
-              <div className="community-category-appearance-heading"><strong>Appearance</strong><small>Applied when this category is selected in an order.</small></div>
-              <fieldset className="community-category-icon-picker">
-                <legend className={fieldLabelClass}>Icon</legend>
-                <div className="community-category-icon-options">
-                  {Object.entries(COMMUNITY_CATEGORY_ICONS).map(([iconName, Icon]) => (
-                    <button
-                      key={iconName}
-                      type="button"
-                      title={iconName}
-                      aria-label={iconName}
-                      aria-pressed={communityCategoryDraft.iconName === iconName}
-                      className={communityCategoryDraft.iconName === iconName ? "is-selected" : ""}
-                      onClick={() => setCommunityCategoryDraft((current) => ({ ...current, iconName }))}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </button>
-                  ))}
+            <header className="community-category-modal-header">
+              <span className="confirm-modal-icon is-success" aria-hidden="true"><Settings2 className="h-5 w-5" /></span>
+              <div>
+                <p className="app-kicker text-[var(--app-accent)]">Members Stock</p>
+                <h2 id="community-category-title">{editingCommunityCategoryId ? "Edit category" : "Create category"}</h2>
+                <p>Give this member pool a clear name and choose how orders from it behave.</p>
+              </div>
+            </header>
+            <div className="community-category-modal-grid">
+              <div className="community-category-modal-column">
+                <label className="grid gap-2 text-left">
+                  <span className={fieldLabelClass}>Category name</span>
+                  <Input autoFocus value={communityCategoryDraft.name} maxLength={60} placeholder="Example: Premium members" onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, name: event.target.value }))} />
+                </label>
+                <div className="community-category-appearance" style={getCommunityCategoryAppearance(communityCategoryDraft.colorKey)}>
+                  <div className="community-category-appearance-heading"><strong>Appearance</strong><small>Used when this category is selected.</small></div>
+                  <fieldset className="community-category-icon-picker">
+                    <legend className={fieldLabelClass}>Icon</legend>
+                    <div className="community-category-icon-options">
+                      {Object.entries(COMMUNITY_CATEGORY_ICONS).map(([iconName, Icon]) => (
+                        <button key={iconName} type="button" title={iconName} aria-label={iconName} aria-pressed={communityCategoryDraft.iconName === iconName} className={communityCategoryDraft.iconName === iconName ? "is-selected" : ""} onClick={() => setCommunityCategoryDraft((current) => ({ ...current, iconName }))}>
+                          <Icon className="h-4 w-4" />
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
+                  <fieldset className="community-category-color-picker">
+                    <legend className={fieldLabelClass}>Color</legend>
+                    <div className="community-category-color-options">
+                      {COMMUNITY_CATEGORY_COLORS.map((color) => (
+                        <button key={color.key} type="button" title={color.label} aria-label={color.label} aria-pressed={communityCategoryDraft.colorKey === color.key} className={communityCategoryDraft.colorKey === color.key ? "is-selected" : ""} style={{ "--category-tone": color.tone } as CSSProperties} onClick={() => setCommunityCategoryDraft((current) => ({ ...current, colorKey: color.key }))}>
+                          <span />
+                        </button>
+                      ))}
+                    </div>
+                  </fieldset>
                 </div>
-              </fieldset>
-              <fieldset className="community-category-color-picker">
-                <legend className={fieldLabelClass}>Color</legend>
-                <div className="community-category-color-options">
-                  {COMMUNITY_CATEGORY_COLORS.map((color) => (
-                    <button
-                      key={color.key}
-                      type="button"
-                      title={color.label}
-                      aria-label={color.label}
-                      aria-pressed={communityCategoryDraft.colorKey === color.key}
-                      className={communityCategoryDraft.colorKey === color.key ? "is-selected" : ""}
-                      style={{ "--category-tone": color.tone } as CSSProperties}
-                      onClick={() => setCommunityCategoryDraft((current) => ({ ...current, colorKey: color.key }))}
-                    >
-                      <span />
-                    </button>
-                  ))}
+              </div>
+              <div className="community-category-modal-column community-category-rules">
+                <div className="community-category-rule-heading"><strong>Support period</strong><small>Choose whether orders have a support deadline.</small></div>
+                <div className="community-category-period-options">
+                  <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryPeriod" checked={!communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: false }))} />
+                    <Users className="h-4 w-4" /><span><strong>Standard</strong><small>No order support deadline</small></span>
+                  </label>
+                  <label className={communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryPeriod" checked={communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: true }))} />
+                    <Timer className="h-4 w-4" /><span><strong>Period based</strong><small>Duration selected per order</small></span>
+                  </label>
                 </div>
-              </fieldset>
+                <div className="community-category-rule-heading"><strong>Check Members replacement</strong><small>Choose whether a Not Live result grants a replacement.</small></div>
+                <div className="community-category-period-options community-category-replacement-options">
+                  <label className={communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: true }))} />
+                    <RefreshCw className="h-4 w-4" /><span><strong>Enabled</strong><small>Not Live members may be replaced</small></span>
+                  </label>
+                  <label className={!communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={!communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: false }))} />
+                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check is informational only</small></span>
+                  </label>
+                </div>
+                <label className={`onliner-enabled-card ${communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}`}>
+                  <input type="checkbox" checked={communityCategoryDraft.reactionUseEnabled} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: event.target.checked }))} />
+                  <span><strong>Reaction</strong><small>Allow reaction requests for orders using this category.</small></span>
+                </label>
+              </div>
             </div>
-            <div className="community-category-period-options">
-              <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
-                <input className="sr-only" type="radio" name="categoryPeriod" checked={!communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: false }))} />
-                <Users className="h-4 w-4" /><span><strong>Standard</strong><small>No order support deadline</small></span>
-              </label>
-              <label className={communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
-                <input className="sr-only" type="radio" name="categoryPeriod" checked={communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: true }))} />
-                <Timer className="h-4 w-4" /><span><strong>Period based</strong><small>Duration is selected per order</small></span>
-              </label>
-            </div>
-            <div className="community-category-rule-heading">
-              <strong>Check Members replacement</strong>
-              <small>Choose whether a Not Live result grants a replacement for this category.</small>
-            </div>
-            <div className="community-category-period-options community-category-replacement-options">
-              <label className={communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
-                <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: true }))} />
-                <RefreshCw className="h-4 w-4" /><span><strong>Enabled</strong><small>Not Live members may be replaced</small></span>
-              </label>
-              <label className={!communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
-                <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={!communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: false }))} />
-                <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check Members is informational only</small></span>
-              </label>
-            </div>
-            <label className={`onliner-enabled-card ${communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}`}>
-              <input type="checkbox" checked={communityCategoryDraft.reactionUseEnabled} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: event.target.checked }))} />
-              <span><strong>Reaction</strong><small>Allow orders using this category to send reactions. Set the total limit while creating the order, then submit message URLs from Orders or Monitor.</small></span>
-            </label>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={resetCommunityCategoryDraft}>Cancel</Button>
               <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>

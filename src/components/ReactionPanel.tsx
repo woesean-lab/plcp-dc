@@ -134,7 +134,20 @@ export function ReactionPanel({
               <button type="button" aria-label="Decrease reaction amount" disabled={countDraft <= 1} onClick={() => onCountChange(Math.max(1, countDraft - 1))}>
                 <Minus aria-hidden="true" />
               </button>
-              <span className="boost-amount-value" aria-live="polite">{Math.min(countDraft, remaining)}</span>
+              <input
+                className="boost-amount-value"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={remaining}
+                value={Math.min(countDraft, remaining)}
+                aria-label="Reaction amount"
+                onFocus={(event) => event.currentTarget.select()}
+                onChange={(event) => {
+                  const next = Number.parseInt(event.target.value, 10);
+                  onCountChange(Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1);
+                }}
+              />
               <button type="button" aria-label="Increase reaction amount" disabled={countDraft >= remaining} onClick={() => onCountChange(Math.min(remaining, countDraft + 1))}>
                 <Plus aria-hidden="true" />
               </button>
