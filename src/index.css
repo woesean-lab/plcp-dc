@@ -4844,10 +4844,11 @@
     text-transform: uppercase;
   }
   .public-token-humanizer-badge svg { width: 10px; height: 10px; }
-  .public-token-humanizer-badge[data-state="success"],
-  .public-token-humanizer-badge[data-state="partial"] { border-color: rgba(105,221,178,.18); color: #8be0bf; background: rgba(105,221,178,.085); }
+  .public-token-humanizer-badge[data-state="success"] { border-color: rgba(105,221,178,.18); color: #8be0bf; background: rgba(105,221,178,.085); }
+  .public-token-humanizer-badge[data-state="partial"] { border-color: rgba(244,190,78,.28); color: #f4c95e; background: rgba(244,190,78,.09); }
   .public-token-humanizer-badge[data-state="running"] { border-color: var(--app-accent-border); color: var(--app-accent-bright); background: var(--app-accent-soft); }
   .public-token-humanizer-badge[data-state="failed"] { border-color: var(--app-danger-button-border); color: var(--app-danger-text); background: var(--app-danger-soft); }
+  .public-token-humanizer-badge[data-state="pending"] { border-color: var(--app-border); color: var(--app-muted); background: rgba(255,255,255,.03); }
 
   .public-token-result-slots {
     justify-self: center;
