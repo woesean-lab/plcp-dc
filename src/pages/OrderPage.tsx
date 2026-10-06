@@ -1059,6 +1059,11 @@ export default function OrderPage() {
           "📊 Order Monitor:",
           getPublicMonitorLink(target),
           "",
+          ...(reactionCapacity > 0 ? [
+            `✨ EMOJI REACTIONS INCLUDED: ${reactionCapacity} reactions`,
+            "Submit Discord message links from the Order Monitor whenever you are ready.",
+            ""
+          ] : []),
           `⚙️ Delivery Speed: ${deliveryTiming}`
         ].join("\n")
       : [
