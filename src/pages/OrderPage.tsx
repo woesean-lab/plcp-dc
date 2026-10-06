@@ -1404,19 +1404,12 @@ export default function OrderPage() {
             </section>
           ) : null}
 
-          {isCommunityProvider && communityMemberResults.length > 0 ? (
-            <section className="lookup-reaction-limit-control">
-              <span className="lookup-reaction-limit-icon" aria-hidden="true"><MessageSquareText /></span>
-              <div>
-                <span className="app-kicker">Reaction allowance</span>
-                <strong>{reactionCapacity > 0 ? `${reactionCapacity} reactions enabled` : "No reaction limit added"}</strong>
-                <small>{reactionCapacity > 0 ? "Change how many members can be assigned to reaction requests." : "Enable reactions for this existing Members order."}</small>
-              </div>
-              <Button type="button" variant={reactionCapacity > 0 ? "secondary" : "default"} onClick={openReactionLimitModal}>
-                <MessageSquareText className="h-4 w-4" aria-hidden="true" />
-                {reactionCapacity > 0 ? "Edit reaction limit" : "Add reaction limit"}
-              </Button>
-            </section>
+          {isCommunityProvider && communityMemberResults.length > 0 && reactionCapacity <= 0 ? (
+            <div className="lookup-reaction-limit-shortcut">
+              <button className="monitor-reaction-message-link" type="button" onClick={openReactionLimitModal}>
+                <MessageSquareText aria-hidden="true" /> Add reaction limit
+              </button>
+            </div>
           ) : null}
 
           {reactionUseEnabled && reactionCapacity > 0 ? (
@@ -1435,6 +1428,7 @@ export default function OrderPage() {
                 onMessageChange={setReactionMessageDraft}
                 onCountChange={setReactionCountDraft}
                 onSubmit={() => void handleSaveReactionMessage()}
+                onEditLimit={openReactionLimitModal}
               />
             </div>
           ) : null}
