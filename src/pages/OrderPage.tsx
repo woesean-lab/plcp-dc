@@ -8,7 +8,7 @@ import { ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -395,6 +395,7 @@ export default function OrderPage() {
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [dcordReplaceQueue, setDcordReplaceQueue] = useState<number[]>([]);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
+  const [retryingFailedCommunityMembers, setRetryingFailedCommunityMembers] = useState(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [leavingAllCommunityMembers, setLeavingAllCommunityMembers] = useState(false);
   const [showLeaveAllCommunityModal, setShowLeaveAllCommunityModal] = useState(false);
@@ -519,6 +520,7 @@ export default function OrderPage() {
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.membershipStatus !== "removed").length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
+  const failedCommunityMemberCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "failed").length;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
     if (item.onlinerLive !== false) return false;
     const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
@@ -1018,6 +1020,21 @@ export default function OrderPage() {
     }
   }
 
+  async function handleRetryFailedCommunityMembers() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || retryingFailedCommunityMembers || !communityReplacementStatusAllowed || !failedCommunityMemberCount) return;
+    try {
+      setRetryingFailedCommunityMembers(true);
+      const data = await retryFailedCommunityMembers(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success(`${failedCommunityMemberCount} failed member${failedCommunityMemberCount === 1 ? "" : "s"} queued again.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed members could not be retried.");
+    } finally {
+      setRetryingFailedCommunityMembers(false);
+    }
+  }
+
   async function copyBotInvite() {
     if (!botInvite) return;
     try {
@@ -1455,6 +1472,12 @@ export default function OrderPage() {
                         </span>
                       </span>
                     </>
+                  ) : null}
+                  {failedCommunityMemberCount > 0 ? (
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleRetryFailedCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers || retryingFailedCommunityMembers}>
+                      <RotateCcw className={`h-3.5 w-3.5 ${retryingFailedCommunityMembers ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {retryingFailedCommunityMembers ? "Retrying..." : `Retry failed (${failedCommunityMemberCount})`}
+                    </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>

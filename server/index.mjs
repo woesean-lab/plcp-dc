@@ -11340,6 +11340,88 @@ app.post("/api/community/orders/:uniqid/extend", requireSession, async (req, res
   }
 });
 
+app.post("/api/community/orders/:uniqid/retry-failed", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Members order could not be found." });
+    }
+    if (!["PARTIAL", "COMPLETED", "ERROR"].includes(String(order.status ?? "").toUpperCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Wait for the current delivery to finish before retrying failed members." });
+    }
+
+    const failedUserIds = order.communityResults
+      .filter((item) => String(item?.state ?? "").toLowerCase() === "failed" && isDiscordGuildId(String(item?.discordUserId ?? "")))
+      .map((item) => String(item.discordUserId));
+    if (!failedUserIds.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This order has no failed members to retry." });
+    }
+
+    const memberResult = await client.query(
+      `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token,
+              encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+      [order.serverId, failedUserIds]
+    );
+    const retryUserIds = new Set(memberResult.rows.map((member) => String(member.discord_user_id)));
+    if (!retryUserIds.size) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "The failed members are no longer available in Members Stock." });
+    }
+
+    await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
+      [order.serverId, [...retryUserIds], uniqid]
+    );
+    const communityResults = order.communityResults.map((item) => retryUserIds.has(String(item?.discordUserId ?? ""))
+      ? resetCommunityResultVerification(item, {
+          state: "queued",
+          details: "Failed member queued for retry.",
+          completedAt: undefined,
+          retryAttempt: Math.max(0, Number(item?.retryAttempt) || 0) + 1
+        })
+      : item);
+    const added = communityResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length;
+    const retryOrder = {
+      ...order,
+      added,
+      status: "PROCESS",
+      waitingCode: null,
+      details: `${retryUserIds.size} failed member${retryUserIds.size === 1 ? "" : "s"} queued for retry.`,
+      activeDelay: null,
+      nextMemberAt: null,
+      communityResults
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [uniqid, JSON.stringify(retryOrder)]
+    );
+    await client.query("COMMIT");
+
+    const config = normalizeCommunityOAuthConfig({ ...(await getCommunityOAuthConfig()), guildId: String(order.serverId ?? "") });
+    void processCommunityOrder(retryOrder, memberResult.rows, config).catch(async (error) => {
+      console.error("Members retry failed:", error instanceof Error ? error.message : error);
+      await saveTrackedOrderPayload({ ...retryOrder, status: "ERROR", details: error instanceof Error ? error.message : "Members retry failed." }).catch(() => {});
+    });
+    res.set("Cache-Control", "no-store").json(retryOrder);
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => {
   const client = await pool.connect();
   try {

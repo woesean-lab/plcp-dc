@@ -191,6 +191,13 @@ export function replaceAllCommunityMembers(uniqid: string) {
   );
 }
 
+export function retryFailedCommunityMembers(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/community/orders/${encodeURIComponent(uniqid)}/retry-failed`,
+    { method: "POST" }
+  );
+}
+
 export type CommunityMemberCheckResult = {
   order: OrderStatusResponse;
   summary: {
