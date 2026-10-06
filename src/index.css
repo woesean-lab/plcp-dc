@@ -7758,6 +7758,23 @@
 .lookup-humanize-all-modal { width: min(620px, calc(100vw - 2rem)); }
 .lookup-humanize-all-modal .boost-humanizer-package-field { margin-top: 18px; }
 .lookup-humanize-all-modal .boost-humanizer-package-grid { max-height: min(330px, 42vh); overflow-y: auto; }
+.lookup-humanizer-progress {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 14px;
+  margin: 0 18px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-accent-border);
+  border-radius: 10px;
+  color: var(--app-text-secondary);
+  background: var(--app-accent-soft);
+  font-size: 11px;
+}
+.lookup-humanizer-progress > span { display: flex; align-items: center; gap: 7px; font-weight: 700; }
+.lookup-humanizer-progress > span svg { color: var(--app-accent-bright); }
+.lookup-humanizer-progress > strong { color: var(--app-text); font-size: 11px; }
+.lookup-humanizer-progress .humanizer-progress { grid-column: 1 / -1; }
 .lookup-reaction-limit-field { margin-top: 18px; }
 .lookup-reaction-limit-note { display: block; margin-top: 9px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
 

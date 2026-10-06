@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
-import { getHumanizerJob, getHumanizerPackages, startDcordOrderHumanizer, type HumanizerPackage } from "../lib/humanizer";
+import { getHumanizerJob, getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
@@ -413,6 +413,7 @@ export default function OrderPage() {
   const [selectedHumanizerPackageId, setSelectedHumanizerPackageId] = useState("");
   const [loadingHumanizerPackages, setLoadingHumanizerPackages] = useState(false);
   const [humanizingAll, setHumanizingAll] = useState(false);
+  const [humanizerOrderJob, setHumanizerOrderJob] = useState<HumanizerJob | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
@@ -471,6 +472,11 @@ export default function OrderPage() {
   const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const humanizerOrderCompleted = humanizerOrderJob?.completed ?? 0;
+  const humanizerOrderTotal = humanizerOrderJob?.total ?? dcordTokenResults.length;
+  const humanizerOrderProgress = humanizerOrderTotal > 0
+    ? Math.min(100, Math.round((humanizerOrderCompleted / humanizerOrderTotal) * 100))
+    : 0;
   const replaceableDcordTokenIndices = dcordTokenResults
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
@@ -583,6 +589,7 @@ export default function OrderPage() {
       requestRunning = true;
       try {
         const job = await getHumanizerJob(jobId);
+        setHumanizerOrderJob(job);
         if (!active || ["queued", "running"].includes(job.status)) return;
         const target = String(result?.uniqid ?? uniqid).trim();
         if (target) setResult(await getOrderStatus(target, "dcord"));
@@ -727,8 +734,10 @@ export default function OrderPage() {
       return;
     }
     try {
+      setHumanizerOrderJob(null);
       setHumanizingAll(true);
       const data = await startDcordOrderHumanizer(target, selectedHumanizerPackageId);
+      setHumanizerOrderJob(data.job);
       setResult((current) => mergeOrderStatus(current, data.order));
       setShowHumanizeAllModal(false);
       toast.success(`Humanizer started for ${data.job.total} assigned tokens.`);
@@ -1338,7 +1347,7 @@ export default function OrderPage() {
                   {dcordTokenResults.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll}>
                       <Sparkles className={`h-3.5 w-3.5 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
-                      {humanizingAll ? "Humanizing..." : "Humanize all"}
+                      {humanizingAll ? `Humanizing ${humanizerOrderCompleted}/${humanizerOrderTotal || "..."}` : "Humanize all"}
                     </Button>
                   ) : null}
                   {reactionMessageLink ? (
@@ -1355,6 +1364,14 @@ export default function OrderPage() {
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {dcordCompletedTokenCount}/{dcordTokenCount ?? "-"} completed</span>
                 </span>
               </div>
+
+              {humanizingAll ? (
+                <div className="lookup-humanizer-progress" role="status" aria-live="polite">
+                  <span><Sparkles className="h-3.5 w-3.5 animate-pulse" /> Humanizing assigned tokens</span>
+                  <strong>{humanizerOrderCompleted}/{humanizerOrderTotal || "..."}</strong>
+                  <div className="humanizer-progress" aria-label={`${humanizerOrderProgress}% complete`}><span style={{ width: `${humanizerOrderProgress}%` }} /></div>
+                </div>
+              ) : null}
 
               {dcordTokenResults.length ? (
                 <div className="public-token-results-list">
