@@ -634,18 +634,16 @@ export default function OrderPage() {
   }
 
   function openReactionLimitModal() {
-    const maximum = Math.max(1, communityMemberResults.length);
-    setReactionLimitDraft(Math.min(maximum, Math.max(1, reactionCapacity || totalAmount || maximum)));
+    setReactionLimitDraft(Math.max(1, reactionCapacity || totalAmount || 1));
     setShowReactionLimitModal(true);
   }
 
   async function handleUpdateReactionLimit() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    const maximum = communityMemberResults.length;
     const minimum = Math.max(1, reactionAssignedCount);
     if (!target || !isCommunityProvider || updatingReactionLimit) return;
-    if (!Number.isInteger(reactionLimitDraft) || reactionLimitDraft < minimum || reactionLimitDraft > maximum) {
-      toast.error(`Choose a reaction limit between ${minimum} and ${maximum}.`);
+    if (!Number.isSafeInteger(reactionLimitDraft) || reactionLimitDraft < minimum) {
+      toast.error(`Choose a reaction limit of at least ${minimum}.`);
       return;
     }
     try {
@@ -1477,7 +1475,7 @@ export default function OrderPage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><MessageSquareText className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
             <h2 id="reaction-limit-title">{reactionCapacity > 0 ? "Edit reaction limit" : "Add reaction limit"}</h2>
-            <p>Choose how many of this order’s <strong>{communityMemberResults.length}</strong> members can be assigned to reaction requests.</p>
+            <p>Set the total reaction allowance for this order. This limit is independent from the order’s member count.</p>
             <label className="boost-order-field lookup-reaction-limit-field">
               <span className="boost-order-label">Reaction limit</span>
               <input
@@ -1485,7 +1483,6 @@ export default function OrderPage() {
                 className="boost-number-input"
                 type="number"
                 min={Math.max(1, reactionAssignedCount)}
-                max={communityMemberResults.length}
                 value={reactionLimitDraft}
                 onChange={(event) => setReactionLimitDraft(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
               />

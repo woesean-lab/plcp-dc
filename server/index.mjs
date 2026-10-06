@@ -11021,10 +11021,13 @@ async function updateCommunityReactionMessage(req, res, next) {
     const hasExplicitReactionCapacity = Number.isInteger(Number(order.reactionCapacity));
     const isReactionAvailable = (item) => item?.reactionAvailable === true
       || (!hasExplicitReactionCapacity && reactionEnabledCategoryIds.has(String(item?.categoryId ?? order.categoryId ?? "")));
-    const reactionCapacity = order.communityResults.filter(isReactionAvailable).length;
+    const availableMemberCount = order.communityResults.filter(isReactionAvailable).length;
+    const reactionCapacity = hasExplicitReactionCapacity
+      ? Math.max(0, Number(order.reactionCapacity))
+      : availableMemberCount;
     const assignedCount = order.communityResults.filter((item) => item?.reactionEligible === true).length;
     const remainingCount = Math.max(0, reactionCapacity - assignedCount);
-    if (!reactionCapacity) {
+    if (!reactionCapacity || !availableMemberCount) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "Reaction use is not enabled for any category in this order." });
     }
@@ -11105,14 +11108,13 @@ app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (r
       return res.status(404).json({ message: "Members order could not be found." });
     }
 
-    const maximumLimit = order.communityResults.length;
     const assignedCount = order.communityResults.filter((item) => item?.reactionEligible === true).length;
-    if (!Number.isInteger(reactionLimit) || reactionLimit < Math.max(1, assignedCount) || reactionLimit > maximumLimit) {
+    if (!Number.isSafeInteger(reactionLimit) || reactionLimit < Math.max(1, assignedCount)) {
       await client.query("ROLLBACK");
       return res.status(400).json({
         message: assignedCount > 0
-          ? `Choose a reaction limit between ${assignedCount} and ${maximumLimit}.`
-          : `Choose a reaction limit between 1 and ${maximumLimit}.`
+          ? `Choose a reaction limit of at least ${assignedCount}.`
+          : "Choose a reaction limit of at least 1."
       });
     }
 
