@@ -495,9 +495,9 @@ export default function OrderPage() {
   const reactionCapacity = typeof result?.reactionCapacity === "number"
     ? result.reactionCapacity
     : categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + allocation.amount : total, 0);
-  const reactionUseEnabled = reactionCapacity > 0
-    || communityMemberResults.some((item) => item.reactionEligible)
+  const reactionCategoryEnabled = communityMemberResults.some((item) => item.reactionEligible)
     || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
+  const reactionUseEnabled = reactionCategoryEnabled && reactionCapacity > 0;
   const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
   const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
   const legacyReactionMembers = communityMemberResults.filter((item) => item.reactionEligible);
@@ -1635,7 +1635,7 @@ export default function OrderPage() {
             </section>
           ) : null}
 
-          {isCommunityProvider && communityMemberResults.length > 0 && reactionCapacity <= 0 ? (
+          {isCommunityProvider && reactionCategoryEnabled && communityMemberResults.length > 0 && reactionCapacity <= 0 ? (
             <div className="lookup-reaction-limit-shortcut">
               <button className="monitor-reaction-message-link" type="button" onClick={openReactionLimitModal}>
                 <MessageSquareText aria-hidden="true" /> Add reaction limit
@@ -1643,7 +1643,7 @@ export default function OrderPage() {
             </div>
           ) : null}
 
-          {reactionUseEnabled && reactionCapacity > 0 ? (
+          {reactionUseEnabled ? (
             <div className="lookup-reaction-section">
               <ReactionPanel
                 className="is-orders"

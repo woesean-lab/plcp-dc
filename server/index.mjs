@@ -11315,6 +11315,14 @@ app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (r
       return res.status(404).json({ message: "Members order could not be found." });
     }
 
+    const reactionCategoryEnabled = (Array.isArray(order.categoryAllocations)
+      && order.categoryAllocations.some((allocation) => allocation?.reactionUseEnabled === true))
+      || order.communityResults.some((item) => item?.reactionEligible === true || item?.reactionAvailable === true);
+    if (!reactionCategoryEnabled) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Reaction limits are not enabled for this order's category." });
+    }
+
     const assignedCount = order.communityResults.filter((item) => item?.reactionEligible === true).length;
     if (!Number.isSafeInteger(reactionLimit) || reactionLimit < Math.max(1, assignedCount)) {
       await client.query("ROLLBACK");
