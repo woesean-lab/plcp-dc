@@ -104,6 +104,16 @@ export interface OrderStatusResponse {
   durationMonths?: number | null;
   error?: string;
   canManageDcordTokens?: boolean;
+  dcordRejoinJob?: {
+    status: "running" | "completed" | "partial" | "failed" | string;
+    total: number;
+    completed: number;
+    succeeded: number;
+    failed: number;
+    startedAt?: string;
+    completedAt?: string;
+    error?: string;
+  };
   canManageCommunityMembers?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;

@@ -138,6 +138,13 @@ export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
   );
 }
 
+export function rejoinDcordBoostOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/rejoin`,
+    { method: "POST" }
+  );
+}
+
 export function resumeDcordBoostOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(
     `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/resume`,

@@ -7032,6 +7032,65 @@ async function runDcordBoostToken(token, invite, options = {}) {
   }
 }
 
+const dcordRejoinJobs = new Set();
+
+async function saveDcordRejoinJob(orderId, job) {
+  const updated = await pool.query(
+    `UPDATE tracked_orders
+     SET payload = jsonb_set(payload, '{dcordRejoinJob}', $2::jsonb, TRUE), updated_at = NOW()
+     WHERE uniqid = $1
+     RETURNING payload`,
+    [orderId, JSON.stringify(job)]
+  );
+  return updated.rows[0]?.payload ?? null;
+}
+
+async function runDcordOrderRejoin(order, tokens, proxies) {
+  const orderId = String(order?.uniqid ?? "").trim();
+  const invite = String(order?.serverInvite ?? "").trim();
+  const results = tokens.map((token, index) => ({
+    index,
+    token: redactToken(token),
+    state: "waiting",
+    message: "Waiting to re-join."
+  }));
+  const startedAt = new Date().toISOString();
+  const createJob = (status = "running", completedAt) => {
+    const completed = results.filter((item) => item.state !== "waiting" && item.state !== "running").length;
+    const succeeded = results.filter((item) => item.state === "success").length;
+    const failed = results.filter((item) => item.state === "failed").length;
+    return { status, total: results.length, completed, succeeded, failed, startedAt, ...(completedAt ? { completedAt } : {}), results };
+  };
+
+  await saveDcordRejoinJob(orderId, createJob());
+  try {
+    await forEachWithConcurrency(tokens, Math.min(5, normalizeDcordBoostConcurrency(order?.concurrency)), async (token, index) => {
+      results[index] = { ...results[index], state: "running", message: "Dcord join request is running." };
+      await saveDcordRejoinJob(orderId, createJob());
+      const proxy = order?.useProxy === true ? normalizeDcordProxyForDcord(proxies[index]) : "";
+      const response = await runDcordBoostToken(token, invite, { boost: false, proxy });
+      const succeeded = response?.success === true || ["joined", "already joined", "already_member", "already member"].includes(String(response?.joinStatus ?? "").toLowerCase());
+      results[index] = {
+        index,
+        token: redactToken(token),
+        state: succeeded ? "success" : "failed",
+        joinStatus: String(response?.joinStatus ?? response?.status ?? (succeeded ? "joined" : "failed")),
+        message: String(response?.boostMessage ?? (succeeded ? "Re-joined successfully." : "Re-join failed.")),
+        dcordTaskId: response?.dcordTaskId
+      };
+      await saveDcordRejoinJob(orderId, createJob());
+    });
+    const finalJob = createJob(results.some((item) => item.state === "failed") ? "partial" : "completed", new Date().toISOString());
+    await saveDcordRejoinJob(orderId, finalJob);
+  } catch (error) {
+    const failedJob = createJob("failed", new Date().toISOString());
+    failedJob.error = error instanceof Error ? error.message : "Re-join failed.";
+    await saveDcordRejoinJob(orderId, failedJob);
+  } finally {
+    dcordRejoinJobs.delete(orderId);
+  }
+}
+
 async function processDcordBoostOrder(order, tokens, invite) {
   const orderId = String(order?.uniqid ?? "").trim();
   if (!orderId || dcordOrderProcessingJobs.has(orderId)) return;
@@ -12704,6 +12763,47 @@ app.post("/api/dcord/boost-orders/:uniqid/humanize", requireSession, async (req,
       order: await revealDcordOrderTokens(runningOrder),
       job: getHumanizerJobSnapshot(humanizerJobs.get(jobId))
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-orders/:uniqid/rejoin", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid boost order ID is required." });
+    if (dcordRejoinJobs.has(uniqid)) return res.status(409).json({ message: "This order is already re-joining." });
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || (order.provider !== "dcord" && order.service !== "DCORD-BOOSTS")) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (!["COMPLETED", "PARTIAL", "ERROR"].includes(String(order.status ?? "").toUpperCase())) {
+      return res.status(409).json({ message: "Wait until boost delivery finishes before using Re-join." });
+    }
+
+    const tokens = await loadDcordOrderTokens(uniqid);
+    const proxies = await loadDcordOrderProxies(uniqid);
+    if (!tokens.length) return res.status(409).json({ message: "This order has no assigned tokens to re-join." });
+    if (!String(order.serverInvite ?? "").trim()) return res.status(409).json({ message: "This order has no Discord invite." });
+
+    const initialJob = {
+      status: "running",
+      total: tokens.length,
+      completed: 0,
+      succeeded: 0,
+      failed: 0,
+      startedAt: new Date().toISOString(),
+      results: tokens.map((token, index) => ({ index, token: redactToken(token), state: "waiting", message: "Waiting to re-join." }))
+    };
+    const runningOrder = await saveDcordRejoinJob(uniqid, initialJob);
+    dcordRejoinJobs.add(uniqid);
+    void runDcordOrderRejoin(order, tokens, proxies).catch((error) => {
+      dcordRejoinJobs.delete(uniqid);
+      console.error("Dcord order re-join failed:", error instanceof Error ? error.message : error);
+    });
+    res.status(202).json(await revealDcordOrderTokens(runningOrder));
   } catch (error) {
     next(error);
   }

@@ -5,10 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReactionPanel } from "@/components/ReactionPanel";
-import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -386,6 +386,7 @@ export default function OrderPage() {
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
+  const [startingDcordRejoin, setStartingDcordRejoin] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
   const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
   const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
@@ -474,6 +475,8 @@ export default function OrderPage() {
   const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
+  const dcordRejoinJob = result?.dcordRejoinJob;
+  const dcordRejoinRunning = dcordRejoinJob?.status === "running";
   const storedHumanizerOrderJob = result?.humanizerJob && typeof result.humanizerJob === "object" && !Array.isArray(result.humanizerJob)
     ? result.humanizerJob as HumanizerJob
     : null;
@@ -622,6 +625,32 @@ export default function OrderPage() {
       window.clearInterval(timer);
     };
   }, [result?.humanizerJobId, result?.humanizerStatus, result?.uniqid, uniqid]);
+
+  useEffect(() => {
+    if (!dcordRejoinRunning) return;
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target) return;
+    let active = true;
+    let requestRunning = false;
+    const poll = async () => {
+      if (requestRunning) return;
+      requestRunning = true;
+      try {
+        const updated = await getOrderStatus(target, "dcord");
+        if (active) setResult((current) => mergeOrderStatus(current, updated));
+      } catch {
+        // Keep the latest progress visible and retry on the next poll.
+      } finally {
+        requestRunning = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 1_000);
+    void poll();
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [dcordRejoinRunning, result?.uniqid, uniqid]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -866,6 +895,21 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Dcord delivery could not be resumed.");
     } finally {
       setResumingDcordOrder(false);
+    }
+  }
+
+  async function handleRejoinDcordOrder() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || startingDcordRejoin || dcordRejoinRunning) return;
+    try {
+      setStartingDcordRejoin(true);
+      const data = await rejoinDcordBoostOrder(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success("Re-join started. Boost delivery will not run.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Re-join could not be started.");
+    } finally {
+      setStartingDcordRejoin(false);
     }
   }
 
@@ -1375,6 +1419,16 @@ export default function OrderPage() {
                   <h3>Per-token boost log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
+                  {["COMPLETED", "PARTIAL", "ERROR"].includes(normalizedStatus) && dcordTokenResults.length ? (
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleRejoinDcordOrder()} disabled={startingDcordRejoin || dcordRejoinRunning}>
+                      <LogIn className={`h-3.5 w-3.5 ${dcordRejoinRunning ? "animate-pulse" : ""}`} aria-hidden="true" />
+                      {startingDcordRejoin
+                        ? "Starting..."
+                        : dcordRejoinRunning
+                          ? `Re-joining ${dcordRejoinJob?.completed ?? 0}/${dcordRejoinJob?.total ?? dcordTokenResults.length}`
+                          : "Re-join all"}
+                    </Button>
+                  ) : null}
                   {dcordTokenResults.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll || allOrderTokensHumanized}>
                       <Sparkles className={`h-3.5 w-3.5 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
