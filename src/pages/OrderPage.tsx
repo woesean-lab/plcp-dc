@@ -5,11 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ReactionPanel } from "@/components/ReactionPanel";
-import { Activity, Bot, CalendarPlus, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
+import { getHumanizerJob, getHumanizerPackages, startDcordOrderHumanizer, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
@@ -407,6 +408,11 @@ export default function OrderPage() {
   const [showReactionLimitModal, setShowReactionLimitModal] = useState(false);
   const [reactionLimitDraft, setReactionLimitDraft] = useState(1);
   const [updatingReactionLimit, setUpdatingReactionLimit] = useState(false);
+  const [showHumanizeAllModal, setShowHumanizeAllModal] = useState(false);
+  const [humanizerPackages, setHumanizerPackages] = useState<HumanizerPackage[]>([]);
+  const [selectedHumanizerPackageId, setSelectedHumanizerPackageId] = useState("");
+  const [loadingHumanizerPackages, setLoadingHumanizerPackages] = useState(false);
+  const [humanizingAll, setHumanizingAll] = useState(false);
   const [pageLoading, setPageLoading] = useState(true);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(2);
   const refreshInFlightRef = useRef(false);
@@ -552,17 +558,49 @@ export default function OrderPage() {
   }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal && !showReactionLimitModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal && !showReactionLimitModal && !showHumanizeAllModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
       if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
       if (event.key === "Escape" && !leavingAllCommunityMembers) setShowLeaveAllCommunityModal(false);
       if (event.key === "Escape" && !updatingReactionLimit) setShowReactionLimitModal(false);
+      if (event.key === "Escape" && !humanizingAll) setShowHumanizeAllModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, showReactionLimitModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers, updatingReactionLimit]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, showReactionLimitModal, showHumanizeAllModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers, updatingReactionLimit, humanizingAll]);
+
+  useEffect(() => {
+    const jobId = typeof result?.humanizerJobId === "string" ? result.humanizerJobId : "";
+    const status = String(result?.humanizerStatus ?? "").toLowerCase();
+    if (!jobId || !["queued", "running"].includes(status)) return;
+    setHumanizingAll(true);
+    let active = true;
+    let requestRunning = false;
+    const poll = async () => {
+      if (requestRunning) return;
+      requestRunning = true;
+      try {
+        const job = await getHumanizerJob(jobId);
+        if (!active || ["queued", "running"].includes(job.status)) return;
+        const target = String(result?.uniqid ?? uniqid).trim();
+        if (target) setResult(await getOrderStatus(target, "dcord"));
+        setHumanizingAll(false);
+        toast.success(`Humanizer finished: ${job.succeeded}/${job.total} tokens updated.`);
+      } catch {
+        // Keep the order page usable while the job endpoint is temporarily unavailable.
+      } finally {
+        requestRunning = false;
+      }
+    };
+    const timer = window.setInterval(() => void poll(), 1_000);
+    void poll();
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [result?.humanizerJobId, result?.humanizerStatus, result?.uniqid, uniqid]);
 
   useEffect(() => {
     const target = String(result?.uniqid ?? uniqid).trim();
@@ -663,6 +701,40 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Reaction limit could not be updated.");
     } finally {
       setUpdatingReactionLimit(false);
+    }
+  }
+
+  async function openHumanizeAllModal() {
+    setShowHumanizeAllModal(true);
+    if (humanizerPackages.length || loadingHumanizerPackages) return;
+    try {
+      setLoadingHumanizerPackages(true);
+      const packages = await getHumanizerPackages();
+      setHumanizerPackages(packages);
+      setSelectedHumanizerPackageId((current) => current || packages[0]?.id || "");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Humanizer packages could not be loaded.");
+    } finally {
+      setLoadingHumanizerPackages(false);
+    }
+  }
+
+  async function handleHumanizeAll() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || humanizingAll) return;
+    if (!selectedHumanizerPackageId) {
+      toast.error("Choose a Humanizer package.");
+      return;
+    }
+    try {
+      setHumanizingAll(true);
+      const data = await startDcordOrderHumanizer(target, selectedHumanizerPackageId);
+      setResult((current) => mergeOrderStatus(current, data.order));
+      setShowHumanizeAllModal(false);
+      toast.success(`Humanizer started for ${data.job.total} assigned tokens.`);
+    } catch (error) {
+      setHumanizingAll(false);
+      toast.error(error instanceof Error ? error.message : "Humanizer could not be started.");
     }
   }
 
@@ -1258,6 +1330,12 @@ export default function OrderPage() {
                   <h3>Per-token boost log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
+                  {dcordTokenResults.length ? (
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll}>
+                      <Sparkles className={`h-3.5 w-3.5 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
+                      {humanizingAll ? "Humanizing..." : "Humanize all"}
+                    </Button>
+                  ) : null}
                   {reactionMessageLink ? (
                     <Button asChild className="member-log-action-button" variant="secondary" size="xs">
                       <a href={reactionMessageLink} target="_blank" rel="noreferrer"><MessageSquareText className="h-3.5 w-3.5" /> Reaction message</a>
@@ -1473,6 +1551,56 @@ export default function OrderPage() {
           </div>
         </div>
       )}
+      {showHumanizeAllModal ? createPortal(
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !humanizingAll) setShowHumanizeAllModal(false);
+          }}
+        >
+          <div className="confirm-modal lookup-humanize-all-modal" role="dialog" aria-modal="true" aria-labelledby="humanize-all-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Sparkles className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Boost Humanizer</p>
+            <h2 id="humanize-all-title">Humanize all tokens</h2>
+            <p>Apply a saved package to all <strong>{dcordTokenResults.length}</strong> tokens using the proxies already assigned to this order.</p>
+            <div className="boost-humanizer-package-field">
+              <span className="boost-order-label">Humanizer package</span>
+              {loadingHumanizerPackages ? (
+                <div className="boost-humanizer-package-empty"><Sparkles className="h-4 w-4 animate-pulse" /> Loading packages...</div>
+              ) : humanizerPackages.length ? (
+                <div className="boost-humanizer-package-grid">
+                  {humanizerPackages.map((humanizerPackage) => {
+                    const selected = selectedHumanizerPackageId === humanizerPackage.id;
+                    return (
+                      <button
+                        key={humanizerPackage.id}
+                        type="button"
+                        className={selected ? "is-selected" : ""}
+                        aria-pressed={selected}
+                        onClick={() => setSelectedHumanizerPackageId(humanizerPackage.id)}
+                      >
+                        <span><Sparkles className="h-4 w-4" /><strong>{humanizerPackage.name}</strong></span>
+                        <small>{humanizerPackage.enabledFields.length} profile field{humanizerPackage.enabledFields.length === 1 ? "" : "s"} · {humanizerPackage.concurrency} workers</small>
+                        {selected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="boost-humanizer-package-empty">No saved package found. Create one from the Humanizer page first.</div>
+              )}
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" disabled={humanizingAll} onClick={() => setShowHumanizeAllModal(false)}>Cancel</Button>
+              <Button type="button" disabled={humanizingAll || loadingHumanizerPackages || !selectedHumanizerPackageId} onClick={() => void handleHumanizeAll()}>
+                <Sparkles className={`h-4 w-4 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
+                {humanizingAll ? "Starting..." : "Humanize all"}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
       {showReactionLimitModal ? createPortal(
         <div
           className="confirm-modal-backdrop"

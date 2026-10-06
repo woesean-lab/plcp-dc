@@ -851,7 +851,7 @@ async function runHumanizerJob(job, accounts, options) {
   job.completedAt = new Date().toISOString();
 }
 
-async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow) {
+async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow, jobId = crypto.randomUUID()) {
   const payload = packageRow?.payload && typeof packageRow.payload === "object" ? packageRow.payload : {};
   const enabledFields = new Set(normalizeHumanizerEnabledFields(payload.enabledFields, payload));
   const accounts = tokens.map((stockToken, index) => {
@@ -872,7 +872,7 @@ async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow) {
     };
   });
   const job = {
-    id: crypto.randomUUID(),
+    id: jobId,
     status: "queued",
     createdAt: new Date().toISOString(),
     startedAt: null,
@@ -12452,6 +12452,88 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
     }
 
     res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(payload));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/dcord/boost-orders/:uniqid/humanize", requireSession, async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    const packageId = String(req.body?.packageId ?? "").trim();
+    if (!uniqid || uniqid.length > 160 || !packageId) {
+      return res.status(400).json({ message: "A valid boost order and Humanizer package are required." });
+    }
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || typeof order !== "object" || Array.isArray(order) || (order.provider !== "dcord" && order.service !== "DCORD-BOOSTS")) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    if (order.humanizerStatus === "running" || order.humanizerStatus === "queued") {
+      return res.status(409).json({ message: "Humanizer is already running for this order." });
+    }
+
+    const packageResult = await pool.query(
+      "SELECT id, name, payload, created_at, updated_at FROM humanizer_packages WHERE id = $1 LIMIT 1",
+      [packageId]
+    );
+    const humanizerPackage = packageResult.rows[0];
+    if (!humanizerPackage) return res.status(404).json({ message: "The selected Humanizer package could not be found." });
+
+    const tokens = await loadDcordOrderTokens(uniqid);
+    const proxies = await loadDcordOrderProxies(uniqid);
+    if (!tokens.length) return res.status(409).json({ message: "This order has no assigned boost tokens." });
+    if (proxies.length < tokens.length) {
+      return res.status(409).json({ message: "One or more assigned order proxies are missing." });
+    }
+    const invalidAssignmentIndex = tokens.findIndex((token, index) =>
+      !extractDcordApiToken(token) || !normalizeDiscordOnlinerProxyUrl(proxies[index])
+    );
+    if (invalidAssignmentIndex >= 0) {
+      return res.status(409).json({ message: `Token ${invalidAssignmentIndex + 1} has an invalid token or assigned proxy.` });
+    }
+
+    const jobId = crypto.randomUUID();
+    const startedAt = new Date().toISOString();
+    const runningOrder = {
+      ...order,
+      humanizerPackageId: humanizerPackage.id,
+      humanizerPackageName: humanizerPackage.name,
+      humanizerStatus: "running",
+      humanizerJobId: jobId,
+      humanizerStartedAt: startedAt,
+      humanizerCompletedAt: null,
+      humanizerError: null
+    };
+    await saveTrackedOrderPayload(runningOrder);
+
+    void runDcordOrderHumanizer(uniqid, tokens, proxies, humanizerPackage, jobId)
+      .then(async (humanizerJob) => {
+        const latest = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+        const latestOrder = latest.rows[0]?.payload ?? runningOrder;
+        await saveTrackedOrderPayload({
+          ...latestOrder,
+          humanizerStatus: humanizerJob.failed > 0 ? "partial" : "completed",
+          humanizerCompletedAt: new Date().toISOString(),
+          humanizerJob
+        });
+      })
+      .catch(async (error) => {
+        const latest = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]).catch(() => ({ rows: [] }));
+        const latestOrder = latest.rows[0]?.payload ?? runningOrder;
+        await saveTrackedOrderPayload({
+          ...latestOrder,
+          humanizerStatus: "failed",
+          humanizerCompletedAt: new Date().toISOString(),
+          humanizerError: error instanceof Error ? error.message : "Humanizer failed."
+        }).catch(() => {});
+      });
+
+    res.status(202).set("Cache-Control", "no-store").json({
+      order: await revealDcordOrderTokens(runningOrder),
+      job: getHumanizerJobSnapshot(humanizerJobs.get(jobId))
+    });
   } catch (error) {
     next(error);
   }

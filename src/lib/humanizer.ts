@@ -149,3 +149,12 @@ export function startHumanizerJob(input: HumanizerJobInput) {
     body: JSON.stringify(input)
   }).then(parseResponse<HumanizerJob>);
 }
+
+export function startDcordOrderHumanizer(uniqid: string, packageId: string) {
+  return fetch(`/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/humanize`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ packageId })
+  }).then(parseResponse<{ order: import("../types").OrderStatusResponse; job: HumanizerJob }>);
+}
