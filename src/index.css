@@ -1178,62 +1178,6 @@
     text-transform: none;
   }
 
-  .member-check-progress {
-    display: grid;
-    grid-template-columns: auto minmax(90px, 190px);
-    align-items: center;
-    justify-content: end;
-    gap: .65rem;
-    margin-top: .65rem;
-    color: var(--app-muted);
-    font-size: 10px;
-  }
-
-  .member-check-progress-copy {
-    display: inline-flex;
-    align-items: center;
-    gap: .35rem;
-    white-space: nowrap;
-  }
-
-  .member-check-progress-copy svg,
-  .member-check-progress-copy strong {
-    color: var(--app-accent-bright);
-  }
-
-  .member-check-progress-copy strong {
-    font-size: 10px;
-    font-weight: 650;
-  }
-
-  .member-check-progress-copy small {
-    color: var(--app-muted);
-    font-size: 9px;
-  }
-
-  .member-check-progress-track {
-    height: 5px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, .07);
-  }
-
-  .member-check-progress-track i {
-    display: block;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, var(--app-accent), var(--app-accent-bright));
-    box-shadow: 0 0 12px var(--app-accent-soft);
-    transition: width .35s ease;
-  }
-
-  @media (max-width: 639px) {
-    .member-check-progress {
-      grid-template-columns: minmax(0, 1fr);
-      justify-content: stretch;
-    }
-  }
-
   .member-check-control {
     position: relative;
     display: inline-flex;

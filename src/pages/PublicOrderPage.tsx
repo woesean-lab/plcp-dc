@@ -1080,18 +1080,6 @@ export default function PublicOrderPage() {
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>
-                    {checkingCommunityMembers ? (
-                      <div className="member-check-progress" role="status" aria-live="polite">
-                        <span className="member-check-progress-copy">
-                          <ShieldCheck className="h-3.5 w-3.5 animate-pulse" aria-hidden="true" />
-                          <strong>Checking members</strong>
-                          <small>{communityMemberCheckProgress?.checked ?? 0}/{communityMemberCheckProgress?.total || communityMemberResults.length || 0}</small>
-                        </span>
-                        <span className="member-check-progress-track" aria-hidden="true">
-                          <i style={{ width: `${Math.min(100, Math.max(0, ((communityMemberCheckProgress?.checked ?? 0) / Math.max(communityMemberCheckProgress?.total || communityMemberResults.length || 1, 1)) * 100))}%` }} />
-                        </span>
-                      </div>
-                    ) : null}
                     {communityCheckNeedsBot && botInvite ? (
                       <div className="monitor-member-check-bot-alert" role="alert">
                         <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check or replace members.</strong></span>
