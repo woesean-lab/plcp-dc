@@ -794,7 +794,7 @@ export default function HomePage() {
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const previousReactionMemberAmountRef = useRef(EMPTY_FORM.amount);
+  const reactionLimitManuallyEditedRef = useRef(false);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -888,13 +888,11 @@ export default function HomePage() {
   );
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   useEffect(() => {
-    const amountChanged = previousReactionMemberAmountRef.current !== form.amount;
-    previousReactionMemberAmountRef.current = form.amount;
     if (!selectedIsCommunity || !selectedCommunityHasReaction || selectedCommunityReactionCapacity < 1) return;
     setForm((current) => {
-      const nextLimit = amountChanged
-        ? Math.min(current.amount, selectedCommunityReactionCapacity)
-        : Math.min(current.reactionLimit, selectedCommunityReactionCapacity);
+      const nextLimit = reactionLimitManuallyEditedRef.current
+        ? Math.min(current.reactionLimit, selectedCommunityReactionCapacity)
+        : Math.min(current.amount, selectedCommunityReactionCapacity);
       return current.reactionLimit === nextLimit ? current : { ...current, reactionLimit: Math.max(1, nextLimit) };
     });
   }, [form.amount, selectedCommunityHasReaction, selectedCommunityReactionCapacity, selectedIsCommunity]);
@@ -3699,7 +3697,21 @@ export default function HomePage() {
                           {selectedIsCommunity && selectedCommunityHasReaction ? (
                             <label className="boost-order-field community-order-reaction-limit-field">
                               <span className="boost-order-label">Reaction limit</span>
-                              <input className="boost-number-input" type="number" min={1} max={selectedCommunityReactionCapacity} value={Math.min(form.reactionLimit, selectedCommunityReactionCapacity)} onChange={(event) => setForm((current) => ({ ...current, reactionLimit: Math.min(selectedCommunityReactionCapacity, Math.max(1, Number.parseInt(event.target.value, 10) || 1)) }))} required />
+                              <input
+                                className="boost-number-input"
+                                type="number"
+                                min={1}
+                                max={selectedCommunityReactionCapacity}
+                                value={Math.min(form.reactionLimit, selectedCommunityReactionCapacity)}
+                                onChange={(event) => {
+                                  reactionLimitManuallyEditedRef.current = true;
+                                  setForm((current) => ({
+                                    ...current,
+                                    reactionLimit: Math.min(selectedCommunityReactionCapacity, Math.max(1, Number.parseInt(event.target.value, 10) || 1))
+                                  }));
+                                }}
+                                required
+                              />
                             </label>
                           ) : null}
 
