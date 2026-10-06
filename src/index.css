@@ -4825,6 +4825,30 @@
     background: var(--app-danger-soft);
   }
 
+  .public-token-result-title { display: flex; min-width: 0; align-items: center; gap: 8px; }
+  .public-token-result-title > strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .public-token-humanizer-badge {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    padding: 3px 6px;
+    color: var(--app-muted);
+    background: rgba(255,255,255,.03);
+    font-size: 8px;
+    font-weight: 800;
+    letter-spacing: .035em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+  .public-token-humanizer-badge svg { width: 10px; height: 10px; }
+  .public-token-humanizer-badge[data-state="success"],
+  .public-token-humanizer-badge[data-state="partial"] { border-color: rgba(105,221,178,.18); color: #8be0bf; background: rgba(105,221,178,.085); }
+  .public-token-humanizer-badge[data-state="running"] { border-color: var(--app-accent-border); color: var(--app-accent-bright); background: var(--app-accent-soft); }
+  .public-token-humanizer-badge[data-state="failed"] { border-color: var(--app-danger-button-border); color: var(--app-danger-text); background: var(--app-danger-soft); }
+
   .public-token-result-slots {
     justify-self: center;
     color: var(--app-text-secondary);
@@ -7758,23 +7782,6 @@
 .lookup-humanize-all-modal { width: min(620px, calc(100vw - 2rem)); }
 .lookup-humanize-all-modal .boost-humanizer-package-field { margin-top: 18px; }
 .lookup-humanize-all-modal .boost-humanizer-package-grid { max-height: min(330px, 42vh); overflow-y: auto; }
-.lookup-humanizer-progress {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px 14px;
-  margin: 0 18px 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--app-accent-border);
-  border-radius: 10px;
-  color: var(--app-text-secondary);
-  background: var(--app-accent-soft);
-  font-size: 11px;
-}
-.lookup-humanizer-progress > span { display: flex; align-items: center; gap: 7px; font-weight: 700; }
-.lookup-humanizer-progress > span svg { color: var(--app-accent-bright); }
-.lookup-humanizer-progress > strong { color: var(--app-text); font-size: 11px; }
-.lookup-humanizer-progress .humanizer-progress { grid-column: 1 / -1; }
 .lookup-reaction-limit-field { margin-top: 18px; }
 .lookup-reaction-limit-note { display: block; margin-top: 9px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
 

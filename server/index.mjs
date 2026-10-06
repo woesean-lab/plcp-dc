@@ -844,14 +844,20 @@ async function runHumanizerJob(job, accounts, options) {
     } finally {
       result.completedAt = new Date().toISOString();
       job.completed += 1;
+      if (typeof options.onProgress === "function") {
+        await options.onProgress(getHumanizerJobSnapshot(job)).catch(() => {});
+      }
     }
   });
 
   job.status = "completed";
   job.completedAt = new Date().toISOString();
+  if (typeof options.onProgress === "function") {
+    await options.onProgress(getHumanizerJobSnapshot(job)).catch(() => {});
+  }
 }
 
-async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow, jobId = crypto.randomUUID()) {
+async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow, jobId = crypto.randomUUID(), onProgress = null) {
   const payload = packageRow?.payload && typeof packageRow.payload === "object" ? packageRow.payload : {};
   const enabledFields = new Set(normalizeHumanizerEnabledFields(payload.enabledFields, payload));
   const accounts = tokens.map((stockToken, index) => {
@@ -904,7 +910,8 @@ async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow, jobI
     pronouns: enabledFields.has("pronouns") && Array.isArray(payload.pronouns) ? payload.pronouns : [],
     avatarIds: enabledFields.has("avatar") && Array.isArray(payload.avatars) ? payload.avatars.map((avatar) => String(avatar?.id ?? "")).filter(Boolean) : [],
     hypesquad: enabledFields.has("hypesquad") && ["random", "bravery", "brilliance", "balance"].includes(payload.hypesquad) ? payload.hypesquad : null,
-    concurrency: Math.min(Math.max(Number.parseInt(payload.concurrency, 10) || 1, 1), 5)
+    concurrency: Math.min(Math.max(Number.parseInt(payload.concurrency, 10) || 1, 1), 5),
+    onProgress
   });
   return getHumanizerJobSnapshot(job);
 }
@@ -12508,7 +12515,16 @@ app.post("/api/dcord/boost-orders/:uniqid/humanize", requireSession, async (req,
     };
     await saveTrackedOrderPayload(runningOrder);
 
-    void runDcordOrderHumanizer(uniqid, tokens, proxies, humanizerPackage, jobId)
+    const persistHumanizerProgress = async (snapshot) => {
+      await pool.query(
+        `UPDATE tracked_orders
+         SET payload = jsonb_set(payload, '{humanizerJob}', $2::jsonb, true), updated_at = NOW()
+         WHERE uniqid = $1
+           AND COALESCE((payload->'humanizerJob'->>'completed')::int, -1) <= $3`,
+        [uniqid, JSON.stringify(snapshot), snapshot.completed]
+      );
+    };
+    void runDcordOrderHumanizer(uniqid, tokens, proxies, humanizerPackage, jobId, persistHumanizerProgress)
       .then(async (humanizerJob) => {
         const latest = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
         const latestOrder = latest.rows[0]?.payload ?? runningOrder;

@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
-import { getHumanizerJob, getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
+import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
 
@@ -472,11 +472,14 @@ export default function OrderPage() {
   const queuedDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase() === "queued").length;
   const verifyingDcordTokenCount = dcordTokenResults.filter((item) => item.status.toLowerCase().includes("verifying")).length;
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
-  const humanizerOrderCompleted = humanizerOrderJob?.completed ?? 0;
-  const humanizerOrderTotal = humanizerOrderJob?.total ?? dcordTokenResults.length;
-  const humanizerOrderProgress = humanizerOrderTotal > 0
-    ? Math.min(100, Math.round((humanizerOrderCompleted / humanizerOrderTotal) * 100))
-    : 0;
+  const storedHumanizerOrderJob = result?.humanizerJob && typeof result.humanizerJob === "object" && !Array.isArray(result.humanizerJob)
+    ? result.humanizerJob as HumanizerJob
+    : null;
+  const effectiveHumanizerOrderJob = humanizerOrderJob ?? storedHumanizerOrderJob;
+  const humanizerOrderCompleted = effectiveHumanizerOrderJob?.completed ?? 0;
+  const humanizerOrderTotal = effectiveHumanizerOrderJob?.total ?? dcordTokenResults.length;
+  const humanizedTokenCount = effectiveHumanizerOrderJob?.results.filter((item) => item.state === "success").length ?? 0;
+  const allOrderTokensHumanized = humanizerOrderTotal > 0 && humanizedTokenCount >= humanizerOrderTotal;
   const replaceableDcordTokenIndices = dcordTokenResults
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
@@ -584,15 +587,21 @@ export default function OrderPage() {
     setHumanizingAll(true);
     let active = true;
     let requestRunning = false;
+    let finished = false;
     const poll = async () => {
-      if (requestRunning) return;
+      if (requestRunning || finished) return;
       requestRunning = true;
       try {
-        const job = await getHumanizerJob(jobId);
+        const target = String(result?.uniqid ?? uniqid).trim();
+        if (!target) return;
+        const updated = await getOrderStatus(target, "dcord");
+        if (!active) return;
+        setResult((current) => mergeOrderStatus(current, updated));
+        const job = updated.humanizerJob as HumanizerJob | undefined;
+        if (!job || job.id !== jobId) return;
         setHumanizerOrderJob(job);
         if (!active || ["queued", "running"].includes(job.status)) return;
-        const target = String(result?.uniqid ?? uniqid).trim();
-        if (target) setResult(await getOrderStatus(target, "dcord"));
+        finished = true;
         setHumanizingAll(false);
         toast.success(`Humanizer finished: ${job.succeeded}/${job.total} tokens updated.`);
       } catch {
@@ -1345,9 +1354,13 @@ export default function OrderPage() {
                 </div>
                 <span className="public-secure-mark gap-2">
                   {dcordTokenResults.length ? (
-                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll || allOrderTokensHumanized}>
                       <Sparkles className={`h-3.5 w-3.5 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
-                      {humanizingAll ? `Humanizing ${humanizerOrderCompleted}/${humanizerOrderTotal || "..."}` : "Humanize all"}
+                      {humanizingAll
+                        ? `Humanizing ${humanizerOrderCompleted}/${humanizerOrderTotal || "..."}`
+                        : effectiveHumanizerOrderJob
+                          ? `Humanized ${humanizedTokenCount}/${humanizerOrderTotal}`
+                          : "Humanize all"}
                     </Button>
                   ) : null}
                   {reactionMessageLink ? (
@@ -1365,14 +1378,6 @@ export default function OrderPage() {
                 </span>
               </div>
 
-              {humanizingAll ? (
-                <div className="lookup-humanizer-progress" role="status" aria-live="polite">
-                  <span><Sparkles className="h-3.5 w-3.5 animate-pulse" /> Humanizing assigned tokens</span>
-                  <strong>{humanizerOrderCompleted}/{humanizerOrderTotal || "..."}</strong>
-                  <div className="humanizer-progress" aria-label={`${humanizerOrderProgress}% complete`}><span style={{ width: `${humanizerOrderProgress}%` }} /></div>
-                </div>
-              ) : null}
-
               {dcordTokenResults.length ? (
                 <div className="public-token-results-list">
                   <div className="public-token-results-head" aria-hidden="true">
@@ -1380,11 +1385,22 @@ export default function OrderPage() {
                     <span>Token</span>
                     <span className="public-token-result-flow"><span /><span>Join</span><span>Boost</span><span>Slots</span></span>
                   </div>
-                  {dcordTokenResults.map((item, index) => (
+                  {dcordTokenResults.map((item, index) => {
+                    const humanizerResult = effectiveHumanizerOrderJob?.results[index];
+                    const humanizerState = humanizerResult?.state;
+                    return (
                     <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                       <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
                       <span className="public-token-result-main">
-                        <strong>{item.token}</strong>
+                        <span className="public-token-result-title">
+                          <strong>{item.token}</strong>
+                          {humanizerState ? (
+                            <span className="public-token-humanizer-badge" data-state={humanizerState}>
+                              <Sparkles className={humanizerState === "running" ? "animate-pulse" : ""} aria-hidden="true" />
+                              {humanizerState === "success" ? "Humanized" : humanizerState === "partial" ? "Partial" : humanizerState === "running" ? "Humanizing" : humanizerState === "failed" ? "Failed" : "Waiting"}
+                            </span>
+                          ) : null}
+                        </span>
                         <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}</small>
                         {item.timing ? <small className="public-token-result-timing">{item.timing}</small> : null}
                       </span>
@@ -1401,7 +1417,8 @@ export default function OrderPage() {
                         <span className="public-token-result-slots">{item.slots}</span>
                       </span>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <p className="public-token-results-empty">Waiting for token results.</p>
