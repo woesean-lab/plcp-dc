@@ -58,7 +58,7 @@ export function ReactionPanel({
 }: ReactionPanelProps) {
   const titleId = useId();
   const assigned = Math.max(0, limit - remaining);
-  const pending = Math.max(0, assigned - completed - failed);
+  const pending = Math.max(0, assigned - completed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
   const status = failed > 0 ? `${failed} failed` : completed >= limit && limit > 0 ? "Complete" : assigned > 0 ? "In progress" : "Ready";
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";

@@ -516,14 +516,16 @@ export default function PublicOrderPage() {
   const reactionMessageLink = typeof status?.reactionMessageLink === "string" ? status.reactionMessageLink : "";
   const reactionRequests = Array.isArray(status?.reactionRequests) ? status.reactionRequests : [];
   const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
-  const reactionAssignedCount = reactionAssignments.length || reactionMembers.length;
-  const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionAssignedCount);
   const reactionCompletedCount = reactionAssignments.length
     ? reactionAssignments.filter((item) => item.reactionState === "completed").length
     : reactionMembers.filter((item) => item.reactionState === "completed").length;
   const reactionFailedCount = reactionAssignments.length
     ? reactionAssignments.filter((item) => item.reactionState === "failed").length
     : reactionMembers.filter((item) => item.reactionState === "failed").length;
+  const reactionAssignedCount = reactionAssignments.length
+    ? reactionAssignments.filter((item) => item.reactionState !== "failed").length
+    : reactionMembers.filter((item) => item.reactionState !== "failed").length;
+  const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionAssignedCount);
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0

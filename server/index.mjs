@@ -11156,7 +11156,13 @@ async function updateCommunityReactionMessage(req, res, next) {
       ? Math.max(0, Number(order.reactionCapacity))
       : order.communityResults.filter((item) => item?.reactionAvailable === true).length;
     const existingRequests = Array.isArray(order.reactionRequests) ? order.reactionRequests : [];
-    const assignedCount = existingRequests.reduce((total, request) => total + Math.max(0, Number(request?.assignedCount) || 0), 0);
+    const assignedCount = existingRequests.reduce((total, request) => {
+      const assignments = Array.isArray(request?.assignments) ? request.assignments : [];
+      if (assignments.length) {
+        return total + assignments.filter((assignment) => String(assignment?.reactionState ?? "pending").toLowerCase() !== "failed").length;
+      }
+      return total + Math.max(0, Number(request?.assignedCount) || 0);
+    }, 0);
     const remainingCount = Math.max(0, reactionCapacity - assignedCount);
     if (!reactionCapacity) {
       await client.query("ROLLBACK");
@@ -11188,6 +11194,7 @@ async function updateCommunityReactionMessage(req, res, next) {
     const usedPairs = new Set(existingRequests
       .filter((request) => request?.messageLink === reactionMessage.url)
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
+      .filter((assignment) => String(assignment?.reactionState ?? "pending").toLowerCase() !== "failed")
       .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
     const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, requestedEmojiCount);
     if (assignments.length !== requestedCount) {
