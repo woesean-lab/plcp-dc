@@ -7644,26 +7644,9 @@
 .monitor-reaction-form-icon svg { width: 15px; height: 15px; }
 .monitor-reaction-form-copy strong { display: block; color: var(--app-text); font-size: 11px; }
 .monitor-reaction-form-copy small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 8px; line-height: 1.35; }
-.monitor-reaction-field { display: grid; min-width: 0; gap: 6px; }
-.monitor-reaction-field > span:first-child { color: var(--app-subtle); font-size: 8px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.monitor-reaction-input-shell { position: relative; display: block; }
-.monitor-reaction-input-shell > svg { position: absolute; top: 50%; left: 11px; z-index: 1; width: 13px; height: 13px; color: var(--app-subtle); transform: translateY(-50%); }
-.monitor-reaction-form input { min-width: 0; height: 38px; border-color: var(--app-border); background: rgba(5,6,14,.56); font-size: 10px; }
-.monitor-reaction-url-field input { padding-left: 32px; }
-.monitor-reaction-amount-control { grid-template-columns: 38px minmax(58px, 1fr) 38px; }
-.monitor-reaction-amount-control button,
-.monitor-reaction-amount-control .boost-amount-value { height: 38px; min-height: 38px; }
-.monitor-reaction-amount-control input.boost-amount-value {
-  width: 100%;
-  min-width: 0;
-  padding: 0 8px;
-  text-align: center;
-  appearance: textfield;
-}
-.monitor-reaction-amount-control input.boost-amount-value::-webkit-inner-spin-button,
-.monitor-reaction-amount-control input.boost-amount-value::-webkit-outer-spin-button { margin: 0; appearance: none; }
-.monitor-reaction-amount-control button svg { width: 14px; height: 14px; }
-.monitor-reaction-form .ui-button { min-height: 38px; white-space: nowrap; }
+.monitor-reaction-field { min-width: 0; }
+.monitor-reaction-form .boost-number-input { min-width: 0; }
+.monitor-reaction-form .ui-button { min-height: 40px; white-space: nowrap; }
 
 .monitor-reaction-allowance-complete { display: flex; align-items: center; gap: 10px; margin: 0 20px 16px; padding: 12px 14px; border: 1px solid rgba(105,221,178,.2); border-radius: 13px; background: var(--app-success-soft); color: var(--app-success); }
 .monitor-reaction-allowance-complete > svg { width: 18px; height: 18px; flex: 0 0 auto; }

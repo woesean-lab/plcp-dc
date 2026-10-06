@@ -1,7 +1,6 @@
 import { useId, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Minus, Plus, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, MessageSquareText, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 export type ReactionPanelRequest = {
   id: string;
@@ -124,34 +123,32 @@ export function ReactionPanel({
             <span className="monitor-reaction-form-icon" aria-hidden="true"><MessageSquareText /></span>
             <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
           </div>
-          <label className="monitor-reaction-field monitor-reaction-url-field">
-            <span>Message URL</span>
-            <span className="monitor-reaction-input-shell"><Link2 aria-hidden="true" /><Input type="url" value={messageDraft} onChange={(event) => onMessageChange(event.target.value)} placeholder="https://discord.com/channels/..." aria-label="Discord message link" /></span>
+          <label className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
+            <span className="boost-order-label">Discord Message URL</span>
+            <input
+              className="boost-number-input"
+              type="url"
+              value={messageDraft}
+              onChange={(event) => onMessageChange(event.target.value)}
+              placeholder="https://discord.com/channels/..."
+              aria-label="Discord message URL"
+            />
           </label>
-          <label className="monitor-reaction-field">
-            <span>Amount</span>
-            <span className="boost-amount-control monitor-reaction-amount-control">
-              <button type="button" aria-label="Decrease reaction amount" disabled={countDraft <= 1} onClick={() => onCountChange(Math.max(1, countDraft - 1))}>
-                <Minus aria-hidden="true" />
-              </button>
-              <input
-                className="boost-amount-value"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={remaining}
-                value={Math.min(countDraft, remaining)}
-                aria-label="Reaction amount"
-                onFocus={(event) => event.currentTarget.select()}
-                onChange={(event) => {
-                  const next = Number.parseInt(event.target.value, 10);
-                  onCountChange(Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1);
-                }}
-              />
-              <button type="button" aria-label="Increase reaction amount" disabled={countDraft >= remaining} onClick={() => onCountChange(Math.min(remaining, countDraft + 1))}>
-                <Plus aria-hidden="true" />
-              </button>
-            </span>
+          <label className="boost-order-field monitor-reaction-field">
+            <span className="boost-order-label">Amount</span>
+            <input
+              className="boost-number-input"
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={remaining}
+              value={Math.min(countDraft, remaining)}
+              aria-label="Reaction amount"
+              onChange={(event) => {
+                const next = Number.parseInt(event.target.value, 10);
+                onCountChange(Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1);
+              }}
+            />
           </label>
           <Button type="submit" disabled={saving || !messageDraft.trim()}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
