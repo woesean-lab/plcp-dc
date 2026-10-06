@@ -150,7 +150,7 @@ export function ReactionPanel({
               }}
             />
           </label>
-          <Button type="submit" disabled={saving || !messageDraft.trim()}>
+          <Button className="monitor-reaction-submit" type="submit" disabled={saving || !messageDraft.trim()}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
           </Button>

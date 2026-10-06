@@ -7644,9 +7644,29 @@
 .monitor-reaction-form-icon svg { width: 15px; height: 15px; }
 .monitor-reaction-form-copy strong { display: block; color: var(--app-text); font-size: 11px; }
 .monitor-reaction-form-copy small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 8px; line-height: 1.35; }
-.monitor-reaction-field { min-width: 0; }
-.monitor-reaction-form .boost-number-input { min-width: 0; }
-.monitor-reaction-form .ui-button { min-height: 40px; white-space: nowrap; }
+.monitor-reaction-field { min-width: 0; grid-template-rows: 14px 44px; }
+.monitor-reaction-form .boost-number-input {
+  height: 44px;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 12px;
+}
+.monitor-reaction-url-field .boost-number-input {
+  font-size: 13px;
+  font-weight: 450;
+  letter-spacing: 0;
+}
+.monitor-reaction-url-field .boost-number-input::placeholder {
+  color: var(--app-placeholder);
+  font-weight: 450;
+}
+.monitor-reaction-form .monitor-reaction-submit {
+  height: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  padding-inline: 18px;
+  white-space: nowrap;
+}
 
 .monitor-reaction-allowance-complete { display: flex; align-items: center; gap: 10px; margin: 0 20px 16px; padding: 12px 14px; border: 1px solid rgba(105,221,178,.2); border-radius: 13px; background: var(--app-success-soft); color: var(--app-success); }
 .monitor-reaction-allowance-complete > svg { width: 18px; height: 18px; flex: 0 0 auto; }
