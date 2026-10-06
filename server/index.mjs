@@ -958,21 +958,25 @@ function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCo
     const candidates = palette.map((emoji) => shuffleReactionValues(deliveredMembers.filter((member) =>
       !usedPairs.has(`${member.discordUserId}:${emoji}`)
     )));
+    if (requestedCount < paletteCount || candidates.some((values) => values.length === 0)) continue;
     if (candidates.reduce((total, values) => total + values.length, 0) < requestedCount) continue;
 
     const weights = palette.map((_, index) => 0.62 ** index);
     const weightTotal = weights.reduce((total, weight) => total + weight, 0);
-    const rawCounts = weights.map((weight) => requestedCount * weight / weightTotal);
-    const counts = rawCounts.map((value, index) => Math.min(Math.floor(value), candidates[index].length));
+    const weightedRemainder = requestedCount - paletteCount;
+    const rawCounts = weights.map((weight) => weightedRemainder * weight / weightTotal);
+    const counts = rawCounts.map((value, index) => 1 + Math.min(Math.floor(value), candidates[index].length - 1));
     let remaining = requestedCount - counts.reduce((total, value) => total + value, 0);
     const priority = rawCounts.map((value, index) => ({ index, fraction: value - Math.floor(value) }))
       .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+    let priorityIndex = 0;
     while (remaining > 0) {
-      const available = priority.find(({ index }) => counts[index] < candidates[index].length);
+      const available = Array.from({ length: priority.length }, (_, offset) => priority[(priorityIndex + offset) % priority.length])
+        .find(({ index }) => counts[index] < candidates[index].length);
       if (!available) break;
       counts[available.index] += 1;
       remaining -= 1;
-      priority.push(priority.shift());
+      priorityIndex = (priority.indexOf(available) + 1) % priority.length;
     }
     if (remaining > 0) continue;
 
