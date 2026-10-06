@@ -933,6 +933,56 @@ const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, wa
 // Discord messages support a limited number of distinct reaction types. Rotate
 // through a varied pool while allowing larger orders to share those reactions.
 const communityReactionEmojis = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎"];
+const communityNaturalReactionEmojis = ["❤️", "🔥", "👍", "🎉", "😂", "😍", "👏", "💯"];
+
+function shuffleReactionValues(values) {
+  const shuffled = [...values];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = crypto.randomInt(index + 1);
+    [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs = new Set()) {
+  const naturalPalette = shuffleReactionValues(communityNaturalReactionEmojis);
+  const fallbackPalette = shuffleReactionValues(communityReactionEmojis.filter((emoji) => !communityNaturalReactionEmojis.includes(emoji)));
+  const fullPalette = [...naturalPalette, ...fallbackPalette];
+  const aestheticCount = requestedCount <= 12 ? 2 : requestedCount <= 35 ? 3 : requestedCount <= 75 ? 8 : requestedCount <= 200 ? 9 : 10;
+  const minimumCount = Math.ceil(requestedCount / deliveredMembers.length);
+
+  for (let paletteCount = Math.max(aestheticCount, minimumCount); paletteCount <= fullPalette.length; paletteCount += 1) {
+    const palette = fullPalette.slice(0, paletteCount);
+    const candidates = palette.map((emoji) => shuffleReactionValues(deliveredMembers.filter((member) =>
+      !usedPairs.has(`${member.discordUserId}:${emoji}`)
+    )));
+    if (candidates.reduce((total, values) => total + values.length, 0) < requestedCount) continue;
+
+    const weights = palette.map((_, index) => 0.62 ** index);
+    const weightTotal = weights.reduce((total, weight) => total + weight, 0);
+    const rawCounts = weights.map((weight) => requestedCount * weight / weightTotal);
+    const counts = rawCounts.map((value, index) => Math.min(Math.floor(value), candidates[index].length));
+    let remaining = requestedCount - counts.reduce((total, value) => total + value, 0);
+    const priority = rawCounts.map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+      .sort((left, right) => right.fraction - left.fraction || left.index - right.index);
+    while (remaining > 0) {
+      const available = priority.find(({ index }) => counts[index] < candidates[index].length);
+      if (!available) break;
+      counts[available.index] += 1;
+      remaining -= 1;
+      priority.push(priority.shift());
+    }
+    if (remaining > 0) continue;
+
+    return palette.flatMap((emoji, emojiIndex) => candidates[emojiIndex].slice(0, counts[emojiIndex]).map((member) => ({
+      discordUserId: String(member.discordUserId),
+      reactionEmoji: emoji,
+      reactionState: "pending",
+      reactionDetails: "Waiting for the delivered member's Onliner Gateway connection before reacting."
+    })));
+  }
+  return [];
+}
 const discordOnlinerProxyHealth = new Map();
 let discordOnlinerProxySelectionSequence = 0;
 function createDiscordGatewayIdentityProperties() {
@@ -11124,18 +11174,15 @@ async function updateCommunityReactionMessage(req, res, next) {
     }
 
     const requestId = crypto.randomUUID();
-    const assignments = Array.from({ length: requestedCount }, (_, index) => {
-      const sequence = assignedCount + index;
-      const emojiIndex = sequence % communityReactionEmojis.length;
-      const emojiRound = Math.floor(sequence / communityReactionEmojis.length);
-      const member = deliveredMembers[(emojiRound + emojiIndex) % deliveredMembers.length];
-      return {
-        discordUserId: String(member.discordUserId),
-        reactionEmoji: communityReactionEmojis[emojiIndex],
-        reactionState: "pending",
-        reactionDetails: "Waiting for the delivered member's Onliner Gateway connection before reacting."
-      };
-    });
+    const usedPairs = new Set(existingRequests
+      .filter((request) => request?.messageLink === reactionMessage.url)
+      .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
+      .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
+    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs);
+    if (assignments.length !== requestedCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This delivered member pool does not have enough unused member and emoji combinations for that message." });
+    }
     for (const assignment of assignments) {
       await client.query(
         `INSERT INTO community_reaction_jobs (order_id, request_id, discord_user_id, channel_id, message_id, emoji)
