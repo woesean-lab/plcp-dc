@@ -7696,23 +7696,6 @@
 .monitor-reaction-metrics > div > strong { display: block; margin-top: 10px; color: var(--app-text); font-size: 24px; font-weight: 720; letter-spacing: -.04em; }
 .monitor-reaction-metrics > div > small { display: block; margin-top: 3px; color: var(--app-subtle); font-size: 8px; line-height: 1.35; }
 
-.monitor-reaction-failure {
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
-  margin: 0 20px 16px;
-  padding: 11px 13px;
-  border: 1px solid var(--app-danger-button-border);
-  border-radius: 12px;
-  color: var(--app-danger-text);
-  background: var(--app-danger-soft);
-}
-.monitor-reaction-failure > svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; }
-.monitor-reaction-failure strong { display: block; color: var(--app-text); font-size: 10px; }
-.monitor-reaction-failure small,
-.monitor-reaction-failure li { color: var(--app-muted); font-size: 9px; line-height: 1.45; }
-.monitor-reaction-failure ul { display: grid; gap: 2px; margin: 4px 0 0; padding-left: 14px; }
-
 .monitor-reaction-form {
   position: relative;
   display: grid;
@@ -7816,6 +7799,11 @@
 .monitor-reaction-history-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-reaction-history-copy strong { font-size: 10px; font-weight: 650; }
 .monitor-reaction-history-copy small { margin-top: 2px; color: var(--app-subtle); font-size: 8px; }
+.monitor-reaction-history-error { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; padding: 6px 7px; border: 1px solid var(--app-danger-button-border); border-radius: 7px; color: var(--app-danger-text); background: var(--app-danger-soft); }
+.monitor-reaction-history-error > svg { width: 11px; height: 11px; flex: 0 0 auto; margin-top: 1px; }
+.monitor-reaction-history-error > span { display: grid; min-width: 0; gap: 1px; }
+.monitor-reaction-history-error b { font-size: 8px; font-weight: 700; }
+.monitor-reaction-history-copy .monitor-reaction-history-error small { display: block; overflow: visible; color: var(--app-muted); font-size: 8px; line-height: 1.35; text-overflow: clip; white-space: normal; }
 .monitor-reaction-history-progress { display: grid; grid-template-columns: minmax(50px, 1fr) auto; align-items: center; gap: 7px; }
 .monitor-reaction-history-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.07); }
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }

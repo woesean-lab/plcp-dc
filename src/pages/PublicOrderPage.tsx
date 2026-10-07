@@ -1149,9 +1149,6 @@ export default function PublicOrderPage() {
                     limit={reactionOrderLimit}
                     completed={reactionCompletedCount}
                     failed={reactionFailedCount}
-                    failureMessages={[...new Set((reactionAssignments.length
-                      ? reactionAssignments.filter((item) => item.reactionState === "failed").map((item) => getFriendlyReactionFailure(item.reactionDetails))
-                      : reactionMembers.filter((item) => item.reactionState === "failed").map((item) => getFriendlyReactionFailure(item.reactionDetails))))]}
                     remaining={reactionRemainingCount}
                     latestMessageLink={reactionMessageLink}
                     messageDraft={reactionMessageDraft}
@@ -1159,9 +1156,18 @@ export default function PublicOrderPage() {
                     emojiCountDraft={reactionEmojiCountDraft}
                     saving={savingReactionMessage}
                     requestEnabled={["PARTIAL", "COMPLETED"].includes(normalizedStatus)}
-                    requests={reactionRequests.map((request) => ({ ...request, completedCount: Array.isArray(request.assignments)
-                      ? request.assignments.filter((item) => item.reactionState === "completed").length
-                      : reactionMembers.filter((item) => item.reactionRequestId === request.id && item.reactionState === "completed").length }))}
+                    requests={reactionRequests.map((request) => {
+                      const assignments = Array.isArray(request.assignments)
+                        ? request.assignments
+                        : reactionMembers.filter((item) => item.reactionRequestId === request.id);
+                      const failedAssignments = assignments.filter((item) => item.reactionState === "failed");
+                      return {
+                        ...request,
+                        completedCount: assignments.filter((item) => item.reactionState === "completed").length,
+                        failedCount: failedAssignments.length,
+                        failureMessages: [...new Set(failedAssignments.map((item) => getFriendlyReactionFailure(item.reactionDetails)))]
+                      };
+                    })}
                     onMessageChange={setReactionMessageDraft}
                     onCountChange={setReactionCountDraft}
                     onEmojiCountChange={setReactionEmojiCountDraft}

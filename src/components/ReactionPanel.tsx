@@ -9,6 +9,8 @@ export type ReactionPanelRequest = {
   emojiCount?: number;
   assignedCount: number;
   completedCount: number;
+  failedCount?: number;
+  failureMessages?: string[];
   createdAt: string;
 };
 
@@ -17,7 +19,6 @@ type ReactionPanelProps = {
   limit: number;
   completed: number;
   failed: number;
-  failureMessages?: string[];
   remaining: number;
   latestMessageLink?: string;
   messageDraft: string;
@@ -44,7 +45,6 @@ export function ReactionPanel({
   limit,
   completed,
   failed,
-  failureMessages = [],
   remaining,
   latestMessageLink,
   messageDraft,
@@ -135,20 +135,6 @@ export function ReactionPanel({
           </div>
         </div>
       </div>
-
-      {failed > 0 ? (
-        <div className="monitor-reaction-failure" role="alert">
-          <TriangleAlert aria-hidden="true" />
-          <div>
-            <strong>{failed} reaction{failed === 1 ? "" : "s"} failed</strong>
-            {failureMessages.length ? (
-              <ul>
-                {failureMessages.slice(0, 4).map((message) => <li key={message}>{message}</li>)}
-              </ul>
-            ) : <small>No failure detail was returned.</small>}
-          </div>
-        </div>
-      ) : null}
 
       {remaining > 0 ? (
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
@@ -241,6 +227,15 @@ export function ReactionPanel({
                   <span className="monitor-reaction-history-copy">
                     <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
+                    {(request.failedCount ?? 0) > 0 ? (
+                      <span className="monitor-reaction-history-error" role="alert">
+                        <TriangleAlert aria-hidden="true" />
+                        <span>
+                          <b>{request.failedCount} failed</b>
+                          {(request.failureMessages?.length ? request.failureMessages : ["No failure detail was returned."]).slice(0, 4).map((message) => <small key={message}>{message}</small>)}
+                        </span>
+                      </span>
+                    ) : null}
                   </span>
                   <span className="monitor-reaction-history-progress">
                     <span><i style={{ width: `${requestProgress}%` }} /></span>
