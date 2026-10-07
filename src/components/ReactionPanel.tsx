@@ -1,5 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -248,30 +249,24 @@ export function ReactionPanel({
         </details>
       ) : null}
 
-      {failureRequest ? (
+      {failureRequest && typeof document !== "undefined" ? createPortal((
         <div className="reaction-failure-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFailureRequest(null); }}>
           <div className="reaction-failure-dialog" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-failure-title`}>
             <header>
               <span className="reaction-failure-dialog-icon" aria-hidden="true"><TriangleAlert /></span>
               <div>
-                <small>REACTION DELIVERY</small>
                 <h2 id={`${titleId}-failure-title`}>Failure details</h2>
-                <p><strong>{failureRequest.failedCount}</strong> of {failureRequest.assignedCount} reactions weren’t delivered.</p>
+                <p>{failureRequest.failedCount} reaction{failureRequest.failedCount === 1 ? "" : "s"} failed</p>
               </div>
-              <button type="button" onClick={() => setFailureRequest(null)} aria-label="Close failure details"><X /></button>
             </header>
             <div className="reaction-failure-dialog-list">
               {failureRequest.failureMessages?.map((message, index) => (
                 <div key={`${message}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{message}</p></div>
               ))}
             </div>
-            <footer>
-              <span><TriangleAlert aria-hidden="true" /> Failed reactions were returned to the available allowance.</span>
-              <a href={failureRequest.messageLink} target="_blank" rel="noreferrer">Open Discord message <ExternalLink /></a>
-            </footer>
           </div>
         </div>
-      ) : null}
+      ), document.body) : null}
     </section>
   );
 }
