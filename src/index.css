@@ -9751,8 +9751,8 @@
 .onliner-proxy-usage-heading,
 .onliner-proxy-usage-row {
   display: grid;
-  min-width: 735px;
-  grid-template-columns: minmax(220px, 1fr) 58px 95px 105px minmax(150px, .65fr);
+  min-width: 775px;
+  grid-template-columns: minmax(220px, 1fr) 58px 95px 105px minmax(150px, .65fr) 32px;
   gap: 12px;
   align-items: center;
 }
@@ -9807,6 +9807,10 @@
 .onliner-proxy-health-copy { display: grid; min-width: 0; gap: 3px; }
 .onliner-proxy-usage-row[data-status="cooling"] .onliner-proxy-health-state i { background: var(--app-danger); box-shadow: 0 0 0 3px var(--app-danger-soft); }
 .onliner-proxy-usage-row[data-status="cooling"] .onliner-proxy-health-state strong { color: var(--app-danger); }
+.onliner-proxy-remove { display: grid; width: 28px; height: 28px; place-items: center; border: 0; border-radius: 8px; color: var(--app-subtle); background: rgba(255,255,255,.035); transition: color .15s ease, background .15s ease; }
+.onliner-proxy-remove:hover:not(:disabled) { color: var(--app-danger); background: var(--app-danger-soft); }
+.onliner-proxy-remove:disabled { cursor: not-allowed; opacity: .45; }
+.onliner-proxy-remove svg { width: 13px; height: 13px; }
 
 .stock-workbench {
   overflow: hidden;

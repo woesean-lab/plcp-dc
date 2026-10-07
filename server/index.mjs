@@ -8170,6 +8170,48 @@ app.put("/api/onliner/proxies", requireSession, async (req, res, next) => {
   }
 });
 
+app.delete("/api/onliner/proxies", requireSession, async (req, res, next) => {
+  try {
+    const requestedProxy = normalizeDiscordOnlinerProxyUrl(req.body?.proxy);
+    if (!requestedProxy) return res.status(400).json({ message: "A valid saved proxy is required." });
+    const current = await getDiscordOnlinerConfig();
+    if (!current.proxyPool.includes(requestedProxy)) return res.status(404).json({ message: "Saved proxy not found." });
+
+    const remainingProxies = current.proxyPool.filter((proxy) => proxy !== requestedProxy);
+    const affectedAccounts = current.accounts.filter((account) => account.proxyUrl === requestedProxy);
+    if (affectedAccounts.length && !remainingProxies.length) {
+      return res.status(409).json({ message: "This proxy is assigned to accounts. Add another proxy before removing it." });
+    }
+
+    const unchangedAccounts = current.accounts.filter((account) => account.proxyUrl !== requestedProxy);
+    const assignmentConfig = { ...current, proxyPool: remainingProxies, accounts: unchangedAccounts };
+    const replacementAssignments = [];
+    const reassignedById = new Map();
+    for (const account of affectedAccounts) {
+      const proxyUrl = selectDiscordOnlinerProxy(assignmentConfig, replacementAssignments);
+      if (proxyUrl) replacementAssignments.push(proxyUrl);
+      reassignedById.set(account.id, proxyUrl);
+    }
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      proxyPool: remainingProxies,
+      accounts: current.accounts.map((account) => reassignedById.has(account.id)
+        ? { ...account, proxyUrl: reassignedById.get(account.id) }
+        : account)
+    });
+
+    discordOnlinerProxyHealth.delete(requestedProxy);
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
+      await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
+      discordOnlinerWorkerCurrentConfig = candidate;
+    }
+    res.json({ ...getDiscordOnlinerProxyPoolResponse(candidate), reassignedAccounts: affectedAccounts.length });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
   try {
     discordOnlinerLogs.length = 0;

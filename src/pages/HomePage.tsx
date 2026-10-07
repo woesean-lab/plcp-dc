@@ -113,6 +113,7 @@ import {
   pauseDiscordOnlinerConnections,
   reconnectDiscordOnliner,
   reconnectDiscordOnlinerAccount,
+  removeDiscordOnlinerProxy,
   rotateDiscordOnlinerAccountProxy,
   removeDiscordOnlinerAccount,
   saveDiscordOnliner,
@@ -717,6 +718,7 @@ export default function HomePage() {
   const [onlinerCoolingProxyCount, setOnlinerCoolingProxyCount] = useState(0);
   const [onlinerProxyDetails, setOnlinerProxyDetails] = useState<DiscordOnlinerProxyDetail[]>([]);
   const [savingOnlinerProxies, setSavingOnlinerProxies] = useState(false);
+  const [removingOnlinerProxy, setRemovingOnlinerProxy] = useState<string | null>(null);
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
   const [reconnectingOnlinerAccountId, setReconnectingOnlinerAccountId] = useState<string | null>(null);
@@ -1705,6 +1707,26 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Onliner proxies could not be saved.");
     } finally {
       setSavingOnlinerProxies(false);
+    }
+  }
+
+  async function handleRemoveOnlinerProxy(proxy: string) {
+    try {
+      setRemovingOnlinerProxy(proxy);
+      const result = await removeDiscordOnlinerProxy(proxy);
+      setOnlinerProxyDraft(result.proxies.join("\n"));
+      setOnlinerProxyCount(result.count);
+      setOnlinerAvailableProxyCount(result.availableCount);
+      setOnlinerCoolingProxyCount(result.coolingDownCount);
+      setOnlinerProxyDetails(result.details);
+      if (result.reassignedAccounts) setOnlinerSnapshot(await getDiscordOnliner());
+      notifySuccess(result.reassignedAccounts
+        ? `Proxy removed; only its ${result.reassignedAccounts} assigned account${result.reassignedAccounts === 1 ? " was" : "s were"} moved and reconnected.`
+        : "Proxy removed. No active connections were changed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner proxy could not be removed.");
+    } finally {
+      setRemovingOnlinerProxy(null);
     }
   }
 
@@ -4371,7 +4393,7 @@ export default function HomePage() {
                       {onlinerProxyDetails.length ? (
                         <div className="onliner-proxy-usage">
                           <div className="onliner-proxy-usage-heading">
-                            <span>Saved proxy</span><span>Country</span><span>Accounts</span><span>Status</span><span>Health</span>
+                            <span>Saved proxy</span><span>Country</span><span>Accounts</span><span>Status</span><span>Health</span><span aria-hidden="true" />
                           </div>
                           <div className="onliner-proxy-usage-list">
                             {onlinerProxyDetails.map((proxy) => (
@@ -4384,6 +4406,9 @@ export default function HomePage() {
                                   <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : "No active failures"}</strong>
                                   <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>
                                 </span>
+                                <button className="onliner-proxy-remove" type="button" aria-label={`Remove ${formatOnlinerProxyLabel(proxy.proxy)}`} title="Remove only this proxy" disabled={removingOnlinerProxy !== null || savingOnlinerProxies} onClick={() => void handleRemoveOnlinerProxy(proxy.proxy)}>
+                                  {removingOnlinerProxy === proxy.proxy ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Minus aria-hidden="true" />}
+                                </button>
                               </div>
                             ))}
                           </div>

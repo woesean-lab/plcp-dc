@@ -153,6 +153,18 @@ export async function saveDiscordOnlinerProxies(proxies: string[]) {
   return payload as DiscordOnlinerProxyPool;
 }
 
+export async function removeDiscordOnlinerProxy(proxy: string) {
+  const response = await fetch("/api/onliner/proxies", {
+    method: "DELETE",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proxy })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as DiscordOnlinerProxyPool & { reassignedAccounts: number };
+}
+
 export async function getDiscordOnlinerLogs(after = 0) {
   const response = await fetch(`/api/onliner/logs?after=${encodeURIComponent(String(after))}`, { cache: "no-store", credentials: "same-origin" });
   const payload = await response.json().catch(() => ({}));
