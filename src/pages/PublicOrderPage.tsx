@@ -507,9 +507,13 @@ export default function PublicOrderPage() {
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
   const reactionMembers = communityMemberResults.filter((item) => item.reactionEligible === true);
-  const reactionEligibleMemberCount = communityMemberResults.filter((item) => ["joined", "already_member"].includes(item.state.toLowerCase())
+  const reactionDeliveredMembers = communityMemberResults.filter((item) => ["joined", "already_member"].includes(item.state.toLowerCase())
     && item.membershipStatus !== "removed"
-    && item.authorizationStatus !== "inactive").length;
+    && item.authorizationStatus !== "inactive");
+  const reactionMembersHaveOnlinerCheck = reactionDeliveredMembers.some((item) => typeof item.onlinerLive === "boolean");
+  const reactionEligibleMemberCount = reactionMembersHaveOnlinerCheck
+    ? reactionDeliveredMembers.filter((item) => item.onlinerLive === true).length
+    : reactionDeliveredMembers.length;
   const configuredReactionCapacity = categoryAllocations.reduce((total, allocation) => {
     if (allocation?.reactionUseEnabled !== true) return total;
     const amount = Number.isFinite(allocation.amount) ? Math.max(0, allocation.amount) : 0;
@@ -1143,6 +1147,8 @@ export default function PublicOrderPage() {
                     failed={visibleReactionFailedCount}
                     remaining={reactionRemainingCount}
                     eligibleMembers={reactionEligibleMemberCount}
+                    onRefreshEligibleMembers={(isCompleted || normalizedStatus === "PARTIAL") && canManageCommunityMembers ? () => void handleCheckCommunityMembers() : undefined}
+                    refreshingEligibleMembers={checkingCommunityMembers}
                     messageDraft={reactionMessageDraft}
                     countDraft={reactionCountDraft}
                     emojiCountDraft={reactionEmojiCountDraft}

@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -22,6 +22,8 @@ type ReactionPanelProps = {
   failed: number;
   remaining: number;
   eligibleMembers: number;
+  onRefreshEligibleMembers?: () => void;
+  refreshingEligibleMembers?: boolean;
   messageDraft: string;
   countDraft: number;
   emojiCountDraft: number;
@@ -49,6 +51,8 @@ export function ReactionPanel({
   failed,
   remaining,
   eligibleMembers,
+  onRefreshEligibleMembers,
+  refreshingEligibleMembers = false,
   messageDraft,
   countDraft,
   emojiCountDraft,
@@ -129,9 +133,15 @@ export function ReactionPanel({
             <small>ready to assign</small>
           </div>
           <div data-tone="members">
-            <span><Users aria-hidden="true" /> Eligible members</span>
+            <span><Users aria-hidden="true" /> Onliner live
+              {onRefreshEligibleMembers ? (
+                <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh Onliner live members" title="Check members and refresh the Onliner live count">
+                  <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
+                </button>
+              ) : null}
+            </span>
             <strong>{eligibleMembers}</strong>
-            <small>able to react</small>
+            <small>{refreshingEligibleMembers ? "checking members" : "able to react now"}</small>
           </div>
         </div>
       </div>
