@@ -152,7 +152,7 @@ export function ReactionPanel({
               ) : null}
             </span>
             <strong>{eligibleMembers}</strong>
-            <small>{refreshingEligibleMembers ? "checking members" : "able to react now"}</small>
+            <small>{refreshingEligibleMembers ? "checking members" : "members can react"}</small>
           </div>
         </div>
       </div>
