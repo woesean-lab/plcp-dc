@@ -8133,6 +8133,42 @@ app.get("/api/onliner/proxies", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post("/api/onliner/proxies", requireSession, async (req, res, next) => {
+  try {
+    const requested = Array.isArray(req.body?.proxies) ? req.body.proxies : [];
+    if (!requested.length) return res.status(400).json({ message: "Add at least one proxy." });
+    const additions = [];
+    for (let index = 0; index < requested.length; index += 1) {
+      const proxy = normalizeDiscordOnlinerProxyUrl(requested[index]);
+      if (!proxy) return res.status(400).json({ message: `Proxy line ${index + 1} is invalid.` });
+      if (!additions.includes(proxy)) additions.push(proxy);
+    }
+
+    const current = await getDiscordOnlinerConfig();
+    const newProxies = additions.filter((proxy) => !current.proxyPool.includes(proxy));
+    if (current.proxyPool.length + newProxies.length > 10_000) {
+      return res.status(400).json({ message: "Onliner supports up to 10,000 saved proxies." });
+    }
+    const candidate = normalizeDiscordOnlinerConfig({
+      ...current,
+      proxyPool: [...current.proxyPool, ...newProxies],
+      accounts: current.accounts
+    });
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
+      await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
+      discordOnlinerWorkerCurrentConfig = candidate;
+    }
+    res.status(201).json({
+      ...getDiscordOnlinerProxyPoolResponse(candidate),
+      addedCount: newProxies.length,
+      duplicateCount: additions.length - newProxies.length
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.put("/api/onliner/proxies", requireSession, async (req, res, next) => {
   try {
     const requested = Array.isArray(req.body?.proxies) ? req.body.proxies : [];

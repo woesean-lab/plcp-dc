@@ -153,6 +153,18 @@ export async function saveDiscordOnlinerProxies(proxies: string[]) {
   return payload as DiscordOnlinerProxyPool;
 }
 
+export async function addDiscordOnlinerProxies(proxies: string[]) {
+  const response = await fetch("/api/onliner/proxies", {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ proxies })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as DiscordOnlinerProxyPool & { addedCount: number; duplicateCount: number };
+}
+
 export async function removeDiscordOnlinerProxy(proxy: string) {
   const response = await fetch("/api/onliner/proxies", {
     method: "DELETE",

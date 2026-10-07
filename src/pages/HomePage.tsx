@@ -103,6 +103,7 @@ import { normalizeAdminTab, type AdminTab } from "../lib/navigation";
 import {
   addDiscordOnlinerAccount,
   addDiscordOnlinerAccountsBulk,
+  addDiscordOnlinerProxies,
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
   continueDiscordOnlinerConnections,
@@ -718,6 +719,9 @@ export default function HomePage() {
   const [onlinerCoolingProxyCount, setOnlinerCoolingProxyCount] = useState(0);
   const [onlinerProxyDetails, setOnlinerProxyDetails] = useState<DiscordOnlinerProxyDetail[]>([]);
   const [savingOnlinerProxies, setSavingOnlinerProxies] = useState(false);
+  const [showAddOnlinerProxiesModal, setShowAddOnlinerProxiesModal] = useState(false);
+  const [onlinerProxyAddDraft, setOnlinerProxyAddDraft] = useState("");
+  const [addingOnlinerProxies, setAddingOnlinerProxies] = useState(false);
   const [removingOnlinerProxy, setRemovingOnlinerProxy] = useState<string | null>(null);
   const [addingOnlinerBulk, setAddingOnlinerBulk] = useState(false);
   const [removingOnlinerAccountId, setRemovingOnlinerAccountId] = useState<string | null>(null);
@@ -1049,6 +1053,20 @@ export default function HomePage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [showOnlinerBulkModal, addingOnlinerBulk]);
+
+  useEffect(() => {
+    if (!showAddOnlinerProxiesModal) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !addingOnlinerProxies) setShowAddOnlinerProxiesModal(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showAddOnlinerProxiesModal, addingOnlinerProxies]);
 
   useEffect(() => {
     if (!editingOnlinerAccountId) return;
@@ -1707,6 +1725,30 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Onliner proxies could not be saved.");
     } finally {
       setSavingOnlinerProxies(false);
+    }
+  }
+
+  async function handleAddOnlinerProxies(event: FormEvent) {
+    event.preventDefault();
+    const proxies = parseProxyDraft(onlinerProxyAddDraft);
+    if (!proxies.length) return;
+    try {
+      setAddingOnlinerProxies(true);
+      const result = await addDiscordOnlinerProxies(proxies);
+      setOnlinerProxyDraft(result.proxies.join("\n"));
+      setOnlinerProxyCount(result.count);
+      setOnlinerAvailableProxyCount(result.availableCount);
+      setOnlinerCoolingProxyCount(result.coolingDownCount);
+      setOnlinerProxyDetails(result.details);
+      setOnlinerProxyAddDraft("");
+      setShowAddOnlinerProxiesModal(false);
+      notifySuccess(result.addedCount
+        ? `${result.addedCount} prox${result.addedCount === 1 ? "y" : "ies"} added without changing active connections${result.duplicateCount ? `; ${result.duplicateCount} duplicate${result.duplicateCount === 1 ? " was" : "s were"} skipped` : ""}.`
+        : "All entered proxies were already saved. Active connections were not changed.");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Onliner proxies could not be added.");
+    } finally {
+      setAddingOnlinerProxies(false);
     }
   }
 
@@ -4387,6 +4429,9 @@ export default function HomePage() {
                             {savingOnlinerProxies ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                             {savingOnlinerProxies ? "Saving..." : "Save proxies"}
                           </Button>
+                          <Button type="button" size="icon-sm" variant="secondary" aria-label="Add proxies" title="Add proxies without changing active connections" disabled={savingOnlinerProxies || addingOnlinerProxies} onClick={() => setShowAddOnlinerProxiesModal(true)}>
+                            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                          </Button>
                         </div>
                       </header>
                       <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
@@ -5378,6 +5423,31 @@ export default function HomePage() {
                 <Button type="submit" disabled={addingOnlinerBulk || !onlinerBulkTokenDraft.trim() || !onlinerProxyCount || (onlinerSnapshot?.accounts.length ?? 0) >= DISCORD_ONLINER_ACCOUNT_LIMIT}>
                   {addingOnlinerBulk ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                   {addingOnlinerBulk ? "Adding..." : "Add profiles"}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {showAddOnlinerProxiesModal ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingOnlinerProxies) setShowAddOnlinerProxiesModal(false); }}>
+          <div className="confirm-modal add-tokens-modal w-[min(620px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="add-onliner-proxies-title">
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><Globe2 className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent)]">Gateway routing</p>
+            <h2 id="add-onliner-proxies-title">Add proxies</h2>
+            <p>New proxies are appended to the pool. Existing account assignments and active Gateway connections stay unchanged.</p>
+            <form className="mt-5 grid gap-4" onSubmit={handleAddOnlinerProxies}>
+              <label className="grid gap-2">
+                <span className={fieldLabelClass}>Proxies · one per line</span>
+                <textarea className="ui-input min-h-56 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6" value={onlinerProxyAddDraft} onChange={(event) => setOnlinerProxyAddDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} autoFocus />
+                <span className="text-xs text-[var(--app-muted)]">{parseProxyDraft(onlinerProxyAddDraft).length} new line(s) ready · duplicates will be skipped</span>
+              </label>
+              <div className="confirm-modal-actions">
+                <Button type="button" variant="secondary" disabled={addingOnlinerProxies} onClick={() => setShowAddOnlinerProxiesModal(false)}>Cancel</Button>
+                <Button type="submit" disabled={addingOnlinerProxies || !parseProxyDraft(onlinerProxyAddDraft).length}>
+                  {addingOnlinerProxies ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                  {addingOnlinerProxies ? "Adding..." : "Add proxies"}
                 </Button>
               </div>
             </form>
