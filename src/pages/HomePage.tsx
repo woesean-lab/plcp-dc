@@ -4377,7 +4377,7 @@ export default function HomePage() {
                             {onlinerProxyDetails.map((proxy) => (
                               <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
                                 <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
-                                <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><strong>{proxy.countryName ?? "Unknown"}</strong><small>{proxy.countryCode ?? "—"}</small></span>
+                                <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><small>{proxy.countryName ?? "Unknown"}</small></span>
                                 <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
                                 <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
                                 <span className="onliner-proxy-health-copy">
