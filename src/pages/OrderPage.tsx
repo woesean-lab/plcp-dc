@@ -1651,7 +1651,6 @@ export default function OrderPage() {
                 completed={reactionCompletedCount}
                 failed={reactionFailedCount}
                 remaining={reactionRemainingCount}
-                latestMessageLink={reactionMessageLink}
                 messageDraft={reactionMessageDraft}
                 countDraft={reactionCountDraft}
                 emojiCountDraft={reactionEmojiCountDraft}

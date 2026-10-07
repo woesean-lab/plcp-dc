@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -21,7 +21,6 @@ type ReactionPanelProps = {
   completed: number;
   failed: number;
   remaining: number;
-  latestMessageLink?: string;
   messageDraft: string;
   countDraft: number;
   emojiCountDraft: number;
@@ -47,7 +46,6 @@ export function ReactionPanel({
   completed,
   failed,
   remaining,
-  latestMessageLink,
   messageDraft,
   countDraft,
   emojiCountDraft,
@@ -92,11 +90,6 @@ export function ReactionPanel({
             <button className="monitor-reaction-message-link" type="button" onClick={onEditLimit}>
               <MessageSquareText aria-hidden="true" /> {limitActionLabel}
             </button>
-          ) : null}
-          {latestMessageLink ? (
-            <a className="monitor-reaction-message-link" href={latestMessageLink} target="_blank" rel="noreferrer">
-              <Link2 aria-hidden="true" /> Latest message <ExternalLink aria-hidden="true" />
-            </a>
           ) : null}
         </div>
       </div>
