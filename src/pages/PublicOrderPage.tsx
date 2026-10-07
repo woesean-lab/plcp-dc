@@ -80,14 +80,6 @@ function formatDcordTiming(value: unknown) {
   return milliseconds < 1_000 ? `${Math.round(milliseconds)}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
 }
 
-function getFriendlyReactionFailure(value: unknown) {
-  const message = String(value ?? "").toLowerCase();
-  if (/403|forbidden|permission|access|missing access/.test(message)) return "Some accounts could not access this message or add a reaction.";
-  if (/404|unknown message|unknown channel|not found/.test(message)) return "The Discord message or channel could not be found.";
-  if (/emoji|reaction.*disabled|cannot react|can't react/.test(message)) return "The selected emoji cannot be used on this message.";
-  return null;
-}
-
 function maskUsername(value: string) {
   const username = value.trim();
   if (username.length <= 1) return "*";
@@ -528,7 +520,7 @@ export default function PublicOrderPage() {
     ? reactionAssignments.filter((item) => item.reactionState === "completed").length
     : reactionMembers.filter((item) => item.reactionState === "completed").length;
   const visibleReactionFailedCount = (reactionAssignments.length ? reactionAssignments : reactionMembers)
-    .filter((item) => item.reactionState === "failed" && getFriendlyReactionFailure(item.reactionDetails) !== null).length;
+    .filter((item) => item.reactionState === "failed").length;
   const reactionAssignedCount = reactionAssignments.length
     ? reactionAssignments.filter((item) => item.reactionState !== "failed").length
     : reactionMembers.filter((item) => item.reactionState !== "failed").length;
@@ -1158,13 +1150,11 @@ export default function PublicOrderPage() {
                         ? request.assignments
                         : reactionMembers.filter((item) => item.reactionRequestId === request.id);
                       const failedAssignments = assignments.filter((item) => item.reactionState === "failed");
-                      const failureMessages = [...new Set(failedAssignments
-                        .map((item) => getFriendlyReactionFailure(item.reactionDetails))
-                        .filter((message): message is string => Boolean(message)))];
+                      const failureMessages = [...new Set(failedAssignments.map((item) => `${item.reactionEmoji ?? "Reaction"}${item.discordUserId ? ` · ${item.discordUserId}` : ""}: ${item.reactionDetails || "Discord returned no detail."}`))];
                       return {
                         ...request,
                         completedCount: assignments.filter((item) => item.reactionState === "completed").length,
-                        failedCount: failureMessages.length ? failedAssignments.filter((item) => getFriendlyReactionFailure(item.reactionDetails) !== null).length : 0,
+                        failedCount: failedAssignments.length,
                         failureMessages
                       };
                     })}
