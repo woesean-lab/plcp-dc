@@ -7704,7 +7704,7 @@
 .monitor-reaction-progress-track { display: block; height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
 .monitor-reaction-progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8070ed, #b2a7ff); box-shadow: 0 0 12px rgba(155,140,255,.45); transition: width .35s ease; }
 
-.monitor-reaction-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--app-border); border-radius: 15px; background: rgba(5,6,14,.32); }
+.monitor-reaction-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--app-border); border-radius: 15px; background: rgba(5,6,14,.32); }
 .monitor-reaction-metrics > div { min-width: 0; padding: 15px 13px; border-right: 1px solid var(--app-divider); }
 .monitor-reaction-metrics > div:last-child { border-right: 0; }
 .monitor-reaction-metrics span { display: flex; align-items: center; gap: 5px; color: var(--app-muted); font-size: 8px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
@@ -7845,7 +7845,9 @@
 .monitor-reaction-panel.is-side .monitor-reaction-heading { align-items: flex-start; flex-direction: column; }
 .monitor-reaction-panel.is-side .monitor-reaction-heading-actions { width: 100%; justify-content: space-between; }
 .monitor-reaction-panel.is-side .monitor-reaction-overview { padding: 13px; }
-.monitor-reaction-panel.is-side .monitor-reaction-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.monitor-reaction-panel.is-side .monitor-reaction-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.monitor-reaction-panel.is-side .monitor-reaction-metrics > div:nth-child(2n) { border-right: 0; }
+.monitor-reaction-panel.is-side .monitor-reaction-metrics > div:nth-child(n+3) { border-top: 1px solid var(--app-divider); }
 .monitor-reaction-panel.is-side .monitor-reaction-form-copy { padding-bottom: 3px; }
 .monitor-reaction-panel.is-side .monitor-reaction-form .ui-button { width: 100%; }
 
@@ -11364,6 +11366,9 @@
   .monitor-reaction-progress-ring::before { width: 60px; height: 60px; }
   .monitor-reaction-progress-ring strong { font-size: 17px; }
   .monitor-reaction-metrics > div { padding: 12px 9px; }
+  .monitor-reaction-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .monitor-reaction-metrics > div:nth-child(2n) { border-right: 0; }
+  .monitor-reaction-metrics > div:nth-child(n+3) { border-top: 1px solid var(--app-divider); }
   .monitor-reaction-metrics > div > strong { font-size: 20px; }
   .monitor-reaction-metrics > div > small { display: none; }
   .monitor-reaction-form { grid-template-columns: minmax(0, 1fr); margin: 0 12px 12px; padding: 12px; }

@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, ShoppingCart, Sparkles, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -21,6 +21,7 @@ type ReactionPanelProps = {
   completed: number;
   failed: number;
   remaining: number;
+  eligibleMembers: number;
   messageDraft: string;
   countDraft: number;
   emojiCountDraft: number;
@@ -47,6 +48,7 @@ export function ReactionPanel({
   completed,
   failed,
   remaining,
+  eligibleMembers,
   messageDraft,
   countDraft,
   emojiCountDraft,
@@ -125,6 +127,11 @@ export function ReactionPanel({
             <span><Sparkles aria-hidden="true" /> Available</span>
             <strong>{remaining}</strong>
             <small>ready to assign</small>
+          </div>
+          <div data-tone="members">
+            <span><Users aria-hidden="true" /> Eligible members</span>
+            <strong>{eligibleMembers}</strong>
+            <small>able to react</small>
           </div>
         </div>
       </div>
