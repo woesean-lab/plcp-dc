@@ -93,6 +93,8 @@ export interface OrderStatusResponse {
     requestedCount: number;
     assignedCount: number;
     createdAt: string;
+    autoStopReason?: string;
+    autoStoppedAt?: string;
     assignments?: Array<{
       discordUserId: string;
       reactionState?: string;

@@ -2749,6 +2749,73 @@ async function updateCommunityReactionResult(job, fields) {
   }
 }
 
+async function stopCommunityReactionRequestAfterAccessFailures(orderId, requestId) {
+  const recent = await pool.query(
+    `SELECT discord_user_id, status, last_error
+     FROM community_reaction_jobs
+     WHERE order_id = $1 AND request_id = $2 AND status IN ('completed', 'failed')
+     ORDER BY completed_at DESC
+     LIMIT 100`,
+    [orderId, requestId]
+  );
+  const inaccessibleMembers = new Set();
+  for (const row of recent.rows) {
+    const accessFailure = row.status === "failed" && /missing access|missing permissions/i.test(String(row.last_error ?? ""));
+    if (!accessFailure) break;
+    inaccessibleMembers.add(String(row.discord_user_id));
+    if (inaccessibleMembers.size >= 10) break;
+  }
+  if (inaccessibleMembers.size < 10) return 0;
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || !Array.isArray(order.reactionRequests)) {
+      await client.query("ROLLBACK");
+      return 0;
+    }
+    const reason = "Stopped automatically: members cannot access this channel or message.";
+    const cancelledJobs = await client.query(
+      `UPDATE community_reaction_jobs
+       SET status = 'cancelled', completed_at = NOW(), last_error = $3
+       WHERE order_id = $1 AND request_id = $2 AND status = 'pending'
+       RETURNING discord_user_id, emoji`,
+      [orderId, requestId, reason]
+    );
+    if (!cancelledJobs.rowCount) {
+      await client.query("ROLLBACK");
+      return 0;
+    }
+    const cancelledKeys = new Set(cancelledJobs.rows.map((job) => `${job.discord_user_id}:${job.emoji}`));
+    const cancelledAt = new Date().toISOString();
+    const reactionRequests = order.reactionRequests.map((request) => String(request?.id) === String(requestId)
+      ? {
+          ...request,
+          autoStopReason: reason,
+          autoStoppedAt: cancelledAt,
+          assignments: Array.isArray(request?.assignments)
+            ? request.assignments.map((assignment) => cancelledKeys.has(`${assignment?.discordUserId}:${assignment?.reactionEmoji}`)
+              ? { ...assignment, reactionState: "cancelled", reactionDetails: reason, reactionCompletedAt: cancelledAt }
+              : assignment)
+            : request?.assignments
+        }
+      : request);
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [orderId, JSON.stringify({ ...order, reactionRequests })]
+    );
+    await client.query("COMMIT");
+    return cancelledJobs.rowCount;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 async function processCommunityReactionJobsUnlocked() {
   const jobs = await pool.query(
     `SELECT order_id, request_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
@@ -2843,6 +2910,12 @@ async function processCommunityReactionJobsUnlocked() {
         [job.order_id, job.request_id, job.discord_user_id, job.emoji, terminal ? "failed" : "pending", account.id, message]
       );
       await updateCommunityReactionResult(job, { reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: message });
+      if (terminal && result.response.status === 403 && /missing access|missing permissions/i.test(message)) {
+        const cancelledCount = await stopCommunityReactionRequestAfterAccessFailures(job.order_id, job.request_id);
+        if (cancelledCount > 0) {
+          appendDiscordOnlinerLog("warn", `Reaction request stopped after 10 consecutive members could not access the message; ${cancelledCount} queued reactions were cancelled.`, account.id);
+        }
+      }
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).slice(0, 400);
       const terminal = Number(job.attempts) >= 5;

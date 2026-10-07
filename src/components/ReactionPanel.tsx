@@ -13,6 +13,7 @@ export type ReactionPanelRequest = {
   failedCount?: number;
   cancelledCount?: number;
   failureMessages?: string[];
+  autoStopReason?: string;
   createdAt: string;
 };
 
@@ -248,6 +249,7 @@ export function ReactionPanel({
                   <span className="monitor-reaction-history-copy">
                     <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
+                    {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>
                   <span className="monitor-reaction-history-progress">
                     <span><i style={{ width: `${requestProgress}%` }} /></span>

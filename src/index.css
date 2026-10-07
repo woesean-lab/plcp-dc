@@ -7825,6 +7825,7 @@
 .monitor-reaction-history-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-reaction-history-copy strong { font-size: 10px; font-weight: 650; }
 .monitor-reaction-history-copy small { margin-top: 2px; color: var(--app-subtle); font-size: 8px; }
+.monitor-reaction-history-copy .monitor-reaction-history-stop { overflow: hidden; color: var(--app-danger-text); text-overflow: ellipsis; white-space: nowrap; }
 .monitor-reaction-history-progress { display: grid; grid-template-columns: minmax(50px, 1fr) auto; align-items: center; gap: 7px; }
 .monitor-reaction-history-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.07); }
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }
