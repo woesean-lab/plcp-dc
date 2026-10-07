@@ -7802,8 +7802,8 @@
 .monitor-reaction-history-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.07); }
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }
 .monitor-reaction-history-progress small { color: var(--app-muted); font-size: 8px; }
-.monitor-reaction-history-failure-button { display: grid; width: 32px; height: 32px; place-items: center; border: 1px solid var(--app-border); border-radius: 9px; color: #ff7896; background: rgba(255,255,255,.035); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); transition: border-color .15s ease, color .15s ease, background .15s ease; }
-.monitor-reaction-history-failure-button:hover { border-color: rgba(255,120,150,.48); background: rgba(244,86,120,.09); }
+.monitor-reaction-history-failure-button { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 9px; color: #ff6f8f; background: rgba(111,15,38,.32); box-shadow: none; transition: color .15s ease, background .15s ease; }
+.monitor-reaction-history-failure-button:hover { color: #ff8aa3; background: rgba(139,18,47,.46); }
 .monitor-reaction-history-failure-button svg { width: 13px; height: 13px; }
 .monitor-reaction-history-failure-placeholder { width: 32px; }
 .monitor-reaction-history-link { display: grid; width: 30px; height: 32px; place-items: center; color: var(--app-subtle); transition: color .15s ease, background .15s ease; }
