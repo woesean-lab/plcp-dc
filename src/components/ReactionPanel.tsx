@@ -1,4 +1,4 @@
-import { useId, type CSSProperties, type FormEvent } from "react";
+import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -61,6 +61,7 @@ export function ReactionPanel({
   limitActionLabel = "+ Add reaction limit"
 }: ReactionPanelProps) {
   const titleId = useId();
+  const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
@@ -222,31 +223,50 @@ export function ReactionPanel({
             {[...requests].reverse().map((request, index) => {
               const requestProgress = request.assignedCount > 0 ? Math.min(100, Math.round((request.completedCount / request.assignedCount) * 100)) : 0;
               return (
-                <a key={request.id} href={request.messageLink} target="_blank" rel="noreferrer">
+                <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
                     <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
-                    {(request.failedCount ?? 0) > 0 && request.failureMessages?.length ? (
-                      <span className="monitor-reaction-history-error" role="alert">
-                        <TriangleAlert aria-hidden="true" />
-                        <span>
-                          <b>{request.failedCount} failed</b>
-                          {(request.failureMessages?.length ? request.failureMessages : ["No failure detail was returned."]).slice(0, 4).map((message) => <small key={message}>{message}</small>)}
-                        </span>
-                      </span>
-                    ) : null}
                   </span>
                   <span className="monitor-reaction-history-progress">
                     <span><i style={{ width: `${requestProgress}%` }} /></span>
                     <small>{request.completedCount}/{request.assignedCount}</small>
                   </span>
-                  <ExternalLink aria-hidden="true" />
-                </a>
+                  {(request.failedCount ?? 0) > 0 && request.failureMessages?.length ? (
+                    <button className="monitor-reaction-history-failure-button" type="button" onClick={() => setFailureRequest(request)} aria-label={`Show ${request.failedCount} failed reaction details`} title={`${request.failedCount} failed`}>
+                      <TriangleAlert aria-hidden="true" />
+                      <span>{request.failedCount}</span>
+                    </button>
+                  ) : <span className="monitor-reaction-history-failure-placeholder" />}
+                  <a className="monitor-reaction-history-link" href={request.messageLink} target="_blank" rel="noreferrer" aria-label="Open Discord message">
+                    <ExternalLink aria-hidden="true" />
+                  </a>
+                </div>
               );
             })}
           </div>
         </details>
+      ) : null}
+
+      {failureRequest ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFailureRequest(null); }}>
+          <div className="confirm-modal reaction-failure-modal" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-failure-title`}>
+            <span className="confirm-modal-icon reaction-failure-modal-icon" aria-hidden="true"><TriangleAlert /></span>
+            <p className="app-kicker">Reaction request</p>
+            <h2 id={`${titleId}-failure-title`}>Why did it fail?</h2>
+            <p><strong>{failureRequest.failedCount} of {failureRequest.assignedCount}</strong> assigned reactions could not be delivered.</p>
+            <div className="reaction-failure-modal-list">
+              {failureRequest.failureMessages?.map((message, index) => (
+                <div key={`${message}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{message}</p></div>
+              ))}
+            </div>
+            <div className="confirm-modal-actions">
+              <Button type="button" variant="secondary" onClick={() => setFailureRequest(null)}>Close</Button>
+              <Button asChild><a href={failureRequest.messageLink} target="_blank" rel="noreferrer">Open message <ExternalLink /></a></Button>
+            </div>
+          </div>
+        </div>
       ) : null}
     </section>
   );

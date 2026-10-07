@@ -7789,25 +7789,35 @@
 .monitor-reaction-history summary > svg { width: 14px; height: 14px; color: var(--app-subtle); transition: transform .18s ease; }
 .monitor-reaction-history[open] summary > svg { transform: rotate(180deg); }
 .monitor-reaction-history > div { display: grid; gap: 6px; padding: 0 8px 8px; border-top: 1px solid var(--app-divider); }
-.monitor-reaction-history a { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 150px) auto; align-items: center; gap: 10px; padding: 9px; border-radius: 9px; color: var(--app-text); text-decoration: none; transition: background .16s ease; }
-.monitor-reaction-history a:first-child { margin-top: 7px; }
-.monitor-reaction-history a:hover { background: var(--app-accent-soft); }
-.monitor-reaction-history a > svg { width: 13px; height: 13px; color: var(--app-subtle); }
+.monitor-reaction-history-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 150px) 28px 20px; align-items: center; gap: 10px; padding: 9px; border-radius: 9px; color: var(--app-text); transition: background .16s ease; }
+.monitor-reaction-history-row:first-child { margin-top: 7px; }
+.monitor-reaction-history-row:hover { background: var(--app-accent-soft); }
 .monitor-reaction-history-index { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--app-border); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--app-muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
 .monitor-reaction-history-copy { min-width: 0; }
 .monitor-reaction-history-copy strong,
 .monitor-reaction-history-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .monitor-reaction-history-copy strong { font-size: 10px; font-weight: 650; }
 .monitor-reaction-history-copy small { margin-top: 2px; color: var(--app-subtle); font-size: 8px; }
-.monitor-reaction-history-error { display: flex; align-items: flex-start; gap: 5px; margin-top: 6px; padding: 6px 7px; border: 1px solid var(--app-danger-button-border); border-radius: 7px; color: var(--app-danger-text); background: var(--app-danger-soft); }
-.monitor-reaction-history-error > svg { width: 11px; height: 11px; flex: 0 0 auto; margin-top: 1px; }
-.monitor-reaction-history-error > span { display: grid; min-width: 0; gap: 1px; }
-.monitor-reaction-history-error b { font-size: 8px; font-weight: 700; }
-.monitor-reaction-history-copy .monitor-reaction-history-error small { display: block; overflow: visible; color: var(--app-muted); font-size: 8px; line-height: 1.35; text-overflow: clip; white-space: normal; }
 .monitor-reaction-history-progress { display: grid; grid-template-columns: minmax(50px, 1fr) auto; align-items: center; gap: 7px; }
 .monitor-reaction-history-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.07); }
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }
 .monitor-reaction-history-progress small { color: var(--app-muted); font-size: 8px; }
+.monitor-reaction-history-failure-button { position: relative; display: grid; width: 27px; height: 27px; place-items: center; border: 1px solid var(--app-danger-button-border); border-radius: 50%; color: var(--app-danger-text); background: var(--app-danger-soft); transition: transform .15s ease, border-color .15s ease, background .15s ease; }
+.monitor-reaction-history-failure-button:hover { transform: translateY(-1px); border-color: var(--app-danger-text); background: rgba(244, 86, 120, .16); }
+.monitor-reaction-history-failure-button svg { width: 12px; height: 12px; }
+.monitor-reaction-history-failure-button span { position: absolute; top: -5px; right: -5px; min-width: 14px; height: 14px; padding: 0 3px; border: 2px solid var(--app-surface); border-radius: 99px; color: #fff; background: var(--app-danger); font-size: 7px; font-weight: 800; line-height: 10px; }
+.monitor-reaction-history-failure-placeholder { width: 27px; }
+.monitor-reaction-history-link { display: grid; width: 20px; height: 24px; place-items: center; color: var(--app-subtle); }
+.monitor-reaction-history-link:hover { color: var(--app-accent-bright); }
+.monitor-reaction-history-link svg { width: 13px; height: 13px; }
+
+.reaction-failure-modal { width: min(560px, calc(100vw - 2rem)); }
+.reaction-failure-modal-icon { border-color: var(--app-danger-button-border); color: var(--app-danger-text); background: var(--app-danger-soft); }
+.reaction-failure-modal-list { display: grid; max-height: min(340px, 42vh); overflow-y: auto; gap: 7px; margin-top: 14px; }
+.reaction-failure-modal-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: start; gap: 9px; padding: 9px; border: 1px solid var(--app-divider); border-radius: 9px; background: rgba(255,255,255,.02); }
+.reaction-failure-modal-list > div > span { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--app-danger-button-border); border-radius: 7px; color: var(--app-danger-text); background: var(--app-danger-soft); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
+.reaction-failure-modal-list p { margin: 2px 0 0; color: var(--app-text-secondary); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; line-height: 1.5; overflow-wrap: anywhere; }
+.reaction-failure-modal .confirm-modal-actions svg { width: 13px; height: 13px; }
 
 .monitor-reaction-panel.is-side .monitor-reaction-heading,
 .monitor-reaction-panel.is-side .monitor-reaction-dashboard,
@@ -11334,6 +11344,6 @@
   .lookup-reaction-limit-shortcut { margin-right: 12px; margin-left: 12px; }
   .monitor-reaction-allowance-complete,
   .monitor-reaction-history { margin-right: 12px; margin-left: 12px; }
-  .monitor-reaction-history a { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .monitor-reaction-history-progress { grid-column: 2 / -1; }
+  .monitor-reaction-history-row { grid-template-columns: auto minmax(0, 1fr) 28px 20px; }
+  .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
