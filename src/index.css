@@ -7714,9 +7714,11 @@
 .monitor-reaction-metrics span { display: flex; align-items: center; gap: 5px; color: var(--app-muted); font-size: 8px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
 .monitor-reaction-metrics span svg { width: 12px; height: 12px; color: var(--app-accent-bright); }
 .monitor-reaction-metrics [data-tone="success"] span svg { color: var(--app-success); }
+.monitor-reaction-metrics [data-tone="members"] { position: relative; }
+.monitor-reaction-metrics [data-tone="members"] > span { padding-right: 22px; }
 .monitor-reaction-metrics > div > strong { display: block; margin-top: 10px; color: var(--app-text); font-size: 24px; font-weight: 720; letter-spacing: -.04em; }
 .monitor-reaction-metrics > div > small { display: block; margin-top: 3px; color: var(--app-subtle); font-size: 8px; line-height: 1.35; }
-.monitor-reaction-metric-refresh { display: grid; width: 20px; height: 20px; margin-left: auto; place-items: center; border: 0; border-radius: 6px; color: var(--app-subtle); background: rgba(255,255,255,.045); transition: color .15s ease, background .15s ease; }
+.monitor-reaction-metric-refresh { position: absolute; top: 11px; right: 9px; display: grid; width: 20px; height: 20px; place-items: center; border: 0; border-radius: 6px; color: var(--app-subtle); background: rgba(255,255,255,.045); transition: color .15s ease, background .15s ease; }
 .monitor-reaction-metric-refresh:hover:not(:disabled) { color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .monitor-reaction-metric-refresh:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-metric-refresh svg { width: 11px !important; height: 11px !important; }
