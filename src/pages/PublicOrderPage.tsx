@@ -9,7 +9,7 @@ import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Pla
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelPublicCommunityOrderReactions, checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -270,6 +270,7 @@ export default function PublicOrderPage() {
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
   const [reactionEmojiCountDraft, setReactionEmojiCountDraft] = useState(8);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
+  const [cancellingReactions, setCancellingReactions] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -529,8 +530,8 @@ export default function PublicOrderPage() {
   const visibleReactionFailedCount = (reactionAssignments.length ? reactionAssignments : reactionMembers)
     .filter((item) => item.reactionState === "failed").length;
   const reactionAssignedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => item.reactionState !== "failed").length
-    : reactionMembers.filter((item) => item.reactionState !== "failed").length;
+    ? reactionAssignments.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length
+    : reactionMembers.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length;
   const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionAssignedCount);
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
@@ -584,6 +585,22 @@ export default function PublicOrderPage() {
       toast.error(saveError instanceof Error ? saveError.message : "Reaction message could not be saved.");
     } finally {
       setSavingReactionMessage(false);
+    }
+  }
+
+  async function handleCancelPendingReactions() {
+    if (!uniqid || cancellingReactions) return;
+    try {
+      setCancellingReactions(true);
+      const data = await cancelPublicCommunityOrderReactions(uniqid);
+      setStatus((current) => mergeOrderStatus(current, data.order));
+      toast.success(data.cancelledCount
+        ? `${data.cancelledCount} pending reaction${data.cancelledCount === 1 ? " was" : "s were"} cancelled and returned to your available limit.`
+        : "No queued reactions remained to cancel.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Pending reactions could not be cancelled.");
+    } finally {
+      setCancellingReactions(false);
     }
   }
   useEffect(() => {
@@ -1164,6 +1181,7 @@ export default function PublicOrderPage() {
                         ...request,
                         completedCount: assignments.filter((item) => item.reactionState === "completed").length,
                         failedCount: failedAssignments.length,
+                        cancelledCount: assignments.filter((item) => item.reactionState === "cancelled").length,
                         failureMessages
                       };
                     })}
@@ -1171,6 +1189,8 @@ export default function PublicOrderPage() {
                     onCountChange={setReactionCountDraft}
                     onEmojiCountChange={setReactionEmojiCountDraft}
                     onSubmit={() => void handleSaveReactionMessage()}
+                    onCancelPending={() => void handleCancelPendingReactions()}
+                    cancellingPending={cancellingReactions}
                     onEditLimit={() => setShowReactionPurchaseModal(true)}
                     limitActionLabel="Buy reaction limit"
                     limitActionVariant="purchase"

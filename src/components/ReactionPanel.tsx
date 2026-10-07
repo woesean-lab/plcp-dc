@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -11,6 +11,7 @@ export type ReactionPanelRequest = {
   assignedCount: number;
   completedCount: number;
   failedCount?: number;
+  cancelledCount?: number;
   failureMessages?: string[];
   createdAt: string;
 };
@@ -24,6 +25,8 @@ type ReactionPanelProps = {
   eligibleMembers: number;
   onRefreshEligibleMembers?: () => void;
   refreshingEligibleMembers?: boolean;
+  onCancelPending?: () => void;
+  cancellingPending?: boolean;
   messageDraft: string;
   countDraft: number;
   emojiCountDraft: number;
@@ -53,6 +56,8 @@ export function ReactionPanel({
   eligibleMembers,
   onRefreshEligibleMembers,
   refreshingEligibleMembers = false,
+  onCancelPending,
+  cancellingPending = false,
   messageDraft,
   countDraft,
   emojiCountDraft,
@@ -94,6 +99,12 @@ export function ReactionPanel({
         </div>
 
         <div className="monitor-reaction-heading-actions">
+          {pending > 0 && onCancelPending ? (
+            <button className="monitor-reaction-cancel" type="button" onClick={onCancelPending} disabled={cancellingPending}>
+              {cancellingPending ? <LoaderCircle className="animate-spin" aria-hidden="true" /> : <Ban aria-hidden="true" />}
+              {cancellingPending ? "Cancelling..." : `Cancel remaining (${pending})`}
+            </button>
+          ) : null}
           {onEditLimit ? (
             <button className={`monitor-reaction-message-link${limitActionVariant === "purchase" ? " is-purchase" : ""}`} type="button" onClick={onEditLimit}>
               {limitActionVariant === "purchase" ? <ShoppingCart aria-hidden="true" /> : <MessageSquareText aria-hidden="true" />} {limitActionLabel}
@@ -133,9 +144,9 @@ export function ReactionPanel({
             <small>ready to assign</small>
           </div>
           <div data-tone="members">
-            <span><Users aria-hidden="true" /> Eligible members
+            <span><Users aria-hidden="true" /> Eligible
               {onRefreshEligibleMembers ? (
-                <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh Onliner live members" title="Check members and refresh the Onliner live count">
+                <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh online members" title="Check members and refresh the online count">
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
                 </button>
               ) : null}
@@ -240,7 +251,7 @@ export function ReactionPanel({
                   </span>
                   <span className="monitor-reaction-history-progress">
                     <span><i style={{ width: `${requestProgress}%` }} /></span>
-                    <small>{request.completedCount}/{request.assignedCount}</small>
+                    <small>{request.completedCount}/{request.assignedCount}{request.cancelledCount ? ` · ${request.cancelledCount} cancelled` : ""}</small>
                   </span>
                   {(request.failedCount ?? 0) > 0 && request.failureMessages?.length ? (
                     <button className="monitor-reaction-history-failure-button" type="button" onClick={() => setFailureRequest(request)} aria-label={`Show ${request.failedCount} failed reaction details`} title={`${request.failedCount} failed`}>

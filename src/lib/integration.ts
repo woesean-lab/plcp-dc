@@ -81,7 +81,7 @@ export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "reaction-message", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "reaction-message" | "reaction-cancel", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -125,6 +125,10 @@ export function updatePublicCommunityOrderReactionMessage(uniqid: string, messag
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messageLink, reactionCount, emojiCount })
   });
+}
+
+export function cancelPublicCommunityOrderReactions(uniqid: string) {
+  return requestPublicOrderApi<{ order: OrderStatusResponse; cancelledCount: number }>(uniqid, "reaction-cancel", { method: "POST" });
 }
 
 export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {
@@ -307,6 +311,10 @@ export function updateCommunityOrderReactionMessage(uniqid: string, messageLink:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messageLink, reactionCount, emojiCount })
   });
+}
+
+export function cancelCommunityOrderReactions(uniqid: string) {
+  return requestJson<{ order: OrderStatusResponse; cancelledCount: number }>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-cancel`, { method: "POST" });
 }
 
 export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number) {
