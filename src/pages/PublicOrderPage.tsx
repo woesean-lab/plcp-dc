@@ -82,12 +82,10 @@ function formatDcordTiming(value: unknown) {
 
 function getFriendlyReactionFailure(value: unknown) {
   const message = String(value ?? "").toLowerCase();
-  if (/401|token|unauthori[sz]ed|authentication/.test(message)) return "Some accounts could not be verified.";
   if (/403|forbidden|permission|access|missing access/.test(message)) return "Some accounts could not access this message or add a reaction.";
   if (/404|unknown message|unknown channel|not found/.test(message)) return "The Discord message or channel could not be found.";
-  if (/429|rate.?limit|too many requests/.test(message)) return "Discord temporarily limited some reaction attempts.";
-  if (/proxy|gateway|connect|socket|timeout|timed out/.test(message)) return "Some accounts could not connect in time.";
-  return "Some reactions could not be delivered. You can try again with the returned allowance.";
+  if (/emoji|reaction.*disabled|cannot react|can't react/.test(message)) return "The selected emoji cannot be used on this message.";
+  return null;
 }
 
 function maskUsername(value: string) {
@@ -529,9 +527,8 @@ export default function PublicOrderPage() {
   const reactionCompletedCount = reactionAssignments.length
     ? reactionAssignments.filter((item) => item.reactionState === "completed").length
     : reactionMembers.filter((item) => item.reactionState === "completed").length;
-  const reactionFailedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => item.reactionState === "failed").length
-    : reactionMembers.filter((item) => item.reactionState === "failed").length;
+  const visibleReactionFailedCount = (reactionAssignments.length ? reactionAssignments : reactionMembers)
+    .filter((item) => item.reactionState === "failed" && getFriendlyReactionFailure(item.reactionDetails) !== null).length;
   const reactionAssignedCount = reactionAssignments.length
     ? reactionAssignments.filter((item) => item.reactionState !== "failed").length
     : reactionMembers.filter((item) => item.reactionState !== "failed").length;
@@ -1148,7 +1145,7 @@ export default function PublicOrderPage() {
                   <ReactionPanel
                     limit={reactionOrderLimit}
                     completed={reactionCompletedCount}
-                    failed={reactionFailedCount}
+                    failed={visibleReactionFailedCount}
                     remaining={reactionRemainingCount}
                     latestMessageLink={reactionMessageLink}
                     messageDraft={reactionMessageDraft}
@@ -1161,11 +1158,14 @@ export default function PublicOrderPage() {
                         ? request.assignments
                         : reactionMembers.filter((item) => item.reactionRequestId === request.id);
                       const failedAssignments = assignments.filter((item) => item.reactionState === "failed");
+                      const failureMessages = [...new Set(failedAssignments
+                        .map((item) => getFriendlyReactionFailure(item.reactionDetails))
+                        .filter((message): message is string => Boolean(message)))];
                       return {
                         ...request,
                         completedCount: assignments.filter((item) => item.reactionState === "completed").length,
-                        failedCount: failedAssignments.length,
-                        failureMessages: [...new Set(failedAssignments.map((item) => getFriendlyReactionFailure(item.reactionDetails)))]
+                        failedCount: failureMessages.length ? failedAssignments.filter((item) => getFriendlyReactionFailure(item.reactionDetails) !== null).length : 0,
+                        failureMessages
                       };
                     })}
                     onMessageChange={setReactionMessageDraft}

@@ -227,7 +227,7 @@ export function ReactionPanel({
                   <span className="monitor-reaction-history-copy">
                     <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
-                    {(request.failedCount ?? 0) > 0 ? (
+                    {(request.failedCount ?? 0) > 0 && request.failureMessages?.length ? (
                       <span className="monitor-reaction-history-error" role="alert">
                         <TriangleAlert aria-hidden="true" />
                         <span>
