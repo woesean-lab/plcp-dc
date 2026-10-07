@@ -7833,7 +7833,7 @@
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }
 .monitor-reaction-history-progress small { color: var(--app-muted); font-size: 8px; }
 .monitor-reaction-history-cancel { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 9px; color: var(--app-muted); background: rgba(255,255,255,.035); box-shadow: none; transition: color .15s ease, background .15s ease; }
-.monitor-reaction-history-cancel:hover:not(:disabled) { color: var(--app-danger-text); background: var(--app-danger-soft); }
+.monitor-reaction-history-cancel:hover:not(:disabled) { color: #ff7896; background: rgba(139,18,47,.46); }
 .monitor-reaction-history-cancel:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-history-cancel svg { width: 13px; height: 13px; }
 .monitor-reaction-history-action-placeholder { width: 32px; }
