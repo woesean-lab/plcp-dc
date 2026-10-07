@@ -7641,10 +7641,6 @@
   box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 10px 28px color-mix(in srgb, var(--app-accent) 31%, transparent);
 }
 .monitor-reaction-message-link.is-purchase svg { width: 14px; height: 14px; }
-.monitor-reaction-cancel { display: inline-flex; min-height: 32px; align-items: center; gap: 6px; padding: 0 10px; border: 1px solid var(--app-danger-button-border); border-radius: 10px; color: var(--app-danger-text); background: var(--app-danger-soft); font-size: 10px; font-weight: 650; transition: color .15s ease, background .15s ease, border-color .15s ease; }
-.monitor-reaction-cancel:hover:not(:disabled) { border-color: var(--app-danger); background: color-mix(in srgb, var(--app-danger) 16%, transparent); }
-.monitor-reaction-cancel:disabled { cursor: wait; opacity: .6; }
-.monitor-reaction-cancel svg { width: 12px; height: 12px; }
 .monitor-reaction-status {
   display: inline-flex;
   min-height: 32px;
@@ -7822,7 +7818,7 @@
 .monitor-reaction-history summary > svg { width: 14px; height: 14px; color: var(--app-subtle); transition: transform .18s ease; }
 .monitor-reaction-history[open] summary > svg { transform: rotate(180deg); }
 .monitor-reaction-history > div { display: grid; gap: 6px; padding: 0 8px 8px; border-top: 1px solid var(--app-divider); }
-.monitor-reaction-history-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 150px) 32px 30px; align-items: center; gap: 8px; padding: 9px; border-radius: 9px; color: var(--app-text); transition: background .16s ease; }
+.monitor-reaction-history-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 150px) 32px 32px 30px; align-items: center; gap: 8px; padding: 9px; border-radius: 9px; color: var(--app-text); transition: background .16s ease; }
 .monitor-reaction-history-row:first-child { margin-top: 7px; }
 .monitor-reaction-history-row:hover { background: var(--app-accent-soft); }
 .monitor-reaction-history-index { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--app-border); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--app-muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
@@ -7836,6 +7832,11 @@
 .monitor-reaction-history-progress > span { height: 4px; overflow: hidden; border-radius: 99px; background: rgba(255,255,255,.07); }
 .monitor-reaction-history-progress i { display: block; height: 100%; border-radius: inherit; background: var(--app-accent); }
 .monitor-reaction-history-progress small { color: var(--app-muted); font-size: 8px; }
+.monitor-reaction-history-cancel { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 9px; color: var(--app-muted); background: rgba(255,255,255,.035); box-shadow: none; transition: color .15s ease, background .15s ease; }
+.monitor-reaction-history-cancel:hover:not(:disabled) { color: var(--app-danger-text); background: var(--app-danger-soft); }
+.monitor-reaction-history-cancel:disabled { cursor: wait; opacity: .6; }
+.monitor-reaction-history-cancel svg { width: 13px; height: 13px; }
+.monitor-reaction-history-action-placeholder { width: 32px; }
 .monitor-reaction-history-failure-button { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 9px; color: #ff6f8f; background: rgba(111,15,38,.32); box-shadow: none; transition: color .15s ease, background .15s ease; }
 .monitor-reaction-history-failure-button:hover { color: #ff8aa3; background: rgba(139,18,47,.46); }
 .monitor-reaction-history-failure-button svg { width: 13px; height: 13px; }
