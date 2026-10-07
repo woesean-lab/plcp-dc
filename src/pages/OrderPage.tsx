@@ -501,7 +501,7 @@ export default function OrderPage() {
   const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
   const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
   const legacyReactionMembers = communityMemberResults.filter((item) => item.reactionEligible);
-  const reactionEligibleMemberCount = communityMemberResults.filter((item) => item.reactionEligible
+  const reactionEligibleMemberCount = communityMemberResults.filter((item) => ["joined", "already_member"].includes(item.state.toLowerCase())
     && item.membershipStatus !== "removed"
     && item.authorizationStatus !== "inactive").length;
   const reactionCompletedCount = reactionAssignments.length
