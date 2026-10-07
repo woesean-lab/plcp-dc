@@ -7807,7 +7807,7 @@
 .monitor-reaction-history-failure-button svg { width: 13px; height: 13px; }
 .monitor-reaction-history-failure-placeholder { width: 32px; }
 .monitor-reaction-history-link { display: grid; width: 32px; height: 32px; place-items: center; border: 0; border-radius: 9px; color: var(--app-subtle); background: rgba(255,255,255,.035); transition: color .15s ease, background .15s ease, box-shadow .15s ease; }
-.monitor-reaction-history-link:hover { color: #70b7ff; background: rgba(55,139,255,.12); box-shadow: 0 0 14px rgba(55,139,255,.08); }
+.monitor-reaction-history-link:hover { color: var(--app-accent-bright); background: color-mix(in srgb, var(--app-accent) 12%, transparent); box-shadow: 0 0 14px color-mix(in srgb, var(--app-accent) 9%, transparent); }
 .monitor-reaction-history-link svg { width: 14px; height: 14px; }
 
 .reaction-failure-backdrop { position: fixed; z-index: 1000; inset: 0; width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; padding: 16px; background: rgba(3,4,10,.72); backdrop-filter: blur(8px); }
