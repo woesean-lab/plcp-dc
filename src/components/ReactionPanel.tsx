@@ -1,5 +1,5 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -236,7 +236,6 @@ export function ReactionPanel({
                   {(request.failedCount ?? 0) > 0 && request.failureMessages?.length ? (
                     <button className="monitor-reaction-history-failure-button" type="button" onClick={() => setFailureRequest(request)} aria-label={`Show ${request.failedCount} failed reaction details`} title={`${request.failedCount} failed`}>
                       <TriangleAlert aria-hidden="true" />
-                      <span>{request.failedCount}</span>
                     </button>
                   ) : <span className="monitor-reaction-history-failure-placeholder" />}
                   <a className="monitor-reaction-history-link" href={request.messageLink} target="_blank" rel="noreferrer" aria-label="Open Discord message">
@@ -250,21 +249,26 @@ export function ReactionPanel({
       ) : null}
 
       {failureRequest ? (
-        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFailureRequest(null); }}>
-          <div className="confirm-modal reaction-failure-modal" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-failure-title`}>
-            <span className="confirm-modal-icon reaction-failure-modal-icon" aria-hidden="true"><TriangleAlert /></span>
-            <p className="app-kicker">Reaction request</p>
-            <h2 id={`${titleId}-failure-title`}>Why did it fail?</h2>
-            <p><strong>{failureRequest.failedCount} of {failureRequest.assignedCount}</strong> assigned reactions could not be delivered.</p>
-            <div className="reaction-failure-modal-list">
+        <div className="reaction-failure-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setFailureRequest(null); }}>
+          <div className="reaction-failure-dialog" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-failure-title`}>
+            <header>
+              <span className="reaction-failure-dialog-icon" aria-hidden="true"><TriangleAlert /></span>
+              <div>
+                <small>REACTION DELIVERY</small>
+                <h2 id={`${titleId}-failure-title`}>Failure details</h2>
+                <p><strong>{failureRequest.failedCount}</strong> of {failureRequest.assignedCount} reactions weren’t delivered.</p>
+              </div>
+              <button type="button" onClick={() => setFailureRequest(null)} aria-label="Close failure details"><X /></button>
+            </header>
+            <div className="reaction-failure-dialog-list">
               {failureRequest.failureMessages?.map((message, index) => (
                 <div key={`${message}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{message}</p></div>
               ))}
             </div>
-            <div className="confirm-modal-actions">
-              <Button type="button" variant="secondary" onClick={() => setFailureRequest(null)}>Close</Button>
-              <Button asChild><a href={failureRequest.messageLink} target="_blank" rel="noreferrer">Open message <ExternalLink /></a></Button>
-            </div>
+            <footer>
+              <span><TriangleAlert aria-hidden="true" /> Failed reactions were returned to the available allowance.</span>
+              <a href={failureRequest.messageLink} target="_blank" rel="noreferrer">Open Discord message <ExternalLink /></a>
+            </footer>
           </div>
         </div>
       ) : null}
