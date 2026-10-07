@@ -80,6 +80,16 @@ function formatDcordTiming(value: unknown) {
   return milliseconds < 1_000 ? `${Math.round(milliseconds)}ms` : `${(milliseconds / 1_000).toFixed(1)}s`;
 }
 
+function getFriendlyReactionFailure(value: unknown) {
+  const message = String(value ?? "").toLowerCase();
+  if (/401|token|unauthori[sz]ed|authentication/.test(message)) return "Some accounts could not be verified.";
+  if (/403|forbidden|permission|access|missing access/.test(message)) return "Some accounts could not access this message or add a reaction.";
+  if (/404|unknown message|unknown channel|not found/.test(message)) return "The Discord message or channel could not be found.";
+  if (/429|rate.?limit|too many requests/.test(message)) return "Discord temporarily limited some reaction attempts.";
+  if (/proxy|gateway|connect|socket|timeout|timed out/.test(message)) return "Some accounts could not connect in time.";
+  return "Some reactions could not be delivered. You can try again with the returned allowance.";
+}
+
 function maskUsername(value: string) {
   const username = value.trim();
   if (username.length <= 1) return "*";
@@ -1139,6 +1149,9 @@ export default function PublicOrderPage() {
                     limit={reactionOrderLimit}
                     completed={reactionCompletedCount}
                     failed={reactionFailedCount}
+                    failureMessages={[...new Set((reactionAssignments.length
+                      ? reactionAssignments.filter((item) => item.reactionState === "failed").map((item) => getFriendlyReactionFailure(item.reactionDetails))
+                      : reactionMembers.filter((item) => item.reactionState === "failed").map((item) => getFriendlyReactionFailure(item.reactionDetails))))]}
                     remaining={reactionRemainingCount}
                     latestMessageLink={reactionMessageLink}
                     messageDraft={reactionMessageDraft}

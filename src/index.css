@@ -7696,6 +7696,23 @@
 .monitor-reaction-metrics > div > strong { display: block; margin-top: 10px; color: var(--app-text); font-size: 24px; font-weight: 720; letter-spacing: -.04em; }
 .monitor-reaction-metrics > div > small { display: block; margin-top: 3px; color: var(--app-subtle); font-size: 8px; line-height: 1.35; }
 
+.monitor-reaction-failure {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 20px 16px;
+  padding: 11px 13px;
+  border: 1px solid var(--app-danger-button-border);
+  border-radius: 12px;
+  color: var(--app-danger-text);
+  background: var(--app-danger-soft);
+}
+.monitor-reaction-failure > svg { width: 15px; height: 15px; flex: 0 0 auto; margin-top: 1px; }
+.monitor-reaction-failure strong { display: block; color: var(--app-text); font-size: 10px; }
+.monitor-reaction-failure small,
+.monitor-reaction-failure li { color: var(--app-muted); font-size: 9px; line-height: 1.45; }
+.monitor-reaction-failure ul { display: grid; gap: 2px; margin: 4px 0 0; padding-left: 14px; }
+
 .monitor-reaction-form {
   position: relative;
   display: grid;

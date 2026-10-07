@@ -1650,6 +1650,9 @@ export default function OrderPage() {
                 limit={reactionCapacity}
                 completed={reactionCompletedCount}
                 failed={reactionFailedCount}
+                failureMessages={[...new Set((reactionAssignments.length
+                  ? reactionAssignments.filter((item) => item.reactionState === "failed").map((item) => `${item.reactionEmoji ?? "Reaction"}${item.discordUserId ? ` · ${item.discordUserId}` : ""}: ${item.reactionDetails || "Discord returned no detail."}`)
+                  : legacyReactionMembers.filter((item) => item.reactionState === "failed").map((item) => `${item.reactionEmoji ?? "Reaction"}: ${item.reactionDetails || "Discord returned no detail."}`)))]}
                 remaining={reactionRemainingCount}
                 latestMessageLink={reactionMessageLink}
                 messageDraft={reactionMessageDraft}

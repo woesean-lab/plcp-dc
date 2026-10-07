@@ -1,5 +1,5 @@
 import { useId, type CSSProperties, type FormEvent } from "react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, Link2, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -17,6 +17,7 @@ type ReactionPanelProps = {
   limit: number;
   completed: number;
   failed: number;
+  failureMessages?: string[];
   remaining: number;
   latestMessageLink?: string;
   messageDraft: string;
@@ -43,6 +44,7 @@ export function ReactionPanel({
   limit,
   completed,
   failed,
+  failureMessages = [],
   remaining,
   latestMessageLink,
   messageDraft,
@@ -133,6 +135,20 @@ export function ReactionPanel({
           </div>
         </div>
       </div>
+
+      {failed > 0 ? (
+        <div className="monitor-reaction-failure" role="alert">
+          <TriangleAlert aria-hidden="true" />
+          <div>
+            <strong>{failed} reaction{failed === 1 ? "" : "s"} failed</strong>
+            {failureMessages.length ? (
+              <ul>
+                {failureMessages.slice(0, 4).map((message) => <li key={message}>{message}</li>)}
+              </ul>
+            ) : <small>No failure detail was returned.</small>}
+          </div>
+        </div>
+      ) : null}
 
       {remaining > 0 ? (
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
