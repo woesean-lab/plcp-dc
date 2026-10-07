@@ -133,7 +133,7 @@ export function ReactionPanel({
             <small>ready to assign</small>
           </div>
           <div data-tone="members">
-            <span><Users aria-hidden="true" /> Onliner live
+            <span><Users aria-hidden="true" /> Eligible members
               {onRefreshEligibleMembers ? (
                 <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh Onliner live members" title="Check members and refresh the Onliner live count">
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
