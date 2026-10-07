@@ -5,6 +5,7 @@ import { execFile as execFileCallback, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import geoipCountry from "geoip-country";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import pg from "pg";
 import { SocksProxyAgent } from "socks-proxy-agent";
@@ -1420,8 +1421,16 @@ function getDiscordOnlinerProxyPoolResponse(config) {
   const details = config.proxyPool.map((proxy) => {
     const health = discordOnlinerProxyHealth.get(proxy);
     const unavailableUntil = Math.max(0, Number(health?.unavailableUntil) || 0);
+    let location = null;
+    try {
+      location = geoipCountry.lookup(new URL(proxy).hostname);
+    } catch {
+      location = null;
+    }
     return {
       proxy,
+      countryCode: String(location?.country ?? "").toUpperCase() || null,
+      countryName: String(location?.name ?? "").trim() || null,
       assignedAccounts: usage.get(proxy) ?? 0,
       status: unavailableUntil > now ? "cooling" : "available",
       failureCount: Math.max(0, Number(health?.failures) || 0),

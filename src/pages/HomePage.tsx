@@ -383,6 +383,12 @@ function formatOnlinerProxyLabel(proxy: string) {
   }
 }
 
+function formatCountryFlag(countryCode: string | null) {
+  const code = String(countryCode ?? "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "🌐";
+  return String.fromCodePoint(...[...code].map((character) => 127397 + character.charCodeAt(0)));
+}
+
 function formatOnlinerProxyEvent(value: string | null) {
   if (!value) return "Not tested yet";
   const timestamp = new Date(value).getTime();
@@ -4365,12 +4371,13 @@ export default function HomePage() {
                       {onlinerProxyDetails.length ? (
                         <div className="onliner-proxy-usage">
                           <div className="onliner-proxy-usage-heading">
-                            <span>Saved proxy</span><span>Accounts</span><span>Status</span><span>Health</span>
+                            <span>Saved proxy</span><span>Country</span><span>Accounts</span><span>Status</span><span>Health</span>
                           </div>
                           <div className="onliner-proxy-usage-list">
                             {onlinerProxyDetails.map((proxy) => (
                               <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
                                 <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
+                                <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><strong>{proxy.countryName ?? "Unknown"}</strong><small>{proxy.countryCode ?? "—"}</small></span>
                                 <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
                                 <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
                                 <span className="onliner-proxy-health-copy">

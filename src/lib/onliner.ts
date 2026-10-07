@@ -105,6 +105,8 @@ export type DiscordOnlinerAccountCredentials = {
 
 export type DiscordOnlinerProxyDetail = {
   proxy: string;
+  countryCode: string | null;
+  countryName: string | null;
   assignedAccounts: number;
   status: "available" | "cooling";
   failureCount: number;

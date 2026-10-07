@@ -16,6 +16,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "express": "^5.2.1",
+    "geoip-country": "^5.0.202610070241",
     "https-proxy-agent": "^9.1.0",
     "lucide-react": "^1.24.0",
     "pg": "^8.22.0",
