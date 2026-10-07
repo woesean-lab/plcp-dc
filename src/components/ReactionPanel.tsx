@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, Sparkles, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Send, ShoppingCart, Sparkles, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -33,6 +33,7 @@ type ReactionPanelProps = {
   onSubmit: () => void;
   onEditLimit?: () => void;
   limitActionLabel?: string;
+  limitActionVariant?: "default" | "purchase";
 };
 
 function formatReactionDate(value: string) {
@@ -57,7 +58,8 @@ export function ReactionPanel({
   onEmojiCountChange,
   onSubmit,
   onEditLimit,
-  limitActionLabel = "+ Add reaction limit"
+  limitActionLabel = "+ Add reaction limit",
+  limitActionVariant = "default"
 }: ReactionPanelProps) {
   const titleId = useId();
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
@@ -87,8 +89,8 @@ export function ReactionPanel({
 
         <div className="monitor-reaction-heading-actions">
           {onEditLimit ? (
-            <button className="monitor-reaction-message-link" type="button" onClick={onEditLimit}>
-              <MessageSquareText aria-hidden="true" /> {limitActionLabel}
+            <button className={`monitor-reaction-message-link${limitActionVariant === "purchase" ? " is-purchase" : ""}`} type="button" onClick={onEditLimit}>
+              {limitActionVariant === "purchase" ? <ShoppingCart aria-hidden="true" /> : <MessageSquareText aria-hidden="true" />} {limitActionLabel}
             </button>
           ) : null}
         </div>

@@ -1163,6 +1163,7 @@ export default function PublicOrderPage() {
                     onSubmit={() => void handleSaveReactionMessage()}
                     onEditLimit={() => setShowReactionPurchaseModal(true)}
                     limitActionLabel="Buy reaction limit"
+                    limitActionVariant="purchase"
                   />
                 ) : null}
 
