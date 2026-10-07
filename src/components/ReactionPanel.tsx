@@ -165,13 +165,15 @@ export function ReactionPanel({
             <span className="monitor-reaction-form-icon" aria-hidden="true"><MessageSquareText /></span>
             <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
           </div>
-          <label className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
-            <span className="boost-order-label monitor-reaction-url-label">Discord Message URL
-              <button type="button" onClick={() => setMessageLinkHelpOpen(true)} aria-label="How to copy a Discord message URL" title="How to copy a Discord message URL">
+          <div className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
+            <span className="boost-order-label monitor-reaction-url-label">
+              <label htmlFor={`${titleId}-message-url`}>Discord Message URL</label>
+              <button className="monitor-reaction-url-help" type="button" onClick={() => setMessageLinkHelpOpen(true)} aria-label="How to copy a Discord message URL" title="How to copy a Discord message URL">
                 <CircleHelp aria-hidden="true" />
               </button>
             </span>
             <input
+              id={`${titleId}-message-url`}
               className="boost-number-input"
               type="url"
               value={messageDraft}
@@ -183,7 +185,7 @@ export function ReactionPanel({
               disabled={!requestEnabled}
               required
             />
-          </label>
+          </div>
           <label className="boost-order-field monitor-reaction-field">
             <span className="boost-order-label">Amount</span>
             <input

@@ -7768,10 +7768,11 @@
   box-shadow: 0 0 18px var(--app-accent-soft);
 }
 .monitor-reaction-url-label { display: inline-flex; align-items: center; gap: 5px; }
-.monitor-reaction-url-label button { display: grid; width: 20px; height: 20px; place-items: center; border: 0; border-radius: 6px; color: var(--app-subtle); background: rgba(255,255,255,.045); box-shadow: none; transition: color .15s ease, background .15s ease; }
-.monitor-reaction-url-label button:hover { color: var(--app-accent-bright); background: var(--app-accent-soft); }
-.monitor-reaction-url-label button:focus:not(:hover) { color: var(--app-subtle); background: rgba(255,255,255,.045); box-shadow: none; outline: none; }
-.monitor-reaction-url-label button svg { width: 11px; height: 11px; }
+.monitor-reaction-url-label > label { cursor: default; }
+.monitor-reaction-url-help { display: grid; width: 20px; height: 20px; flex: 0 0 20px; place-items: center; border: 0; border-radius: 6px; color: var(--app-subtle); background: rgba(255,255,255,.045); box-shadow: none; transition: color .15s ease, background .15s ease; }
+.monitor-reaction-url-help:hover { color: var(--app-accent-bright); background: var(--app-accent-soft); }
+.monitor-reaction-url-help:focus:not(:hover) { color: var(--app-subtle); background: rgba(255,255,255,.045); box-shadow: none; outline: none; }
+.monitor-reaction-url-help svg { width: 11px; height: 11px; }
 .monitor-reaction-form-lock svg { width: 15px; height: 15px; }
 .monitor-reaction-form-lock strong { display: block; color: var(--app-text); font-size: 11px; font-weight: 700; }
 .monitor-reaction-form-lock small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.45; }
