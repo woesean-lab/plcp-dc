@@ -9743,7 +9743,7 @@
 }
 
 .onliner-proxy-usage {
-  overflow-x: auto;
+  overflow-x: hidden;
   border-top: 1px solid var(--app-divider);
   background: rgba(4, 5, 11, .16);
 }
@@ -9751,9 +9751,10 @@
 .onliner-proxy-usage-heading,
 .onliner-proxy-usage-row {
   display: grid;
-  min-width: 775px;
-  grid-template-columns: minmax(220px, 1fr) 58px 95px 105px minmax(150px, .65fr) 32px;
-  gap: 12px;
+  width: 100%;
+  min-width: 0;
+  grid-template-columns: minmax(150px, 1.5fr) 52px 82px 92px minmax(120px, .8fr) 28px;
+  gap: 8px;
   align-items: center;
 }
 
