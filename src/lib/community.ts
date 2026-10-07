@@ -207,6 +207,25 @@ export function getCommunityMemberAccountToken(discordUserId: string) {
   }).then(parseResponse<{ accountToken: string }>);
 }
 
+export async function downloadCommunityMemberTokens(discordUserIds: string[], tokenType: "access" | "account") {
+  const response = await fetch("/api/community/members/export-tokens", {
+    method: "POST",
+    cache: "no-store",
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ discordUserIds, tokenType })
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  }
+  return {
+    blob: await response.blob(),
+    count: Math.max(0, Number.parseInt(response.headers.get("X-Token-Count") ?? "0", 10) || 0),
+    skipped: Math.max(0, Number.parseInt(response.headers.get("X-Skipped-Count") ?? "0", 10) || 0)
+  };
+}
+
 export function connectCommunityMemberToOnliner(discordUserId: string, richPresenceEnabled: boolean) {
   return fetch(`/api/community/members/${encodeURIComponent(discordUserId)}/onliner`, {
     method: "POST",

