@@ -7768,8 +7768,8 @@
   box-shadow: 0 0 18px var(--app-accent-soft);
 }
 .monitor-reaction-url-label { display: inline-flex; align-items: center; gap: 5px; }
-.monitor-reaction-url-label button { display: grid; width: 17px; height: 17px; place-items: center; border: 0; border-radius: 5px; color: var(--app-subtle); background: rgba(255,255,255,.045); transition: color .15s ease, background .15s ease; }
-.monitor-reaction-url-label button:hover { color: var(--app-accent-bright); background: var(--app-accent-soft); }
+.monitor-reaction-url-label button { display: grid; width: 17px; height: 17px; place-items: center; border: 0; border-radius: 5px; color: var(--app-subtle); background: transparent; box-shadow: none; transition: color .15s ease, background .15s ease, box-shadow .15s ease; }
+.monitor-reaction-url-label button:hover { color: var(--app-accent-bright); background: var(--app-accent-soft); box-shadow: 0 0 12px var(--app-accent-soft); }
 .monitor-reaction-url-label button svg { width: 11px; height: 11px; }
 .monitor-reaction-form-lock svg { width: 15px; height: 15px; }
 .monitor-reaction-form-lock strong { display: block; color: var(--app-text); font-size: 11px; font-weight: 700; }
@@ -7844,11 +7844,14 @@
 
 .reaction-failure-backdrop { position: fixed; z-index: 1000; inset: 0; width: 100vw; height: 100dvh; display: grid; place-items: center; overflow: hidden; padding: 16px; background: rgba(3,4,10,.72); backdrop-filter: blur(8px); }
 .reaction-failure-dialog { width: min(560px, calc(100vw - 2rem)); max-height: min(520px, calc(100dvh - 2rem)); overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 15px; background: linear-gradient(145deg, rgba(24,25,43,.98), rgba(11,12,23,.99)); box-shadow: 0 28px 80px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.045); }
-.reaction-failure-dialog > header { display: grid; grid-template-columns: 34px minmax(0,1fr); align-items: center; gap: 10px; padding: 14px 15px; border-bottom: 1px solid var(--app-divider); }
+.reaction-failure-dialog > header { display: grid; grid-template-columns: 34px minmax(0,1fr) 30px; align-items: center; gap: 10px; padding: 14px 15px; border-bottom: 1px solid var(--app-divider); }
 .reaction-failure-dialog-icon { display: grid; width: 34px; height: 34px; place-items: center; border: 1px solid rgba(244,86,120,.3); border-radius: 10px; color: #ff7896; background: rgba(244,86,120,.09); }
 .reaction-failure-dialog-icon svg { width: 16px; height: 16px; }
 .reaction-failure-dialog header h2 { margin: 0; color: var(--app-text); font-size: 14px; font-weight: 700; letter-spacing: -.015em; }
 .reaction-failure-dialog header p { margin: 2px 0 0; color: var(--app-muted); font-size: 9px; }
+.reaction-failure-dialog-close { display: grid; width: 30px; height: 30px; place-items: center; border: 0; border-radius: 8px; color: var(--app-muted); background: transparent; box-shadow: none; transition: color .15s ease, background .15s ease; }
+.reaction-failure-dialog-close:hover { color: var(--app-text); background: rgba(255,255,255,.08); }
+.reaction-failure-dialog-close svg { width: 14px; height: 14px; }
 .reaction-failure-dialog-list { display: grid; max-height: min(330px, 43vh); overflow-y: auto; gap: 6px; padding: 12px 14px; }
 .reaction-failure-dialog-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 38px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.065); border-radius: 10px; background: rgba(255,255,255,.018); }
 .reaction-failure-dialog-list > div > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #ff7896; background: rgba(244,86,120,.08); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }

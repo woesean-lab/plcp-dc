@@ -284,6 +284,9 @@ export function ReactionPanel({
                 <h2 id={`${titleId}-failure-title`}>Failure details</h2>
                 <p>{failureRequest.failedCount} reaction{failureRequest.failedCount === 1 ? "" : "s"} failed</p>
               </div>
+              <button className="reaction-failure-dialog-close" type="button" onClick={() => setFailureRequest(null)} aria-label="Close">
+                <X aria-hidden="true" />
+              </button>
             </header>
             <div className="reaction-failure-dialog-list">
               {failureRequest.failureMessages?.map((message, index) => (
