@@ -1,6 +1,6 @@
 import { useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { Ban, CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users } from "lucide-react";
+import { Ban, CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export type ReactionPanelRequest = {
@@ -75,6 +75,7 @@ export function ReactionPanel({
 }: ReactionPanelProps) {
   const titleId = useId();
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
+  const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
@@ -165,7 +166,11 @@ export function ReactionPanel({
             <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
           </div>
           <label className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
-            <span className="boost-order-label">Discord Message URL</span>
+            <span className="boost-order-label monitor-reaction-url-label">Discord Message URL
+              <button type="button" onClick={() => setMessageLinkHelpOpen(true)} aria-label="How to copy a Discord message URL" title="How to copy a Discord message URL">
+                <CircleHelp aria-hidden="true" />
+              </button>
+            </span>
             <input
               className="boost-number-input"
               type="url"
@@ -284,6 +289,22 @@ export function ReactionPanel({
               {failureRequest.failureMessages?.map((message, index) => (
                 <div key={`${message}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{message}</p></div>
               ))}
+            </div>
+          </div>
+        </div>
+      ), document.body) : null}
+
+      {messageLinkHelpOpen && typeof document !== "undefined" ? createPortal((
+        <div className="reaction-help-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setMessageLinkHelpOpen(false); }}>
+          <div className="reaction-help-dialog" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-message-link-help-title`}>
+            <header>
+              <div><span>Discord message URL</span><h2 id={`${titleId}-message-link-help-title`}>Copy the message link</h2></div>
+              <button type="button" onClick={() => setMessageLinkHelpOpen(false)} aria-label="Close"><X aria-hidden="true" /></button>
+            </header>
+            <img src="/discord-copy-message-link-guide.png" alt="Discord message menu with step 1 pointing to the three-dot menu and step 2 pointing to Copy Message Link" />
+            <div className="reaction-help-steps">
+              <span><b>1</b><small>Click the three-dot menu on the message.</small></span>
+              <span><b>2</b><small>Select Copy Message Link.</small></span>
             </div>
           </div>
         </div>

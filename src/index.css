@@ -7767,6 +7767,10 @@
   background: rgba(13, 14, 28, .9);
   box-shadow: 0 0 18px var(--app-accent-soft);
 }
+.monitor-reaction-url-label { display: inline-flex; align-items: center; gap: 5px; }
+.monitor-reaction-url-label button { display: grid; width: 17px; height: 17px; place-items: center; border: 0; border-radius: 5px; color: var(--app-subtle); background: rgba(255,255,255,.045); transition: color .15s ease, background .15s ease; }
+.monitor-reaction-url-label button:hover { color: var(--app-accent-bright); background: var(--app-accent-soft); }
+.monitor-reaction-url-label button svg { width: 11px; height: 11px; }
 .monitor-reaction-form-lock svg { width: 15px; height: 15px; }
 .monitor-reaction-form-lock strong { display: block; color: var(--app-text); font-size: 11px; font-weight: 700; }
 .monitor-reaction-form-lock small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 9px; line-height: 1.45; }
@@ -7849,6 +7853,19 @@
 .reaction-failure-dialog-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 38px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.065); border-radius: 10px; background: rgba(255,255,255,.018); }
 .reaction-failure-dialog-list > div > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #ff7896; background: rgba(244,86,120,.08); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
 .reaction-failure-dialog-list p { margin: 0; color: var(--app-text-secondary); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
+.reaction-help-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgba(3,4,10,.76); backdrop-filter: blur(8px); }
+.reaction-help-dialog { width: min(700px, calc(100vw - 2rem)); overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 16px; background: linear-gradient(145deg, rgba(24,25,43,.99), rgba(11,12,23,.99)); box-shadow: 0 28px 80px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.045); }
+.reaction-help-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--app-divider); }
+.reaction-help-dialog header span { color: var(--app-accent-bright); font-size: 8px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; }
+.reaction-help-dialog header h2 { margin: 3px 0 0; color: var(--app-text); font-size: 15px; font-weight: 700; }
+.reaction-help-dialog header button { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 0; border-radius: 8px; color: var(--app-muted); background: rgba(255,255,255,.045); }
+.reaction-help-dialog header button:hover { color: var(--app-text); background: rgba(255,255,255,.08); }
+.reaction-help-dialog header button svg { width: 14px; height: 14px; }
+.reaction-help-dialog > img { display: block; width: 100%; max-height: min(52vh, 430px); object-fit: contain; background: #090a10; }
+.reaction-help-steps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 12px 14px 14px; border-top: 1px solid var(--app-divider); }
+.reaction-help-steps > span { display: flex; min-width: 0; align-items: center; gap: 8px; padding: 9px 10px; border-radius: 10px; background: rgba(255,255,255,.025); }
+.reaction-help-steps b { display: grid; width: 22px; height: 22px; flex: 0 0 22px; place-items: center; border-radius: 999px; color: white; background: var(--app-accent); font-size: 10px; }
+.reaction-help-steps small { color: var(--app-text-secondary); font-size: 9px; line-height: 1.4; }
 
 .monitor-reaction-panel.is-side .monitor-reaction-heading,
 .monitor-reaction-panel.is-side .monitor-reaction-dashboard,
@@ -7899,6 +7916,8 @@
 }
 
 @media (max-width: 639px) {
+  .reaction-help-steps { grid-template-columns: 1fr; }
+  .reaction-help-dialog > img { max-height: 45vh; }
   .monitor-page { padding: 14px 10px; }
   .monitor-frame {
     min-height: 0;
