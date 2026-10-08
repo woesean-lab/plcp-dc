@@ -270,7 +270,7 @@ export function ReactionPanel({
                     aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)}
                     onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}
                   >
-                    <Sparkles aria-hidden="true" />
+                    <span className="monitor-reaction-mixed-preview" aria-hidden="true">👍 ❤️ 😂 🔥</span>
                     <span>Mixed</span>
                   </button>
                   {selectedEmojis.filter((emoji) => emoji !== REACTION_MIXED_VALUE).map((emoji) => (
