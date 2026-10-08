@@ -3,11 +3,14 @@ import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+export const REACTION_EMOJI_OPTIONS = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎"] as const;
+
 export type ReactionPanelRequest = {
   id: string;
   messageLink: string;
   requestedCount: number;
   emojiCount?: number;
+  emojis?: string[];
   assignedCount: number;
   completedCount: number;
   failedCount?: number;
@@ -30,13 +33,13 @@ type ReactionPanelProps = {
   cancellingPending?: boolean;
   messageDraft: string;
   countDraft: number;
-  emojiCountDraft: number;
+  selectedEmojis: string[];
   saving: boolean;
   requestEnabled?: boolean;
   requests: ReactionPanelRequest[];
   onMessageChange: (value: string) => void;
   onCountChange: (value: number) => void;
-  onEmojiCountChange: (value: number) => void;
+  onEmojiSelectionChange: (value: string[]) => void;
   onSubmit: () => void;
   onEditLimit?: () => void;
   limitActionLabel?: string;
@@ -61,13 +64,13 @@ export function ReactionPanel({
   cancellingPending = false,
   messageDraft,
   countDraft,
-  emojiCountDraft,
+  selectedEmojis,
   saving,
   requestEnabled = true,
   requests,
   onMessageChange,
   onCountChange,
-  onEmojiCountChange,
+  onEmojiSelectionChange,
   onSubmit,
   onEditLimit,
   limitActionLabel = "+ Add reaction limit",
@@ -85,7 +88,7 @@ export function ReactionPanel({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (requestEnabled && !saving && isValidMessageUrl && remaining > 0) onSubmit();
+    if (requestEnabled && !saving && isValidMessageUrl && remaining > 0 && selectedEmojis.length > 0) onSubmit();
   }
 
   return (
@@ -193,28 +196,23 @@ export function ReactionPanel({
               disabled={!requestEnabled}
               onChange={(event) => {
                 const next = Number.parseInt(event.target.value, 10);
-                onCountChange(Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1);
+                const nextCount = Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1;
+                onCountChange(nextCount);
+                if (selectedEmojis.length > nextCount) onEmojiSelectionChange(selectedEmojis.slice(0, nextCount));
               }}
             />
           </label>
-          <label className="boost-order-field monitor-reaction-field">
-            <span className="boost-order-label">Emoji count</span>
-            <input
-              className="boost-number-input"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={Math.min(20, countDraft)}
-              value={Math.min(emojiCountDraft, countDraft, 20)}
-              aria-label="Distinct emoji count"
-              disabled={!requestEnabled}
-              onChange={(event) => {
-                const next = Number.parseInt(event.target.value, 10);
-                onEmojiCountChange(Number.isFinite(next) ? Math.min(20, countDraft, Math.max(1, next)) : 1);
-              }}
-            />
-          </label>
-          <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim()}>
+          <fieldset className="monitor-reaction-emoji-field" disabled={!requestEnabled}>
+            <legend>Choose emojis <small>{selectedEmojis.length}/{Math.min(20, countDraft)} selected</small></legend>
+            <div className="monitor-reaction-emoji-options">
+              {REACTION_EMOJI_OPTIONS.map((emoji) => {
+                const selected = selectedEmojis.includes(emoji);
+                const selectionFull = !selected && selectedEmojis.length >= Math.min(20, countDraft);
+                return <button key={emoji} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} aria-label={`${emoji} ${selected ? "selected" : "not selected"}`} disabled={!requestEnabled || selectionFull} onClick={() => onEmojiSelectionChange(selected ? selectedEmojis.filter((value) => value !== emoji) : [...selectedEmojis, emoji])}>{emoji}</button>;
+              })}
+            </div>
+          </fieldset>
+          <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim() || !selectedEmojis.length}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
           </Button>
@@ -249,7 +247,7 @@ export function ReactionPanel({
                 <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions{request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
+                    <strong>{request.requestedCount} reactions{request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                     {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>

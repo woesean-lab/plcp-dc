@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ReactionPanel } from "@/components/ReactionPanel";
+import { REACTION_EMOJI_OPTIONS, ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
@@ -406,7 +406,7 @@ export default function OrderPage() {
   const [delayDraft, setDelayDraft] = useState("");
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
-  const [reactionEmojiCountDraft, setReactionEmojiCountDraft] = useState(8);
+  const [reactionEmojiDraft, setReactionEmojiDraft] = useState<string[]>([REACTION_EMOJI_OPTIONS[0]]);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [cancellingReactions, setCancellingReactions] = useState(false);
   const [showReactionLimitModal, setShowReactionLimitModal] = useState(false);
@@ -740,11 +740,16 @@ export default function OrderPage() {
     try {
       setSavingReactionMessage(true);
       const reactionAmount = Math.min(reactionCountDraft, reactionRemainingCount);
-      const updated = await updateCommunityOrderReactionMessage(target, messageLink, reactionAmount, Math.min(reactionEmojiCountDraft, reactionAmount, 20));
+      const selectedEmojis = reactionEmojiDraft.slice(0, Math.min(reactionAmount, 20));
+      if (!selectedEmojis.length) {
+        toast.error("Choose at least one emoji.");
+        return;
+      }
+      const updated = await updateCommunityOrderReactionMessage(target, messageLink, reactionAmount, selectedEmojis);
       setResult((current) => mergeOrderStatus(current, updated));
       setReactionMessageDraft("");
       setReactionCountDraft(1);
-      setReactionEmojiCountDraft(8);
+      setReactionEmojiDraft([REACTION_EMOJI_OPTIONS[0]]);
       toast.success("Reaction request added. Eligible members were queued.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Reaction message could not be saved.");
@@ -1681,7 +1686,7 @@ export default function OrderPage() {
                 refreshingEligibleMembers={checkingCommunityMembers}
                 messageDraft={reactionMessageDraft}
                 countDraft={reactionCountDraft}
-                emojiCountDraft={reactionEmojiCountDraft}
+                selectedEmojis={reactionEmojiDraft}
                 saving={savingReactionMessage}
                 requestEnabled={["PARTIAL", "COMPLETED"].includes(normalizedStatus)}
                 requests={reactionRequests.map((request) => {
@@ -1699,7 +1704,7 @@ export default function OrderPage() {
                 })}
                 onMessageChange={setReactionMessageDraft}
                 onCountChange={setReactionCountDraft}
-                onEmojiCountChange={setReactionEmojiCountDraft}
+                onEmojiSelectionChange={setReactionEmojiDraft}
                 onSubmit={() => void handleSaveReactionMessage()}
                 onCancelPending={() => void handleCancelPendingReactions()}
                 cancellingPending={cancellingReactions}

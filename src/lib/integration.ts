@@ -119,11 +119,11 @@ export function resumePublicCommunityOrder(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "resume", { method: "POST" });
 }
 
-export function updatePublicCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojiCount: number) {
+export function updatePublicCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojis: string[]) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "reaction-message", {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messageLink, reactionCount, emojiCount })
+    body: JSON.stringify({ messageLink, reactionCount, emojis })
   });
 }
 
@@ -305,11 +305,11 @@ export function extendCommunityOrderSupport(uniqid: string, months: number) {
   });
 }
 
-export function updateCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojiCount: number) {
+export function updateCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojis: string[]) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-message`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messageLink, reactionCount, emojiCount })
+    body: JSON.stringify({ messageLink, reactionCount, emojis })
   });
 }
 

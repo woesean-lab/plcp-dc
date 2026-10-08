@@ -92,6 +92,8 @@ export interface OrderStatusResponse {
     messageLink: string;
     requestedCount: number;
     assignedCount: number;
+    emojiCount?: number;
+    emojis?: string[];
     createdAt: string;
     autoStopReason?: string;
     autoStoppedAt?: string;
