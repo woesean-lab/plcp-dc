@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, useState, type CSSProperties, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
@@ -94,12 +94,30 @@ export function ReactionPanel({
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/discord\.com\/channels\/.+/.test(messageDraft.trim());
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!emojiPickerRef.current?.contains(event.target as Node)) setEmojiPickerOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setEmojiPickerOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [emojiPickerOpen]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -230,9 +248,21 @@ export function ReactionPanel({
           </label>
           <div className="boost-order-field monitor-reaction-field monitor-reaction-emoji-field">
             <span className="boost-order-label">Emojis</span>
-            <details className="monitor-reaction-emoji-picker" onToggle={(event) => setEmojiPickerOpen(event.currentTarget.open)}>
-              <summary>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</summary>
-              <div className="monitor-reaction-emoji-popover">
+            <div className="monitor-reaction-emoji-picker" data-open={emojiPickerOpen} ref={emojiPickerRef}>
+              <button
+                type="button"
+                className="monitor-reaction-emoji-trigger"
+                aria-expanded={emojiPickerOpen}
+                aria-controls={`${titleId}-emoji-picker`}
+                onClick={() => {
+                  if (!emojiPickerOpen) setEmojiPickerMounted(true);
+                  setEmojiPickerOpen((current) => !current);
+                }}
+              >
+                <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
+                <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
+              </button>
+              <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
                 <button
                   type="button"
                   className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
@@ -259,7 +289,7 @@ export function ReactionPanel({
                     ))}
                   </div>
                 </div>
-                {emojiPickerOpen ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
+                {emojiPickerMounted ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
                     theme={"dark" as Theme}
                     emojiStyle={"native" as EmojiStyle}
                     width="100%"
@@ -271,7 +301,7 @@ export function ReactionPanel({
                     onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
                   /></Suspense> : null}
               </div>
-            </details>
+            </div>
           </div>
           <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim() || !selectedEmojis.length}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
