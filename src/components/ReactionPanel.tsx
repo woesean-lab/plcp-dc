@@ -1,11 +1,22 @@
 import { lazy, Suspense, useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import type { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
+import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
+const DISCORD_POPULAR_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "💯", "✅", "👀", "😭", "🤣", "😍", "🙏", "💀", "🥰", "😎", "🤔", "👎", "😢", "🚀", "🤝"];
+const EMOJI_PICKER_CATEGORIES: CategoryConfig[] = [
+  { category: "smileys_people" as Categories, name: "Smileys & People" },
+  { category: "animals_nature" as Categories, name: "Animals & Nature" },
+  { category: "food_drink" as Categories, name: "Food & Drink" },
+  { category: "travel_places" as Categories, name: "Travel & Places" },
+  { category: "activities" as Categories, name: "Activities" },
+  { category: "objects" as Categories, name: "Objects" },
+  { category: "symbols" as Categories, name: "Symbols" },
+  { category: "flags" as Categories, name: "Flags" }
+];
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
 export type ReactionPanelRequest = {
@@ -93,6 +104,17 @@ export function ReactionPanel({
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (requestEnabled && !saving && isValidMessageUrl && remaining > 0 && selectedEmojis.length > 0) onSubmit();
+  }
+
+  function toggleEmoji(emoji: string) {
+    const selected = selectedEmojis.includes(emoji);
+    const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
+    const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
+    if (selectionFull) return;
+    const next = selected
+      ? explicitSelections.filter((value) => value !== emoji)
+      : [...explicitSelections, emoji];
+    onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
   }
 
   return (
@@ -220,24 +242,33 @@ export function ReactionPanel({
                   <Sparkles aria-hidden="true" />
                   <span>Mixed</span>
                 </button>
+                <div className="monitor-reaction-popular-emojis">
+                  <span>Popular</span>
+                  <div>
+                    {DISCORD_POPULAR_EMOJIS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        className={selectedEmojis.includes(emoji) ? "is-selected" : undefined}
+                        aria-label={`Select ${emoji}`}
+                        aria-pressed={selectedEmojis.includes(emoji)}
+                        onClick={() => toggleEmoji(emoji)}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 {emojiPickerOpen ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
                     theme={"dark" as Theme}
                     emojiStyle={"native" as EmojiStyle}
                     width="100%"
-                    height={340}
+                    height={280}
                     lazyLoadEmojis
                     searchDisabled
+                    categories={EMOJI_PICKER_CATEGORIES}
                     previewConfig={{ showPreview: false }}
-                    onEmojiClick={({ emoji }: EmojiClickData) => {
-                      const selected = selectedEmojis.includes(emoji);
-                      const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
-                      const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
-                      if (selectionFull) return;
-                      const next = selected
-                        ? explicitSelections.filter((value) => value !== emoji)
-                        : [...explicitSelections, emoji];
-                      onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
-                    }}
+                    onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
                   /></Suspense> : null}
               </div>
             </details>
