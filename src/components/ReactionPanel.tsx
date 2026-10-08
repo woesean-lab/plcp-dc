@@ -211,21 +211,22 @@ export function ReactionPanel({
             <details className="monitor-reaction-emoji-picker" onToggle={(event) => setEmojiPickerOpen(event.currentTarget.open)}>
               <summary>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</summary>
               <div className="monitor-reaction-emoji-popover">
-                <div className="monitor-reaction-emoji-selection">
-                  <button type="button" className={selectedEmojis.includes(REACTION_MIXED_VALUE) ? "is-selected is-mixed" : "is-mixed"} aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)} onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}><Sparkles aria-hidden="true" /> Mixed</button>
-                  {selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE).map((emoji) => <button key={emoji} type="button" className="is-selected" aria-label={`Remove ${emoji}`} onClick={() => {
-                    const next = selectedEmojis.filter((value) => value !== emoji && value !== REACTION_MIXED_VALUE);
-                    onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
-                  }}>{emoji}</button>)}
-                  <small>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? "Automatic mix" : `${selectedEmojis.length}/${Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft)} selected`}</small>
-                </div>
+                <button
+                  type="button"
+                  className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
+                  aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)}
+                  onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}
+                >
+                  <Sparkles aria-hidden="true" />
+                  <span>Mixed</span>
+                </button>
                 {emojiPickerOpen ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
                     theme={"dark" as Theme}
                     emojiStyle={"native" as EmojiStyle}
                     width="100%"
                     height={340}
                     lazyLoadEmojis
-                    searchPlaceholder="Search emojis"
+                    searchDisabled
                     previewConfig={{ showPreview: false }}
                     onEmojiClick={({ emoji }: EmojiClickData) => {
                       const selected = selectedEmojis.includes(emoji);
