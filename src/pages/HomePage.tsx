@@ -497,6 +497,25 @@ function getOrderProgress(order: TrackedOrder) {
   };
 }
 
+function getTrackedOrderReactionUsage(order: TrackedOrder) {
+  const explicitCapacity = Number(order.reactionCapacity);
+  const derivedCapacity = Array.isArray(order.categoryAllocations)
+    ? order.categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + Math.max(0, Number(allocation.amount) || 0) : total, 0)
+    : 0;
+  const total = Number.isFinite(explicitCapacity) ? Math.max(0, explicitCapacity) : derivedCapacity;
+  if (total <= 0) return null;
+
+  const used = (Array.isArray(order.reactionRequests) ? order.reactionRequests : []).reduce((count, request) => {
+    const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+    if (assignments.length) {
+      return count + assignments.filter((assignment) => !["failed", "cancelled"].includes(String(assignment.reactionState ?? "pending").toLowerCase())).length;
+    }
+    return count + Math.max(0, Number(request.assignedCount) || 0);
+  }, 0);
+
+  return { used: Math.min(used, total), total };
+}
+
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
   const [delayElapsed, setDelayElapsed] = useState(false);
   const [maxDelayElapsed, setMaxDelayElapsed] = useState(false);
@@ -952,6 +971,10 @@ export default function HomePage() {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
     return filteredOrders.slice(start, start + ORDER_PAGE_SIZE);
   }, [currentOrderPage, filteredOrders]);
+  const showReactionUseColumn = useMemo(
+    () => paginatedOrders.some((order) => getTrackedOrderReactionUsage(order) !== null),
+    [paginatedOrders]
+  );
 
   useEffect(() => {
     if (activeTab === "manage") {
@@ -2653,11 +2676,16 @@ export default function HomePage() {
       duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
       expiredAt: typeof (status.expiredAt ?? status.expired_at) === "string" ? String(status.expiredAt ?? status.expired_at) : order.expiredAt,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
-      details: typeof status.details === "string" ? status.details : order.details
+      details: typeof status.details === "string" ? status.details : order.details,
+      reactionMessageLink: typeof status.reactionMessageLink === "string" ? status.reactionMessageLink : order.reactionMessageLink,
+      reactionCapacity: typeof status.reactionCapacity === "number" ? status.reactionCapacity : order.reactionCapacity,
+      reactionRequests: Array.isArray(status.reactionRequests) ? status.reactionRequests : order.reactionRequests
     };
   }
 
   function areTrackedOrdersEqual(a: TrackedOrder, b: TrackedOrder) {
+    const aReactionUsage = getTrackedOrderReactionUsage(a);
+    const bReactionUsage = getTrackedOrderReactionUsage(b);
     return (
       a.uniqid === b.uniqid &&
       a.status === b.status &&
@@ -2673,7 +2701,11 @@ export default function HomePage() {
       a.service === b.service &&
       a.provider === b.provider &&
       a.duration === b.duration &&
-      a.expiredAt === b.expiredAt
+      a.expiredAt === b.expiredAt &&
+      a.reactionCapacity === b.reactionCapacity &&
+      a.reactionMessageLink === b.reactionMessageLink &&
+      aReactionUsage?.used === bReactionUsage?.used &&
+      aReactionUsage?.total === bReactionUsage?.total
     );
   }
 
@@ -3977,9 +4009,9 @@ export default function HomePage() {
                 </div>
 
                 {filteredOrders.length ? (
-                  <div className="orders-table" role="table" aria-label="Tracked orders">
+                  <div className="orders-table" data-reaction-use={showReactionUseColumn ? "true" : "false"} role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span>{showReactionUseColumn ? <span>Reaction Use</span> : null}<span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
@@ -3993,11 +4025,12 @@ export default function HomePage() {
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
                         const delayValue = order.statusDelay ?? order.delay;
+                        const reactionUsage = getTrackedOrderReactionUsage(order);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
                           <li key={order.uniqid}>
-                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
+                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} data-has-reaction-use={reactionUsage ? "true" : "false"} aria-labelledby={titleId}>
                               <div className="orders-row-identity">
                                 <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
                                 <span className="min-w-0">
@@ -4019,6 +4052,7 @@ export default function HomePage() {
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <time className="orders-row-expiration" dateTime={order.expiredAt ?? undefined} title={order.expiredAt ?? undefined}>{order.expiredAt ? formatTrackedDate(order.expiredAt) : "-"}</time>
+                              {showReactionUseColumn ? <div className="orders-row-reaction-use">{reactionUsage ? <><MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" /><strong>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</strong></> : null}</div> : null}
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>

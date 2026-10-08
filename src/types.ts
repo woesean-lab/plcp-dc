@@ -172,6 +172,7 @@ export interface TrackedOrder {
   isEldoradoSale?: boolean;
   reactionMessageLink?: string;
   reactionCapacity?: number;
+  reactionRequests?: OrderStatusResponse["reactionRequests"];
 }
 
 export interface BoostStock {

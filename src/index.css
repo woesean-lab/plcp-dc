@@ -3550,6 +3550,11 @@
     column-gap: .8rem;
   }
 
+  .orders-table[data-reaction-use="true"] .orders-table-head,
+  .orders-table[data-reaction-use="true"] .orders-row {
+    grid-template-columns: minmax(210px, 1.7fr) 110px 125px 175px 95px 95px 90px 126px;
+  }
+
   .orders-table-head {
     min-height: 34px;
     padding: 0 .85rem;
@@ -3698,6 +3703,17 @@
 
   .orders-row-expiration:not([datetime]) { color: var(--app-subtle); }
 
+  .orders-row-reaction-use {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: .35rem;
+    color: var(--app-accent-bright);
+    font-size: 10px;
+  }
+
+  .orders-row-reaction-use strong { font-size: 11px; white-space: nowrap; }
+
   .orders-row-actions {
     display: flex;
     min-width: 0;
@@ -3759,6 +3775,11 @@
     .orders-row-expiration { grid-area: expiration; }
     .orders-row-actions { grid-area: actions; }
     .orders-row-alert { grid-area: alert; }
+    .orders-table[data-reaction-use="true"] .orders-row {
+      grid-template-areas: "identity service status date expiration reaction" "delivery delivery delivery delivery actions actions" "alert alert alert alert alert alert";
+      grid-template-columns: minmax(190px, 1fr) 105px minmax(120px, .7fr) 85px 85px 90px;
+    }
+    .orders-row-reaction-use { grid-area: reaction; }
   }
 
   @media (max-width: 899px) {
@@ -3790,6 +3811,12 @@
       padding: .8rem;
       background: rgba(255,255,255,.018);
     }
+    .orders-table[data-reaction-use="true"] .orders-row {
+      grid-template-areas: "identity status" "service date" "expiration reaction" "delivery delivery" "actions actions" "alert alert";
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    .orders-row[data-has-reaction-use="false"] .orders-row-expiration { grid-column: 1 / -1; }
+    .orders-row-reaction-use:empty { display: none; }
     .orders-row[data-status-tone="success"] { border-left-color: var(--app-success); }
     .orders-row[data-status-tone="danger"] { border-left-color: var(--app-danger); }
     .orders-row[data-status-tone="paused"] { border-left-color: #66bfd5; }
