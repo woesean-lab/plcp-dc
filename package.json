@@ -15,6 +15,8 @@
     "@tailwindcss/vite": "^4.3.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "emoji-picker-react": "^4.22.3",
+    "emoji-regex": "^10.6.0",
     "express": "^5.2.1",
     "geoip-country": "^5.0.202610070241",
     "https-proxy-agent": "^9.1.0",

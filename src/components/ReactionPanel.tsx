@@ -1,11 +1,12 @@
-import { useId, useState, type CSSProperties, type FormEvent } from "react";
+import { lazy, Suspense, useId, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
+import type { EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const REACTION_MIXED_VALUE = "mixed";
-export const REACTION_EMOJI_OPTIONS = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎", "😂", "🤣", "😊", "😁", "😭", "😮", "🤯", "😱", "🫡", "💪", "🙏", "👀", "🎯", "🏆", "⭐", "🌟", "⚡", "💥", "🎊", "🎈", "🫶", "🤝", "🐐", "🍀", "🥂", "💎", "🏅"] as const;
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
+const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
 export type ReactionPanelRequest = {
   id: string;
@@ -81,6 +82,7 @@ export function ReactionPanel({
   const titleId = useId();
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const progress = limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0;
@@ -204,26 +206,41 @@ export function ReactionPanel({
               }}
             />
           </label>
-          <fieldset className="monitor-reaction-emoji-field" disabled={!requestEnabled}>
-            <legend>Emojis</legend>
-            <details className="monitor-reaction-emoji-picker">
+          <div className="boost-order-field monitor-reaction-field monitor-reaction-emoji-field">
+            <span className="boost-order-label">Emojis</span>
+            <details className="monitor-reaction-emoji-picker" onToggle={(event) => setEmojiPickerOpen(event.currentTarget.open)}>
               <summary>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</summary>
-              <div className="monitor-reaction-emoji-options">
-                <button type="button" className={selectedEmojis.includes(REACTION_MIXED_VALUE) ? "is-selected is-mixed" : "is-mixed"} aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)} onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}><Sparkles aria-hidden="true" /> Mixed</button>
-                {REACTION_EMOJI_OPTIONS.map((emoji) => {
-                const selected = selectedEmojis.includes(emoji);
-                const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
-                const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
-                return <button key={emoji} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} aria-label={`${emoji} ${selected ? "selected" : "not selected"}`} disabled={!requestEnabled || selectionFull} onClick={() => {
-                  const next = selected
-                    ? explicitSelections.filter((value) => value !== emoji)
-                    : [...explicitSelections, emoji];
-                  onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
-                }}>{emoji}</button>;
-                })}
+              <div className="monitor-reaction-emoji-popover">
+                <div className="monitor-reaction-emoji-selection">
+                  <button type="button" className={selectedEmojis.includes(REACTION_MIXED_VALUE) ? "is-selected is-mixed" : "is-mixed"} aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)} onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}><Sparkles aria-hidden="true" /> Mixed</button>
+                  {selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE).map((emoji) => <button key={emoji} type="button" className="is-selected" aria-label={`Remove ${emoji}`} onClick={() => {
+                    const next = selectedEmojis.filter((value) => value !== emoji && value !== REACTION_MIXED_VALUE);
+                    onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
+                  }}>{emoji}</button>)}
+                  <small>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? "Automatic mix" : `${selectedEmojis.length}/${Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft)} selected`}</small>
+                </div>
+                {emojiPickerOpen ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
+                    theme={"dark" as Theme}
+                    emojiStyle={"native" as EmojiStyle}
+                    width="100%"
+                    height={340}
+                    lazyLoadEmojis
+                    searchPlaceholder="Search emojis"
+                    previewConfig={{ showPreview: false }}
+                    onEmojiClick={({ emoji }: EmojiClickData) => {
+                      const selected = selectedEmojis.includes(emoji);
+                      const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
+                      const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
+                      if (selectionFull) return;
+                      const next = selected
+                        ? explicitSelections.filter((value) => value !== emoji)
+                        : [...explicitSelections, emoji];
+                      onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
+                    }}
+                  /></Suspense> : null}
               </div>
             </details>
-          </fieldset>
+          </div>
           <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim() || !selectedEmojis.length}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}

@@ -5,6 +5,7 @@ import { execFile as execFileCallback, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import emojiRegex from "emoji-regex";
 import geoipCountry from "geoip-country";
 import { HttpsProxyAgent } from "https-proxy-agent";
 import pg from "pg";
@@ -936,6 +937,11 @@ const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, wa
 const communityReactionEmojis = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎", "😂", "🤣", "😊", "😁", "😭", "😮", "🤯", "😱", "🫡", "💪", "🙏", "👀", "🎯", "🏆", "⭐", "🌟", "⚡", "💥", "🎊", "🎈", "🫶", "🤝", "🐐", "🍀", "🥂", "💎", "🏅"];
 const communityNaturalReactionEmojis = ["❤️", "🔥", "👍", "🎉", "😂", "😍", "👏", "💯"];
 const communityReactionEmojiLimit = 20;
+
+function isCommunityReactionEmoji(value) {
+  const matches = String(value ?? "").match(emojiRegex());
+  return matches?.length === 1 && matches[0] === value;
+}
 
 function shuffleReactionValues(values) {
   const shuffled = [...values];
@@ -11456,7 +11462,7 @@ async function updateCommunityReactionMessage(req, res, next) {
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
         : "This order's reaction limit has been used." });
     }
-    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !communityReactionEmojis.includes(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
+    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
     }
