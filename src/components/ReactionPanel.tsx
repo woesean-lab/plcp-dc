@@ -263,15 +263,29 @@ export function ReactionPanel({
                 <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
               </button>
               <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
-                <button
-                  type="button"
-                  className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
-                  aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)}
-                  onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}
-                >
-                  <Sparkles aria-hidden="true" />
-                  <span>Mixed</span>
-                </button>
+                <div className="monitor-reaction-emoji-selection">
+                  <button
+                    type="button"
+                    className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
+                    aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)}
+                    onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}
+                  >
+                    <Sparkles aria-hidden="true" />
+                    <span>Mixed</span>
+                  </button>
+                  {selectedEmojis.filter((emoji) => emoji !== REACTION_MIXED_VALUE).map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      className="monitor-reaction-selected-emoji"
+                      aria-label={`Remove ${emoji}`}
+                      title={`Remove ${emoji}`}
+                      onClick={() => toggleEmoji(emoji)}
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
                 <div className="monitor-reaction-popular-emojis">
                   <span>Popular</span>
                   <div>
