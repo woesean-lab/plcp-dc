@@ -3704,15 +3704,12 @@
   .orders-row-expiration:not([datetime]) { color: var(--app-subtle); }
 
   .orders-row-reaction-use {
-    display: flex;
     min-width: 0;
-    align-items: center;
-    gap: .35rem;
-    color: var(--app-accent-bright);
-    font-size: 10px;
+    margin: 0;
   }
 
-  .orders-row-reaction-use strong { font-size: 11px; white-space: nowrap; }
+  .orders-row-reaction-use dt { color: var(--app-subtle); font-size: 8px; font-weight: 750; text-transform: uppercase; }
+  .orders-row-reaction-use dd { margin: .22rem 0 0; color: var(--app-text-secondary); font-size: 12px; font-weight: 720; white-space: nowrap; }
 
   .orders-row-actions {
     display: flex;

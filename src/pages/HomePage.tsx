@@ -4052,7 +4052,7 @@ export default function HomePage() {
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <time className="orders-row-expiration" dateTime={order.expiredAt ?? undefined} title={order.expiredAt ?? undefined}>{order.expiredAt ? formatTrackedDate(order.expiredAt) : "-"}</time>
-                              {showReactionUseColumn ? <div className="orders-row-reaction-use">{reactionUsage ? <><MessageSquareText className="h-3.5 w-3.5" aria-hidden="true" /><strong>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</strong></> : null}</div> : null}
+                              {showReactionUseColumn ? <dl className="orders-row-reaction-use">{reactionUsage ? <div><dt>Reaction Use</dt><dd>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</dd></div> : null}</dl> : null}
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
