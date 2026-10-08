@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { REACTION_EMOJI_OPTIONS, ReactionPanel } from "@/components/ReactionPanel";
+import { REACTION_MIXED_VALUE, ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
@@ -268,7 +268,7 @@ export default function PublicOrderPage() {
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [reactionMessageDraft, setReactionMessageDraft] = useState("");
   const [reactionCountDraft, setReactionCountDraft] = useState(1);
-  const [reactionEmojiDraft, setReactionEmojiDraft] = useState<string[]>([REACTION_EMOJI_OPTIONS[0]]);
+  const [reactionEmojiDraft, setReactionEmojiDraft] = useState<string[]>([REACTION_MIXED_VALUE]);
   const [savingReactionMessage, setSavingReactionMessage] = useState(false);
   const [cancellingReactions, setCancellingReactions] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
@@ -584,7 +584,7 @@ export default function PublicOrderPage() {
       setStatus((current) => mergeOrderStatus(current, updated));
       setReactionMessageDraft("");
       setReactionCountDraft(1);
-      setReactionEmojiDraft([REACTION_EMOJI_OPTIONS[0]]);
+      setReactionEmojiDraft([REACTION_MIXED_VALUE]);
       toast.success("Reaction request added. Eligible members were queued.");
     } catch (saveError) {
       toast.error(saveError instanceof Error ? saveError.message : "Reaction message could not be saved.");

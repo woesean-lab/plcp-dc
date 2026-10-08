@@ -3,7 +3,9 @@ import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export const REACTION_EMOJI_OPTIONS = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎"] as const;
+export const REACTION_MIXED_VALUE = "mixed";
+export const REACTION_EMOJI_OPTIONS = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎", "😂", "🤣", "😊", "😁", "😭", "😮", "🤯", "😱", "🫡", "💪", "🙏", "👀", "🎯", "🏆", "⭐", "🌟", "⚡", "💥", "🎊", "🎈", "🫶", "🤝", "🐐", "🍀", "🥂", "💎", "🏅"] as const;
+const REACTION_EMOJI_SELECTION_LIMIT = 20;
 
 export type ReactionPanelRequest = {
   id: string;
@@ -203,14 +205,24 @@ export function ReactionPanel({
             />
           </label>
           <fieldset className="monitor-reaction-emoji-field" disabled={!requestEnabled}>
-            <legend>Choose emojis <small>{selectedEmojis.length}/{Math.min(20, countDraft)} selected</small></legend>
-            <div className="monitor-reaction-emoji-options">
-              {REACTION_EMOJI_OPTIONS.map((emoji) => {
+            <legend>Emojis</legend>
+            <details className="monitor-reaction-emoji-picker">
+              <summary>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</summary>
+              <div className="monitor-reaction-emoji-options">
+                <button type="button" className={selectedEmojis.includes(REACTION_MIXED_VALUE) ? "is-selected is-mixed" : "is-mixed"} aria-pressed={selectedEmojis.includes(REACTION_MIXED_VALUE)} onClick={() => onEmojiSelectionChange([REACTION_MIXED_VALUE])}><Sparkles aria-hidden="true" /> Mixed</button>
+                {REACTION_EMOJI_OPTIONS.map((emoji) => {
                 const selected = selectedEmojis.includes(emoji);
-                const selectionFull = !selected && selectedEmojis.length >= Math.min(20, countDraft);
-                return <button key={emoji} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} aria-label={`${emoji} ${selected ? "selected" : "not selected"}`} disabled={!requestEnabled || selectionFull} onClick={() => onEmojiSelectionChange(selected ? selectedEmojis.filter((value) => value !== emoji) : [...selectedEmojis, emoji])}>{emoji}</button>;
-              })}
-            </div>
+                const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
+                const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
+                return <button key={emoji} type="button" className={selected ? "is-selected" : ""} aria-pressed={selected} aria-label={`${emoji} ${selected ? "selected" : "not selected"}`} disabled={!requestEnabled || selectionFull} onClick={() => {
+                  const next = selected
+                    ? explicitSelections.filter((value) => value !== emoji)
+                    : [...explicitSelections, emoji];
+                  onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
+                }}>{emoji}</button>;
+                })}
+              </div>
+            </details>
           </fieldset>
           <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || saving || !messageDraft.trim() || !selectedEmojis.length}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
@@ -247,7 +259,7 @@ export function ReactionPanel({
                 <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions{request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
+                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                     {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>

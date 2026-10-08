@@ -933,8 +933,9 @@ const discordOnlinerActivityTypes = new Set([...discordOnlinerActivityTypeValues
 const discordOnlinerActivityCodes = { playing: 0, streaming: 1, listening: 2, watching: 3 };
 // Discord messages support a limited number of distinct reaction types. Rotate
 // through a varied pool while allowing larger orders to share those reactions.
-const communityReactionEmojis = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎"];
+const communityReactionEmojis = ["👍", "❤️", "🔥", "🎉", "👏", "😍", "🤩", "💯", "✨", "🚀", "✅", "💜", "💙", "💚", "💛", "🧡", "🥳", "🙌", "👌", "😎", "😂", "🤣", "😊", "😁", "😭", "😮", "🤯", "😱", "🫡", "💪", "🙏", "👀", "🎯", "🏆", "⭐", "🌟", "⚡", "💥", "🎊", "🎈", "🫶", "🤝", "🐐", "🍀", "🥂", "💎", "🏅"];
 const communityNaturalReactionEmojis = ["❤️", "🔥", "👍", "🎉", "😂", "😍", "👏", "💯"];
+const communityReactionEmojiLimit = 20;
 
 function shuffleReactionValues(values) {
   const shuffled = [...values];
@@ -949,9 +950,9 @@ function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCo
   const selectedPalette = Array.isArray(requestedEmojis) ? shuffleReactionValues(requestedEmojis) : null;
   const naturalPalette = selectedPalette ?? shuffleReactionValues(communityNaturalReactionEmojis);
   const fallbackPalette = selectedPalette ? [] : shuffleReactionValues(communityReactionEmojis.filter((emoji) => !communityNaturalReactionEmojis.includes(emoji)));
-  const fullPalette = [...naturalPalette, ...fallbackPalette];
+  const fullPalette = [...naturalPalette, ...fallbackPalette].slice(0, communityReactionEmojiLimit);
   const automaticEmojiCount = requestedCount <= 12 ? 2 : requestedCount <= 35 ? 3 : requestedCount <= 75 ? 8 : requestedCount <= 200 ? 9 : 10;
-  const aestheticCount = selectedPalette ? selectedPalette.length : automaticEmojiCount;
+  const aestheticCount = selectedPalette ? selectedPalette.length : Math.min(automaticEmojiCount, requestedCount, fullPalette.length);
   const minimumCount = Math.ceil(requestedCount / deliveredMembers.length);
   const maximumPaletteCount = selectedPalette ? aestheticCount : fullPalette.length;
 
@@ -11413,6 +11414,7 @@ async function updateCommunityReactionMessage(req, res, next) {
     const requestedEmojis = [...new Set((Array.isArray(req.body?.emojis) ? req.body.emojis : [])
       .map((emoji) => String(emoji ?? "").trim())
       .filter(Boolean))];
+    const mixedEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "mixed";
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
 
@@ -11454,19 +11456,19 @@ async function updateCommunityReactionMessage(req, res, next) {
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
         : "This order's reaction limit has been used." });
     }
-    if (!requestedEmojis.length || requestedEmojis.length > Math.min(20, requestedCount) || requestedEmojis.some((emoji) => !communityReactionEmojis.includes(emoji))) {
+    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !communityReactionEmojis.includes(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: `Choose between 1 and ${Math.min(20, requestedCount)} supported emojis.` });
+      return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
     }
 
     const deliveredMembers = order.communityResults.filter((item) =>
       item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
     );
-    const maximumRequestSize = deliveredMembers.length * requestedEmojis.length;
+    const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : requestedEmojis.length);
     if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: deliveredMembers.length
-        ? `With ${requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
+        ? `With ${mixedEmojiMode ? "Mixed" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
         : "No delivered members are available for reactions yet." });
     }
 
@@ -11476,7 +11478,7 @@ async function updateCommunityReactionMessage(req, res, next) {
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
       .filter((assignment) => String(assignment?.reactionState ?? "pending").toLowerCase() !== "failed")
       .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
-    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, requestedEmojis);
+    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, mixedEmojiMode ? null : requestedEmojis);
     if (assignments.length !== requestedCount) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "This delivered member pool does not have enough unused member and emoji combinations for that message." });
@@ -11498,7 +11500,7 @@ async function updateCommunityReactionMessage(req, res, next) {
         id: requestId,
         messageLink: reactionMessage.url,
         requestedCount,
-        emojiCount: requestedEmojis.length,
+        emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
         emojis: requestedEmojis,
         assignedCount: assignments.length,
         assignments,
