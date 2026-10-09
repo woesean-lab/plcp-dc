@@ -21,7 +21,11 @@ const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
 function formatReactionEmoji(value: string) {
   const customEmoji = value.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
-  return customEmoji ? `:${customEmoji[1]}:` : value;
+  return customEmoji ? (customEmoji[1] === "emoji" ? "Custom emoji" : `:${customEmoji[1]}:`) : value;
+}
+
+function getCustomReactionEmojiId(value: string) {
+  return value.match(/^<a?:[\w~]{1,64}:(\d{16,22})>$/)?.[1] ?? null;
 }
 
 function parseDiscordEmojiId(value: string) {
@@ -106,7 +110,6 @@ export function ReactionPanel({
   const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
-  const [customEmojiNameDraft, setCustomEmojiNameDraft] = useState("");
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
@@ -149,12 +152,10 @@ export function ReactionPanel({
   }
 
   function addCustomEmoji() {
-    const rawName = customEmojiNameDraft.trim().replace(/^:+|:+$/g, "");
     const emojiId = parseDiscordEmojiId(customEmojiUrlDraft);
-    if (!/^[\w~]{1,64}$/.test(rawName) || !emojiId) return;
-    const customEmoji = `<:${rawName}:${emojiId}>`;
+    if (!emojiId) return;
+    const customEmoji = `<:emoji:${emojiId}>`;
     if (!selectedEmojis.includes(customEmoji)) toggleEmoji(customEmoji);
-    setCustomEmojiNameDraft("");
     setCustomEmojiUrlDraft("");
   }
 
@@ -305,21 +306,13 @@ export function ReactionPanel({
                       title={`Remove ${emoji}`}
                       onClick={() => toggleEmoji(emoji)}
                     >
-                      {formatReactionEmoji(emoji)}
+                      {getCustomReactionEmojiId(emoji) ? <img src={`https://cdn.discordapp.com/emojis/${getCustomReactionEmojiId(emoji)}.webp?size=40`} alt="Custom emoji" /> : formatReactionEmoji(emoji)}
                     </button>
                   ))}
                 </div>
                 <div className="monitor-reaction-custom-emoji">
                   <span>Custom emoji</span>
                   <div>
-                    <input
-                      type="text"
-                      value={customEmojiNameDraft}
-                      onChange={(event) => setCustomEmojiNameDraft(event.target.value)}
-                      placeholder=":hoodlife:"
-                      aria-label="Custom Discord emoji name"
-                      maxLength={66}
-                    />
                     <input
                       type="url"
                       value={customEmojiUrlDraft}
@@ -329,10 +322,10 @@ export function ReactionPanel({
                         event.preventDefault();
                         addCustomEmoji();
                       }}
-                      placeholder="Emoji ID or Discord CDN link"
-                      aria-label="Discord custom emoji ID or CDN link"
+                      placeholder="Paste Discord emoji CDN link"
+                      aria-label="Discord custom emoji CDN link"
                     />
-                    <button type="button" onClick={addCustomEmoji} disabled={!/^[\w~]{1,64}$/.test(customEmojiNameDraft.trim().replace(/^:+|:+$/g, "")) || !parseDiscordEmojiId(customEmojiUrlDraft)} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
+                    <button type="button" onClick={addCustomEmoji} disabled={!parseDiscordEmojiId(customEmojiUrlDraft)} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
                   </div>
                 </div>
                 <div className="monitor-reaction-popular-emojis">
