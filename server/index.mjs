@@ -11478,20 +11478,35 @@ async function updateCommunityReactionMessage(req, res, next) {
 
     let assignmentEmojis = requestedEmojis;
     let popularReaction = null;
+    const deliveredMembers = order.communityResults.filter((item) =>
+      item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
+    );
     if (popularEmojiMode) {
-      const config = await getCommunityOAuthConfig();
-      if (!config.configured || String(config.guildId) !== String(order.serverId)) {
+      const onlinerConfig = await getDiscordOnlinerConfig();
+      const deliveredUserIds = new Set(deliveredMembers.map((member) => String(member.discordUserId)));
+      const readerAccount = onlinerConfig.accounts.find((account) =>
+        account.botToken
+        && account.proxyUrl
+        && (
+          deliveredUserIds.has(String(account.discordUserId ?? ""))
+          || deliveredUserIds.has(String(discordOnlinerRuntimes.get(account.id)?.bot?.id ?? ""))
+        )
+      );
+      if (!readerAccount) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ message: "The Members bot is not configured for this Discord server, so the most popular message reaction cannot be checked." });
+        return res.status(409).json({ message: "No delivered Onliner account with a token and proxy is available to check this message's reactions." });
       }
-      const messageResult = await requestDiscord(
+      const messageResult = await sendHumanizerDiscordRequest(
         `channels/${encodeURIComponent(reactionMessage.channelId)}/messages/${encodeURIComponent(reactionMessage.messageId)}`,
-        { headers: { Authorization: `Bot ${config.botToken}` } }
+        readerAccount.proxyUrl,
+        readerAccount.botToken,
+        "GET",
+        undefined
       );
       if (!messageResult.response.ok) {
         await client.query("ROLLBACK");
         return res.status(messageResult.response.status === 403 ? 403 : 409).json({ message: messageResult.response.status === 403
-          ? "The Members bot cannot view this channel or read its message history."
+          ? "The Onliner account cannot view this channel or read its message history."
           : "The Discord message could not be loaded to determine its most popular reaction." });
       }
       const popularCandidate = (Array.isArray(messageResult.payload?.reactions) ? messageResult.payload.reactions : [])
@@ -11510,9 +11525,6 @@ async function updateCommunityReactionMessage(req, res, next) {
       assignmentEmojis = [popularReaction];
     }
 
-    const deliveredMembers = order.communityResults.filter((item) =>
-      item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
-    );
     const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : assignmentEmojis.length);
     if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
       await client.query("ROLLBACK");
