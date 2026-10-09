@@ -943,6 +943,13 @@ function isCommunityReactionEmoji(value) {
   return matches?.length === 1 && matches[0] === value;
 }
 
+function communityReactionEmojiFromDiscord(value) {
+  const name = String(value?.name ?? "").trim();
+  const id = String(value?.id ?? "").trim();
+  if (id && name && /^\d{16,22}$/.test(id) && /^[\w~]{1,64}$/.test(name)) return `${name}:${id}`;
+  return isCommunityReactionEmoji(name) ? name : null;
+}
+
 function shuffleReactionValues(values) {
   const shuffled = [...values];
   for (let index = shuffled.length - 1; index > 0; index -= 1) {
@@ -11421,6 +11428,7 @@ async function updateCommunityReactionMessage(req, res, next) {
       .map((emoji) => String(emoji ?? "").trim())
       .filter(Boolean))];
     const mixedEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "mixed";
+    const popularEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "popular";
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
 
@@ -11462,19 +11470,54 @@ async function updateCommunityReactionMessage(req, res, next) {
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
         : "This order's reaction limit has been used." });
     }
-    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
+    const automaticEmojiMode = mixedEmojiMode || popularEmojiMode;
+    if (!requestedEmojis.length || (!automaticEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => !["mixed", "popular"].includes(emoji) && !isCommunityReactionEmoji(emoji)) || requestedEmojis.some((emoji) => ["mixed", "popular"].includes(emoji)) && !automaticEmojiMode) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
+      return res.status(400).json({ message: `Choose Popular, Mixed, or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
+    }
+
+    let assignmentEmojis = requestedEmojis;
+    let popularReaction = null;
+    if (popularEmojiMode) {
+      const config = await getCommunityOAuthConfig();
+      if (!config.configured || String(config.guildId) !== String(order.serverId)) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "The Members bot is not configured for this Discord server, so the most popular message reaction cannot be checked." });
+      }
+      const messageResult = await requestDiscord(
+        `channels/${encodeURIComponent(reactionMessage.channelId)}/messages/${encodeURIComponent(reactionMessage.messageId)}`,
+        { headers: { Authorization: `Bot ${config.botToken}` } }
+      );
+      if (!messageResult.response.ok) {
+        await client.query("ROLLBACK");
+        return res.status(messageResult.response.status === 403 ? 403 : 409).json({ message: messageResult.response.status === 403
+          ? "The Members bot cannot view this channel or read its message history."
+          : "The Discord message could not be loaded to determine its most popular reaction." });
+      }
+      const popularCandidate = (Array.isArray(messageResult.payload?.reactions) ? messageResult.payload.reactions : [])
+        .map((reaction, index) => ({
+          emoji: communityReactionEmojiFromDiscord(reaction?.emoji),
+          count: Math.max(0, Number(reaction?.count) || 0),
+          index
+        }))
+        .filter((reaction) => reaction.emoji && reaction.count > 0)
+        .sort((left, right) => right.count - left.count || left.index - right.index)[0];
+      if (!popularCandidate?.emoji) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ message: "This message does not have an existing reaction for Popular mode to use." });
+      }
+      popularReaction = popularCandidate.emoji;
+      assignmentEmojis = [popularReaction];
     }
 
     const deliveredMembers = order.communityResults.filter((item) =>
       item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
     );
-    const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : requestedEmojis.length);
+    const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : assignmentEmojis.length);
     if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: deliveredMembers.length
-        ? `With ${mixedEmojiMode ? "Mixed" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
+        ? `With ${mixedEmojiMode ? "Mixed" : popularEmojiMode ? "Popular" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
         : "No delivered members are available for reactions yet." });
     }
 
@@ -11484,7 +11527,7 @@ async function updateCommunityReactionMessage(req, res, next) {
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
       .filter((assignment) => String(assignment?.reactionState ?? "pending").toLowerCase() !== "failed")
       .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
-    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, mixedEmojiMode ? null : requestedEmojis);
+    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, mixedEmojiMode ? null : assignmentEmojis);
     if (assignments.length !== requestedCount) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "This delivered member pool does not have enough unused member and emoji combinations for that message." });
@@ -11508,6 +11551,7 @@ async function updateCommunityReactionMessage(req, res, next) {
         requestedCount,
         emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
         emojis: requestedEmojis,
+        ...(popularReaction ? { popularReaction } : {}),
         assignedCount: assignments.length,
         assignments,
         createdAt: new Date().toISOString()

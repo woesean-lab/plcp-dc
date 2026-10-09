@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, Flame, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const REACTION_MIXED_VALUE = "mixed";
+export const REACTION_POPULAR_VALUE = "popular";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
 const DISCORD_POPULAR_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "💯", "✅", "👀", "😭", "🤣", "😍", "🙏", "💀", "🥰", "😎", "🤔", "👎", "😢", "🚀", "🤝"];
 const EMOJI_PICKER_CATEGORIES: CategoryConfig[] = [
@@ -126,7 +127,7 @@ export function ReactionPanel({
 
   function toggleEmoji(emoji: string) {
     const selected = selectedEmojis.includes(emoji);
-    const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
+    const explicitSelections = selectedEmojis.filter((value) => ![REACTION_MIXED_VALUE, REACTION_POPULAR_VALUE].includes(value));
     const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
     if (selectionFull) return;
     const next = selected
@@ -259,11 +260,20 @@ export function ReactionPanel({
                   setEmojiPickerOpen((current) => !current);
                 }}
               >
-                <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
+                <span>{selectedEmojis.includes(REACTION_POPULAR_VALUE) ? <><Flame aria-hidden="true" /> Popular</> : selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
                 <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
               </button>
               <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
                 <div className="monitor-reaction-emoji-selection">
+                  <button
+                    type="button"
+                    className={`monitor-reaction-popular-option${selectedEmojis.includes(REACTION_POPULAR_VALUE) ? " is-selected" : ""}`}
+                    aria-pressed={selectedEmojis.includes(REACTION_POPULAR_VALUE)}
+                    onClick={() => onEmojiSelectionChange([REACTION_POPULAR_VALUE])}
+                  >
+                    <Flame aria-hidden="true" />
+                    <span>Popular</span>
+                  </button>
                   <button
                     type="button"
                     className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
@@ -273,7 +283,7 @@ export function ReactionPanel({
                     <span className="monitor-reaction-mixed-preview" aria-hidden="true">👍 ❤️ 😂 🔥</span>
                     <span>Mixed</span>
                   </button>
-                  {selectedEmojis.filter((emoji) => emoji !== REACTION_MIXED_VALUE).map((emoji) => (
+                  {selectedEmojis.filter((emoji) => ![REACTION_MIXED_VALUE, REACTION_POPULAR_VALUE].includes(emoji)).map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
@@ -287,7 +297,7 @@ export function ReactionPanel({
                   ))}
                 </div>
                 <div className="monitor-reaction-popular-emojis">
-                  <span>Popular</span>
+                  <span>Top emojis</span>
                   <div>
                     {DISCORD_POPULAR_EMOJIS.map((emoji) => (
                       <button
@@ -352,7 +362,7 @@ export function ReactionPanel({
                 <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
+                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_POPULAR_VALUE) ? " · Popular" : request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                     {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>
