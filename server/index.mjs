@@ -943,6 +943,10 @@ function isCommunityReactionEmoji(value) {
   return matches?.length === 1 && matches[0] === value;
 }
 
+function isCommunityCustomReactionSelector(value) {
+  return /^:[\w~]{1,64}:$/.test(String(value ?? ""));
+}
+
 function communityReactionEmojiFromDiscord(value) {
   const name = String(value?.name ?? "").trim();
   const id = String(value?.id ?? "").trim();
@@ -11428,7 +11432,6 @@ async function updateCommunityReactionMessage(req, res, next) {
       .map((emoji) => String(emoji ?? "").trim())
       .filter(Boolean))];
     const mixedEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "mixed";
-    const popularEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "popular";
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
 
@@ -11470,18 +11473,17 @@ async function updateCommunityReactionMessage(req, res, next) {
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
         : "This order's reaction limit has been used." });
     }
-    const automaticEmojiMode = mixedEmojiMode || popularEmojiMode;
-    if (!requestedEmojis.length || (!automaticEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => !["mixed", "popular"].includes(emoji) && !isCommunityReactionEmoji(emoji)) || requestedEmojis.some((emoji) => ["mixed", "popular"].includes(emoji)) && !automaticEmojiMode) {
+    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji) && !isCommunityCustomReactionSelector(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ message: `Choose Popular, Mixed, or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
+      return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
     }
 
     let assignmentEmojis = requestedEmojis;
-    let popularReaction = null;
     const deliveredMembers = order.communityResults.filter((item) =>
       item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
     );
-    if (popularEmojiMode) {
+    const customEmojiSelectors = requestedEmojis.filter(isCommunityCustomReactionSelector);
+    if (customEmojiSelectors.length) {
       const onlinerConfig = await getDiscordOnlinerConfig();
       const deliveredUserIds = new Set(deliveredMembers.map((member) => String(member.discordUserId)));
       const readerAccount = onlinerConfig.accounts.find((account) =>
@@ -11494,7 +11496,7 @@ async function updateCommunityReactionMessage(req, res, next) {
       );
       if (!readerAccount) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ message: "No delivered Onliner account with a token and proxy is available to check this message's reactions." });
+        return res.status(409).json({ message: "No delivered Onliner account with a token and proxy is available to resolve the custom emoji." });
       }
       const messageResult = await sendHumanizerDiscordRequest(
         `channels/${encodeURIComponent(reactionMessage.channelId)}/messages/${encodeURIComponent(reactionMessage.messageId)}`,
@@ -11507,29 +11509,36 @@ async function updateCommunityReactionMessage(req, res, next) {
         await client.query("ROLLBACK");
         return res.status(messageResult.response.status === 403 ? 403 : 409).json({ message: messageResult.response.status === 403
           ? "The Onliner account cannot view this channel or read its message history."
-          : "The Discord message could not be loaded to determine its most popular reaction." });
+          : "The Discord message could not be loaded to resolve the custom emoji." });
       }
-      const popularCandidate = (Array.isArray(messageResult.payload?.reactions) ? messageResult.payload.reactions : [])
-        .map((reaction, index) => ({
-          emoji: communityReactionEmojiFromDiscord(reaction?.emoji),
-          count: Math.max(0, Number(reaction?.count) || 0),
-          index
-        }))
-        .filter((reaction) => reaction.emoji && reaction.count > 0)
-        .sort((left, right) => right.count - left.count || left.index - right.index)[0];
-      if (!popularCandidate?.emoji) {
+      const customEmojiByName = new Map();
+      for (const reaction of Array.isArray(messageResult.payload?.reactions) ? messageResult.payload.reactions : []) {
+        const emoji = communityReactionEmojiFromDiscord(reaction?.emoji);
+        if (emoji?.includes(":")) customEmojiByName.set(String(reaction?.emoji?.name ?? "").toLowerCase(), emoji);
+      }
+      const messageText = JSON.stringify({
+        content: messageResult.payload?.content,
+        embeds: messageResult.payload?.embeds,
+        components: messageResult.payload?.components
+      });
+      for (const match of messageText.matchAll(/<a?:([\w~]{1,64}):(\d{16,22})>/g)) {
+        customEmojiByName.set(match[1].toLowerCase(), `${match[1]}:${match[2]}`);
+      }
+      const missingCustomEmojis = customEmojiSelectors.filter((selector) => !customEmojiByName.has(selector.slice(1, -1).toLowerCase()));
+      if (missingCustomEmojis.length) {
         await client.query("ROLLBACK");
-        return res.status(409).json({ message: "This message does not have an existing reaction for Popular mode to use." });
+        return res.status(409).json({ message: `The following custom emoji could not be found in the message or its existing reactions: ${missingCustomEmojis.join(", ")}` });
       }
-      popularReaction = popularCandidate.emoji;
-      assignmentEmojis = [popularReaction];
+      assignmentEmojis = requestedEmojis.map((emoji) => isCommunityCustomReactionSelector(emoji)
+        ? customEmojiByName.get(emoji.slice(1, -1).toLowerCase())
+        : emoji);
     }
 
     const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : assignmentEmojis.length);
     if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: deliveredMembers.length
-        ? `With ${mixedEmojiMode ? "Mixed" : popularEmojiMode ? "Popular" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
+        ? `With ${mixedEmojiMode ? "Mixed" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
         : "No delivered members are available for reactions yet." });
     }
 
@@ -11563,7 +11572,6 @@ async function updateCommunityReactionMessage(req, res, next) {
         requestedCount,
         emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
         emojis: requestedEmojis,
-        ...(popularReaction ? { popularReaction } : {}),
         assignedCount: assignments.length,
         assignments,
         createdAt: new Date().toISOString()

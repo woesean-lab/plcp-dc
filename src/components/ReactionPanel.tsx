@@ -1,11 +1,10 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, Flame, LoaderCircle, LockKeyhole, MessageSquareText, Pause, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export const REACTION_MIXED_VALUE = "mixed";
-export const REACTION_POPULAR_VALUE = "popular";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
 const DISCORD_POPULAR_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "💯", "✅", "👀", "😭", "🤣", "😍", "🙏", "💀", "🥰", "😎", "🤔", "👎", "😢", "🚀", "🤝"];
 const EMOJI_PICKER_CATEGORIES: CategoryConfig[] = [
@@ -96,6 +95,7 @@ export function ReactionPanel({
   const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
+  const [customEmojiDraft, setCustomEmojiDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
@@ -127,13 +127,21 @@ export function ReactionPanel({
 
   function toggleEmoji(emoji: string) {
     const selected = selectedEmojis.includes(emoji);
-    const explicitSelections = selectedEmojis.filter((value) => ![REACTION_MIXED_VALUE, REACTION_POPULAR_VALUE].includes(value));
+    const explicitSelections = selectedEmojis.filter((value) => value !== REACTION_MIXED_VALUE);
     const selectionFull = !selected && explicitSelections.length >= Math.min(REACTION_EMOJI_SELECTION_LIMIT, countDraft);
     if (selectionFull) return;
     const next = selected
       ? explicitSelections.filter((value) => value !== emoji)
       : [...explicitSelections, emoji];
     onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
+  }
+
+  function addCustomEmoji() {
+    const rawName = customEmojiDraft.trim().replace(/^:+|:+$/g, "");
+    if (!/^[\w~]{1,64}$/.test(rawName)) return;
+    const customEmoji = `:${rawName}:`;
+    if (!selectedEmojis.includes(customEmoji)) toggleEmoji(customEmoji);
+    setCustomEmojiDraft("");
   }
 
   return (
@@ -260,20 +268,11 @@ export function ReactionPanel({
                   setEmojiPickerOpen((current) => !current);
                 }}
               >
-                <span>{selectedEmojis.includes(REACTION_POPULAR_VALUE) ? <><Flame aria-hidden="true" /> Popular</> : selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
+                <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
                 <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
               </button>
               <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
                 <div className="monitor-reaction-emoji-selection">
-                  <button
-                    type="button"
-                    className={`monitor-reaction-popular-option${selectedEmojis.includes(REACTION_POPULAR_VALUE) ? " is-selected" : ""}`}
-                    aria-pressed={selectedEmojis.includes(REACTION_POPULAR_VALUE)}
-                    onClick={() => onEmojiSelectionChange([REACTION_POPULAR_VALUE])}
-                  >
-                    <Flame aria-hidden="true" />
-                    <span>Popular</span>
-                  </button>
                   <button
                     type="button"
                     className={`monitor-reaction-mixed-option${selectedEmojis.includes(REACTION_MIXED_VALUE) ? " is-selected" : ""}`}
@@ -283,11 +282,11 @@ export function ReactionPanel({
                     <span className="monitor-reaction-mixed-preview" aria-hidden="true">👍 ❤️ 😂 🔥</span>
                     <span>Mixed</span>
                   </button>
-                  {selectedEmojis.filter((emoji) => ![REACTION_MIXED_VALUE, REACTION_POPULAR_VALUE].includes(emoji)).map((emoji) => (
+                  {selectedEmojis.filter((emoji) => emoji !== REACTION_MIXED_VALUE).map((emoji) => (
                     <button
                       key={emoji}
                       type="button"
-                      className="monitor-reaction-selected-emoji"
+                      className={`monitor-reaction-selected-emoji${/^:[\w~]{1,64}:$/.test(emoji) ? " is-custom" : ""}`}
                       aria-label={`Remove ${emoji}`}
                       title={`Remove ${emoji}`}
                       onClick={() => toggleEmoji(emoji)}
@@ -295,6 +294,25 @@ export function ReactionPanel({
                       {emoji}
                     </button>
                   ))}
+                </div>
+                <div className="monitor-reaction-custom-emoji">
+                  <span>Custom emoji</span>
+                  <div>
+                    <input
+                      type="text"
+                      value={customEmojiDraft}
+                      onChange={(event) => setCustomEmojiDraft(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        addCustomEmoji();
+                      }}
+                      placeholder=":hoodlife:"
+                      aria-label="Custom Discord emoji name"
+                      maxLength={66}
+                    />
+                    <button type="button" onClick={addCustomEmoji} disabled={!customEmojiDraft.trim()} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
+                  </div>
                 </div>
                 <div className="monitor-reaction-popular-emojis">
                   <span>Top emojis</span>
@@ -362,7 +380,7 @@ export function ReactionPanel({
                 <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_POPULAR_VALUE) ? " · Popular" : request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
+                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                     {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>
