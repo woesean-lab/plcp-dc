@@ -1172,6 +1172,12 @@ function createDiscordOnlinerRuntime(accountId) {
     connectionQueueStartNext: null,
     nextQueuedConnectionAt: null,
     heartbeatAcknowledged: true,
+    heartbeatIntervalMs: null,
+    lastHeartbeatSentAt: null,
+    lastHeartbeatAckAt: null,
+    lastGatewayEventAt: null,
+    lastDispatchType: null,
+    socketOpenedAt: null,
     sequence: null,
     sessionId: null,
     resumeGatewayUrl: null,
@@ -1211,7 +1217,13 @@ function serializeDiscordOnlinerRuntime(runtime) {
     lastDisconnectedAt: runtime.lastDisconnectedAt,
     lastError: runtime.lastError,
     reconnectAttempt: runtime.reconnectAttempt,
-    nextQueuedConnectionAt: runtime.nextQueuedConnectionAt
+    nextQueuedConnectionAt: runtime.nextQueuedConnectionAt,
+    heartbeatIntervalMs: runtime.heartbeatIntervalMs,
+    lastHeartbeatSentAt: runtime.lastHeartbeatSentAt,
+    lastHeartbeatAckAt: runtime.lastHeartbeatAckAt,
+    lastGatewayEventAt: runtime.lastGatewayEventAt,
+    lastDispatchType: runtime.lastDispatchType,
+    socketOpenedAt: runtime.socketOpenedAt
   };
 }
 
@@ -1855,6 +1867,13 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.reconnectAttempt = 0;
   runtime.automaticReconnectBlocked = false;
   runtime.reconnectNotBefore = 0;
+  runtime.heartbeatAcknowledged = true;
+  runtime.heartbeatIntervalMs = null;
+  runtime.lastHeartbeatSentAt = null;
+  runtime.lastHeartbeatAckAt = null;
+  runtime.lastGatewayEventAt = null;
+  runtime.lastDispatchType = null;
+  runtime.socketOpenedAt = null;
   runtime.sequence = null;
   runtime.sessionId = null;
   runtime.resumeGatewayUrl = null;
@@ -2150,10 +2169,71 @@ function applyDiscordOnlinerAccountPresenceLive(config, account, message = "Rich
   return true;
 }
 
+const discordGatewayCloseDiagnostics = new Map([
+  [1000, { label: "normal_closure", explanation: "The Gateway connection closed normally." }],
+  [1001, { label: "going_away", explanation: "The Gateway endpoint or network connection went away." }],
+  [4000, { label: "unknown_gateway_error", explanation: "Discord closed the session for an unspecified Gateway error." }],
+  [4003, { label: "not_authenticated", explanation: "Discord did not receive a valid authentication payload." }],
+  [4004, { label: "authentication_failed", explanation: "Discord rejected the saved account token." }],
+  [4005, { label: "already_authenticated", explanation: "The Gateway connection attempted to authenticate more than once." }],
+  [4007, { label: "invalid_sequence", explanation: "The saved Gateway sequence could not be resumed." }],
+  [4008, { label: "gateway_rate_limited", explanation: "Discord rate limited the Gateway connection." }],
+  [4009, { label: "session_timeout", explanation: "The previous Gateway session timed out and cannot be resumed." }],
+  [4010, { label: "invalid_shard", explanation: "Discord rejected the Gateway shard configuration." }],
+  [4011, { label: "sharding_required", explanation: "Discord requires this connection to use sharding." }],
+  [4012, { label: "invalid_api_version", explanation: "Discord rejected the requested Gateway API version." }],
+  [4013, { label: "invalid_intents", explanation: "Discord rejected the requested Gateway intents." }],
+  [4014, { label: "disallowed_intents", explanation: "Discord rejected privileged Gateway intents." }]
+]);
+
+function formatDiscordOnlinerDiagnosticDuration(value) {
+  const milliseconds = Math.max(0, Number(value) || 0);
+  if (milliseconds < 1_000) return `${Math.round(milliseconds)}ms`;
+  if (milliseconds < 60_000) return `${(milliseconds / 1_000).toFixed(1)}s`;
+  if (milliseconds < 3_600_000) return `${(milliseconds / 60_000).toFixed(1)}m`;
+  return `${(milliseconds / 3_600_000).toFixed(1)}h`;
+}
+
+function getDiscordOnlinerAgeLabel(timestamp, now = Date.now()) {
+  const parsed = timestamp ? new Date(timestamp).getTime() : Number.NaN;
+  return Number.isFinite(parsed) ? formatDiscordOnlinerDiagnosticDuration(now - parsed) : "never";
+}
+
+async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
+  try {
+    const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
+    const status = Number(identity.response.status) || 0;
+    const code = Number(identity.payload?.code ?? 0);
+    if (identity.response.ok) {
+      const actualUserId = String(identity.payload?.id ?? "");
+      const identityNote = expectedUserId && actualUserId && actualUserId !== expectedUserId
+        ? ` Token mismatch: Gateway profile was ${expectedUserId}, but REST authenticated as ${actualUserId}.`
+        : ` REST authenticated as ${actualUserId || "an unknown user"}.`;
+      appendDiscordOnlinerLog("error", `[TOKEN_CHECK] Gateway rejected authentication, but REST /users/@me succeeded.${identityNote} Treat this as a Gateway/session or route inconsistency, not a confirmed dead token.`, account.id);
+      return;
+    }
+    if (status === 401) {
+      appendDiscordOnlinerLog("error", `[TOKEN_CHECK] Token invalidity confirmed: Gateway closed with 4004 and REST /users/@me returned HTTP 401${code ? ` (Discord code ${code})` : ""}. Re-authentication is required; reconnecting the same token will not recover it.`, account.id);
+      return;
+    }
+    appendDiscordOnlinerLog("warn", `[TOKEN_CHECK] Token verification was inconclusive: REST /users/@me returned HTTP ${status || "unknown"}${code ? ` (Discord code ${code})` : ""}. Keep the account disabled and check the proxy route before retrying.`, account.id);
+  } catch (error) {
+    const detail = String(error instanceof Error ? error.message : error).replace(/\s+/g, " ").trim().slice(0, 180);
+    appendDiscordOnlinerLog("warn", `[TOKEN_CHECK] Token verification could not run through the assigned proxy${detail ? `: ${detail}` : "."}`, account.id);
+  }
+}
+
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
+  runtime.heartbeatAcknowledged = true;
+  runtime.heartbeatIntervalMs = null;
+  runtime.lastHeartbeatSentAt = null;
+  runtime.lastHeartbeatAckAt = null;
+  runtime.lastGatewayEventAt = null;
+  runtime.lastDispatchType = null;
+  runtime.socketOpenedAt = null;
   const defaultGatewayUrl = "wss://gateway.discord.gg/?v=10&encoding=json";
   let gatewayUrl = defaultGatewayUrl;
   let shouldResume = false;
@@ -2219,6 +2299,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("open", () => {
     if (generation !== runtime.generation) return;
     transportOpened = true;
+    runtime.socketOpenedAt = new Date().toISOString();
     if (account.proxyUrl) recordDiscordOnlinerProxyHealth(account.proxyUrl, true);
     const networkSocket = socket._socket;
     const localAddress = formatDiscordOnlinerSocketAddress(networkSocket?.localAddress, networkSocket?.localPort);
@@ -2234,6 +2315,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
 
   socket.on("message", (raw) => {
     if (generation !== runtime.generation) return;
+    runtime.lastGatewayEventAt = new Date().toISOString();
     let payload;
     try {
       payload = JSON.parse(raw.toString());
@@ -2247,18 +2329,21 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 10) {
       const interval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
+      runtime.heartbeatIntervalMs = interval;
+      runtime.lastHeartbeatAckAt = new Date().toISOString();
       appendDiscordOnlinerLog("info", `Gateway HELLO received; heartbeat interval is ${Math.round(interval / 1000)}s.`, account.id);
       const heartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
         if (!runtime.heartbeatAcknowledged) {
           runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerHeartbeatCooldownMs);
           runtime.lastError = "Discord stopped acknowledging heartbeats; reconnect delayed for 60 seconds.";
-          appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError}`, account.id);
+          appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError} Socket age ${getDiscordOnlinerAgeLabel(runtime.socketOpenedAt)}; last ACK ${getDiscordOnlinerAgeLabel(runtime.lastHeartbeatAckAt)} ago; last Gateway event ${runtime.lastDispatchType ?? "none"} ${getDiscordOnlinerAgeLabel(runtime.lastGatewayEventAt)} ago; route ${proxyEndpoint ?? "direct"}.`, account.id);
           queueDiscordOnlinerRuntimePersist(runtime);
           socket.terminate();
           return;
         }
         runtime.heartbeatAcknowledged = false;
+        runtime.lastHeartbeatSentAt = new Date().toISOString();
         socket.send(JSON.stringify({ op: 1, d: sequence }));
       };
       runtime.heartbeatAcknowledged = true;
@@ -2293,10 +2378,12 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 11) {
       runtime.heartbeatAcknowledged = true;
+      runtime.lastHeartbeatAckAt = new Date().toISOString();
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
       runtime.heartbeatAcknowledged = false;
+      runtime.lastHeartbeatSentAt = new Date().toISOString();
       socket.send(JSON.stringify({ op: 1, d: sequence }));
       appendDiscordOnlinerLog("info", `Discord requested a HEARTBEAT; sent${sequence == null ? " before receiving a sequence" : ` (seq ${sequence})`}.`, account.id);
       return;
@@ -2320,7 +2407,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("info", `Gateway opcode ${String(payload?.op ?? "unknown")} received.`, account.id);
       return;
     }
-    appendDiscordOnlinerLog("info", `DISPATCH ${String(payload.t ?? "UNKNOWN")}${sequence == null ? "" : ` (seq ${sequence})`}.`, account.id);
+    runtime.lastDispatchType = String(payload.t ?? "UNKNOWN");
     if (payload.t === "READY") {
       const user = payload.d?.user ?? {};
       const userId = String(user.id ?? "");
@@ -2395,6 +2482,35 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   });
   socket.on("close", (code, reason) => {
     if (generation !== runtime.generation) return;
+    const closedAt = Date.now();
+    const closeDiagnostic = discordGatewayCloseDiagnostics.get(Number(code)) ?? {
+      label: "unclassified_close",
+      explanation: "The Gateway connection ended with an unclassified close code."
+    };
+    const socketAge = getDiscordOnlinerAgeLabel(runtime.socketOpenedAt, closedAt);
+    const readyAge = getDiscordOnlinerAgeLabel(runtime.connectedAt, closedAt);
+    const heartbeatAckAge = getDiscordOnlinerAgeLabel(runtime.lastHeartbeatAckAt, closedAt);
+    const gatewayEventAge = getDiscordOnlinerAgeLabel(runtime.lastGatewayEventAt, closedAt);
+    const lastKnownError = String(runtime.lastError ?? "").trim();
+    const canAttemptResume = Boolean(runtime.sessionId && Number.isInteger(runtime.sequence) && runtime.resumeGatewayUrl);
+    const closeReason = reason?.toString().trim();
+    const sessionSummary = [
+      `[SESSION_END] code=${code}`,
+      `class=${closeDiagnostic.label}`,
+      `socketAge=${socketAge}`,
+      `readyAge=${readyAge}`,
+      `lastEvent=${runtime.lastDispatchType ?? "none"}`,
+      `lastEventAgo=${gatewayEventAge}`,
+      `lastAckAgo=${heartbeatAckAge}`,
+      `heartbeat=${runtime.heartbeatIntervalMs ? `${Math.round(runtime.heartbeatIntervalMs / 1000)}s` : "unknown"}`,
+      `seq=${Number.isInteger(runtime.sequence) ? runtime.sequence : "none"}`,
+      `resumeCandidate=${canAttemptResume ? "yes" : "no"}`,
+      `route=${proxyEndpoint ?? "direct"}`,
+      `transport=${transportOpened ? "opened" : "not_opened"}`,
+      closeReason ? `reason=${closeReason}` : null,
+      lastKnownError ? `precededBy=${lastKnownError}` : null,
+      `diagnosis=${closeDiagnostic.explanation}`
+    ].filter(Boolean).join(" · ");
     if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
     if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
     runtime.heartbeatTimer = null;
@@ -2402,8 +2518,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     runtime.socket = null;
     runtime.connectedAt = null;
     runtime.lastDisconnectedAt = new Date().toISOString();
-    const closeReason = reason?.toString().trim();
-    appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", `Gateway closed with code ${code}${closeReason ? ` (${closeReason})` : ""}.`, account.id);
+    appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", sessionSummary, account.id);
     if ([4004, 4010, 4011, 4012, 4013, 4014].includes(code)) {
       runtime.sequence = null;
       runtime.sessionId = null;
@@ -2411,11 +2526,12 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.automaticReconnectBlocked = true;
       runtime.state = "error";
       runtime.lastError = code === 4004
-        ? "Discord rejected the saved bot token. Automatic reconnect stopped."
+        ? "Discord rejected the saved account token. Automatic reconnect stopped while REST verification runs."
         : `Discord rejected this Gateway session with non-retryable close code ${code}. Automatic reconnect stopped.`;
       appendDiscordOnlinerLog("error", `[${code}] ${runtime.lastError}`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
       advanceDiscordOnlinerConnectionQueue(runtime, "failed");
+      if (code === 4004) void verifyDiscordOnlinerRejectedToken(account, String(runtime.bot?.id ?? ""));
       return;
     }
     if ([1000, 1001, 4003, 4005, 4007, 4009].includes(code)) {
