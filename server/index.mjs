@@ -2828,6 +2828,56 @@ async function stopCommunityReactionRequestAfterAccessFailures(orderId, requestI
   }
 }
 
+async function diagnoseCommunityReactionFailure(job, account, reactionResult) {
+  const failure = getDiscordRequestFailureDetails("Discord reaction", reactionResult);
+  if (![403, 404].includes(Number(reactionResult?.response?.status))) return failure;
+
+  try {
+    const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
+    if (!identity.response.ok) {
+      return `${failure} Diagnosis: the account identity check failed (${getDiscordRequestFailureDetails("identity check", identity)}).`;
+    }
+
+    const authenticatedUserId = String(identity.payload?.id ?? "");
+    if (authenticatedUserId && authenticatedUserId !== String(job.discord_user_id)) {
+      return `${failure} Diagnosis: token mismatch; expected Discord user ${job.discord_user_id}, but the token belongs to ${authenticatedUserId}.`;
+    }
+
+    const messageAccess = await sendHumanizerDiscordRequest(
+      `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}`,
+      account.proxyUrl,
+      account.botToken,
+      "GET",
+      undefined
+    );
+    if (messageAccess.response.ok) {
+      const customEmoji = /^([^:]+):(\d{16,22})$/.exec(String(job.emoji));
+      const matchingReaction = customEmoji
+        ? (Array.isArray(messageAccess.payload?.reactions) ? messageAccess.payload.reactions : [])
+          .find((reaction) => String(reaction?.emoji?.id ?? "") === customEmoji[2])
+        : null;
+      const actualEmojiName = String(matchingReaction?.emoji?.name ?? "").trim();
+      if (customEmoji && actualEmojiName && actualEmojiName !== customEmoji[1]) {
+        return `${failure} Diagnosis: the token matches and the message is readable, but the custom emoji name is wrong; sent ${customEmoji[1]}:${customEmoji[2]}, message reports ${actualEmojiName}:${customEmoji[2]}.`;
+      }
+      return `${failure} Diagnosis: the token matches and the message is readable; Discord rejected the reaction itself. Check Add Reactions, membership screening, and custom emoji availability.`;
+    }
+
+    const accessStatus = Number(messageAccess.response.status);
+    const accessCode = Number(messageAccess.payload?.code ?? 0);
+    if (accessStatus === 403 || accessCode === 50001) {
+      return `${failure} Diagnosis: the token matches, but this member cannot read channel ${job.channel_id} or message ${job.message_id}. Check View Channel, Read Message History, role/category overrides, and pending membership screening.`;
+    }
+    if (accessStatus === 404 || accessCode === 10008) {
+      return `${failure} Diagnosis: the token matches, but the target message no longer exists or is no longer visible. Use the newest verification message link.`;
+    }
+    return `${failure} Diagnosis: message access check failed (${getDiscordRequestFailureDetails("message access check", messageAccess)}).`;
+  } catch (error) {
+    const detail = String(error instanceof Error ? error.message : error).replace(/\s+/g, " ").trim().slice(0, 180);
+    return `${failure} Diagnosis could not complete${detail ? `: ${detail}` : "."}`;
+  }
+}
+
 async function processCommunityReactionJobsUnlocked() {
   const jobs = await pool.query(
     `SELECT order_id, request_id, discord_user_id, account_id, channel_id, message_id, emoji, attempts
@@ -2911,7 +2961,7 @@ async function processCommunityReactionJobsUnlocked() {
         appendDiscordOnlinerLog("success", `Reaction ${job.emoji} added for Members order ${job.order_id}.`, account.id);
         continue;
       }
-      const message = String(result.payload?.message ?? `Discord returned HTTP ${result.response.status}.`).slice(0, 400);
+      const message = String(await diagnoseCommunityReactionFailure(job, account, result)).slice(0, 700);
       const terminal = [401, 403, 404].includes(result.response.status) || Number(job.attempts) >= 5;
       await pool.query(
         `UPDATE community_reaction_jobs
