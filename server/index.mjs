@@ -21,8 +21,9 @@ const humanizerPrimpPython = process.env.PRIMP_PYTHON
   ?? (process.platform === "win32" ? "python" : "python3");
 const port = Number(process.env.PORT ?? 3000);
 const isProduction = process.env.NODE_ENV === "production";
-const requestedServiceRole = String(process.env.SERVICE_ROLE ?? "all").trim().toLowerCase();
-const serviceRole = ["web", "onliner", "all"].includes(requestedServiceRole) ? requestedServiceRole : "all";
+const defaultServiceRole = isProduction ? "web" : "all";
+const requestedServiceRole = String(process.env.SERVICE_ROLE ?? defaultServiceRole).trim().toLowerCase();
+const serviceRole = ["web", "onliner", "all"].includes(requestedServiceRole) ? requestedServiceRole : defaultServiceRole;
 const serviceRunsWeb = serviceRole === "web" || serviceRole === "all";
 const serviceRunsOnliner = serviceRole === "onliner" || serviceRole === "all";
 const sessionCookie = "plcp_session";
@@ -1157,6 +1158,10 @@ let discordOnlinerRuntimeFlushTimer = null;
 let discordOnlinerLogFlushTimer = null;
 let discordOnlinerConnectionsPaused = false;
 
+function isNoisyDiscordOnlinerLogMessage(value) {
+  return /^DISPATCH\s+/i.test(String(value ?? "").trim());
+}
+
 function createDiscordOnlinerRuntime(accountId) {
   return {
     accountId,
@@ -1786,7 +1791,7 @@ function getDiscordOnlinerSnapshot(config) {
       ...serializeDiscordOnlinerRuntime(runtime)
     };
   });
-  return buildDiscordOnlinerSnapshot(config, accounts, discordOnlinerLogs.slice(-100), {
+  return buildDiscordOnlinerSnapshot(config, accounts, discordOnlinerLogs.filter((entry) => !isNoisyDiscordOnlinerLogMessage(entry.message)).slice(-100), {
     status: serviceRunsOnliner ? "online" : "offline",
     heartbeatAt: serviceRunsOnliner ? new Date().toISOString() : null,
     connectionPaused: discordOnlinerConnectionsPaused
@@ -1797,7 +1802,7 @@ async function getDiscordOnlinerSnapshotForApi(config) {
   if (serviceRunsOnliner) return getDiscordOnlinerSnapshot(config);
   const [runtimeResult, logsResult, workerResult] = await Promise.all([
     pool.query("SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [config.accounts.map((account) => account.id)]),
-    pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs ORDER BY id DESC LIMIT 100"),
+    pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE message NOT LIKE 'DISPATCH %' ORDER BY id DESC LIMIT 100"),
     pool.query("SELECT worker_id, status, started_at, heartbeat_at, last_error, connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
   ]);
   const runtimeByAccountId = new Map(runtimeResult.rows.map((row) => [String(row.account_id), row.payload ?? {}]));
@@ -8522,9 +8527,9 @@ app.get("/api/onliner/logs", requireSession, async (req, res, next) => {
   try {
     const after = Math.max(0, Number.parseInt(String(req.query.after ?? "0"), 10) || 0);
     if (serviceRunsOnliner) {
-      return res.set("Cache-Control", "no-store").json({ logs: discordOnlinerLogs.filter((entry) => entry.id > after).slice(-100) });
+      return res.set("Cache-Control", "no-store").json({ logs: discordOnlinerLogs.filter((entry) => entry.id > after && !isNoisyDiscordOnlinerLogMessage(entry.message)).slice(-100) });
     }
-    const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 ORDER BY id ASC LIMIT 100", [after]);
+    const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 AND message NOT LIKE 'DISPATCH %' ORDER BY id ASC LIMIT 100", [after]);
     res.set("Cache-Control", "no-store").json({
       logs: result.rows.map((row) => ({ id: Number(row.id), timestamp: new Date(row.timestamp).toISOString(), level: row.level, accountId: row.account_id, message: row.message }))
     });
@@ -8558,7 +8563,7 @@ app.get("/api/onliner/logs/stream", requireSession, async (req, res, next) => {
   const heartbeat = setInterval(async () => {
     try {
       if (!serviceRunsOnliner) {
-        const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 ORDER BY id ASC LIMIT 100", [databaseLogCursor]);
+        const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE id > $1 AND message NOT LIKE 'DISPATCH %' ORDER BY id ASC LIMIT 100", [databaseLogCursor]);
         for (const row of result.rows) {
           databaseLogCursor = Number(row.id);
           res.write(`data: ${JSON.stringify({ id: databaseLogCursor, timestamp: new Date(row.timestamp).toISOString(), level: row.level, accountId: row.account_id, message: row.message })}\n\n`);

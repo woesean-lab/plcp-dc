@@ -176,6 +176,10 @@ const DEFAULT_ONLINER_STREAMING_CATEGORIES = ["Just Chatting", "VALORANT", "Mine
 const DEFAULT_ONLINER_STREAMING_TITLES = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
 const DISCORD_ONLINER_ACCOUNT_LIMIT = 3000;
 
+function isVisibleGatewayConsoleLog(message: string) {
+  return !/^DISPATCH\s+/i.test(message.trim());
+}
+
 const EMPTY_ONLINER_DRAFT = {
   enabled: true,
   statuses: ["online", "idle", "dnd"] as Array<"online" | "idle" | "dnd">,
@@ -4658,7 +4662,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="onliner-console" role="log" aria-live="polite">
-                  {onlinerSnapshot?.logs?.length ? [...onlinerSnapshot.logs].reverse().map((entry) => {
+                  {onlinerSnapshot?.logs?.some((entry) => isVisibleGatewayConsoleLog(entry.message)) ? [...onlinerSnapshot.logs].filter((entry) => isVisibleGatewayConsoleLog(entry.message)).reverse().map((entry) => {
                     const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
                     const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
                     const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
