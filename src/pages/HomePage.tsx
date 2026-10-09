@@ -148,6 +148,8 @@ import {
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
+const DEFAULT_REACTION_LIMIT = 5;
+
 const EMPTY_FORM = {
   service: "COMMUNITY-OFFLINE" as ServiceType,
   serverId: "",
@@ -163,7 +165,7 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
-  reactionLimit: 100,
+  reactionLimit: DEFAULT_REACTION_LIMIT,
   humanizerEnabled: false,
   humanizerPackageId: "",
   isEldoradoSale: true
@@ -942,7 +944,7 @@ export default function HomePage() {
     setForm((current) => {
       const nextLimit = reactionLimitManuallyEditedRef.current
         ? Math.min(current.reactionLimit, selectedCommunityReactionCapacity)
-        : Math.min(current.amount, selectedCommunityReactionCapacity);
+        : Math.min(DEFAULT_REACTION_LIMIT, selectedCommunityReactionCapacity);
       return current.reactionLimit === nextLimit ? current : { ...current, reactionLimit: Math.max(1, nextLimit) };
     });
   }, [form.amount, selectedCommunityHasReaction, selectedCommunityReactionCapacity, selectedIsCommunity]);
