@@ -7840,7 +7840,7 @@
 .monitor-reaction-selected-emoji:hover { border-color: rgba(255,125,153,.42); background: rgba(139,18,47,.25); transform: translateY(-1px); }
 .monitor-reaction-custom-emoji { padding: 7px 9px 4px; }
 .monitor-reaction-custom-emoji > span { display: block; padding: 0 7px 6px; color: var(--app-muted); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
-.monitor-reaction-custom-emoji > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.monitor-reaction-custom-emoji > div { display: grid; grid-template-columns: minmax(82px, .65fr) minmax(130px, 1.35fr) auto; gap: 6px; }
 .monitor-reaction-custom-emoji input { width: 100%; height: 34px; min-width: 0; border: 1px solid var(--app-border); border-radius: 9px; outline: none; padding: 0 10px; color: var(--app-text); background: rgba(255,255,255,.035); font-family: inherit; font-size: 11px; transition: border-color .16s ease, box-shadow .16s ease; }
 .monitor-reaction-custom-emoji input:focus { border-color: var(--app-accent-border); box-shadow: 0 0 0 2px var(--app-accent-soft); }
 .monitor-reaction-custom-emoji button { display: inline-flex; height: 34px; align-items: center; gap: 5px; border: 1px solid var(--app-accent-border); border-radius: 9px; padding: 0 10px; color: var(--app-text); background: var(--app-accent-soft); cursor: pointer; font-size: 10px; font-weight: 700; }
@@ -11484,6 +11484,9 @@
   .monitor-reaction-panel.is-side .monitor-reaction-emoji-popover { position: fixed; z-index: 120; right: 12px; bottom: 12px; left: 12px; width: auto; max-height: calc(100dvh - 24px); margin: 0; border-radius: 16px; box-shadow: 0 -24px 70px rgba(0,0,0,.68); transform: translateY(16px) scale(.985); transform-origin: center bottom; }
   .monitor-reaction-emoji-picker[data-open="true"] .monitor-reaction-emoji-popover { transform: translateY(0) scale(1); }
   .monitor-reaction-emoji-selection { min-height: 54px; max-height: 138px; padding: 10px; }
+  .monitor-reaction-custom-emoji > div { grid-template-columns: minmax(0, 1fr) auto; }
+  .monitor-reaction-custom-emoji input[type="url"] { grid-column: 1 / -1; grid-row: 2; }
+  .monitor-reaction-custom-emoji button { grid-column: 2; grid-row: 1; }
   .monitor-reaction-emoji-popover .EmojiPickerReact { height: min(280px, calc(100dvh - 270px)) !important; min-height: 170px; }
   .monitor-reaction-form .ui-button { width: 100%; }
   .lookup-reaction-limit-shortcut { margin-right: 12px; margin-left: 12px; }

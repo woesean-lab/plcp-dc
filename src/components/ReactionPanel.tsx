@@ -19,6 +19,11 @@ const EMOJI_PICKER_CATEGORIES: CategoryConfig[] = [
 ];
 const EmojiPicker = lazy(() => import("emoji-picker-react"));
 
+function formatReactionEmoji(value: string) {
+  const customEmoji = value.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
+  return customEmoji ? `:${customEmoji[1]}:` : value;
+}
+
 export type ReactionPanelRequest = {
   id: string;
   messageLink: string;
@@ -95,7 +100,8 @@ export function ReactionPanel({
   const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
-  const [customEmojiDraft, setCustomEmojiDraft] = useState("");
+  const [customEmojiNameDraft, setCustomEmojiNameDraft] = useState("");
+  const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
@@ -137,11 +143,13 @@ export function ReactionPanel({
   }
 
   function addCustomEmoji() {
-    const rawName = customEmojiDraft.trim().replace(/^:+|:+$/g, "");
-    if (!/^[\w~]{1,64}$/.test(rawName)) return;
-    const customEmoji = `:${rawName}:`;
+    const rawName = customEmojiNameDraft.trim().replace(/^:+|:+$/g, "");
+    const emojiId = customEmojiUrlDraft.trim().match(/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d{16,22})(?:\.[a-z0-9]+)?(?:\?.*)?$/i)?.[1];
+    if (!/^[\w~]{1,64}$/.test(rawName) || !emojiId) return;
+    const customEmoji = `<:${rawName}:${emojiId}>`;
     if (!selectedEmojis.includes(customEmoji)) toggleEmoji(customEmoji);
-    setCustomEmojiDraft("");
+    setCustomEmojiNameDraft("");
+    setCustomEmojiUrlDraft("");
   }
 
   return (
@@ -268,7 +276,7 @@ export function ReactionPanel({
                   setEmojiPickerOpen((current) => !current);
                 }}
               >
-                <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
+                <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).map(formatReactionEmoji).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
                 <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
               </button>
               <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
@@ -286,12 +294,12 @@ export function ReactionPanel({
                     <button
                       key={emoji}
                       type="button"
-                      className={`monitor-reaction-selected-emoji${/^:[\w~]{1,64}:$/.test(emoji) ? " is-custom" : ""}`}
+                      className={`monitor-reaction-selected-emoji${/^<a?:[\w~]{1,64}:\d{16,22}>$/.test(emoji) ? " is-custom" : ""}`}
                       aria-label={`Remove ${emoji}`}
                       title={`Remove ${emoji}`}
                       onClick={() => toggleEmoji(emoji)}
                     >
-                      {emoji}
+                      {formatReactionEmoji(emoji)}
                     </button>
                   ))}
                 </div>
@@ -300,18 +308,25 @@ export function ReactionPanel({
                   <div>
                     <input
                       type="text"
-                      value={customEmojiDraft}
-                      onChange={(event) => setCustomEmojiDraft(event.target.value)}
+                      value={customEmojiNameDraft}
+                      onChange={(event) => setCustomEmojiNameDraft(event.target.value)}
+                      placeholder=":hoodlife:"
+                      aria-label="Custom Discord emoji name"
+                      maxLength={66}
+                    />
+                    <input
+                      type="url"
+                      value={customEmojiUrlDraft}
+                      onChange={(event) => setCustomEmojiUrlDraft(event.target.value)}
                       onKeyDown={(event) => {
                         if (event.key !== "Enter") return;
                         event.preventDefault();
                         addCustomEmoji();
                       }}
-                      placeholder=":hoodlife:"
-                      aria-label="Custom Discord emoji name"
-                      maxLength={66}
+                      placeholder="Discord emoji CDN link"
+                      aria-label="Discord custom emoji CDN link"
                     />
-                    <button type="button" onClick={addCustomEmoji} disabled={!customEmojiDraft.trim()} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
+                    <button type="button" onClick={addCustomEmoji} disabled={!customEmojiNameDraft.trim() || !customEmojiUrlDraft.trim()} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
                   </div>
                 </div>
                 <div className="monitor-reaction-popular-emojis">
@@ -380,7 +395,7 @@ export function ReactionPanel({
                 <div key={request.id} className="monitor-reaction-history-row">
                   <span className="monitor-reaction-history-index">{String(requests.length - index).padStart(2, "0")}</span>
                   <span className="monitor-reaction-history-copy">
-                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
+                    <strong>{request.requestedCount} reactions{request.emojis?.includes(REACTION_MIXED_VALUE) ? " · Mixed" : request.emojis?.length ? ` · ${request.emojis.map(formatReactionEmoji).join(" ")}` : request.emojiCount ? ` · ${request.emojiCount} emoji` : ""}</strong>
                     <small>{formatReactionDate(request.createdAt)}</small>
                     {request.autoStopReason ? <small className="monitor-reaction-history-stop">{request.autoStopReason}</small> : null}
                   </span>

@@ -944,14 +944,7 @@ function isCommunityReactionEmoji(value) {
 }
 
 function isCommunityCustomReactionSelector(value) {
-  return /^:[\w~]{1,64}:$/.test(String(value ?? ""));
-}
-
-function communityReactionEmojiFromDiscord(value) {
-  const name = String(value?.name ?? "").trim();
-  const id = String(value?.id ?? "").trim();
-  if (id && name && /^\d{16,22}$/.test(id) && /^[\w~]{1,64}$/.test(name)) return `${name}:${id}`;
-  return isCommunityReactionEmoji(name) ? name : null;
+  return /^<a?:[\w~]{1,64}:\d{16,22}>$/.test(String(value ?? ""));
 }
 
 function shuffleReactionValues(values) {
@@ -11484,54 +11477,11 @@ async function updateCommunityReactionMessage(req, res, next) {
     );
     const customEmojiSelectors = requestedEmojis.filter(isCommunityCustomReactionSelector);
     if (customEmojiSelectors.length) {
-      const onlinerConfig = await getDiscordOnlinerConfig();
-      const deliveredUserIds = new Set(deliveredMembers.map((member) => String(member.discordUserId)));
-      const readerAccount = onlinerConfig.accounts.find((account) =>
-        account.botToken
-        && account.proxyUrl
-        && (
-          deliveredUserIds.has(String(account.discordUserId ?? ""))
-          || deliveredUserIds.has(String(discordOnlinerRuntimes.get(account.id)?.bot?.id ?? ""))
-        )
-      );
-      if (!readerAccount) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ message: "No delivered Onliner account with a token and proxy is available to resolve the custom emoji." });
-      }
-      const messageResult = await sendHumanizerDiscordRequest(
-        `channels/${encodeURIComponent(reactionMessage.channelId)}/messages/${encodeURIComponent(reactionMessage.messageId)}`,
-        readerAccount.proxyUrl,
-        readerAccount.botToken,
-        "GET",
-        undefined
-      );
-      if (!messageResult.response.ok) {
-        await client.query("ROLLBACK");
-        return res.status(messageResult.response.status === 403 ? 403 : 409).json({ message: messageResult.response.status === 403
-          ? "The Onliner account cannot view this channel or read its message history."
-          : "The Discord message could not be loaded to resolve the custom emoji." });
-      }
-      const customEmojiByName = new Map();
-      for (const reaction of Array.isArray(messageResult.payload?.reactions) ? messageResult.payload.reactions : []) {
-        const emoji = communityReactionEmojiFromDiscord(reaction?.emoji);
-        if (emoji?.includes(":")) customEmojiByName.set(String(reaction?.emoji?.name ?? "").toLowerCase(), emoji);
-      }
-      const messageText = JSON.stringify({
-        content: messageResult.payload?.content,
-        embeds: messageResult.payload?.embeds,
-        components: messageResult.payload?.components
+      assignmentEmojis = requestedEmojis.map((emoji) => {
+        if (!isCommunityCustomReactionSelector(emoji)) return emoji;
+        const match = emoji.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
+        return `${match[1]}:${match[2]}`;
       });
-      for (const match of messageText.matchAll(/<a?:([\w~]{1,64}):(\d{16,22})>/g)) {
-        customEmojiByName.set(match[1].toLowerCase(), `${match[1]}:${match[2]}`);
-      }
-      const missingCustomEmojis = customEmojiSelectors.filter((selector) => !customEmojiByName.has(selector.slice(1, -1).toLowerCase()));
-      if (missingCustomEmojis.length) {
-        await client.query("ROLLBACK");
-        return res.status(409).json({ message: `The following custom emoji could not be found in the message or its existing reactions: ${missingCustomEmojis.join(", ")}` });
-      }
-      assignmentEmojis = requestedEmojis.map((emoji) => isCommunityCustomReactionSelector(emoji)
-        ? customEmojiByName.get(emoji.slice(1, -1).toLowerCase())
-        : emoji);
     }
 
     const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : assignmentEmojis.length);
