@@ -4427,7 +4427,9 @@ export default function HomePage() {
                     ) : null}
                     {onlinerSnapshot?.accounts.length ? (
                       <div className="onliner-account-list">
-                        {onlinerSnapshot.accounts.map((account, index) => (
+                        {[...onlinerSnapshot.accounts]
+                          .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting"))
+                          .map((account, index) => (
                           <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
                             <span className="onliner-bot-avatar" aria-hidden="true">
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
@@ -4460,7 +4462,7 @@ export default function HomePage() {
                               </Button>
                             </div>
                           </div>
-                        ))}
+                          ))}
                       </div>
                     ) : null}
                     <div className="grid gap-4">
