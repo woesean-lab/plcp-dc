@@ -24,6 +24,12 @@ function formatReactionEmoji(value: string) {
   return customEmoji ? `:${customEmoji[1]}:` : value;
 }
 
+function parseDiscordEmojiId(value: string) {
+  const input = value.trim();
+  if (/^\d{16,22}$/.test(input)) return input;
+  return input.match(/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d{16,22})(?:\.[a-z0-9]+)?(?:\?.*)?$/i)?.[1] ?? null;
+}
+
 export type ReactionPanelRequest = {
   id: string;
   messageLink: string;
@@ -144,7 +150,7 @@ export function ReactionPanel({
 
   function addCustomEmoji() {
     const rawName = customEmojiNameDraft.trim().replace(/^:+|:+$/g, "");
-    const emojiId = customEmojiUrlDraft.trim().match(/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d{16,22})(?:\.[a-z0-9]+)?(?:\?.*)?$/i)?.[1];
+    const emojiId = parseDiscordEmojiId(customEmojiUrlDraft);
     if (!/^[\w~]{1,64}$/.test(rawName) || !emojiId) return;
     const customEmoji = `<:${rawName}:${emojiId}>`;
     if (!selectedEmojis.includes(customEmoji)) toggleEmoji(customEmoji);
@@ -323,10 +329,10 @@ export function ReactionPanel({
                         event.preventDefault();
                         addCustomEmoji();
                       }}
-                      placeholder="Discord emoji CDN link"
-                      aria-label="Discord custom emoji CDN link"
+                      placeholder="Emoji ID or Discord CDN link"
+                      aria-label="Discord custom emoji ID or CDN link"
                     />
-                    <button type="button" onClick={addCustomEmoji} disabled={!customEmojiNameDraft.trim() || !customEmojiUrlDraft.trim()} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
+                    <button type="button" onClick={addCustomEmoji} disabled={!/^[\w~]{1,64}$/.test(customEmojiNameDraft.trim().replace(/^:+|:+$/g, "")) || !parseDiscordEmojiId(customEmojiUrlDraft)} aria-label="Add custom emoji"><Plus aria-hidden="true" /> Add</button>
                   </div>
                 </div>
                 <div className="monitor-reaction-popular-emojis">
