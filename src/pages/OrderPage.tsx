@@ -1166,25 +1166,48 @@ export default function OrderPage() {
   async function copyDeliveryTemplate() {
     const target = String(result?.uniqid ?? uniqid).trim();
 
-    if (!target || !botInvite) {
-      toast.error("Bot invite link is required.");
+    if (!target) {
+      toast.error("Order ID is required.");
       return;
     }
 
     const deliveryTiming = speedProfile === "balanced"
       ? "Balanced (variable 30–300 second delay)"
       : `${formatTemplateDelay(result?.delay)} seconds (fully customizable)`;
-    const message = isCommunityProvider
+    const isExperimentalJoin = result?.joinMethod === "experimental_join" || result?.experimentalJoin === true;
+    const requiredPermissionLine = isExperimentalJoin
+      ? "🔑 Required bot permissions: Manage Server, Kick Members, and Create Invite."
+      : "🔑 Required bot permission: Create Invite.";
+    const permissionNotice = isExperimentalJoin
+      ? "These permissions are mandatory for Experimental Join and must remain enabled until delivery is complete."
+      : "The bot uses Create Invite for this order. You can remove the bot after delivery is complete.";
+    const botInstructions = botInvite
       ? [
           "Please add the Members bot to your Discord server so we can begin delivery.",
           "",
-          "🔑 Required bot permission: Create Invite.",
+          requiredPermissionLine,
           "",
-          "The bot uses Create Invite for this order. You can remove the bot after delivery is complete.",
+          permissionNotice,
           "",
           "🤖 Add Bot:",
           botInvite,
-          "",
+          ""
+        ]
+      : result?.joinMethod === "directly"
+        ? []
+        : [
+            "✅ The Members bot has already been added to your Discord server.",
+            "",
+            requiredPermissionLine,
+            "",
+            permissionNotice,
+            "",
+            "Please keep the bot in the server until delivery is complete.",
+            ""
+          ];
+    const message = isCommunityProvider
+      ? [
+          ...botInstructions,
           "📊 Order Monitor:",
           getPublicMonitorLink(target),
           "",
@@ -1193,6 +1216,9 @@ export default function OrderPage() {
             "Submit Discord message links from the Order Monitor whenever you are ready.",
             ""
           ] : []),
+          "🛡️ CHECK MEMBERS & REPLACEMENT",
+          "If you purchased Online Members, use Check Members during the guarantee period. Offline members can be replaced within the guarantee period.",
+          "",
           `⚙️ Delivery Speed: ${deliveryTiming}`
         ].join("\n")
       : [
@@ -1254,7 +1280,7 @@ export default function OrderPage() {
                 <span aria-hidden="true" />
                 {terminal ? "Refresh complete" : `Live refresh · ${secondsUntilRefresh}s`}
               </span>
-              {!isDcordProvider && result?.isEldoradoSale !== false && Boolean(botInvite) ? (
+              {!isDcordProvider && result?.isEldoradoSale !== false ? (
                 <Button
                   type="button"
                   variant="secondary"
