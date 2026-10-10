@@ -108,6 +108,10 @@ export type DiscordOnlinerProxyDetail = {
   countryCode: string | null;
   countryName: string | null;
   assignedAccounts: number;
+  connectedAccounts: number;
+  connectingAccounts: number;
+  errorAccounts: number;
+  disconnectedAccounts: number;
   status: "available" | "cooling";
   failureCount: number;
   cooldownUntil: string | null;
@@ -122,6 +126,7 @@ export type DiscordOnlinerProxyPool = {
   availableCount: number;
   coolingDownCount: number;
   assignedAccounts: number;
+  workerOnline: boolean;
 };
 
 async function parseResponse(response: Response) {

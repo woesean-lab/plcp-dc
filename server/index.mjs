@@ -1469,15 +1469,79 @@ function selectDiscordOnlinerProxy(config, additionalAssignments = [], excludedP
   return selected;
 }
 
-function getDiscordOnlinerProxyPoolResponse(config) {
+function isDiscordOnlinerProxyRuntimeFailure(payload) {
+  const trigger = String(payload?.lastCloseTrigger ?? "");
+  const code = Number(payload?.lastCloseCode);
+  if (["proxy_auth_407", "socket_error"].includes(trigger)) return true;
+  if (trigger.startsWith("unexpected_http_")) return true;
+  return trigger === "remote_or_transport" && code === 1006;
+}
+
+function getDiscordOnlinerProxyRuntimeTimestamp(payload, field) {
+  const value = payload?.[field];
+  const timestamp = value ? new Date(value).getTime() : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+async function getDiscordOnlinerProxyPoolResponse(config) {
   const usage = new Map(config.proxyPool.map((proxy) => [proxy, 0]));
   for (const account of config.accounts) {
     if (usage.has(account.proxyUrl)) usage.set(account.proxyUrl, usage.get(account.proxyUrl) + 1);
   }
+  const accountIds = config.accounts.map((account) => account.id);
+  const [runtimeResult, workerResult] = await Promise.all([
+    accountIds.length
+      ? pool.query("SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [accountIds])
+      : Promise.resolve({ rows: [] }),
+    pool.query("SELECT status, heartbeat_at FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+  ]);
+  const runtimeByAccountId = new Map(runtimeResult.rows.map((row) => [String(row.account_id), row.payload ?? {}]));
+  const worker = workerResult.rows[0] ?? {};
+  const workerHeartbeatAt = worker.heartbeat_at ? new Date(worker.heartbeat_at).getTime() : 0;
+  const workerOnline = worker.status === "online"
+    && Number.isFinite(workerHeartbeatAt)
+    && workerHeartbeatAt >= Date.now() - discordOnlinerWorkerHeartbeatMs * 3;
+  const accountsByProxy = new Map(config.proxyPool.map((proxy) => [proxy, []]));
+  for (const account of config.accounts) {
+    if (accountsByProxy.has(account.proxyUrl)) accountsByProxy.get(account.proxyUrl).push(account);
+  }
   const now = Date.now();
   const details = config.proxyPool.map((proxy) => {
-    const health = discordOnlinerProxyHealth.get(proxy);
-    const unavailableUntil = Math.max(0, Number(health?.unavailableUntil) || 0);
+    const localHealth = discordOnlinerProxyHealth.get(proxy);
+    const assigned = accountsByProxy.get(proxy) ?? [];
+    let connectedAccounts = 0;
+    let connectingAccounts = 0;
+    let errorAccounts = 0;
+    let disconnectedAccounts = 0;
+    let runtimeLastSuccessAt = 0;
+    let runtimeLastFailureAt = 0;
+    let unresolvedRuntimeFailures = 0;
+    for (const account of assigned) {
+      const runtime = runtimeByAccountId.get(account.id) ?? {};
+      const state = workerOnline ? normalizeDiscordOnlinerConnectionState(runtime.connectionState) : "disconnected";
+      if (state === "connected") connectedAccounts += 1;
+      else if (["connecting", "reconnecting"].includes(state)) connectingAccounts += 1;
+      else if (state === "error") errorAccounts += 1;
+      else disconnectedAccounts += 1;
+      const successAt = Math.max(
+        getDiscordOnlinerProxyRuntimeTimestamp(runtime, "socketOpenedAt"),
+        getDiscordOnlinerProxyRuntimeTimestamp(runtime, "connectedAt")
+      );
+      runtimeLastSuccessAt = Math.max(runtimeLastSuccessAt, successAt);
+      if (isDiscordOnlinerProxyRuntimeFailure(runtime)) {
+        const failureAt = getDiscordOnlinerProxyRuntimeTimestamp(runtime, "lastDisconnectedAt");
+        runtimeLastFailureAt = Math.max(runtimeLastFailureAt, failureAt);
+        if (failureAt > successAt) unresolvedRuntimeFailures += 1;
+      }
+    }
+    const localUnavailableUntil = Math.max(0, Number(localHealth?.unavailableUntil) || 0);
+    const derivedUnavailableUntil = unresolvedRuntimeFailures && runtimeLastFailureAt
+      ? runtimeLastFailureAt + 60_000
+      : 0;
+    const unavailableUntil = Math.max(localUnavailableUntil, derivedUnavailableUntil);
+    const failureCount = Math.max(Math.max(0, Number(localHealth?.failures) || 0), unresolvedRuntimeFailures);
+    const lastSuccessAt = Math.max(Math.max(0, Number(localHealth?.lastSuccessAt) || 0), runtimeLastSuccessAt);
+    const lastFailureAt = Math.max(Math.max(0, Number(localHealth?.lastFailureAt) || 0), runtimeLastFailureAt);
     let location = null;
     try {
       location = geoipCountry.lookup(new URL(proxy).hostname);
@@ -1489,11 +1553,15 @@ function getDiscordOnlinerProxyPoolResponse(config) {
       countryCode: String(location?.country ?? "").toUpperCase() || null,
       countryName: String(location?.name ?? "").trim() || null,
       assignedAccounts: usage.get(proxy) ?? 0,
+      connectedAccounts,
+      connectingAccounts,
+      errorAccounts,
+      disconnectedAccounts,
       status: unavailableUntil > now ? "cooling" : "available",
-      failureCount: Math.max(0, Number(health?.failures) || 0),
+      failureCount,
       cooldownUntil: unavailableUntil > now ? new Date(unavailableUntil).toISOString() : null,
-      lastSuccessAt: health?.lastSuccessAt ? new Date(health.lastSuccessAt).toISOString() : null,
-      lastFailureAt: health?.lastFailureAt ? new Date(health.lastFailureAt).toISOString() : null
+      lastSuccessAt: lastSuccessAt ? new Date(lastSuccessAt).toISOString() : null,
+      lastFailureAt: lastFailureAt ? new Date(lastFailureAt).toISOString() : null
     };
   });
   const availableCount = details.filter((proxy) => proxy.status === "available").length;
@@ -1503,7 +1571,8 @@ function getDiscordOnlinerProxyPoolResponse(config) {
     count: config.proxyPool.length,
     availableCount,
     coolingDownCount: config.proxyPool.length - availableCount,
-    assignedAccounts: config.accounts.filter((account) => Boolean(account.proxyUrl)).length
+    assignedAccounts: config.accounts.filter((account) => Boolean(account.proxyUrl)).length,
+    workerOnline
   };
 }
 
@@ -8471,7 +8540,7 @@ app.get("/api/onliner", requireSession, async (_req, res, next) => {
 app.get("/api/onliner/proxies", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig();
-    res.set("Cache-Control", "no-store").json(getDiscordOnlinerProxyPoolResponse(config));
+    res.set("Cache-Control", "no-store").json(await getDiscordOnlinerProxyPoolResponse(config));
   } catch (error) {
     next(error);
   }
@@ -8504,7 +8573,7 @@ app.post("/api/onliner/proxies", requireSession, async (req, res, next) => {
       discordOnlinerWorkerCurrentConfig = candidate;
     }
     res.status(201).json({
-      ...getDiscordOnlinerProxyPoolResponse(candidate),
+      ...(await getDiscordOnlinerProxyPoolResponse(candidate)),
       addedCount: newProxies.length,
       duplicateCount: additions.length - newProxies.length
     });
@@ -8544,7 +8613,7 @@ app.put("/api/onliner/proxies", requireSession, async (req, res, next) => {
       await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
       discordOnlinerWorkerCurrentConfig = candidate;
     }
-    res.json(getDiscordOnlinerProxyPoolResponse(candidate));
+    res.json(await getDiscordOnlinerProxyPoolResponse(candidate));
   } catch (error) {
     next(error);
   }
@@ -8586,7 +8655,7 @@ app.delete("/api/onliner/proxies", requireSession, async (req, res, next) => {
       await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
       discordOnlinerWorkerCurrentConfig = candidate;
     }
-    res.json({ ...getDiscordOnlinerProxyPoolResponse(candidate), reassignedAccounts: affectedAccounts.length });
+    res.json({ ...(await getDiscordOnlinerProxyPoolResponse(candidate)), reassignedAccounts: affectedAccounts.length });
   } catch (error) {
     next(error);
   }

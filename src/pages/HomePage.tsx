@@ -4513,13 +4513,13 @@ export default function HomePage() {
                           </div>
                           <div className="onliner-proxy-usage-list">
                             {onlinerProxyDetails.map((proxy) => (
-                              <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status}>
+                              <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status === "cooling" || proxy.errorAccounts > 0 ? "cooling" : proxy.connectedAccounts > 0 ? "live" : "available"}>
                                 <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
                                 <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><small>{proxy.countryName ?? "Unknown"}</small></span>
                                 <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
-                                <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
+                                <span className="onliner-proxy-health-state"><i /> <strong>{proxy.status === "cooling" ? "Cooling" : proxy.connectedAccounts > 0 ? "Live" : proxy.errorAccounts > 0 ? "Issue" : "Available"}</strong><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
                                 <span className="onliner-proxy-health-copy">
-                                  <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : "No active failures"}</strong>
+                                  <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : proxy.assignedAccounts ? `${proxy.connectedAccounts}/${proxy.assignedAccounts} connected${proxy.connectingAccounts ? ` · ${proxy.connectingAccounts} connecting` : ""}` : "No assigned accounts"}</strong>
                                   <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>
                                 </span>
                                 <button className="onliner-proxy-remove" type="button" aria-label={`Remove ${formatOnlinerProxyLabel(proxy.proxy)}`} title="Remove only this proxy" disabled={removingOnlinerProxy !== null || savingOnlinerProxies} onClick={() => void handleRemoveOnlinerProxy(proxy.proxy)}>
