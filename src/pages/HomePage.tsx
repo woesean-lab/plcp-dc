@@ -363,6 +363,7 @@ const ONLINER_SKELETON_MAX_DELAY = 5_000;
 const ACTIVE_SYNC_BATCH_SIZE = 3;
 const ACTIVE_SYNC_PAUSE_MS = 1000;
 const ORDER_PAGE_SIZE = 20;
+const REACTION_PAGE_SIZE = 25;
 
 function formatNumber(value?: number) {
   return typeof value === "number" && !Number.isNaN(value)
@@ -522,6 +523,34 @@ function getTrackedOrderReactionUsage(order: TrackedOrder) {
   return { used: Math.min(used, total), total };
 }
 
+function getReactionRequestStats(request: NonNullable<TrackedOrder["reactionRequests"]>[number]) {
+  const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+  const requested = Math.max(0, Number(request.requestedCount) || 0);
+  const assigned = Math.max(requested, Number(request.assignedCount) || 0, assignments.length);
+  const completed = assignments.filter((item) => String(item.reactionState ?? "pending").toLowerCase() === "completed").length;
+  const failed = assignments.filter((item) => String(item.reactionState ?? "pending").toLowerCase() === "failed").length;
+  const cancelled = assignments.filter((item) => String(item.reactionState ?? "pending").toLowerCase() === "cancelled").length;
+  const pending = assignments.length
+    ? assignments.filter((item) => !["completed", "failed", "cancelled"].includes(String(item.reactionState ?? "pending").toLowerCase())).length
+    : assigned;
+  const total = Math.max(assigned, completed + failed + cancelled + pending);
+  const status = pending > 0
+    ? "active"
+    : total > 0 && completed === total
+      ? "completed"
+      : total > 0 && cancelled === total
+        ? "cancelled"
+        : failed > 0 || request.autoStopReason
+          ? "issues"
+          : "completed";
+  const failure = request.autoStopReason
+    || assignments.find((item) => String(item.reactionState ?? "").toLowerCase() === "failed")?.reactionDetails
+    || assignments.find((item) => String(item.reactionState ?? "").toLowerCase() === "cancelled")?.reactionDetails
+    || null;
+
+  return { total, completed, failed, cancelled, pending, status, failure };
+}
+
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
   const [delayElapsed, setDelayElapsed] = useState(false);
   const [maxDelayElapsed, setMaxDelayElapsed] = useState(false);
@@ -563,7 +592,7 @@ function SkeletonField({ className = "" }: { className?: string }) {
 }
 
 function HomePageSkeleton({ tab }: { tab: AdminTab }) {
-  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
+  const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "reactions" ? "reaction history" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
 
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
@@ -844,6 +873,10 @@ export default function HomePage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
+  const [currentReactionPage, setCurrentReactionPage] = useState(1);
+  const [reactionSearch, setReactionSearch] = useState("");
+  const [reactionStatusFilter, setReactionStatusFilter] = useState("all");
+  const [refreshingReactions, setRefreshingReactions] = useState(false);
   const orderStatusOptions = useMemo(() => {
     const knownStatuses = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
     const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
@@ -899,6 +932,43 @@ export default function HomePage() {
       return matchesSearch && matchesStatus && matchesType;
     });
   }, [orderSearch, orderStatusFilter, orderTypeFilter, orders]);
+  const reactionRows = useMemo(() => orders.flatMap((order) => (Array.isArray(order.reactionRequests) ? order.reactionRequests : []).map((request) => {
+    const stats = getReactionRequestStats(request);
+    const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+    const emojis = Array.from(new Set((Array.isArray(request.emojis) && request.emojis.length
+      ? request.emojis
+      : assignments.map((assignment) => assignment.reactionEmoji))
+      .map((emoji) => String(emoji ?? "").trim())
+      .filter(Boolean)));
+    return { order, request, stats, emojis };
+  })).sort((left, right) => getTrackedTimestamp(right.request.createdAt) - getTrackedTimestamp(left.request.createdAt)), [orders]);
+  const filteredReactionRows = useMemo(() => {
+    const query = reactionSearch.trim().toLowerCase();
+    return reactionRows.filter(({ order, request, stats, emojis }) => {
+      const matchesStatus = reactionStatusFilter === "all" || stats.status === reactionStatusFilter;
+      const matchesSearch = !query || [
+        order.uniqid,
+        order.serverName,
+        order.serverId,
+        request.id,
+        request.messageLink,
+        ...emojis,
+        stats.failure
+      ].some((value) => String(value ?? "").toLowerCase().includes(query));
+      return matchesStatus && matchesSearch;
+    });
+  }, [reactionRows, reactionSearch, reactionStatusFilter]);
+  const reactionPageCount = Math.max(1, Math.ceil(filteredReactionRows.length / REACTION_PAGE_SIZE));
+  const paginatedReactionRows = useMemo(() => {
+    const start = (currentReactionPage - 1) * REACTION_PAGE_SIZE;
+    return filteredReactionRows.slice(start, start + REACTION_PAGE_SIZE);
+  }, [currentReactionPage, filteredReactionRows]);
+  const reactionTotals = useMemo(() => reactionRows.reduce((totals, row) => ({
+    requests: totals.requests + 1,
+    completed: totals.completed + row.stats.completed,
+    pending: totals.pending + row.stats.pending,
+    failed: totals.failed + row.stats.failed
+  }), { requests: 0, completed: 0, pending: 0, failed: 0 }), [reactionRows]);
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
@@ -992,6 +1062,14 @@ export default function HomePage() {
     setCurrentOrderPage((current) => Math.min(Math.max(current, 1), orderPageCount));
   }, [orderPageCount]);
 
+  useEffect(() => {
+    setCurrentReactionPage(1);
+  }, [reactionSearch, reactionStatusFilter]);
+
+  useEffect(() => {
+    setCurrentReactionPage((current) => Math.min(Math.max(current, 1), reactionPageCount));
+  }, [reactionPageCount]);
+
   async function syncActiveOrders(sourceOrders: TrackedOrder[]) {
     const syncedOrders = [...sourceOrders];
 
@@ -1035,6 +1113,26 @@ export default function HomePage() {
       active = false;
     };
   }, []);
+
+  async function refreshReactionOrders(showProgress = true) {
+    if (showProgress) setRefreshingReactions(true);
+    try {
+      setOrders(await loadTrackedOrders());
+    } catch (error) {
+      if (showProgress) notifyError(error instanceof Error ? error.message : "Reactions could not be refreshed.");
+    } finally {
+      if (showProgress) setRefreshingReactions(false);
+    }
+  }
+
+  useEffect(() => {
+    if (activeTab !== "reactions") return;
+    void refreshReactionOrders(false);
+    const timer = window.setInterval(() => void refreshReactionOrders(false), 5_000);
+    return () => window.clearInterval(timer);
+    // Refresh the reaction ledger while it is visible.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   useEffect(() => {
     if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
@@ -4091,6 +4189,118 @@ export default function HomePage() {
               </section>
             </>
           )
+        ) : null}
+
+        {activeTab === "reactions" ? (
+          <>
+            <header className="page-heading reactions-page-heading">
+              <div>
+                <p className={labelClass}>Operations</p>
+                <h1 className="page-title">Reactions</h1>
+                <p className="app-copy page-copy">Monitor every reaction request, its delivery progress, and Discord failures.</p>
+              </div>
+              <div className="orders-heading-actions">
+                <Button type="button" variant="secondary" size="sm" onClick={() => void refreshReactionOrders()} disabled={refreshingReactions}>
+                  <RefreshCw className={`h-4 w-4 ${refreshingReactions ? "animate-spin" : ""}`} />
+                  {refreshingReactions ? "Refreshing..." : "Refresh"}
+                </Button>
+              </div>
+            </header>
+
+            <section className="orders-summary-strip" aria-label="Reaction overview">
+              <div><span>Requests</span><strong>{reactionTotals.requests}</strong><small>reaction records</small></div>
+              <div data-tone="success"><span>Completed</span><strong>{reactionTotals.completed}</strong><small>reactions added</small></div>
+              <div data-tone="active"><span>Pending</span><strong>{reactionTotals.pending}</strong><small>waiting delivery</small></div>
+              <div data-tone={reactionTotals.failed ? "danger" : "muted"}><span>Failed</span><strong>{reactionTotals.failed}</strong><small>Discord failures</small></div>
+            </section>
+
+            <section className={`${shell} reactions-workspace`}>
+              <div className="orders-commandbar reactions-commandbar">
+                <label className="orders-search-field">
+                  <Search className="h-4 w-4" aria-hidden="true" />
+                  <Input value={reactionSearch} onChange={(event) => setReactionSearch(event.target.value)} placeholder="Search order, server, message or error" aria-label="Search reactions" />
+                </label>
+                <FilterDropdown label="Status" showLabel={false} value={reactionStatusFilter} onChange={setReactionStatusFilter} options={[
+                  { value: "all", label: "All statuses" },
+                  { value: "active", label: "Active" },
+                  { value: "completed", label: "Completed" },
+                  { value: "issues", label: "Issues" },
+                  { value: "cancelled", label: "Cancelled" }
+                ]} />
+              </div>
+
+              <div className="orders-list-meta">
+                <span>{filteredReactionRows.length} results · newest first · auto-refreshes every 5s</span>
+                <span>Page {currentReactionPage} / {reactionPageCount}</span>
+              </div>
+
+              {paginatedReactionRows.length ? (
+                <div className="reactions-table" role="table" aria-label="Reaction requests">
+                  <div className="reactions-table-head" role="row">
+                    <span>Order</span><span>Message & emojis</span><span>Progress</span><span>Status</span><span>Created</span><span>Actions</span>
+                  </div>
+                  <ol className="reactions-row-list">
+                    {paginatedReactionRows.map(({ order, request, stats, emojis }) => {
+                      const providerQuery = order.provider === "community" ? "&provider=community" : "";
+                      const statusLabel = stats.status === "active" ? "Active" : stats.status === "completed" ? "Completed" : stats.status === "cancelled" ? "Cancelled" : "Issues";
+                      const statusVariant = stats.status === "completed" ? "success" : stats.status === "issues" ? "destructive" : "secondary";
+                      return (
+                        <li key={`${order.uniqid}:${request.id}`}>
+                          <article className="reactions-row" data-state={stats.status}>
+                            <div className="reactions-order">
+                              <span className="orders-row-service-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
+                              <span>
+                                <strong title={order.serverName || order.serverId}>{order.serverName || "Discord server"}</strong>
+                                <code title={order.uniqid}>{order.uniqid}</code>
+                              </span>
+                            </div>
+                            <div className="reactions-message">
+                              <a href={request.messageLink} target="_blank" rel="noreferrer" title={request.messageLink}>
+                                <ExternalLink className="h-3.5 w-3.5" /> Open Discord message
+                              </a>
+                              <span className="reactions-emojis" title={emojis.join(" ")}>
+                                {emojis.length ? emojis.slice(0, 8).map((emoji) => <b key={emoji}>{emoji === "mixed" ? "Mixed" : emoji}</b>) : <b>—</b>}
+                                {emojis.length > 8 ? <small>+{emojis.length - 8}</small> : null}
+                              </span>
+                            </div>
+                            <dl className="reactions-progress">
+                              <div><dt>Total</dt><dd>{stats.total}</dd></div>
+                              <div><dt>Done</dt><dd>{stats.completed}</dd></div>
+                              <div><dt>Pending</dt><dd>{stats.pending}</dd></div>
+                              <div><dt>Failed</dt><dd>{stats.failed}</dd></div>
+                            </dl>
+                            <div className="reactions-status">
+                              <Badge className="orders-status-badge" variant={statusVariant}>{statusLabel}</Badge>
+                            </div>
+                            <time className="reactions-created" dateTime={request.createdAt} title={request.createdAt}>{formatTrackedDate(request.createdAt)}</time>
+                            <div className="reactions-actions" role="group" aria-label={`Actions for reaction request ${request.id}`}>
+                              <Button asChild variant="secondary" size="icon" title="Open Discord message"><a href={request.messageLink} target="_blank" rel="noreferrer" aria-label="Open Discord message"><MessageSquareText className="h-4 w-4" /></a></Button>
+                              <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
+                            </div>
+                            {stats.failure ? (
+                              <div className="reactions-failure" title={stats.failure}>
+                                <TriangleAlert className="h-4 w-4" aria-hidden="true" />
+                                <span>{stats.failure}</span>
+                              </div>
+                            ) : null}
+                          </article>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  <div className="orders-pagination">
+                    <span>Showing {filteredReactionRows.length ? (currentReactionPage - 1) * REACTION_PAGE_SIZE + 1 : 0}-{Math.min(currentReactionPage * REACTION_PAGE_SIZE, filteredReactionRows.length)} of {filteredReactionRows.length}</span>
+                    <div>
+                      <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentReactionPage((current) => Math.max(current - 1, 1))} disabled={currentReactionPage <= 1}><ChevronLeft className="h-3.5 w-3.5" /> Prev</Button>
+                      <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentReactionPage((current) => Math.min(current + 1, reactionPageCount))} disabled={currentReactionPage >= reactionPageCount}>Next <ChevronRight className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="orders-empty-state"><MessageSquareText className="h-5 w-5" /><strong>{reactionRows.length ? "No matching reactions" : "No reactions yet"}</strong><span>{reactionRows.length ? "Adjust the search or status filter." : "Reaction requests from completed Members orders will appear here."}</span></div>
+              )}
+            </section>
+          </>
         ) : null}
 
         {activeTab === "stock" ? (

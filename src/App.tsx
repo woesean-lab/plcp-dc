@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck, WandSparkles } from "lucide-react";
+import { Boxes, ListChecks, MessageSquareText, Plus, RadioTower, Settings2, ShieldCheck, WandSparkles } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -75,6 +75,16 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 >
                   <ListChecks className="h-4 w-4" aria-hidden="true" />
                   <span>Orders</span>
+                </Link>
+                <Link
+                  to="/manage?tab=reactions"
+                  aria-label="Reactions"
+                  title="Reactions"
+                  className={`app-nav-button ${isManage && tab === "reactions" ? "is-active" : ""}`}
+                  aria-current={isManage && tab === "reactions" ? "page" : undefined}
+                >
+                  <MessageSquareText className="h-4 w-4" aria-hidden="true" />
+                  <span>Reactions</span>
                 </Link>
                 <Link
                   to="/manage?tab=stock"
