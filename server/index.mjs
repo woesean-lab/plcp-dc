@@ -928,6 +928,10 @@ const discordOnlinerWorkerHeartbeatMs = 5_000;
 const discordOnlinerMaxReconnectAttempts = 2;
 const discordOnlinerRateLimitCooldownMs = 5 * 60_000;
 const discordOnlinerHeartbeatCooldownMs = 60_000;
+const discordOnlinerFlapWindowMs = 10 * 60_000;
+const discordOnlinerFlapCooldownMs = 10 * 60_000;
+const discordOnlinerFlapThreshold = 3;
+const discordOnlinerShortSessionMs = 2 * 60_000;
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
 const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
@@ -1181,12 +1185,15 @@ function createDiscordOnlinerRuntime(accountId) {
     heartbeatAcknowledged: true,
     heartbeatIntervalMs: null,
     lastHeartbeatSentAt: null,
+    heartbeatAwaitingAckSince: null,
+    lastHeartbeatSource: null,
     lastHeartbeatAckAt: null,
     lastGatewayEventAt: null,
     lastDispatchType: null,
     socketOpenedAt: null,
     closeTrigger: null,
     disconnectHistory: [],
+    flapHistory: [],
     disconnectCount: 0,
     lastCloseCode: null,
     lastCloseTrigger: null,
@@ -1232,12 +1239,15 @@ function serializeDiscordOnlinerRuntime(runtime) {
     nextQueuedConnectionAt: runtime.nextQueuedConnectionAt,
     heartbeatIntervalMs: runtime.heartbeatIntervalMs,
     lastHeartbeatSentAt: runtime.lastHeartbeatSentAt,
+    heartbeatAwaitingAckSince: runtime.heartbeatAwaitingAckSince,
+    lastHeartbeatSource: runtime.lastHeartbeatSource,
     lastHeartbeatAckAt: runtime.lastHeartbeatAckAt,
     lastGatewayEventAt: runtime.lastGatewayEventAt,
     lastDispatchType: runtime.lastDispatchType,
     socketOpenedAt: runtime.socketOpenedAt,
     disconnectCount: runtime.disconnectCount,
     disconnectsLast10Minutes: runtime.disconnectHistory.filter((timestamp) => timestamp >= Date.now() - 10 * 60_000).length,
+    rapidDisconnectsLast10Minutes: runtime.flapHistory.filter((timestamp) => timestamp >= Date.now() - discordOnlinerFlapWindowMs).length,
     lastCloseCode: runtime.lastCloseCode,
     lastCloseTrigger: runtime.lastCloseTrigger
   };
@@ -1972,11 +1982,14 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.heartbeatAcknowledged = true;
   runtime.heartbeatIntervalMs = null;
   runtime.lastHeartbeatSentAt = null;
+  runtime.heartbeatAwaitingAckSince = null;
+  runtime.lastHeartbeatSource = null;
   runtime.lastHeartbeatAckAt = null;
   runtime.lastGatewayEventAt = null;
   runtime.lastDispatchType = null;
   runtime.socketOpenedAt = null;
   runtime.closeTrigger = null;
+  runtime.flapHistory = [];
   runtime.sequence = null;
   runtime.sessionId = null;
   runtime.resumeGatewayUrl = null;
@@ -2333,6 +2346,8 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   runtime.heartbeatAcknowledged = true;
   runtime.heartbeatIntervalMs = null;
   runtime.lastHeartbeatSentAt = null;
+  runtime.heartbeatAwaitingAckSince = null;
+  runtime.lastHeartbeatSource = null;
   runtime.lastHeartbeatAckAt = null;
   runtime.lastGatewayEventAt = null;
   runtime.lastDispatchType = null;
@@ -2365,6 +2380,18 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   });
   runtime.socket = socket;
   let sequence = shouldResume ? runtime.sequence : null;
+  const sendGatewayHeartbeat = (source) => {
+    if (socket.readyState !== WebSocket.OPEN) return false;
+    const sentAt = new Date().toISOString();
+    if (runtime.heartbeatAcknowledged || !runtime.heartbeatAwaitingAckSince) {
+      runtime.heartbeatAwaitingAckSince = sentAt;
+    }
+    runtime.heartbeatAcknowledged = false;
+    runtime.lastHeartbeatSentAt = sentAt;
+    runtime.lastHeartbeatSource = source;
+    socket.send(JSON.stringify({ op: 1, d: sequence }));
+    return true;
+  };
   let transportOpened = false;
 
   socket.on("upgrade", (response) => {
@@ -2436,25 +2463,34 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     if (payload?.op === 10) {
       const interval = Math.max(1_000, Number(payload?.d?.heartbeat_interval) || 45_000);
       runtime.heartbeatIntervalMs = interval;
-      runtime.lastHeartbeatAckAt = new Date().toISOString();
+      runtime.heartbeatAcknowledged = true;
+      runtime.heartbeatAwaitingAckSince = null;
       appendDiscordOnlinerLog("info", `Gateway HELLO received; heartbeat interval is ${Math.round(interval / 1000)}s.`, account.id);
       const heartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
         if (!runtime.heartbeatAcknowledged) {
+          const awaitingSince = runtime.heartbeatAwaitingAckSince
+            ? new Date(runtime.heartbeatAwaitingAckSince).getTime()
+            : Number.NaN;
+          const pendingAgeMs = Number.isFinite(awaitingSince) ? Date.now() - awaitingSince : interval;
+          if (pendingAgeMs < interval) return;
           runtime.closeTrigger = "heartbeat_timeout";
           runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerHeartbeatCooldownMs);
           runtime.lastError = "Discord stopped acknowledging heartbeats; reconnect delayed for 60 seconds.";
-          appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError} Socket age ${getDiscordOnlinerAgeLabel(runtime.socketOpenedAt)}; last ACK ${getDiscordOnlinerAgeLabel(runtime.lastHeartbeatAckAt)} ago; last Gateway event ${runtime.lastDispatchType ?? "none"} ${getDiscordOnlinerAgeLabel(runtime.lastGatewayEventAt)} ago; route ${proxyEndpoint ?? "direct"}.`, account.id);
+          appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError} Pending heartbeat ${getDiscordOnlinerAgeLabel(runtime.heartbeatAwaitingAckSince)} old (${runtime.lastHeartbeatSource ?? "unknown"}); socket age ${getDiscordOnlinerAgeLabel(runtime.socketOpenedAt)}; last ACK ${getDiscordOnlinerAgeLabel(runtime.lastHeartbeatAckAt)} ago; last Gateway event ${runtime.lastDispatchType ?? "none"} ${getDiscordOnlinerAgeLabel(runtime.lastGatewayEventAt)} ago; route ${proxyEndpoint ?? "direct"}.`, account.id);
           queueDiscordOnlinerRuntimePersist(runtime);
           socket.terminate();
           return;
         }
-        runtime.heartbeatAcknowledged = false;
-        runtime.lastHeartbeatSentAt = new Date().toISOString();
-        socket.send(JSON.stringify({ op: 1, d: sequence }));
+        sendGatewayHeartbeat("scheduled");
       };
-      runtime.heartbeatAcknowledged = true;
-      runtime.heartbeatTimer = setInterval(heartbeat, interval);
+      const initialDelay = Math.floor(Math.random() * interval);
+      runtime.heartbeatTimer = setTimeout(() => {
+        heartbeat();
+        if (socket.readyState !== WebSocket.OPEN) return;
+        runtime.heartbeatTimer = setInterval(heartbeat, interval);
+        runtime.heartbeatTimer.unref?.();
+      }, initialDelay);
       runtime.heartbeatTimer.unref?.();
       if (shouldResume) {
         socket.send(JSON.stringify({
@@ -2485,13 +2521,12 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 11) {
       runtime.heartbeatAcknowledged = true;
+      runtime.heartbeatAwaitingAckSince = null;
       runtime.lastHeartbeatAckAt = new Date().toISOString();
       return;
     }
     if (payload?.op === 1 && socket.readyState === WebSocket.OPEN) {
-      runtime.heartbeatAcknowledged = false;
-      runtime.lastHeartbeatSentAt = new Date().toISOString();
-      socket.send(JSON.stringify({ op: 1, d: sequence }));
+      sendGatewayHeartbeat("discord_requested");
       appendDiscordOnlinerLog("info", `Discord requested a HEARTBEAT; sent${sequence == null ? " before receiving a sequence" : ` (seq ${sequence})`}.`, account.id);
       return;
     }
@@ -2595,6 +2630,15 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     const closedAt = Date.now();
     const closeTrigger = runtime.closeTrigger ?? "remote_or_transport";
     runtime.disconnectHistory = [...runtime.disconnectHistory, closedAt].filter((timestamp) => timestamp >= closedAt - 10 * 60_000);
+    const connectedAtMs = runtime.connectedAt ? new Date(runtime.connectedAt).getTime() : Number.NaN;
+    const connectedDurationMs = Number.isFinite(connectedAtMs) ? Math.max(0, closedAt - connectedAtMs) : Number.POSITIVE_INFINITY;
+    const rapidRemoteDisconnect = closeTrigger === "remote_or_transport"
+      && [1000, 1006].includes(Number(code))
+      && connectedDurationMs < discordOnlinerShortSessionMs;
+    runtime.flapHistory = [
+      ...runtime.flapHistory.filter((timestamp) => timestamp >= closedAt - discordOnlinerFlapWindowMs),
+      ...(rapidRemoteDisconnect ? [closedAt] : [])
+    ];
     runtime.disconnectCount += 1;
     runtime.lastCloseCode = Number(code);
     runtime.lastCloseTrigger = closeTrigger;
@@ -2624,6 +2668,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       `transport=${transportOpened ? "opened" : "not_opened"}`,
       `trigger=${closeTrigger}`,
       `disconnects10m=${runtime.disconnectHistory.length}`,
+      `rapidDisconnects10m=${runtime.flapHistory.length}`,
       `disconnectsTotal=${runtime.disconnectCount}`,
       closeReason ? `reason=${closeReason}` : null,
       lastKnownError ? `precededBy=${lastKnownError}` : null,
@@ -2666,6 +2711,12 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerRateLimitCooldownMs);
       runtime.lastError = "Discord Gateway rate limited the connection (4008). Reconnect delayed for 5 minutes.";
       appendDiscordOnlinerLog("warn", `[4008] ${runtime.lastError}`, account.id);
+      queueDiscordOnlinerRuntimePersist(runtime);
+    }
+    if (rapidRemoteDisconnect && runtime.flapHistory.length >= discordOnlinerFlapThreshold) {
+      runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerFlapCooldownMs);
+      runtime.lastError = `Connection entered a rapid disconnect loop; reconnect delayed for ${Math.round(discordOnlinerFlapCooldownMs / 60_000)} minutes.`;
+      appendDiscordOnlinerLog("warn", `[FLAP_COOLDOWN] ${runtime.lastError} ${runtime.flapHistory.length} short remote closes were recorded in the last ${Math.round(discordOnlinerFlapWindowMs / 60_000)} minutes.`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
     }
     const latestConfig = runtime.config ?? config;
@@ -2735,6 +2786,21 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
     scheduleDiscordOnlinerAccountStart(activeConfig, account, 0, continueQueue);
   };
   startNext();
+}
+
+function connectDiscordOnlinerAccountsImmediately(config) {
+  discordOnlinerConnectionsPaused = false;
+  const accounts = config.accounts.filter((account) => {
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    return runtime?.state !== "connected" || runtime.socket?.readyState !== WebSocket.OPEN;
+  });
+  for (const account of accounts) {
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    if (runtime) stopDiscordOnlinerRuntime(runtime);
+  }
+  startDiscordOnlinerAccounts(config, accounts);
+  appendDiscordOnlinerLog("warn", `Immediate bulk connect requested; starting ${accounts.length} disconnected bot${accounts.length === 1 ? "" : "s"} at once.`);
+  return accounts.length;
 }
 
 function rescheduleDiscordOnlinerConnectionQueue(config) {
@@ -2960,6 +3026,11 @@ async function processDiscordOnlinerWorkerCommands() {
         const config = await getDiscordOnlinerConfig();
         await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
         continueDiscordOnlinerConnections(config);
+        discordOnlinerWorkerCurrentConfig = config;
+      } else if (command.command_type === "connect_all_now") {
+        const config = await getDiscordOnlinerConfig();
+        await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
+        connectDiscordOnlinerAccountsImmediately(config);
         discordOnlinerWorkerCurrentConfig = config;
       } else if (command.command_type === "reconnect_account") {
         if (discordOnlinerConnectionsPaused) throw new Error("Gateway connections are paused. Continue them before reconnecting a bot.");
@@ -9003,6 +9074,20 @@ app.post("/api/onliner/continue", requireSession, async (_req, res, next) => {
     await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
     if (serviceRunsOnliner) continueDiscordOnlinerConnections(config);
     else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('continue_connections')");
+    res.json(await getDiscordOnlinerSnapshotForApi(config));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/onliner/connect-all-now", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig();
+    if (!config.accounts.length) return res.status(409).json({ message: "Save at least one Discord bot token first." });
+    if (!config.enabled) return res.status(409).json({ message: "Enable the Onliner before connecting profiles." });
+    await pool.query("UPDATE discord_onliner_worker_state SET connection_paused = FALSE WHERE singleton = TRUE");
+    if (serviceRunsOnliner) connectDiscordOnlinerAccountsImmediately(config);
+    else await pool.query("INSERT INTO discord_onliner_commands (command_type) VALUES ('connect_all_now')");
     res.json(await getDiscordOnlinerSnapshotForApi(config));
   } catch (error) {
     next(error);

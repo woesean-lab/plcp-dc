@@ -268,6 +268,10 @@ export function continueDiscordOnlinerConnections() {
   return fetch("/api/onliner/continue", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }
 
+export function connectAllDiscordOnlinerAccountsNow() {
+  return fetch("/api/onliner/connect-all-now", { method: "POST", credentials: "same-origin" }).then(parseResponse);
+}
+
 export function stopDiscordOnlinerConnections() {
   return fetch("/api/onliner/disconnect", { method: "POST", credentials: "same-origin" }).then(parseResponse);
 }

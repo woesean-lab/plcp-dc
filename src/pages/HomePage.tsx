@@ -107,6 +107,7 @@ import {
   addDiscordOnlinerProxies,
   clearDiscordOnliner,
   clearDiscordOnlinerLogs,
+  connectAllDiscordOnlinerAccountsNow,
   continueDiscordOnlinerConnections,
   getDiscordOnliner,
   getDiscordOnlinerProxies,
@@ -759,7 +760,7 @@ export default function HomePage() {
   const [savingOnlinerAccount, setSavingOnlinerAccount] = useState(false);
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
   const onlinerCredentialRequestRef = useRef(0);
-  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "reconnect" | "continue" | "pause" | "stop" | null>(null);
+  const [onlinerControlAction, setOnlinerControlAction] = useState<"start" | "reconnect" | "connect_all" | "continue" | "pause" | "stop" | null>(null);
   const [savingDcordApiKey, setSavingDcordApiKey] = useState(false);
   const [savingBoostStock, setSavingBoostStock] = useState(false);
   const [loadingBoostStock, setLoadingBoostStock] = useState(false);
@@ -1864,11 +1865,13 @@ export default function HomePage() {
     }
   }
 
-  async function handleOnlinerControl(action: "start" | "reconnect" | "continue" | "pause" | "stop") {
+  async function handleOnlinerControl(action: "start" | "reconnect" | "connect_all" | "continue" | "pause" | "stop") {
     try {
       setOnlinerControlAction(action);
       const snapshot = action === "start"
         ? await reconnectDiscordOnliner()
+        : action === "connect_all"
+          ? await connectAllDiscordOnlinerAccountsNow()
         : action === "continue" || action === "reconnect"
           ? await continueDiscordOnlinerConnections()
           : action === "pause"
@@ -1877,6 +1880,8 @@ export default function HomePage() {
       setOnlinerSnapshot(snapshot);
       notifySuccess(action === "start"
         ? "Gateway connection process started from the beginning."
+        : action === "connect_all"
+          ? "All disconnected bot profiles are connecting at once. Connected bots were left online."
         : action === "reconnect"
           ? "Disconnected Gateway connections are restarting. Connected bots were left online."
           : action === "continue"
@@ -4403,6 +4408,10 @@ export default function HomePage() {
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.connectedCount >= onlinerSnapshot.accounts.length} onClick={() => void handleOnlinerControl("reconnect")} title="Reconnect disconnected bots without interrupting bots that are already online">
                           {onlinerControlAction === "reconnect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
                           Reconnect
+                        </Button>
+                        <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.connectedCount >= onlinerSnapshot.accounts.length} onClick={() => void handleOnlinerControl("connect_all")} title="Connect every disconnected bot immediately without waiting between profiles">
+                          {onlinerControlAction === "connect_all" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                          Connect all now
                         </Button>
                         <Button type="button" size="sm" variant="secondary" disabled={savingOnliner || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerControl("pause")} title="Pause pending connections without disconnecting bots that are already online">
                           {onlinerControlAction === "pause" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />}
