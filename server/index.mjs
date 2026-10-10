@@ -2648,12 +2648,13 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
     if (!account) return;
     const continueQueue = queue.length ? (outcome = "connected") => {
       const runtime = getDiscordOnlinerRuntime(account.id);
-      const delayMs = config.connectionDelaySeconds * 1_000;
+      const activeConfig = runtime.config ?? discordOnlinerWorkerCurrentConfig ?? config;
+      const delayMs = activeConfig.connectionDelaySeconds * 1_000;
       runtime.nextQueuedConnectionAt = new Date(Date.now() + delayMs).toISOString();
       runtime.connectionQueueStartNext = startNext;
       appendDiscordOnlinerLog(
         outcome === "connected" ? "info" : "warn",
-        `${outcome === "connected" ? "Connection succeeded" : "Connection failed permanently; skipping this bot"}; next bot starts in ${config.connectionDelaySeconds}s.`,
+        `${outcome === "connected" ? "Connection succeeded" : "Connection failed permanently; skipping this bot"}; next bot starts in ${activeConfig.connectionDelaySeconds}s.`,
         account.id
       );
       runtime.connectionQueueTimer = setTimeout(() => {
@@ -2661,9 +2662,25 @@ function startDiscordOnlinerAccounts(config, accounts, { stagger = false } = {})
       }, delayMs);
       runtime.connectionQueueTimer.unref?.();
     } : null;
-    scheduleDiscordOnlinerAccountStart(config, account, 0, continueQueue);
+    const activeConfig = discordOnlinerWorkerCurrentConfig ?? config;
+    scheduleDiscordOnlinerAccountStart(activeConfig, account, 0, continueQueue);
   };
   startNext();
+}
+
+function rescheduleDiscordOnlinerConnectionQueue(config) {
+  const delayMs = config.connectionDelaySeconds * 1_000;
+  for (const runtime of discordOnlinerRuntimes.values()) {
+    if (!runtime.connectionQueueStartNext) continue;
+    if (runtime.connectionQueueTimer) clearTimeout(runtime.connectionQueueTimer);
+    runtime.nextQueuedConnectionAt = new Date(Date.now() + delayMs).toISOString();
+    runtime.connectionQueueTimer = setTimeout(() => {
+      triggerNextDiscordOnlinerQueuedConnection(runtime);
+    }, delayMs);
+    runtime.connectionQueueTimer.unref?.();
+    queueDiscordOnlinerRuntimePersist(runtime);
+    appendDiscordOnlinerLog("info", `Connection delay updated; next bot starts in ${config.connectionDelaySeconds}s.`, runtime.accountId);
+  }
 }
 
 function startDiscordOnliner(config) {
@@ -2754,6 +2771,7 @@ function applyDiscordOnlinerSettings(current, candidate) {
 
   const presenceChanged = getDiscordOnlinerPresenceConfigFingerprint(current) !== getDiscordOnlinerPresenceConfigFingerprint(candidate);
   const rotationChanged = getDiscordOnlinerRotationConfigFingerprint(current) !== getDiscordOnlinerRotationConfigFingerprint(candidate);
+  const connectionDelayChanged = current.connectionDelaySeconds !== candidate.connectionDelaySeconds;
   if (!presenceChanged && !rotationChanged) return { changed: false, presenceUpdated: false, connectionsRestarted: false };
 
   let presenceUpdated = false;
@@ -2768,6 +2786,7 @@ function applyDiscordOnlinerSettings(current, candidate) {
     }
     scheduleDiscordOnlinerActivityRotation(candidate, account, runtime, runtime.generation);
   }
+  if (connectionDelayChanged) rescheduleDiscordOnlinerConnectionQueue(candidate);
   return { changed: true, presenceUpdated, connectionsRestarted: false };
 }
 
