@@ -175,14 +175,6 @@ export interface TrackedOrder {
   reactionMessageLink?: string;
   reactionCapacity?: number;
   reactionRequests?: OrderStatusResponse["reactionRequests"];
-  communityResults?: Array<{
-    discordUserId?: string;
-    reactionRequestId?: string;
-    reactionState?: string;
-    reactionEmoji?: string;
-    reactionDetails?: string;
-    reactionCompletedAt?: string;
-  }>;
 }
 
 export interface BoostStock {
