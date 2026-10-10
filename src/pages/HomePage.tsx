@@ -523,8 +523,11 @@ function getTrackedOrderReactionUsage(order: TrackedOrder) {
   return { used: Math.min(used, total), total };
 }
 
-function getReactionRequestStats(request: NonNullable<TrackedOrder["reactionRequests"]>[number]) {
-  const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+function getReactionRequestStats(
+  request: NonNullable<TrackedOrder["reactionRequests"]>[number],
+  legacyAssignments: NonNullable<TrackedOrder["communityResults"]> = []
+) {
+  const assignments = Array.isArray(request.assignments) ? request.assignments : legacyAssignments;
   const requested = Math.max(0, Number(request.requestedCount) || 0);
   const assigned = Math.max(requested, Number(request.assignedCount) || 0, assignments.length);
   const completed = assignments.filter((item) => String(item.reactionState ?? "pending").toLowerCase() === "completed").length;
@@ -933,8 +936,11 @@ export default function HomePage() {
     });
   }, [orderSearch, orderStatusFilter, orderTypeFilter, orders]);
   const reactionRows = useMemo(() => orders.flatMap((order) => (Array.isArray(order.reactionRequests) ? order.reactionRequests : []).map((request) => {
-    const stats = getReactionRequestStats(request);
-    const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+    const legacyAssignments = Array.isArray(order.communityResults)
+      ? order.communityResults.filter((item) => item.reactionRequestId === request.id)
+      : [];
+    const assignments = Array.isArray(request.assignments) ? request.assignments : legacyAssignments;
+    const stats = getReactionRequestStats(request, legacyAssignments);
     const emojis = Array.from(new Set((Array.isArray(request.emojis) && request.emojis.length
       ? request.emojis
       : assignments.map((assignment) => assignment.reactionEmoji))
