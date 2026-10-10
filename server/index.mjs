@@ -1157,6 +1157,8 @@ const discordOnlinerPendingLogWrites = [];
 let discordOnlinerRuntimeFlushTimer = null;
 let discordOnlinerLogFlushTimer = null;
 let discordOnlinerConnectionsPaused = false;
+let discordOnlinerEventLoopMonitorTimer = null;
+let discordOnlinerLastEventLoopLagWarningAt = 0;
 
 function isNoisyDiscordOnlinerLogMessage(value) {
   return /^DISPATCH\s+/i.test(String(value ?? "").trim());
@@ -1183,6 +1185,11 @@ function createDiscordOnlinerRuntime(accountId) {
     lastGatewayEventAt: null,
     lastDispatchType: null,
     socketOpenedAt: null,
+    closeTrigger: null,
+    disconnectHistory: [],
+    disconnectCount: 0,
+    lastCloseCode: null,
+    lastCloseTrigger: null,
     sequence: null,
     sessionId: null,
     resumeGatewayUrl: null,
@@ -1228,8 +1235,29 @@ function serializeDiscordOnlinerRuntime(runtime) {
     lastHeartbeatAckAt: runtime.lastHeartbeatAckAt,
     lastGatewayEventAt: runtime.lastGatewayEventAt,
     lastDispatchType: runtime.lastDispatchType,
-    socketOpenedAt: runtime.socketOpenedAt
+    socketOpenedAt: runtime.socketOpenedAt,
+    disconnectCount: runtime.disconnectCount,
+    disconnectsLast10Minutes: runtime.disconnectHistory.filter((timestamp) => timestamp >= Date.now() - 10 * 60_000).length,
+    lastCloseCode: runtime.lastCloseCode,
+    lastCloseTrigger: runtime.lastCloseTrigger
   };
+}
+
+function startDiscordOnlinerEventLoopMonitor() {
+  if (discordOnlinerEventLoopMonitorTimer) clearInterval(discordOnlinerEventLoopMonitorTimer);
+  const intervalMs = 5_000;
+  let expectedAt = Date.now() + intervalMs;
+  discordOnlinerEventLoopMonitorTimer = setInterval(() => {
+    const now = Date.now();
+    const lagMs = Math.max(0, now - expectedAt);
+    expectedAt = now + intervalMs;
+    if (lagMs < 1_500 || now - discordOnlinerLastEventLoopLagWarningAt < 60_000) return;
+    discordOnlinerLastEventLoopLagWarningAt = now;
+    const activeSockets = [...discordOnlinerRuntimes.values()].filter((runtime) => runtime.socket?.readyState === WebSocket.OPEN).length;
+    const memoryMb = Math.round(process.memoryUsage().rss / 1024 / 1024);
+    appendDiscordOnlinerLog("warn", `[EVENT_LOOP_LAG] Worker event loop was delayed by ${formatDiscordOnlinerDiagnosticDuration(lagMs)} · activeSockets=${activeSockets} · pendingRuntimeWrites=${discordOnlinerPendingRuntimeWrites.size} · pendingLogWrites=${discordOnlinerPendingLogWrites.length} · rss=${memoryMb}MB. Heartbeat processing may have been delayed by local worker load.`);
+  }, intervalMs);
+  discordOnlinerEventLoopMonitorTimer.unref?.();
 }
 
 function normalizeDiscordOnlinerConnectionState(value) {
@@ -1879,6 +1907,7 @@ function stopDiscordOnlinerRuntime(runtime, { resetIdentity = false } = {}) {
   runtime.lastGatewayEventAt = null;
   runtime.lastDispatchType = null;
   runtime.socketOpenedAt = null;
+  runtime.closeTrigger = null;
   runtime.sequence = null;
   runtime.sessionId = null;
   runtime.resumeGatewayUrl = null;
@@ -2279,11 +2308,13 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     const statusCode = Number(response.statusCode) || 0;
     if (account.proxyUrl) recordDiscordOnlinerProxyHealth(account.proxyUrl, statusCode !== 407);
     if (statusCode === 407) {
+      runtime.closeTrigger = "proxy_auth_407";
       runtime.automaticReconnectBlocked = true;
       runtime.state = "error";
       runtime.lastError = "Proxy authentication failed (HTTP 407). Automatic reconnect stopped until the proxy credentials change or Start/Continue is used.";
       appendDiscordOnlinerLog("error", `[407] ${runtime.lastError}`, account.id);
     } else if (statusCode === 429) {
+      runtime.closeTrigger = "gateway_http_429";
       const retryAfterHeader = Array.isArray(response.headers?.["retry-after"])
         ? response.headers["retry-after"][0]
         : response.headers?.["retry-after"];
@@ -2293,6 +2324,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.lastError = `Discord Gateway returned HTTP 429. Reconnect delayed for ${Math.ceil(cooldownMs / 1000)} seconds.`;
       appendDiscordOnlinerLog("warn", `[429] ${runtime.lastError}`, account.id);
     } else {
+      runtime.closeTrigger = `unexpected_http_${statusCode || "unknown"}`;
       runtime.lastError = `Discord Gateway returned unexpected HTTP status ${statusCode || "unknown"}.`;
       appendDiscordOnlinerLog("error", runtime.lastError, account.id);
     }
@@ -2340,6 +2372,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       const heartbeat = () => {
         if (socket.readyState !== WebSocket.OPEN) return;
         if (!runtime.heartbeatAcknowledged) {
+          runtime.closeTrigger = "heartbeat_timeout";
           runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerHeartbeatCooldownMs);
           runtime.lastError = "Discord stopped acknowledging heartbeats; reconnect delayed for 60 seconds.";
           appendDiscordOnlinerLog("error", `[HEARTBEAT_TIMEOUT] ${runtime.lastError} Socket age ${getDiscordOnlinerAgeLabel(runtime.socketOpenedAt)}; last ACK ${getDiscordOnlinerAgeLabel(runtime.lastHeartbeatAckAt)} ago; last Gateway event ${runtime.lastDispatchType ?? "none"} ${getDiscordOnlinerAgeLabel(runtime.lastGatewayEventAt)} ago; route ${proxyEndpoint ?? "direct"}.`, account.id);
@@ -2394,11 +2427,13 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       return;
     }
     if (payload?.op === 7) {
+      runtime.closeTrigger = "discord_opcode_7";
       appendDiscordOnlinerLog("warn", "RECONNECT requested by Discord (opcode 7).", account.id);
       socket.close(4000, "Discord requested reconnect");
       return;
     }
     if (payload?.op === 9) {
+      runtime.closeTrigger = payload.d === true ? "discord_opcode_9_resumable" : "discord_opcode_9_not_resumable";
       appendDiscordOnlinerLog("warn", `INVALID SESSION received (opcode 9, resumable: ${payload.d === true ? "yes" : "no"}).`, account.id);
       if (payload.d !== true) {
         runtime.sequence = null;
@@ -2465,6 +2500,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("error", (error) => {
     if (generation === runtime.generation) {
       const errorMessage = error instanceof Error ? error.message : "Discord Gateway connection failed.";
+      runtime.closeTrigger = runtime.closeTrigger ?? "socket_error";
       if (/\b407\b/.test(errorMessage)) {
         runtime.automaticReconnectBlocked = true;
         runtime.state = "error";
@@ -2488,6 +2524,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
   socket.on("close", (code, reason) => {
     if (generation !== runtime.generation) return;
     const closedAt = Date.now();
+    const closeTrigger = runtime.closeTrigger ?? "remote_or_transport";
+    runtime.disconnectHistory = [...runtime.disconnectHistory, closedAt].filter((timestamp) => timestamp >= closedAt - 10 * 60_000);
+    runtime.disconnectCount += 1;
+    runtime.lastCloseCode = Number(code);
+    runtime.lastCloseTrigger = closeTrigger;
     const closeDiagnostic = discordGatewayCloseDiagnostics.get(Number(code)) ?? {
       label: "unclassified_close",
       explanation: "The Gateway connection ended with an unclassified close code."
@@ -2512,15 +2553,23 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       `resumeCandidate=${canAttemptResume ? "yes" : "no"}`,
       `route=${proxyEndpoint ?? "direct"}`,
       `transport=${transportOpened ? "opened" : "not_opened"}`,
+      `trigger=${closeTrigger}`,
+      `disconnects10m=${runtime.disconnectHistory.length}`,
+      `disconnectsTotal=${runtime.disconnectCount}`,
       closeReason ? `reason=${closeReason}` : null,
       lastKnownError ? `precededBy=${lastKnownError}` : null,
-      `diagnosis=${closeDiagnostic.explanation}`
+      `diagnosis=${closeTrigger === "discord_opcode_7"
+        ? "Discord requested a reconnect; this worker initiated the code 4000 close so the session could resume."
+        : closeTrigger.startsWith("discord_opcode_9")
+          ? "Discord invalidated the Gateway session and this worker initiated the reconnect close."
+          : closeDiagnostic.explanation}`
     ].filter(Boolean).join(" · ");
     if (runtime.heartbeatTimer) clearInterval(runtime.heartbeatTimer);
     if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
     runtime.heartbeatTimer = null;
     runtime.activityTimer = null;
     runtime.socket = null;
+    runtime.closeTrigger = null;
     runtime.connectedAt = null;
     runtime.lastDisconnectedAt = new Date().toISOString();
     appendDiscordOnlinerLog(code === 1000 ? "info" : "warn", sessionSummary, account.id);
@@ -3169,6 +3218,15 @@ async function activateDiscordOnlinerWorker(lockClient) {
     SET worker_id = $1, status = 'online', started_at = NOW(), heartbeat_at = NOW(), last_error = NULL
     WHERE singleton = TRUE
   `, [discordOnlinerWorkerId]);
+  const deploymentRevision = String(
+    process.env.RENDER_GIT_COMMIT
+      ?? process.env.RAILWAY_GIT_COMMIT_SHA
+      ?? process.env.VERCEL_GIT_COMMIT_SHA
+      ?? process.env.GIT_COMMIT_SHA
+      ?? "unknown"
+  ).slice(0, 12);
+  appendDiscordOnlinerLog("info", `[WORKER_START] worker=${discordOnlinerWorkerId} · revision=${deploymentRevision} · pid=${process.pid} · node=${process.version} · accounts=${discordOnlinerWorkerCurrentConfig.accounts.length} · connectionDelay=${discordOnlinerWorkerCurrentConfig.connectionDelaySeconds}s · role=${serviceRole}.`);
+  startDiscordOnlinerEventLoopMonitor();
   if (discordOnlinerConnectionsPaused) {
     await pool.query("DELETE FROM discord_onliner_runtime");
     appendDiscordOnlinerLog("info", "Onliner worker started with the Gateway connection queue paused.");
@@ -3207,6 +3265,8 @@ async function stopDiscordOnlinerWorker() {
   if (discordOnlinerWorkerPollTimer) clearInterval(discordOnlinerWorkerPollTimer);
   if (discordOnlinerWorkerHeartbeatTimer) clearInterval(discordOnlinerWorkerHeartbeatTimer);
   if (discordOnlinerWorkerLockRetryTimer) clearInterval(discordOnlinerWorkerLockRetryTimer);
+  if (discordOnlinerEventLoopMonitorTimer) clearInterval(discordOnlinerEventLoopMonitorTimer);
+  discordOnlinerEventLoopMonitorTimer = null;
   stopDiscordOnliner();
   await pool.query("UPDATE discord_onliner_worker_state SET status = 'offline', heartbeat_at = NOW() WHERE singleton = TRUE AND worker_id = $1", [discordOnlinerWorkerId]).catch(() => {});
   if (discordOnlinerWorkerLockClient) {
