@@ -5382,19 +5382,6 @@
 
 .onliner-account-row:last-child { border-bottom-color: transparent; }
 
-.onliner-account-load-more {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
-  gap: 10px;
-  padding: 7px 8px 3px;
-  color: var(--app-muted);
-  font-size: 10px;
-}
-
-.onliner-account-load-more .ui-button { flex: 0 0 auto; }
-
 .onliner-account-row:has(.onliner-account-copy em) {
   min-height: 66px;
 }
@@ -10145,17 +10132,6 @@
   margin: 0;
   padding: 0;
   list-style: none;
-}
-
-.incremental-list-footer {
-  display: flex;
-  min-height: 48px;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 6px 0;
-  color: var(--app-muted);
-  font-size: 10px;
 }
 
 .stock-token-list > li {

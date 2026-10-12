@@ -3002,13 +3002,10 @@ export default function HomePage() {
     .filter((record) => record.stockType === communityStockType);
   const communityVisibleRecords = communityCategoryRecords
     .sort((left, right) => {
-      const inactiveOrder = Number(left.status === "failed") - Number(right.status === "failed");
-      if (inactiveOrder !== 0) return inactiveOrder;
-      const onlinerOrder = Number(right.onlinerConnectionState === "connected") - Number(left.onlinerConnectionState === "connected");
-      if (onlinerOrder !== 0) return onlinerOrder;
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
-      return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
+      const nameOrder = leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
+      return nameOrder || left.id.localeCompare(right.id);
     });
   const visibleCommunityRecords = communityVisibleRecords.slice(0, visibleCommunityMemberCount);
   const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
@@ -3355,14 +3352,6 @@ export default function HomePage() {
             );
           })}
           </div>
-          {hasMoreCommunityRecords ? (
-            <div className="incremental-list-footer">
-              <span>{visibleCommunityRecords.length} of {communityVisibleRecords.length} members shown</span>
-              <Button type="button" size="sm" variant="ghost" onClick={() => setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length))}>
-                <ChevronDown className="h-4 w-4" /> Load more
-              </Button>
-            </div>
-          ) : null}
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
@@ -4427,14 +4416,6 @@ export default function HomePage() {
                           </li>
                         ))}
                         </ol>
-                        {hasMoreUsedBoostTokens ? (
-                          <div className="incremental-list-footer">
-                            <span>{visibleUsedBoostTokens.length} of {filteredUsedBoostTokens.length} records shown</span>
-                            <Button type="button" size="sm" variant="ghost" onClick={() => setVisibleUsedBoostTokenCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, filteredUsedBoostTokens.length))}>
-                              <ChevronDown className="h-4 w-4" /> Load more
-                            </Button>
-                          </div>
-                        ) : null}
                       </>
                     ) : (
                       <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No matching used tokens</strong><span>Adjust the duration or status filters.</span></div>
@@ -4562,14 +4543,6 @@ export default function HomePage() {
                             </div>
                           </div>
                           ))}
-                        {hasMoreOnlinerAccounts ? (
-                          <div className="onliner-account-load-more">
-                            <span>{visibleOnlinerAccounts.length} of {sortedOnlinerAccounts.length} profiles shown</span>
-                            <Button type="button" size="sm" variant="ghost" onClick={loadMoreOnlinerAccounts}>
-                              <ChevronDown className="h-4 w-4" /> Load more
-                            </Button>
-                          </div>
-                        ) : null}
                       </div>
                     ) : null}
                     <div className="grid gap-4">
