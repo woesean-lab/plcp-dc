@@ -9204,6 +9204,15 @@
   margin-top: 16px;
 }
 
+.community-recent-scroll {
+  max-height: 620px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.community-recent-scroll .community-recent-list { padding-right: 4px; }
+
 .community-recent-list > div {
   display: grid;
   grid-template-columns: 16px 34px minmax(0, 1fr) auto auto;
@@ -10136,6 +10145,17 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.incremental-list-footer {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 6px 0;
+  color: var(--app-muted);
+  font-size: 10px;
 }
 
 .stock-token-list > li {

@@ -178,6 +178,7 @@ const DEFAULT_ONLINER_STREAMING_CATEGORIES = ["Just Chatting", "VALORANT", "Mine
 const DEFAULT_ONLINER_STREAMING_TITLES = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
 const DISCORD_ONLINER_ACCOUNT_LIMIT = 3000;
 const ONLINER_ACCOUNT_PAGE_SIZE = 50;
+const STOCK_LIST_PAGE_SIZE = 50;
 
 function isVisibleGatewayConsoleLog(message: string) {
   return !/^DISPATCH\s+/i.test(message.trim());
@@ -727,6 +728,8 @@ export default function HomePage() {
   const [stockView, setStockView] = useState<"active" | "used">("active");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
+  const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
+  const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -976,6 +979,8 @@ export default function HomePage() {
     },
     [usedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter]
   );
+  const visibleUsedBoostTokens = filteredUsedBoostTokens.slice(0, visibleUsedBoostTokenCount);
+  const hasMoreUsedBoostTokens = visibleUsedBoostTokenCount < filteredUsedBoostTokens.length;
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
@@ -1262,12 +1267,22 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "stock") return;
+    setVisibleUsedBoostTokenCount(STOCK_LIST_PAGE_SIZE);
+    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
     void refreshBoostStockTokens();
     void refreshCommunityStatus();
     if (stockCategory === "boosts") void refreshDcordProxies();
     // Stock data is preloaded so switching tabs does not flash empty values.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    setVisibleUsedBoostTokenCount(STOCK_LIST_PAGE_SIZE);
+  }, [stockView, usedTokenDurationFilter, usedTokenStatusFilter]);
+
+  useEffect(() => {
+    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+  }, [communityStockType]);
 
   useEffect(() => {
     if (activeTab === "stock" && stockCategory === "boosts") void refreshDcordProxies();
@@ -2995,6 +3010,8 @@ export default function HomePage() {
       const rightName = right.displayName || right.username;
       return leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
     });
+  const visibleCommunityRecords = communityVisibleRecords.slice(0, visibleCommunityMemberCount);
+  const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
 
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
@@ -3192,8 +3209,17 @@ export default function HomePage() {
         </div>
 
       {communityVisibleRecords.length ? (
-        <div className="community-recent-list">
-          {communityVisibleRecords.map((record, index) => {
+        <div
+          className="community-recent-scroll"
+          onScroll={(event) => {
+            const list = event.currentTarget;
+            if (hasMoreCommunityRecords && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
+              setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
+            }
+          }}
+        >
+          <div className="community-recent-list">
+          {visibleCommunityRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
             const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
             const revealedToken = communityAccessTokens[record.id];
@@ -3328,6 +3354,15 @@ export default function HomePage() {
               </div>
             );
           })}
+          </div>
+          {hasMoreCommunityRecords ? (
+            <div className="incremental-list-footer">
+              <span>{visibleCommunityRecords.length} of {communityVisibleRecords.length} members shown</span>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length))}>
+                <ChevronDown className="h-4 w-4" /> Load more
+              </Button>
+            </div>
+          ) : null}
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
@@ -4363,10 +4398,19 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="stock-used-scroll">
+                  <div
+                    className="stock-used-scroll"
+                    onScroll={(event) => {
+                      const list = event.currentTarget;
+                      if (hasMoreUsedBoostTokens && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
+                        setVisibleUsedBoostTokenCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, filteredUsedBoostTokens.length));
+                      }
+                    }}
+                  >
                     {filteredUsedBoostTokens.length ? (
-                      <ol className="stock-used-list">
-                        {filteredUsedBoostTokens.map((item, index) => (
+                      <>
+                        <ol className="stock-used-list">
+                        {visibleUsedBoostTokens.map((item, index) => (
                           <li key={item.id} className={selectedUsedBoostTokens[item.id] ? "is-selected" : ""}>
                             <input type="checkbox" checked={Boolean(selectedUsedBoostTokens[item.id])} onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)} aria-label={`Select used token ${index + 1}`} />
                             <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
@@ -4382,7 +4426,16 @@ export default function HomePage() {
                             </Button>
                           </li>
                         ))}
-                      </ol>
+                        </ol>
+                        {hasMoreUsedBoostTokens ? (
+                          <div className="incremental-list-footer">
+                            <span>{visibleUsedBoostTokens.length} of {filteredUsedBoostTokens.length} records shown</span>
+                            <Button type="button" size="sm" variant="ghost" onClick={() => setVisibleUsedBoostTokenCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, filteredUsedBoostTokens.length))}>
+                              <ChevronDown className="h-4 w-4" /> Load more
+                            </Button>
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
                       <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No matching used tokens</strong><span>Adjust the duration or status filters.</span></div>
                     )}
