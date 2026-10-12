@@ -640,7 +640,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
             </div>
             <div className="orders-table">
               <div className="orders-table-head">
-                <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Actions</span>
+                <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
               </div>
               <ol className="orders-row-list">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -651,6 +651,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                         <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-28 max-w-full" /></span>
                       </div>
                       <div className="orders-row-service"><Skeleton className="h-4 w-20" /><Skeleton className="h-2.5 w-14" /></div>
+                      <Skeleton className="orders-row-join-method h-3 w-16" />
                       <div className="orders-row-status"><Skeleton className="h-6 w-20" /></div>
                       <div className="orders-row-delivery">
                         <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
@@ -658,6 +659,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                         <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
                       </div>
                       <Skeleton className="orders-row-date h-3 w-20" />
+                      <Skeleton className="orders-row-expiration h-3 w-20" />
                       <div className="orders-row-actions"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div>
                     </div>
                   </li>
@@ -4099,7 +4101,7 @@ export default function HomePage() {
                 {filteredOrders.length ? (
                   <div className="orders-table" data-reaction-use={showReactionUseColumn ? "true" : "false"} role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span>{showReactionUseColumn ? <span>Reaction Use</span> : null}<span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span>{showReactionUseColumn ? <span>Reaction Use</span> : null}<span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
@@ -4109,6 +4111,13 @@ export default function HomePage() {
                         const boostOrder = order.provider === "dcord" || isBoostService(order.service);
                         const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
                         const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
+                        const joinMethodLabel = order.provider !== "community"
+                          ? "—"
+                          : order.joinMethod === "experimental_join"
+                            ? "Experimental Join"
+                            : order.joinMethod === "directly"
+                              ? "Directly"
+                              : "Create Invite";
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
@@ -4130,6 +4139,7 @@ export default function HomePage() {
                                 <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
                                 <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
                               </div>
+                              <span className="orders-row-join-method">{joinMethodLabel}</span>
                               <div className="orders-row-status">
                                 <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                               </div>

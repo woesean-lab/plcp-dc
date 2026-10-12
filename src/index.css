@@ -3545,14 +3545,14 @@
   .orders-table-head,
   .orders-row {
     display: grid;
-    grid-template-columns: minmax(210px, 1.7fr) 110px 125px 175px 95px 95px 126px;
+    grid-template-columns: minmax(190px, 1.5fr) 100px 95px 110px 160px 85px 85px 110px;
     align-items: center;
     column-gap: .8rem;
   }
 
   .orders-table[data-reaction-use="true"] .orders-table-head,
   .orders-table[data-reaction-use="true"] .orders-row {
-    grid-template-columns: minmax(210px, 1.7fr) 110px 125px 175px 95px 95px 90px 126px;
+    grid-template-columns: minmax(190px, 1.5fr) 100px 95px 110px 160px 85px 85px 85px 110px;
   }
 
   .orders-table-head {
@@ -3645,6 +3645,7 @@
   .orders-row-service,
   .orders-row-status { display: grid; min-width: 0; gap: .3rem; }
   .orders-row-service span { color: var(--app-muted); font-size: 9px; }
+  .orders-row-join-method { color: var(--app-text-secondary); font-size: 10px; line-height: 1.35; }
 
   .orders-status-badge {
     width: max-content !important;
@@ -3760,12 +3761,13 @@
     .orders-commandbar { grid-template-columns: minmax(240px, 1fr) 160px 160px; }
     .orders-table-head { display: none; }
     .orders-row {
-      grid-template-areas: "identity service status date expiration" "delivery delivery delivery actions actions" "alert alert alert alert alert";
+      grid-template-areas: "identity service status date expiration" "delivery delivery joinmethod actions actions" "alert alert alert alert alert";
       grid-template-columns: minmax(200px, 1fr) 110px minmax(130px, .7fr) 95px 95px;
       row-gap: .7rem;
     }
     .orders-row-identity { grid-area: identity; }
     .orders-row-service { grid-area: service; }
+    .orders-row-join-method { grid-area: joinmethod; }
     .orders-row-status { grid-area: status; }
     .orders-row-delivery { grid-area: delivery; max-width: 240px; }
     .orders-row-date { grid-area: date; }
@@ -3773,7 +3775,7 @@
     .orders-row-actions { grid-area: actions; }
     .orders-row-alert { grid-area: alert; }
     .orders-table[data-reaction-use="true"] .orders-row {
-      grid-template-areas: "identity service status date expiration reaction" "delivery delivery delivery delivery actions actions" "alert alert alert alert alert alert";
+      grid-template-areas: "identity service status date expiration reaction" "delivery delivery delivery joinmethod actions actions" "alert alert alert alert alert alert";
       grid-template-columns: minmax(190px, 1fr) 105px minmax(120px, .7fr) 85px 85px 90px;
     }
     .orders-row-reaction-use { grid-area: reaction; }
@@ -3798,7 +3800,7 @@
     .orders-row-list { display: grid; gap: .55rem; }
     .orders-row-list > li + li { border-top: 0; }
     .orders-row {
-      grid-template-areas: "identity status" "service date" "expiration expiration" "delivery delivery" "actions actions" "alert alert";
+      grid-template-areas: "identity status" "service date" "expiration expiration" "joinmethod joinmethod" "delivery delivery" "actions actions" "alert alert";
       grid-template-columns: minmax(0, 1fr) auto;
       min-height: 0;
       row-gap: .7rem;
@@ -3809,7 +3811,7 @@
       background: rgba(255,255,255,.018);
     }
     .orders-table[data-reaction-use="true"] .orders-row {
-      grid-template-areas: "identity status" "service date" "expiration reaction" "delivery delivery" "actions actions" "alert alert";
+      grid-template-areas: "identity status" "service date" "expiration reaction" "joinmethod joinmethod" "delivery delivery" "actions actions" "alert alert";
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .orders-row[data-has-reaction-use="false"] .orders-row-expiration { grid-column: 1 / -1; }
@@ -3844,6 +3846,19 @@
     }
     .orders-row-expiration::before {
       content: "Expires";
+      color: var(--app-subtle);
+      font-size: 7px;
+      font-weight: 750;
+      text-transform: uppercase;
+    }
+    .orders-row-join-method {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: .75rem;
+    }
+    .orders-row-join-method::before {
+      content: "Join Method";
       color: var(--app-subtle);
       font-size: 7px;
       font-weight: 750;
