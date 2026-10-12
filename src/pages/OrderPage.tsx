@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { REACTION_MIXED_VALUE, ReactionPanel } from "@/components/ReactionPanel";
-import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X } from "lucide-react";
+import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelCommunityOrderReactions, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
@@ -446,6 +446,15 @@ export default function OrderPage() {
   const serverCreatedAt = getDiscordServerCreatedAt(serverId);
   const serviceType = normalizeOrderService(getStringField(result, ["service", "type"]), isDcordProvider);
   const serviceName = isCommunityProvider && typeof result?.categoryName === "string" ? result.categoryName : getServiceTitle(serviceType);
+  const joinMethod = isCommunityProvider
+    ? result?.joinMethod === "experimental_join" || result?.experimentalJoin === true
+      ? "experimental_join"
+      : result?.joinMethod === "directly"
+        ? "directly"
+        : "create_invite"
+    : null;
+  const joinMethodLabel = joinMethod === "experimental_join" ? "Experimental Join" : joinMethod === "directly" ? "Directly" : "Create Invite";
+  const JoinMethodIcon = joinMethod === "experimental_join" ? Sparkles : joinMethod === "directly" ? Zap : Bot;
   const serverMemberCount = getNumberField(result, [
     "serverMemberCount",
     "approximateMemberCount",
@@ -1272,6 +1281,12 @@ export default function OrderPage() {
                     <strong>{serviceName}</strong>
                     <code>{serviceType}</code>
                   </span>
+                  {joinMethod ? (
+                    <span className="lookup-join-method" data-join-method={joinMethod}>
+                      <small>Join method</small>
+                      <strong><JoinMethodIcon className="h-3.5 w-3.5" aria-hidden="true" /> {joinMethodLabel}</strong>
+                    </span>
+                  ) : null}
                 </div>
               </div>
             </div>

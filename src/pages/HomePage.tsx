@@ -4111,13 +4111,9 @@ export default function HomePage() {
                         const boostOrder = order.provider === "dcord" || isBoostService(order.service);
                         const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
                         const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
-                        const joinMethodLabel = order.provider !== "community"
-                          ? "—"
-                          : order.joinMethod === "experimental_join"
-                            ? "Experimental Join"
-                            : order.joinMethod === "directly"
-                              ? "Directly"
-                              : "Create Invite";
+                        const joinMethod = order.provider === "community" ? (order.joinMethod ?? "create_invite") : null;
+                        const joinMethodLabel = joinMethod === "experimental_join" ? "Experimental Join" : joinMethod === "directly" ? "Directly" : "Create Invite";
+                        const JoinMethodIcon = joinMethod === "experimental_join" ? Sparkles : joinMethod === "directly" ? Zap : Bot;
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
@@ -4139,7 +4135,14 @@ export default function HomePage() {
                                 <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
                                 <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
                               </div>
-                              <span className="orders-row-join-method">{joinMethodLabel}</span>
+                              <div className={`orders-row-join-method ${joinMethod ? "" : "is-empty"}`}>
+                                {joinMethod ? (
+                                  <span className="orders-join-method-badge" data-join-method={joinMethod} title={joinMethodLabel}>
+                                    <JoinMethodIcon className="h-3 w-3" aria-hidden="true" />
+                                    <span>{joinMethodLabel}</span>
+                                  </span>
+                                ) : "—"}
+                              </div>
                               <div className="orders-row-status">
                                 <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
                               </div>

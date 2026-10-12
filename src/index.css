@@ -617,7 +617,8 @@
   }
 
   .lookup-status,
-  .lookup-service-name {
+  .lookup-service-name,
+  .lookup-join-method {
     display: inline-grid;
     min-height: 38px;
     align-content: center;
@@ -629,7 +630,8 @@
   }
 
   .lookup-status small,
-  .lookup-service-name small {
+  .lookup-service-name small,
+  .lookup-join-method small {
     color: var(--app-muted);
     font-size: 7px;
     font-weight: 800;
@@ -638,7 +640,8 @@
   }
 
   .lookup-status strong,
-  .lookup-service-name strong {
+  .lookup-service-name strong,
+  .lookup-join-method strong {
     color: var(--app-text);
     font-size: 11px;
     font-weight: 800;
@@ -665,6 +668,33 @@
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     font-size: 7px;
   }
+
+  .lookup-join-method {
+    border-color: rgba(112, 154, 255, .22);
+    background: rgba(112, 154, 255, .08);
+  }
+
+  .lookup-join-method strong {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    color: #a9c2ff;
+    white-space: nowrap;
+  }
+
+  .lookup-join-method[data-join-method="experimental_join"] {
+    border-color: rgba(183, 132, 255, .25);
+    background: rgba(183, 132, 255, .09);
+  }
+
+  .lookup-join-method[data-join-method="experimental_join"] strong { color: #d2adff; }
+
+  .lookup-join-method[data-join-method="directly"] {
+    border-color: rgba(105, 221, 178, .23);
+    background: var(--app-success-soft);
+  }
+
+  .lookup-join-method[data-join-method="directly"] strong { color: var(--app-success); }
 
   .lookup-status {
     border-color: var(--app-accent-border);
@@ -1346,7 +1376,8 @@
     .lookup-order-identity > div { flex: 1; min-width: 0; }
     .lookup-order-labels { flex-wrap: wrap; }
     .lookup-status,
-    .lookup-service-name { flex: 0 0 auto; max-width: 100%; }
+    .lookup-service-name,
+    .lookup-join-method { flex: 0 0 auto; max-width: 100%; }
     .lookup-service-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .lookup-service-name code { display: none; }
     .lookup-workspace-actions { width: 100%; flex-wrap: wrap; justify-content: flex-start; padding-top: .15rem; }
@@ -3545,14 +3576,14 @@
   .orders-table-head,
   .orders-row {
     display: grid;
-    grid-template-columns: minmax(190px, 1.5fr) 100px 95px 110px 160px 85px 85px 110px;
+    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 105px;
     align-items: center;
     column-gap: .8rem;
   }
 
   .orders-table[data-reaction-use="true"] .orders-table-head,
   .orders-table[data-reaction-use="true"] .orders-row {
-    grid-template-columns: minmax(190px, 1.5fr) 100px 95px 110px 160px 85px 85px 85px 110px;
+    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 80px 105px;
   }
 
   .orders-table-head {
@@ -3645,7 +3676,40 @@
   .orders-row-service,
   .orders-row-status { display: grid; min-width: 0; gap: .3rem; }
   .orders-row-service span { color: var(--app-muted); font-size: 9px; }
-  .orders-row-join-method { color: var(--app-text-secondary); font-size: 10px; line-height: 1.35; }
+  .orders-row-join-method { min-width: 0; color: var(--app-text-secondary); font-size: 10px; line-height: 1.35; }
+  .orders-row-join-method.is-empty { color: var(--app-subtle); }
+
+  .orders-join-method-badge {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: .35rem;
+    border: 1px solid rgba(112, 154, 255, .2);
+    border-radius: 999px;
+    padding: .32rem .5rem;
+    color: #a9c2ff;
+    background: rgba(112, 154, 255, .08);
+    font-size: 9px;
+    font-weight: 750;
+    white-space: nowrap;
+  }
+
+  .orders-join-method-badge > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .orders-join-method-badge[data-join-method="experimental_join"] {
+    border-color: rgba(183, 132, 255, .22);
+    color: #d2adff;
+    background: rgba(183, 132, 255, .09);
+  }
+
+  .orders-join-method-badge[data-join-method="directly"] {
+    border-color: rgba(105, 221, 178, .2);
+    color: var(--app-success);
+    background: var(--app-success-soft);
+  }
 
   .orders-status-badge {
     width: max-content !important;
