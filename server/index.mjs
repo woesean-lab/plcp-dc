@@ -104,8 +104,10 @@ function parseDiscordMessageLink(value) {
 }
 
 const discordInviteResolutionCache = new Map();
+const discordInviteResolutionPending = new Map();
 const discordInviteResolutionCacheTtlMs = 5 * 60_000;
 const discordInviteResolutionStaleTtlMs = 6 * 60 * 60_000;
+let discordInviteRateLimitedUntil = 0;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
 async function resolveDiscordInvite(inviteValue) {
@@ -118,7 +120,18 @@ async function resolveDiscordInvite(inviteValue) {
 
   const cached = discordInviteResolutionCache.get(inviteCode);
   if (cached?.expiresAt > Date.now()) return cached.value;
+  const existingRequest = discordInviteResolutionPending.get(inviteCode);
+  if (existingRequest) return existingRequest;
 
+  const resolutionRequest = (async () => {
+  if (discordInviteRateLimitedUntil > Date.now()) {
+    if (cached?.staleUntil > Date.now()) return cached.value;
+    const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
+    const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
+    error.statusCode = 429;
+    error.expose = true;
+    throw error;
+  }
   const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
   let response = null;
   let payload = {};
@@ -130,6 +143,11 @@ async function resolveDiscordInvite(inviteValue) {
         signal: AbortSignal.timeout(8_000)
       });
       payload = await response.json().catch(() => ({}));
+      if (response.status === 429) {
+        const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 300);
+        discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, Date.now() + retrySeconds * 1_000);
+        if (retrySeconds > 2) break;
+      }
       if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
       requestError = null;
     } catch (error) {
@@ -151,7 +169,7 @@ async function resolveDiscordInvite(inviteValue) {
     const error = new Error(response?.status === 404
       ? "Discord invite could not be found."
       : response?.status === 429
-        ? "Discord is rate limiting invite checks. Please wait a moment and try again."
+        ? `Discord is rate limiting invite checks. Try again in ${Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000))}s.`
         : requestError?.name === "TimeoutError"
           ? "Discord invite check timed out. Please try again."
           : "Discord invite could not be resolved right now.");
@@ -182,6 +200,15 @@ async function resolveDiscordInvite(inviteValue) {
     staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
   });
   return resolved;
+  })();
+  discordInviteResolutionPending.set(inviteCode, resolutionRequest);
+  try {
+    return await resolutionRequest;
+  } finally {
+    if (discordInviteResolutionPending.get(inviteCode) === resolutionRequest) {
+      discordInviteResolutionPending.delete(inviteCode);
+    }
+  }
 }
 
 const pool = new Pool({
