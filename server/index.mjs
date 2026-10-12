@@ -10740,7 +10740,7 @@ function createCommunityBotGuildAccessError(status, context = {}) {
   return error;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite", guildId = "" } = {}) {
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite" } = {}) {
   const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod);
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
@@ -10749,14 +10749,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     throw error;
   }
   const rawTarget = String(inviteValue ?? "").trim();
-  const explicitGuildId = String(guildId ?? "").trim();
-  if (explicitGuildId && !isDiscordGuildId(explicitGuildId)) {
-    const error = new Error("A valid Discord server ID is required.");
-    error.statusCode = 400;
-    throw error;
-  }
-  const resolvedGuildId = explicitGuildId || (isDiscordGuildId(rawTarget) ? rawTarget : "");
-  const targetIsGuildId = Boolean(resolvedGuildId);
+  const targetIsGuildId = isDiscordGuildId(rawTarget);
   const invite = isDiscordGuildId(rawTarget) ? rawTarget : extractDiscordInviteCode(rawTarget);
   if (!invite) {
     const error = new Error("A valid Discord server ID or invite is required.");
@@ -10766,10 +10759,10 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
   let targetGuildAccess = null;
   let serverInfo;
   if (targetIsGuildId) {
-    targetGuildAccess = await checkCommunityBotGuildAccess(config, resolvedGuildId);
+    targetGuildAccess = await checkCommunityBotGuildAccess(config, rawTarget);
     const payload = targetGuildAccess?.payload ?? {};
     serverInfo = {
-      guildId: resolvedGuildId,
+      guildId: rawTarget,
       guildName: typeof payload?.name === "string" && payload.name.trim() ? payload.name.trim() : undefined,
       approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
         ? payload.approximate_member_count
@@ -10921,11 +10914,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     // form. Resolving the invite here repeatedly consumed Discord's public
     // invite rate-limit bucket. The invite is resolved once on order submit.
     const config = stockConfig;
-    const requestedGuildId = String(req.query?.guildId ?? "").trim();
-    if (requestedGuildId && !isDiscordGuildId(requestedGuildId)) {
-      return res.status(400).json({ message: "A valid Discord server ID is required." });
-    }
-    const availabilityGuildId = requestedGuildId || (isDiscordGuildId(inviteValue) ? inviteValue : "");
+    const availabilityGuildId = isDiscordGuildId(inviteValue) ? inviteValue : "";
     const previouslyDeliveredUserIds = availabilityGuildId
       ? await loadCommunityUnavailableUserIds(pool, availabilityGuildId)
       : [];
@@ -10954,18 +10943,13 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const speedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
     const joinMethod = normalizeCommunityJoinMethod(req.body?.joinMethod, "create_invite");
     if (joinMethod === "directly") await loadDcordApiKey();
-    const requestedGuildId = String(req.body?.targetGuildId ?? "").trim();
-    if (joinMethod === "create_invite" && !isDiscordGuildId(requestedGuildId)) {
-      return res.status(400).json({ message: "Create Invite requires both a Discord invite and the target server ID." });
-    }
     const service = String(req.body?.service ?? "");
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
     const resolvedInvite = await resolveConfiguredCommunityInvite(req.body?.id, {
       allowWaitingForBot: true,
-      joinMethod,
-      guildId: requestedGuildId
+      joinMethod
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
     let { waitingForBot, waitingDetails, waitingCode, botInvite } = resolvedInvite;

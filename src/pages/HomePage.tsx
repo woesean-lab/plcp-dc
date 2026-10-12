@@ -156,7 +156,6 @@ const DEFAULT_REACTION_LIMIT = 5;
 const EMPTY_FORM = {
   service: "COMMUNITY-OFFLINE" as ServiceType,
   serverId: "",
-  communityServerId: "",
   amount: 100,
   delay: 1,
   duration: 1 as 1 | 3,
@@ -944,7 +943,6 @@ export default function HomePage() {
   const selectedCanCreate = selectedApiConfigured && (
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
-      (effectiveCommunityJoinMethod !== "create_invite" || /^\d{17,20}$/.test(form.communityServerId.trim())) &&
       !checkingAvailability &&
       availabilityMaximum !== null &&
       selectedCommunityAllocations.length > 0 &&
@@ -1392,7 +1390,7 @@ export default function HomePage() {
 
     const requestId = ++availabilityRequestRef.current;
 
-    if (!form.serverId.trim() || (selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" && !/^\d{17,20}$/.test(form.communityServerId.trim()))) {
+    if (!form.serverId.trim()) {
       setAvailability("");
       setAvailabilityMaximum(null);
       setCommunityAvailability({});
@@ -1409,7 +1407,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.communityServerId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -2401,8 +2399,7 @@ export default function HomePage() {
             serverId,
             form.duration,
             category.id,
-            effectiveCommunityJoinMethod,
-            effectiveCommunityJoinMethod === "create_invite" ? form.communityServerId.trim() : undefined
+            effectiveCommunityJoinMethod
           );
           return [category.id, data.maximum] as const;
         }));
@@ -2947,7 +2944,6 @@ export default function HomePage() {
     const payload: CreateOrderPayload = {
       service: form.service,
       id: form.serverId.trim(),
-      targetGuildId: selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? form.communityServerId.trim() : undefined,
       amount: form.amount,
       delay: selectedIsBoost ? undefined : form.delay,
       duration: selectedIsBoost ? form.duration : undefined,
@@ -4045,36 +4041,20 @@ export default function HomePage() {
                           </div>
 
                           <label className="boost-order-field">
-                            <span className="boost-order-label">Server Invite</span>
+                            <span className="boost-order-label">{selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "Discord Invite or Server ID" : "Server Invite"}</span>
                             <div className="boost-invite-control">
-                              <span>discord.gg/</span>
+                              {selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? null : <span>discord.gg/</span>}
                               <input
                                 value={form.serverId}
                                 onChange={(event) => {
                                   const value = event.target.value;
                                   setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
                                 }}
-                                placeholder="yourcode"
+                                placeholder={selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "discord.gg/yourcode or server ID" : "yourcode"}
                                 required
                               />
                             </div>
                           </label>
-
-                          {selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? (
-                            <label className="boost-order-field">
-                              <span className="boost-order-label">Server ID</span>
-                              <div className="boost-invite-control">
-                                <input
-                                  value={form.communityServerId}
-                                  onChange={(event) => setForm((current) => ({ ...current, communityServerId: event.target.value.replace(/\D/g, "").slice(0, 20) }))}
-                                  placeholder="123456789012345678"
-                                  inputMode="numeric"
-                                  pattern="[0-9]{17,20}"
-                                  required
-                                />
-                              </div>
-                            </label>
-                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasReaction ? (
                             <label className="boost-order-field community-order-reaction-limit-field">

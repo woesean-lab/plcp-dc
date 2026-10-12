@@ -30,7 +30,6 @@ export type OrderStatus =
 export interface CreateOrderPayload {
   service: ServiceType;
   id: string;
-  targetGuildId?: string;
   amount: number;
   delay?: number;
   duration?: BoostDuration;
