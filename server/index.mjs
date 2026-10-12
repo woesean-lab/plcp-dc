@@ -6134,17 +6134,10 @@ async function submitCommunityJoinRequest(config, inviteValue, member) {
     error.discordJoinRequest = true;
     throw error;
   }
-  const inviteInfo = await resolveDiscordInvite(inviteCode);
-  if (inviteInfo.guildId !== String(config.guildId)) {
-    const error = new Error("The Experimental Join invite no longer points to this order's server.");
-    error.discordJoinRequest = true;
-    throw error;
-  }
-  if (inviteInfo.bypassesJoinApplication === true) {
-    const error = new Error("Experimental Join cannot use an invite with Bypass Join Application enabled.");
-    error.discordJoinRequest = true;
-    throw error;
-  }
+  // The server and join settings are validated once when the order is created,
+  // and Experimental Join uses the invite created by our bot for that server.
+  // Resolving the same invite for every member exhausts Discord's public invite
+  // rate-limit bucket while PROCESS orders are running.
   if (!member?.encrypted_account_token) {
     const error = new Error("This stock account has no saved user token. Add the account again before using Experimental Join.");
     error.accountTokenInvalid = true;
@@ -12880,20 +12873,6 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       !Array.isArray(trackedPayload) &&
       (trackedPayload.provider === "dcord" || trackedPayload.service === "DCORD-BOOSTS")
     ) {
-      if ((!trackedPayload.serverName || !Number.isFinite(trackedPayload.serverMemberCount)) && typeof trackedPayload.serverInvite === "string" && trackedPayload.serverInvite.trim()) {
-        try {
-          const inviteInfo = await resolveDiscordInvite(trackedPayload.serverInvite);
-          trackedPayload = {
-            ...trackedPayload,
-            serverId: trackedPayload.serverId ?? inviteInfo.guildId,
-            serverName: trackedPayload.serverName ?? inviteInfo.guildName,
-            serverMemberCount: Number.isFinite(trackedPayload.serverMemberCount) ? trackedPayload.serverMemberCount : inviteInfo.approximateMemberCount
-          };
-          await saveTrackedOrderPayload(trackedPayload);
-        } catch {
-          // Keep the public monitor available even if Discord metadata lookup fails.
-        }
-      }
       trackedPayload = await recoverStaleDcordBoostOrder(trackedPayload);
       const canManageDcordTokens = await hasActiveSession(req);
       if (canManageDcordTokens) {
@@ -13484,29 +13463,7 @@ app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, re
       return res.status(404).json({ message: "Boost order could not be found." });
     }
 
-    let payload = tracked.rows[0].payload;
-    payload = await recoverStaleDcordBoostOrder(payload);
-    if (
-      payload &&
-      typeof payload === "object" &&
-      !Array.isArray(payload) &&
-      (!payload.serverName || !Number.isFinite(payload.serverMemberCount)) &&
-      typeof payload.serverInvite === "string" &&
-      payload.serverInvite.trim()
-    ) {
-      try {
-        const inviteInfo = await resolveDiscordInvite(payload.serverInvite);
-        payload = {
-          ...payload,
-          serverId: payload.serverId ?? inviteInfo.guildId,
-          serverName: payload.serverName ?? inviteInfo.guildName,
-          serverMemberCount: Number.isFinite(payload.serverMemberCount) ? payload.serverMemberCount : inviteInfo.approximateMemberCount
-        };
-        await saveTrackedOrderPayload(payload);
-      } catch {
-        // Keep the private lookup available even if Discord metadata lookup fails.
-      }
-    }
+    const payload = await recoverStaleDcordBoostOrder(tracked.rows[0].payload);
 
     res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(payload));
   } catch (error) {
