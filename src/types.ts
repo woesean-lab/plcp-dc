@@ -49,6 +49,9 @@ export interface CreateOrderPayload {
 export interface CreateOrderResponse {
   uniqid: string;
   bot_invite?: string;
+  serverId?: string;
+  serverName?: string;
+  serverMemberCount?: number;
   cost?: number;
   categoryId?: string;
   categoryName?: string;

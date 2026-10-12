@@ -2874,12 +2874,14 @@ export default function HomePage() {
     const targetId = String(payload.id ?? "").trim();
     const payloadIsBoost = isBoostService(payload.service);
     const payloadIsCommunity = isCommunityService(payload.service);
-    const serverInfo = await resolveDiscordGuildInfo(targetId);
-    const serverId = serverInfo.guildId;
+    const resolvedBeforeCreate = payloadIsCommunity ? null : await resolveDiscordGuildInfo(targetId);
     const created = await createOrder({
       ...payload,
       id: targetId
     });
+    const serverId = created.serverId ?? resolvedBeforeCreate?.guildId ?? "";
+    const serverName = created.serverName ?? resolvedBeforeCreate?.guildName;
+    const serverMemberCount = created.serverMemberCount ?? resolvedBeforeCreate?.approximateMemberCount;
     const createdStock = (created as { stock?: BoostStock }).stock;
     if (createdStock) {
       setBoostStock(createdStock);
@@ -2890,7 +2892,7 @@ export default function HomePage() {
       provider: payloadIsBoost ? "dcord" : "community",
       service: payload.service,
       serverId,
-      serverName: serverInfo.guildName,
+      serverName,
       amount: payload.amount,
       added: 0,
       delay: payloadIsBoost ? undefined : payload.delay,
@@ -2911,7 +2913,7 @@ export default function HomePage() {
       durationMonths: created.durationMonths,
       expiredAt: created.expiredAt,
       serverInvite: extractDiscordInviteCode(targetId) ? targetId : undefined,
-      serverMemberCount: serverInfo.approximateMemberCount,
+      serverMemberCount,
       createdAt: created.createdAt ?? new Date().toISOString(),
       status: "NEW"
     };

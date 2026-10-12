@@ -150,6 +150,33 @@ async function resolveDiscordInvite(inviteValue, { botToken = "" } = {}) {
         if (persisted.expiresAt > Date.now()) return persisted.value;
       }
 
+      const trackedInvite = await lockClient.query(
+        `SELECT payload
+         FROM tracked_orders
+         WHERE payload->>'serverInvite' = $1
+           AND payload->>'serverId' ~ '^\\d{17,20}$'
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+        [inviteCode]
+      );
+      if (trackedInvite.rowCount) {
+        const tracked = trackedInvite.rows[0].payload ?? {};
+        const resolved = {
+          guildId: String(tracked.serverId),
+          guildName: typeof tracked.serverName === "string" && tracked.serverName.trim() ? tracked.serverName.trim() : undefined,
+          approximateMemberCount: Number.isFinite(Number(tracked.serverMemberCount))
+            ? Number(tracked.serverMemberCount)
+            : undefined,
+          bypassesJoinApplication: false
+        };
+        discordInviteResolutionCache.set(inviteCode, {
+          value: resolved,
+          expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
+          staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
+        });
+        return resolved;
+      }
+
       const sharedState = await lockClient.query(
         "SELECT rate_limited_until FROM discord_invite_resolution_state WHERE singleton = TRUE LIMIT 1"
       );
@@ -10879,11 +10906,17 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       return res.status(409).json({ message: "This join method is disabled for the selected category." });
     }
     if (joinMethod === "directly") await loadDcordApiKey();
-    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, {
-      allowWaitingForBot: true,
-      joinMethod
-    });
-    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(pool, serverInfo.guildId);
+    const inviteValue = String(req.query?.invite ?? "").trim();
+    if (!isDiscordGuildId(inviteValue) && !extractDiscordInviteCode(inviteValue)) {
+      return res.status(400).json({ message: "A valid Discord server ID or invite is required." });
+    }
+    // Availability is a stock calculation and runs while the user edits the
+    // form. Resolving the invite here repeatedly consumed Discord's public
+    // invite rate-limit bucket. The invite is resolved once on order submit.
+    const config = stockConfig;
+    const previouslyDeliveredUserIds = isDiscordGuildId(inviteValue)
+      ? await loadCommunityUnavailableUserIds(pool, inviteValue)
+      : [];
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
@@ -11101,6 +11134,9 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     res.json({
       uniqid,
       bot_invite: botInvite,
+      serverId: order.serverId,
+      serverName: order.serverName,
+      serverMemberCount: order.serverMemberCount,
       categoryId: order.categoryId,
       categoryName: order.categoryName,
       categoryAllocations: order.categoryAllocations,
