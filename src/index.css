@@ -9192,13 +9192,10 @@
 }
 
 .community-recent-scroll {
-  max-height: 620px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  scrollbar-width: thin;
+  min-width: 0;
 }
 
-.community-recent-scroll .community-recent-list { padding-right: 4px; }
+.community-member-load-sentinel { height: 1px; pointer-events: none; }
 
 .community-recent-list > div {
   display: grid;

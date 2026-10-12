@@ -730,6 +730,7 @@ export default function HomePage() {
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
   const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
+  const communityMemberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -3010,6 +3011,17 @@ export default function HomePage() {
   const visibleCommunityRecords = communityVisibleRecords.slice(0, visibleCommunityMemberCount);
   const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
 
+  useEffect(() => {
+    const sentinel = communityMemberLoadMoreRef.current;
+    if (activeTab !== "stock" || stockCategory !== "offline" || !hasMoreCommunityRecords || !sentinel) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
+    }, { rootMargin: "240px 0px" });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [activeTab, stockCategory, communityStockType, hasMoreCommunityRecords, communityVisibleRecords.length]);
+
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
       <div className="community-admin-heading">
@@ -3206,15 +3218,7 @@ export default function HomePage() {
         </div>
 
       {communityVisibleRecords.length ? (
-        <div
-          className="community-recent-scroll"
-          onScroll={(event) => {
-            const list = event.currentTarget;
-            if (hasMoreCommunityRecords && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
-              setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
-            }
-          }}
-        >
+        <div className="community-recent-scroll">
           <div className="community-recent-list">
           {visibleCommunityRecords.map((record, index) => {
             const badge = getCommunityRecordBadge(record);
@@ -3352,6 +3356,7 @@ export default function HomePage() {
             );
           })}
           </div>
+          {hasMoreCommunityRecords ? <div ref={communityMemberLoadMoreRef} className="community-member-load-sentinel" aria-hidden="true" /> : null}
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
