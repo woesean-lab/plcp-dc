@@ -3012,15 +3012,30 @@ export default function HomePage() {
   const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
 
   useEffect(() => {
-    const sentinel = communityMemberLoadMoreRef.current;
-    if (activeTab !== "stock" || stockCategory !== "offline" || !hasMoreCommunityRecords || !sentinel) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (!entries.some((entry) => entry.isIntersecting)) return;
-      setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
-    }, { rootMargin: "240px 0px" });
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [activeTab, stockCategory, communityStockType, hasMoreCommunityRecords, communityVisibleRecords.length]);
+    if (activeTab !== "stock" || stockCategory !== "offline" || !hasMoreCommunityRecords) return;
+    let frame = 0;
+    const loadWhenNearListEnd = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        const sentinel = communityMemberLoadMoreRef.current;
+        if (!sentinel) return;
+        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+        if (sentinel.getBoundingClientRect().top <= viewportHeight + 320) {
+          setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
+        }
+      });
+    };
+    loadWhenNearListEnd();
+    window.addEventListener("scroll", loadWhenNearListEnd, true);
+    window.addEventListener("wheel", loadWhenNearListEnd, { passive: true });
+    window.addEventListener("touchmove", loadWhenNearListEnd, { passive: true });
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", loadWhenNearListEnd, true);
+      window.removeEventListener("wheel", loadWhenNearListEnd);
+      window.removeEventListener("touchmove", loadWhenNearListEnd);
+    };
+  }, [activeTab, stockCategory, communityStockType, hasMoreCommunityRecords, communityVisibleRecords.length, visibleCommunityMemberCount]);
 
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>

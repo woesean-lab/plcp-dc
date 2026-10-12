@@ -49,6 +49,8 @@ import {
   type HumanizerPackage
 } from "@/lib/humanizer";
 
+const HUMANIZER_ACCOUNT_PAGE_SIZE = 50;
+
 function splitLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
@@ -227,6 +229,7 @@ export default function HumanizerPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState("all");
   const [search, setSearch] = useState("");
+  const [visibleAccountCount, setVisibleAccountCount] = useState(HUMANIZER_ACCOUNT_PAGE_SIZE);
   const [usernames, setUsernames] = useState("");
   const [displayNames, setDisplayNames] = useState("");
   const [bios, setBios] = useState("");
@@ -318,6 +321,12 @@ export default function HumanizerPage() {
         || left.username.localeCompare(right.username, undefined, { sensitivity: "base", numeric: true })
         || left.id.localeCompare(right.id)
       ));
+  }, [catalog, categoryId, search]);
+  const renderedAccounts = visibleAccounts.slice(0, visibleAccountCount);
+  const hasMoreAccounts = visibleAccountCount < visibleAccounts.length;
+
+  useEffect(() => {
+    setVisibleAccountCount(HUMANIZER_ACCOUNT_PAGE_SIZE);
   }, [catalog, categoryId, search]);
 
   const eligibleVisibleIds = visibleAccounts
@@ -582,16 +591,24 @@ export default function HumanizerPage() {
             />
             </div>
 
-            <div className="humanizer-account-list">
+            <div
+              className="humanizer-account-list"
+              onScroll={(event) => {
+                const list = event.currentTarget;
+                if (hasMoreAccounts && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
+                  setVisibleAccountCount((current) => Math.min(current + HUMANIZER_ACCOUNT_PAGE_SIZE, visibleAccounts.length));
+                }
+              }}
+            >
             {loading ? (
               <div className="flex min-h-48 items-center justify-center text-sm text-[var(--app-muted)]"><LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Loading accounts…</div>
-            ) : visibleAccounts.length ? visibleAccounts.map((account) => {
+            ) : visibleAccounts.length ? renderedAccounts.map((account) => {
               const eligible = account.hasToken && account.hasProxy;
               return (
                 <label key={account.id} className={`humanizer-account-row ${selectedSet.has(account.id) ? "is-selected" : ""} ${eligible ? "" : "is-disabled"}`}>
                   <input type="checkbox" checked={selectedSet.has(account.id)} disabled={!eligible || jobActive} onChange={() => toggleAccount(account.id)} />
                   <span className="humanizer-avatar">
-                    {account.avatarUrl ? <img src={account.avatarUrl} alt="" /> : <Users className="h-4 w-4" />}
+                    {account.avatarUrl ? <img src={account.avatarUrl} alt="" loading="lazy" decoding="async" /> : <Users className="h-4 w-4" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm">{accountLabel(account)}</strong>
