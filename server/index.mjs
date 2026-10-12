@@ -932,6 +932,8 @@ const discordOnlinerFlapWindowMs = 10 * 60_000;
 const discordOnlinerFlapCooldownMs = 10 * 60_000;
 const discordOnlinerFlapThreshold = 3;
 const discordOnlinerShortSessionMs = 2 * 60_000;
+const discordOnlinerInvalidSessionRetryMinMs = 5_000;
+const discordOnlinerInvalidSessionRetryMaxMs = 15_000;
 const discordOnlinerStatusValues = ["online", "idle", "dnd"];
 const discordOnlinerActivityTypeValues = ["playing", "streaming", "listening", "watching"];
 const discordOnlinerStatuses = new Set([...discordOnlinerStatusValues, "mixed"]);
@@ -2538,12 +2540,18 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     }
     if (payload?.op === 9) {
       runtime.closeTrigger = payload.d === true ? "discord_opcode_9_resumable" : "discord_opcode_9_not_resumable";
-      appendDiscordOnlinerLog("warn", `INVALID SESSION received (opcode 9, resumable: ${payload.d === true ? "yes" : "no"}).`, account.id);
+      let retryDelayMs = 0;
       if (payload.d !== true) {
         runtime.sequence = null;
         runtime.sessionId = null;
         runtime.resumeGatewayUrl = null;
+        retryDelayMs = Math.floor(
+          discordOnlinerInvalidSessionRetryMinMs
+          + Math.random() * (discordOnlinerInvalidSessionRetryMaxMs - discordOnlinerInvalidSessionRetryMinMs + 1)
+        );
+        runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + retryDelayMs);
       }
+      appendDiscordOnlinerLog("warn", `INVALID SESSION received (opcode 9, resumable: ${payload.d === true ? "yes" : "no"})${retryDelayMs ? `; reconnect delayed for ${Math.ceil(retryDelayMs / 1000)}s` : ""}.`, account.id);
       socket.close(4000, "Discord invalidated session");
       return;
     }
@@ -2635,9 +2643,12 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     const rapidRemoteDisconnect = closeTrigger === "remote_or_transport"
       && [1000, 1006].includes(Number(code))
       && connectedDurationMs < discordOnlinerShortSessionMs;
+    const rapidInvalidSession = closeTrigger === "discord_opcode_9_not_resumable"
+      && connectedDurationMs < discordOnlinerShortSessionMs;
+    const rapidUnstableDisconnect = rapidRemoteDisconnect || rapidInvalidSession;
     runtime.flapHistory = [
       ...runtime.flapHistory.filter((timestamp) => timestamp >= closedAt - discordOnlinerFlapWindowMs),
-      ...(rapidRemoteDisconnect ? [closedAt] : [])
+      ...(rapidUnstableDisconnect ? [closedAt] : [])
     ];
     runtime.disconnectCount += 1;
     runtime.lastCloseCode = Number(code);
@@ -2713,10 +2724,10 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("warn", `[4008] ${runtime.lastError}`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
     }
-    if (rapidRemoteDisconnect && runtime.flapHistory.length >= discordOnlinerFlapThreshold) {
+    if (rapidUnstableDisconnect && runtime.flapHistory.length >= discordOnlinerFlapThreshold) {
       runtime.reconnectNotBefore = Math.max(runtime.reconnectNotBefore, Date.now() + discordOnlinerFlapCooldownMs);
       runtime.lastError = `Connection entered a rapid disconnect loop; reconnect delayed for ${Math.round(discordOnlinerFlapCooldownMs / 60_000)} minutes.`;
-      appendDiscordOnlinerLog("warn", `[FLAP_COOLDOWN] ${runtime.lastError} ${runtime.flapHistory.length} short remote closes were recorded in the last ${Math.round(discordOnlinerFlapWindowMs / 60_000)} minutes.`, account.id);
+      appendDiscordOnlinerLog("warn", `[FLAP_COOLDOWN] ${runtime.lastError} ${runtime.flapHistory.length} short unstable sessions were recorded in the last ${Math.round(discordOnlinerFlapWindowMs / 60_000)} minutes.`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);
     }
     const latestConfig = runtime.config ?? config;

@@ -176,6 +176,7 @@ const DEFAULT_ONLINER_TWITCH_USERS = ["tarik", "shroud", "xqc", "pokimane", "sum
 const DEFAULT_ONLINER_STREAMING_CATEGORIES = ["Just Chatting", "VALORANT", "Minecraft", "Grand Theft Auto V", "Counter-Strike 2", "League of Legends", "Fortnite", "Call of Duty: Warzone", "Apex Legends", "EA Sports FC 26", "Tom Clancy's Rainbow Six Siege", "Dota 2", "World of Warcraft", "Escape from Tarkov", "Rust", "Dead by Daylight", "IRL", "Music", "Software and Game Development", "Sports"];
 const DEFAULT_ONLINER_STREAMING_TITLES = ["Chill vibes only", "Late night stream", "Ranked grind starts now", "Road to the next rank", "Community games tonight", "Trying something new today", "Come hang out with us", "Climbing the leaderboard", "Casual games and good vibes", "Live with the community", "No sleep, just wins", "Learning the game together", "Chatting before the grind", "Weekend stream is live", "Can we win this one?", "Playing with viewers", "New update, first reactions", "Warm-up then ranked", "One more game", "Highlights incoming"];
 const DISCORD_ONLINER_ACCOUNT_LIMIT = 3000;
+const ONLINER_ACCOUNT_PAGE_SIZE = 50;
 
 function isVisibleGatewayConsoleLog(message: string) {
   return !/^DISPATCH\s+/i.test(message.trim());
@@ -729,6 +730,7 @@ export default function HomePage() {
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
+  const [visibleOnlinerAccountCount, setVisibleOnlinerAccountCount] = useState(ONLINER_ACCOUNT_PAGE_SIZE);
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
@@ -1144,6 +1146,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "onliner") return;
+    setVisibleOnlinerAccountCount(ONLINER_ACCOUNT_PAGE_SIZE);
     setOnlinerCountdownNow(Date.now());
     const countdownTimer = window.setInterval(() => setOnlinerCountdownNow(Date.now()), 1_000);
     return () => window.clearInterval(countdownTimer);
@@ -3327,6 +3330,16 @@ export default function HomePage() {
   const onlinerNextConnectionSeconds = onlinerSnapshot?.nextConnectionAt
     ? Math.max(0, Math.ceil((new Date(onlinerSnapshot.nextConnectionAt).getTime() - onlinerCountdownNow) / 1_000))
     : null;
+  const sortedOnlinerAccounts = useMemo(
+    () => [...(onlinerSnapshot?.accounts ?? [])]
+      .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting")),
+    [onlinerSnapshot?.accounts]
+  );
+  const visibleOnlinerAccounts = sortedOnlinerAccounts.slice(0, visibleOnlinerAccountCount);
+  const hasMoreOnlinerAccounts = visibleOnlinerAccountCount < sortedOnlinerAccounts.length;
+  const loadMoreOnlinerAccounts = () => {
+    setVisibleOnlinerAccountCount((current) => Math.min(current + ONLINER_ACCOUNT_PAGE_SIZE, sortedOnlinerAccounts.length));
+  };
 
   return (
     <div className="relative">
@@ -4435,10 +4448,14 @@ export default function HomePage() {
                       </div>
                     ) : null}
                     {onlinerSnapshot?.accounts.length ? (
-                      <div className="onliner-account-list">
-                        {[...onlinerSnapshot.accounts]
-                          .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting"))
-                          .map((account, index) => (
+                      <div
+                        className="onliner-account-list"
+                        onScroll={(event) => {
+                          const list = event.currentTarget;
+                          if (hasMoreOnlinerAccounts && list.scrollHeight - list.scrollTop - list.clientHeight < 80) loadMoreOnlinerAccounts();
+                        }}
+                      >
+                        {visibleOnlinerAccounts.map((account, index) => (
                           <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
                             <span className="onliner-bot-avatar" aria-hidden="true">
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
@@ -4472,6 +4489,14 @@ export default function HomePage() {
                             </div>
                           </div>
                           ))}
+                        {hasMoreOnlinerAccounts ? (
+                          <div className="onliner-account-load-more">
+                            <span>{visibleOnlinerAccounts.length} of {sortedOnlinerAccounts.length} profiles shown</span>
+                            <Button type="button" size="sm" variant="ghost" onClick={loadMoreOnlinerAccounts}>
+                              <ChevronDown className="h-4 w-4" /> Load more
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                     <div className="grid gap-4">
