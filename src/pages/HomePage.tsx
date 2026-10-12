@@ -129,6 +129,7 @@ import {
   type DiscordOnlinerSnapshot
 } from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
+import { getOrderSupportExpiration } from "../lib/order-status";
 import {
   checkAvailableAmount,
   checkDcordConnection,
@@ -4194,6 +4195,7 @@ export default function HomePage() {
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
                         const delayValue = order.statusDelay ?? order.delay;
                         const reactionUsage = getTrackedOrderReactionUsage(order);
+                        const supportExpiration = getOrderSupportExpiration(order);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -4227,7 +4229,7 @@ export default function HomePage() {
                                 {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
-                              <time className="orders-row-expiration" dateTime={order.expiredAt ?? undefined} title={order.expiredAt ?? undefined}>{order.expiredAt ? formatTrackedDate(order.expiredAt) : "-"}</time>
+                              <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               {showReactionUseColumn ? <dl className="orders-row-reaction-use">{reactionUsage ? <div><dt>Reaction Use</dt><dd>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</dd></div> : null}</dl> : null}
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}

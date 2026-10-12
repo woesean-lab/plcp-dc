@@ -10,7 +10,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
 import { cancelPublicCommunityOrderReactions, checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
-import { mergeOrderStatus } from "../lib/order-status";
+import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -479,7 +479,7 @@ export default function PublicOrderPage() {
     ? membersRemaining * effectiveEstimateDelay
     : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
-  const expiredAt = parseTimestamp(status?.expiredAt ?? status?.expired_at ?? undefined);
+  const expiredAt = parseTimestamp(getOrderSupportExpiration(status) ?? undefined);
   const supportExpired = expiredAt !== undefined && expiredAt <= supportClock;
   const normalizedStatus = String(status?.status ?? "").trim().toUpperCase();
   const nextMemberTimestamp = parseTimestamp(status?.nextMemberAt ?? undefined);

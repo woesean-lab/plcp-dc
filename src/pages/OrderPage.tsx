@@ -9,7 +9,7 @@ import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, Fil
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelCommunityOrderReactions, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
-import { mergeOrderStatus } from "../lib/order-status";
+import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -479,7 +479,7 @@ export default function OrderPage() {
   const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : BALANCED_DELAY_PATTERN[0];
   const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
   const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
-  const expiration = result?.expiredAt ?? result?.expired_at;
+  const expiration = getOrderSupportExpiration(result);
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
     : formatEstimatedDuration(remainingAmount, effectiveEstimateDelay);

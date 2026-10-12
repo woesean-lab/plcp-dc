@@ -1,5 +1,31 @@
 import type { OrderStatusResponse } from "../types";
 
+interface OrderSupportExpirationSource {
+  expiredAt?: string | number | null;
+  expired_at?: string | number | null;
+  categoryAllocations?: Array<{
+    isPeriodic?: boolean;
+    expiredAt?: string | null;
+  }>;
+}
+
+export function getOrderSupportExpiration(order?: OrderSupportExpirationSource | null) {
+  const directExpiration = order?.expiredAt ?? order?.expired_at;
+  if (directExpiration !== undefined && directExpiration !== null && Number.isFinite(new Date(directExpiration).getTime())) {
+    return directExpiration;
+  }
+
+  const periodicExpirations = (order?.categoryAllocations ?? [])
+    .filter((allocation) => allocation.isPeriodic === true && allocation.expiredAt)
+    .map((allocation) => allocation.expiredAt as string)
+    .filter((value) => Number.isFinite(new Date(value).getTime()));
+  if (!periodicExpirations.length) return null;
+
+  return periodicExpirations.reduce((latest, value) => (
+    new Date(value).getTime() > new Date(latest).getTime() ? value : latest
+  ));
+}
+
 type TokenResult = Record<string, unknown>;
 
 function isTokenResult(value: unknown): value is TokenResult {
