@@ -118,88 +118,150 @@ async function resolveDiscordInvite(inviteValue) {
     throw error;
   }
 
-  const cached = discordInviteResolutionCache.get(inviteCode);
+  let cached = discordInviteResolutionCache.get(inviteCode);
   if (cached?.expiresAt > Date.now()) return cached.value;
   const existingRequest = discordInviteResolutionPending.get(inviteCode);
   if (existingRequest) return existingRequest;
 
   const resolutionRequest = (async () => {
-  if (discordInviteRateLimitedUntil > Date.now()) {
-    if (cached?.staleUntil > Date.now()) return cached.value;
-    const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
-    const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
-    error.statusCode = 429;
-    error.expose = true;
-    throw error;
-  }
-  const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
-  let response = null;
-  let payload = {};
-  let requestError = null;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let lockClient = null;
     try {
-      response = await fetch(inviteUrl, {
-        headers: { Accept: "application/json", "User-Agent": "plcp-dc/0.1 Discord invite resolver" },
-        signal: AbortSignal.timeout(8_000)
-      });
-      payload = await response.json().catch(() => ({}));
-      if (response.status === 429) {
-        const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 300);
-        discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, Date.now() + retrySeconds * 1_000);
-        if (retrySeconds > 2) break;
+      lockClient = await pool.connect();
+      // Discord's public invite route is rate limited across invite codes and web
+      // instances, so serialize every cache miss through one shared DB lock.
+      await lockClient.query("SELECT pg_advisory_lock(hashtext($1))", ["discord-invite-resolution"]);
+
+      const persistedCache = await lockClient.query(
+        `SELECT payload, expires_at, stale_until
+         FROM discord_invite_resolution_cache
+         WHERE invite_code = $1
+         LIMIT 1`,
+        [inviteCode]
+      );
+      if (persistedCache.rowCount) {
+        const row = persistedCache.rows[0];
+        const persisted = {
+          value: row.payload,
+          expiresAt: new Date(row.expires_at).getTime(),
+          staleUntil: new Date(row.stale_until).getTime()
+        };
+        if (!cached || persisted.staleUntil > cached.staleUntil) cached = persisted;
+        discordInviteResolutionCache.set(inviteCode, persisted);
+        if (persisted.expiresAt > Date.now()) return persisted.value;
       }
-      if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
-      requestError = null;
-    } catch (error) {
-      response = null;
-      payload = {};
-      requestError = error;
+
+      const sharedState = await lockClient.query(
+        "SELECT rate_limited_until FROM discord_invite_resolution_state WHERE singleton = TRUE LIMIT 1"
+      );
+      const sharedRateLimitedUntil = sharedState.rowCount
+        ? new Date(sharedState.rows[0].rate_limited_until).getTime()
+        : 0;
+      discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, sharedRateLimitedUntil);
+      if (discordInviteRateLimitedUntil > Date.now()) {
+        if (cached?.staleUntil > Date.now()) return cached.value;
+        const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
+        const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
+        error.statusCode = 429;
+        error.expose = true;
+        throw error;
+      }
+
+      const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
+      let response = null;
+      let payload = {};
+      let requestError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          response = await fetch(inviteUrl, {
+            headers: { Accept: "application/json", "User-Agent": "plcp-dc/0.1 Discord invite resolver" },
+            signal: AbortSignal.timeout(8_000)
+          });
+          payload = await response.json().catch(() => ({}));
+          if (response.status === 429) {
+            const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 300);
+            discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, Date.now() + retrySeconds * 1_000);
+            await lockClient.query(
+              `INSERT INTO discord_invite_resolution_state (singleton, rate_limited_until, updated_at)
+               VALUES (TRUE, $1, NOW())
+               ON CONFLICT (singleton) DO UPDATE
+               SET rate_limited_until = GREATEST(discord_invite_resolution_state.rate_limited_until, EXCLUDED.rate_limited_until),
+                   updated_at = NOW()`,
+              [new Date(discordInviteRateLimitedUntil)]
+            );
+            if (retrySeconds > 2) break;
+          }
+          if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
+          requestError = null;
+        } catch (error) {
+          response = null;
+          payload = {};
+          requestError = error;
+        }
+        if (attempt === 0) {
+          const retrySeconds = response?.status === 429
+            ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 2)
+            : 1;
+          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+        }
+      }
+
+      if (!response?.ok) {
+        if (response?.status !== 404 && cached?.staleUntil > Date.now()) return cached.value;
+        if (cached) discordInviteResolutionCache.delete(inviteCode);
+        if (response?.status === 404) {
+          await lockClient.query("DELETE FROM discord_invite_resolution_cache WHERE invite_code = $1", [inviteCode]);
+        }
+        const error = new Error(response?.status === 404
+          ? "Discord invite could not be found."
+          : response?.status === 429
+            ? `Discord is rate limiting invite checks. Try again in ${Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000))}s.`
+            : requestError?.name === "TimeoutError"
+              ? "Discord invite check timed out. Please try again."
+              : "Discord invite could not be resolved right now.");
+        error.statusCode = response?.status === 404 ? 400 : response?.status === 429 ? 429 : 502;
+        error.expose = true;
+        throw error;
+      }
+
+      const guildId = payload?.guild?.id;
+      if (!isDiscordGuildId(String(guildId ?? ""))) {
+        const error = new Error("That invite does not resolve to a Discord server ID.");
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const resolved = {
+        guildId: String(guildId),
+        guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
+        approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
+          ? payload.approximate_member_count
+          : undefined,
+        bypassesJoinApplication: Number.isInteger(payload?.flags)
+          && (payload.flags & DISCORD_INVITE_FLAG_APPLICATION_BYPASS) !== 0
+      };
+      const cacheEntry = {
+        value: resolved,
+        expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
+        staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
+      };
+      discordInviteResolutionCache.set(inviteCode, cacheEntry);
+      await lockClient.query(
+        `INSERT INTO discord_invite_resolution_cache (invite_code, payload, expires_at, stale_until, updated_at)
+         VALUES ($1, $2::jsonb, $3, $4, NOW())
+         ON CONFLICT (invite_code) DO UPDATE
+         SET payload = EXCLUDED.payload,
+             expires_at = EXCLUDED.expires_at,
+             stale_until = EXCLUDED.stale_until,
+             updated_at = NOW()`,
+        [inviteCode, JSON.stringify(resolved), new Date(cacheEntry.expiresAt), new Date(cacheEntry.staleUntil)]
+      );
+      return resolved;
+    } finally {
+      if (lockClient) {
+        await lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", ["discord-invite-resolution"]).catch(() => {});
+        lockClient.release();
+      }
     }
-    if (attempt === 0) {
-      const retrySeconds = response?.status === 429
-        ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 2)
-        : 1;
-      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-    }
-  }
-
-  if (!response?.ok) {
-    if (response?.status !== 404 && cached?.staleUntil > Date.now()) return cached.value;
-    if (cached) discordInviteResolutionCache.delete(inviteCode);
-    const error = new Error(response?.status === 404
-      ? "Discord invite could not be found."
-      : response?.status === 429
-        ? `Discord is rate limiting invite checks. Try again in ${Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000))}s.`
-        : requestError?.name === "TimeoutError"
-          ? "Discord invite check timed out. Please try again."
-          : "Discord invite could not be resolved right now.");
-    error.statusCode = response?.status === 404 ? 400 : response?.status === 429 ? 429 : 502;
-    error.expose = true;
-    throw error;
-  }
-
-  const guildId = payload?.guild?.id;
-  if (!isDiscordGuildId(String(guildId ?? ""))) {
-    const error = new Error("That invite does not resolve to a Discord server ID.");
-    error.statusCode = 400;
-    throw error;
-  }
-
-  const resolved = {
-    guildId: String(guildId),
-    guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
-    approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
-      ? payload.approximate_member_count
-      : undefined,
-    bypassesJoinApplication: Number.isInteger(payload?.flags)
-      && (payload.flags & DISCORD_INVITE_FLAG_APPLICATION_BYPASS) !== 0
-  };
-  discordInviteResolutionCache.set(inviteCode, {
-    value: resolved,
-    expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
-    staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
-  });
-  return resolved;
   })();
   discordInviteResolutionPending.set(inviteCode, resolutionRequest);
   try {
@@ -8090,6 +8152,29 @@ async function initializeDiscordOnlinerDatabase() {
 }
 
 async function initializeDatabase() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_invite_resolution_cache (
+      invite_code TEXT PRIMARY KEY,
+      payload JSONB NOT NULL,
+      expires_at TIMESTAMPTZ NOT NULL,
+      stale_until TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query("CREATE INDEX IF NOT EXISTS discord_invite_resolution_cache_stale_until_idx ON discord_invite_resolution_cache (stale_until)");
+  await pool.query("DELETE FROM discord_invite_resolution_cache WHERE stale_until <= NOW()");
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS discord_invite_resolution_state (
+      singleton BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      rate_limited_until TIMESTAMPTZ NOT NULL DEFAULT TO_TIMESTAMP(0),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    INSERT INTO discord_invite_resolution_state (singleton)
+    VALUES (TRUE)
+    ON CONFLICT (singleton) DO NOTHING
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tracked_orders (
       uniqid TEXT PRIMARY KEY,
