@@ -4295,7 +4295,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+      `SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories AS category
        WHERE guild_id = $1
          AND NOT EXISTS (
@@ -4311,6 +4311,7 @@ async function loadCommunityStockCategories(config) {
   return categoryResult.rows.map((row) => ({
     id: row.id,
     name: row.name,
+    joinMethods: Array.isArray(row.join_methods) && row.join_methods.length ? row.join_methods.map((method) => normalizeCommunityJoinMethod(method)) : ["create_invite", "experimental_join", "directly"],
     isPeriodic: row.is_periodic === true,
     checkReplacementEnabled: row.check_replacement_enabled !== false,
     reactionUseEnabled: row.reaction_use_enabled === true,
@@ -4327,8 +4328,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
 
   await queryable.query(
     `INSERT INTO community_stock_categories
-       (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at)
-     SELECT $2, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, NOW()
+       (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, NOW()
      FROM community_stock_categories AS category
      WHERE guild_id = $1
        AND NOT EXISTS (
@@ -4336,7 +4337,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
          FROM community_stock_category_tombstones AS tombstone
          WHERE tombstone.id = category.id
        )
-     ON CONFLICT (guild_id, id) DO NOTHING`,
+     ON CONFLICT (guild_id, id) DO UPDATE
+       SET join_methods = EXCLUDED.join_methods`,
     [sourceGuildId, targetGuildId]
   );
 }
@@ -6562,6 +6564,15 @@ function normalizeCommunityJoinMethod(value, fallback = "create_invite") {
   return ["experimental_join", "directly"].includes(method) ? method : "create_invite";
 }
 
+const communityJoinMethods = ["create_invite", "experimental_join", "directly"];
+
+function parseCommunityCategoryJoinMethods(value) {
+  if (value === undefined) return [...communityJoinMethods];
+  if (!Array.isArray(value)) return null;
+  const methods = Array.from(new Set(value.map((method) => String(method ?? "").trim().toLowerCase())));
+  return methods.length && methods.every((method) => communityJoinMethods.includes(method)) ? methods : null;
+}
+
 function communityJoinMethodUsesAccountToken(value) {
   return ["experimental_join", "directly"].includes(normalizeCommunityJoinMethod(value));
 }
@@ -8090,6 +8101,7 @@ async function initializeDatabase() {
       guild_id TEXT NOT NULL,
       id TEXT NOT NULL,
       name TEXT NOT NULL,
+      join_methods TEXT[] NOT NULL DEFAULT ARRAY['create_invite', 'experimental_join', 'directly']::TEXT[],
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
       check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE,
@@ -8106,6 +8118,8 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS join_methods TEXT[] NOT NULL DEFAULT ARRAY['create_invite', 'experimental_join', 'directly']::TEXT[]");
+  await pool.query("UPDATE community_stock_categories SET join_methods = ARRAY['create_invite', 'experimental_join', 'directly']::TEXT[] WHERE join_methods IS NULL OR CARDINALITY(join_methods) = 0");
   await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
   await pool.query("UPDATE community_stock_categories SET color_key = CASE WHEN id = 'offline' THEN 'emerald' ELSE 'violet' END WHERE color_key IS NULL OR BTRIM(color_key) = ''");
   await pool.query("ALTER TABLE community_stock_categories ALTER COLUMN icon_name SET DEFAULT 'Users'");
@@ -9401,6 +9415,7 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     const config = await getCommunityOAuthConfig();
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before creating a category." });
     const name = String(req.body?.name ?? "").trim();
+    const joinMethods = parseCommunityCategoryJoinMethods(req.body?.joinMethods);
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
@@ -9409,14 +9424,15 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
+    if (!joinMethods) return res.status(400).json({ message: "Enable at least one valid join method." });
     if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at`,
-      [config.guildId, id, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      `INSERT INTO community_stock_categories (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key)
+       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9)
+       RETURNING id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
     );
     invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
@@ -9433,6 +9449,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const categoryId = parseCommunityCategoryId(req.params.categoryId);
     if (!categoryId) return res.status(400).json({ message: "Choose a valid category." });
     const name = String(req.body?.name ?? "").trim();
+    const joinMethods = parseCommunityCategoryJoinMethods(req.body?.joinMethods);
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
@@ -9441,24 +9458,25 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     if (!name || name.length > 60) {
       return res.status(400).json({ message: "Enter a category name with up to 60 characters." });
     }
+    if (!joinMethods) return res.status(400).json({ message: "Enable at least one valid join method." });
     if (!iconName) return res.status(400).json({ message: "Choose a valid category icon." });
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const updated = await pool.query(
       `WITH updated AS (
          UPDATE community_stock_categories
-         SET name = $3, is_periodic = $4, check_replacement_enabled = $5, reaction_use_enabled = $6, icon_name = $7, color_key = $8, updated_at = NOW()
+         SET name = $3, join_methods = $4::text[], is_periodic = $5, check_replacement_enabled = $6, reaction_use_enabled = $7, icon_name = $8, color_key = $9, updated_at = NOW()
          WHERE id = $2
            AND NOT EXISTS (
              SELECT 1
              FROM community_stock_category_tombstones AS tombstone
              WHERE tombstone.id = community_stock_categories.id
            )
-         RETURNING guild_id, id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+         RETURNING guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        )
-       SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+       SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
        FROM updated
        WHERE guild_id = $1`,
-      [config.guildId, categoryId, name, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      [config.guildId, categoryId, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
@@ -10673,22 +10691,29 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
 
 app.get("/api/community/availability", requireSession, async (req, res, next) => {
   try {
-    if (normalizeCommunityJoinMethod(req.query?.joinMethod) === "directly") await loadDcordApiKey();
-    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, {
-      allowWaitingForBot: true,
-      joinMethod: req.query?.joinMethod
-    });
+    const stockConfig = await getCommunityOAuthConfig();
+    if (!stockConfig.configured) return res.status(503).json({ message: "Configure the Members bot before checking availability." });
     const service = String(req.query?.service ?? "COMMUNITY-OFFLINE");
     if (!isCommunityServiceType(service)) return res.status(400).json({ message: "Choose a valid Members 2 mode." });
     const requestedCategoryId = req.query?.categoryId ?? getCommunityStockTypeFromService(service);
     const stockType = normalizeCommunityStockType(requestedCategoryId);
     const category = await pool.query(
-      "SELECT id FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
-      [config.guildId, stockType]
+      "SELECT id, join_methods FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
+      [stockConfig.guildId, stockType]
     );
     if (!category.rowCount || String(requestedCategoryId ?? "").trim().toLowerCase() !== stockType) {
       return res.status(400).json({ message: "Choose a valid Members 2 category." });
     }
+    const joinMethod = normalizeCommunityJoinMethod(req.query?.joinMethod);
+    const enabledJoinMethods = parseCommunityCategoryJoinMethods(category.rows[0].join_methods) ?? [];
+    if (!enabledJoinMethods.includes(joinMethod)) {
+      return res.status(409).json({ message: "This join method is disabled for the selected category." });
+    }
+    if (joinMethod === "directly") await loadDcordApiKey();
+    const { config, serverInfo } = await resolveConfiguredCommunityInvite(req.query?.invite, {
+      allowWaitingForBot: true,
+      joinMethod
+    });
     const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(pool, serverInfo.guildId);
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
@@ -10698,7 +10723,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
          AND (($4::boolean = TRUE AND encrypted_account_token IS NOT NULL)
            OR ($4::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
          AND NOT (discord_user_id = ANY($3::text[]))`,
-      [config.guildId, stockType, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(req.query?.joinMethod)]
+      [config.guildId, stockType, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
     );
     const available = Number(result.rows[0]?.available ?? 0);
     res.set("Cache-Control", "no-store").json({ available, maximum: available });
@@ -10763,13 +10788,16 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const requestedCategoryIds = requestedAllocations.map((allocation) => allocation.categoryId);
     const categoryResult = await pool.query(
-      `SELECT id, name, is_periodic, check_replacement_enabled, reaction_use_enabled
+      `SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled
        FROM community_stock_categories
        WHERE guild_id = $1 AND id = ANY($2::text[])`,
       [config.guildId, requestedCategoryIds]
     );
     if (categoryResult.rowCount !== requestedAllocations.length) {
       return res.status(400).json({ message: "One or more Members 2 categories could not be found." });
+    }
+    if (categoryResult.rows.some((category) => !(parseCommunityCategoryJoinMethods(category.join_methods) ?? []).includes(joinMethod))) {
+      return res.status(409).json({ message: "The selected join method must be enabled for every selected category." });
     }
     const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
     const reactionCategoryIds = new Set(categoryResult.rows

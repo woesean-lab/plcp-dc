@@ -800,8 +800,9 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; joinMethods: CommunityJoinMethod[]; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
+    joinMethods: ["create_invite", "experimental_join", "directly"],
     isPeriodic: false,
     checkReplacementEnabled: true,
     reactionUseEnabled: false,
@@ -923,6 +924,12 @@ export default function HomePage() {
     : communityCategories.flatMap((category) => category.id === form.communityCategoryId ? [{ category, amount: form.amount }] : []);
   const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
+  const selectedCommunityJoinMethods = (["create_invite", "experimental_join", "directly"] as CommunityJoinMethod[]).filter((method) =>
+    selectedCommunityAllocations.length > 0 && selectedCommunityAllocations.every(({ category }) => (category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).includes(method))
+  );
+  const effectiveCommunityJoinMethod = selectedCommunityJoinMethods.includes(form.communityJoinMethod)
+    ? form.communityJoinMethod
+    : selectedCommunityJoinMethods[0] ?? form.communityJoinMethod;
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReactionCapacity = selectedCommunityAllocations.reduce((total, { category, amount }) => (
     category.reactionUseEnabled ? total + amount : total
@@ -937,12 +944,17 @@ export default function HomePage() {
       !checkingAvailability &&
       availabilityMaximum !== null &&
       selectedCommunityAllocations.length > 0 &&
+      selectedCommunityJoinMethods.length > 0 &&
       availabilityMaximum > 0 &&
       selectedCommunityAmount === form.amount &&
       (!selectedCommunityHasReaction || form.reactionLimit >= 1) &&
       selectedCommunityAllocations.every(({ category, amount }) => amount <= (communityAvailability[category.id] ?? 0))
     )
   );
+  useEffect(() => {
+    if (!selectedIsCommunity || !selectedCommunityJoinMethods.length || selectedCommunityJoinMethods.includes(form.communityJoinMethod)) return;
+    setForm((current) => ({ ...current, communityJoinMethod: selectedCommunityJoinMethods[0] }));
+  }, [form.communityJoinMethod, selectedCommunityJoinMethods.join("|"), selectedIsCommunity]);
   const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   useEffect(() => {
     if (!selectedIsBoost || !form.humanizerEnabled || orderHumanizerPackages.length || loadingOrderHumanizerPackages) return;
@@ -1393,7 +1405,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, form.communityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -2081,6 +2093,7 @@ export default function HomePage() {
     setEditingCommunityCategoryId(category.id);
     setCommunityCategoryDraft({
       name: category.name,
+      joinMethods: category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"],
       isPeriodic: category.isPeriodic,
       checkReplacementEnabled: category.checkReplacementEnabled,
       reactionUseEnabled: category.reactionUseEnabled,
@@ -2092,7 +2105,7 @@ export default function HomePage() {
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
@@ -2235,7 +2248,7 @@ export default function HomePage() {
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -2243,6 +2256,7 @@ export default function HomePage() {
     event.preventDefault();
     const input = {
       name: communityCategoryDraft.name.trim(),
+      joinMethods: communityCategoryDraft.joinMethods,
       isPeriodic: communityCategoryDraft.isPeriodic,
       checkReplacementEnabled: communityCategoryDraft.checkReplacementEnabled,
       reactionUseEnabled: communityCategoryDraft.reactionUseEnabled,
@@ -2250,6 +2264,7 @@ export default function HomePage() {
       colorKey: communityCategoryDraft.colorKey
     };
     if (!input.name) return notifyError("Category name is required.");
+    if (!input.joinMethods.length) return notifyError("Enable at least one join method.");
     if (!COMMUNITY_CATEGORY_ICONS[input.iconName]) return notifyError("Choose a valid Lucide icon name.");
     try {
       setSavingCommunityCategory(true);
@@ -2382,7 +2397,7 @@ export default function HomePage() {
             serverId,
             form.duration,
             category.id,
-            form.communityJoinMethod
+            effectiveCommunityJoinMethod
           );
           return [category.id, data.maximum] as const;
         }));
@@ -2916,6 +2931,10 @@ export default function HomePage() {
       notifyError("One or more selected categories do not have enough available members.");
       return;
     }
+    if (selectedIsCommunity && !selectedCommunityJoinMethods.length) {
+      notifyError("Selected categories do not share an enabled join method.");
+      return;
+    }
 
     const reactionLimit = Math.min(form.reactionLimit, selectedCommunityReactionCapacity);
     const payload: CreateOrderPayload = {
@@ -2930,7 +2949,7 @@ export default function HomePage() {
       categoryAllocations: selectedIsCommunity && form.communityMultiCategory ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
-      joinMethod: selectedIsCommunity ? form.communityJoinMethod : undefined,
+      joinMethod: selectedIsCommunity ? effectiveCommunityJoinMethod : undefined,
       reactionLimit: selectedIsCommunity && selectedCommunityHasReaction ? reactionLimit : undefined,
       humanizerPackageId: selectedIsBoost && form.humanizerEnabled ? form.humanizerPackageId : undefined,
       isEldoradoSale: form.isEldoradoSale
@@ -3140,6 +3159,15 @@ export default function HomePage() {
                           <MessageSquareText aria-hidden="true" />
                         </span>
                       ) : null}
+                      {(category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).map((method) => {
+                        const MethodIcon = method === "experimental_join" ? ListChecks : method === "directly" ? UserPlus : Bot;
+                        const methodLabel = method === "experimental_join" ? "Experimental Join" : method === "directly" ? "Directly" : "Create Invite";
+                        return (
+                          <span key={method} className="community-category-rule-indicator" title={`${methodLabel} active`} aria-label={`${methodLabel} active`}>
+                            <MethodIcon aria-hidden="true" />
+                          </span>
+                        );
+                      })}
                     </small>
                   </span>
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
@@ -3861,6 +3889,7 @@ export default function HomePage() {
                                   type="button"
                                   role="radio"
                                   aria-checked={form.communityJoinMethod === "create_invite"}
+                                  disabled={!selectedCommunityJoinMethods.includes("create_invite")}
                                   className={form.communityJoinMethod === "create_invite" ? "is-selected" : ""}
                                   onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "create_invite" }))}
                                 >
@@ -3872,6 +3901,7 @@ export default function HomePage() {
                                   type="button"
                                   role="radio"
                                   aria-checked={form.communityJoinMethod === "experimental_join"}
+                                  disabled={!selectedCommunityJoinMethods.includes("experimental_join")}
                                   className={form.communityJoinMethod === "experimental_join" ? "is-selected" : ""}
                                   onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "experimental_join" }))}
                                 >
@@ -3883,6 +3913,7 @@ export default function HomePage() {
                                   type="button"
                                   role="radio"
                                   aria-checked={form.communityJoinMethod === "directly"}
+                                  disabled={!selectedCommunityJoinMethods.includes("directly")}
                                   className={form.communityJoinMethod === "directly" ? "is-selected" : ""}
                                   onClick={() => setForm((current) => ({ ...current, communityJoinMethod: "directly" }))}
                                 >
@@ -3891,6 +3922,12 @@ export default function HomePage() {
                                   {form.communityJoinMethod === "directly" ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
                                 </button>
                               </div>
+                              {!selectedCommunityJoinMethods.length ? (
+                                <p className="community-experimental-join-note">
+                                  <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                                  Selected categories do not share an enabled join method. Update their category settings or change the selection.
+                                </p>
+                              ) : null}
                               {form.communityJoinMethod === "experimental_join" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -5313,6 +5350,33 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="community-category-modal-column community-category-rules">
+                <div className="community-category-rule-heading"><strong>Join methods</strong><small>Enable every method orders in this category may use.</small></div>
+                <div className="community-join-method-options" role="group" aria-label="Enabled join methods">
+                  {([
+                    { key: "create_invite", label: "Create Invite", detail: "Bot creates and uses an invite", icon: Bot },
+                    { key: "experimental_join", label: "Experimental Join", detail: "Apply to Join approval flow", icon: ListChecks },
+                    { key: "directly", label: "Directly", detail: "Dcord API without the bot", icon: UserPlus }
+                  ] as const).map((option) => {
+                    const enabled = communityCategoryDraft.joinMethods.includes(option.key);
+                    const Icon = option.icon;
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        aria-pressed={enabled}
+                        className={enabled ? "is-selected" : ""}
+                        onClick={() => setCommunityCategoryDraft((current) => ({
+                          ...current,
+                          joinMethods: enabled ? current.joinMethods.filter((method) => method !== option.key) : [...current.joinMethods, option.key]
+                        }))}
+                      >
+                        <Icon className="h-4 w-4" aria-hidden="true" />
+                        <span><strong>{option.label}</strong><small>{option.detail}</small></span>
+                        <span className="community-join-method-state">{enabled ? "Active" : "Off"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
                 <div className="community-category-rule-heading"><strong>Support period</strong><small>Choose whether orders have a support deadline.</small></div>
                 <div className="community-category-period-options">
                   <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
@@ -5343,7 +5407,7 @@ export default function HomePage() {
             </div>
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={savingCommunityCategory} onClick={resetCommunityCategoryDraft}>Cancel</Button>
-              <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>
+              <Button type="submit" disabled={savingCommunityCategory || !communityCategoryDraft.name.trim() || !communityCategoryDraft.joinMethods.length}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{savingCommunityCategory ? "Saving..." : editingCommunityCategoryId ? "Save changes" : "Create category"}</Button>
             </div>
           </form>
         </div>

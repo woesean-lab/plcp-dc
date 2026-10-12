@@ -2192,10 +2192,41 @@
     box-shadow: inset 0 0 0 1px rgba(155, 140, 255, .08);
   }
 
+  .community-join-method-options button:disabled {
+    opacity: .38;
+    cursor: not-allowed;
+  }
+
+  .community-join-method-options button:disabled:hover {
+    border-color: var(--app-border);
+    color: var(--app-muted);
+    background: rgba(4, 5, 11, .3);
+  }
+
   .community-join-method-options button > span {
     display: grid;
     min-width: 0;
     gap: 2px;
+  }
+
+  .community-join-method-options button > .community-join-method-state {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--app-border);
+    border-radius: 999px;
+    padding: .2rem .42rem;
+    color: var(--app-subtle);
+    font-size: 7px;
+    font-weight: 800;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .community-join-method-options button.is-selected > .community-join-method-state {
+    border-color: rgba(105, 221, 178, .22);
+    color: var(--app-success);
+    background: var(--app-success-soft);
   }
 
   .community-join-method-options strong,

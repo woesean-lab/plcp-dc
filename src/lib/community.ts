@@ -1,3 +1,5 @@
+import type { CommunityJoinMethod } from "../types";
+
 export type CommunityGuild = {
   id: string;
   name: string;
@@ -54,6 +56,7 @@ export type CommunitySyncProgress = {
 export type CommunityStockCategory = {
   id: string;
   name: string;
+  joinMethods: CommunityJoinMethod[];
   isPeriodic: boolean;
   checkReplacementEnabled: boolean;
   reactionUseEnabled: boolean;
@@ -68,6 +71,7 @@ export type CommunityCategoryColorKey = "violet" | "cyan" | "emerald" | "amber" 
 
 export type CommunityStockCategoryInput = {
   name: string;
+  joinMethods: CommunityJoinMethod[];
   isPeriodic: boolean;
   checkReplacementEnabled: boolean;
   reactionUseEnabled: boolean;
