@@ -12934,14 +12934,17 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
   }
 });
 
-app.get("/healthz", async (_req, res, next) => {
+async function handleHealthCheck(_req, res, next) {
   try {
     await pool.query("SELECT 1");
-    res.type("text").send("ok");
+    res.set("Cache-Control", "no-store").json({ status: "ok" });
   } catch (error) {
     next(error);
   }
-});
+}
+
+app.get("/healthz", handleHealthCheck);
+app.get("/api/healthz", handleHealthCheck);
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
