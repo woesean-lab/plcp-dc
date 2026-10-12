@@ -104,7 +104,8 @@ function parseDiscordMessageLink(value) {
 }
 
 const discordInviteResolutionCache = new Map();
-const discordInviteResolutionCacheTtlMs = 30_000;
+const discordInviteResolutionCacheTtlMs = 5 * 60_000;
+const discordInviteResolutionStaleTtlMs = 6 * 60 * 60_000;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
 async function resolveDiscordInvite(inviteValue) {
@@ -117,23 +118,45 @@ async function resolveDiscordInvite(inviteValue) {
 
   const cached = discordInviteResolutionCache.get(inviteCode);
   if (cached?.expiresAt > Date.now()) return cached.value;
-  if (cached) discordInviteResolutionCache.delete(inviteCode);
 
   const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
-  let response = await fetch(inviteUrl, { signal: AbortSignal.timeout(10_000) });
-  let payload = await response.json().catch(() => ({}));
-  if (response.status === 429) {
-    const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 5);
-    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-    response = await fetch(inviteUrl, { signal: AbortSignal.timeout(10_000) });
-    payload = await response.json().catch(() => ({}));
+  let response = null;
+  let payload = {};
+  let requestError = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await fetch(inviteUrl, {
+        headers: { Accept: "application/json", "User-Agent": "plcp-dc/0.1 Discord invite resolver" },
+        signal: AbortSignal.timeout(8_000)
+      });
+      payload = await response.json().catch(() => ({}));
+      if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
+      requestError = null;
+    } catch (error) {
+      response = null;
+      payload = {};
+      requestError = error;
+    }
+    if (attempt === 0) {
+      const retrySeconds = response?.status === 429
+        ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 2)
+        : 1;
+      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+    }
   }
 
-  if (!response.ok) {
-    const error = new Error(response.status === 404
+  if (!response?.ok) {
+    if (response?.status !== 404 && cached?.staleUntil > Date.now()) return cached.value;
+    if (cached) discordInviteResolutionCache.delete(inviteCode);
+    const error = new Error(response?.status === 404
       ? "Discord invite could not be found."
-      : "Discord invite could not be resolved right now.");
-    error.statusCode = response.status === 404 ? 400 : 502;
+      : response?.status === 429
+        ? "Discord is rate limiting invite checks. Please wait a moment and try again."
+        : requestError?.name === "TimeoutError"
+          ? "Discord invite check timed out. Please try again."
+          : "Discord invite could not be resolved right now.");
+    error.statusCode = response?.status === 404 ? 400 : response?.status === 429 ? 429 : 502;
+    error.expose = true;
     throw error;
   }
 
@@ -155,7 +178,8 @@ async function resolveDiscordInvite(inviteValue) {
   };
   discordInviteResolutionCache.set(inviteCode, {
     value: resolved,
-    expiresAt: Date.now() + discordInviteResolutionCacheTtlMs
+    expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
+    staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
   });
   return resolved;
 }
@@ -13969,7 +13993,7 @@ app.use((error, _req, res, _next) => {
 
   console.error(error);
   const statusCode = Number.isInteger(error?.statusCode) ? error.statusCode : 500;
-  res.status(statusCode).json({ message: statusCode >= 500 ? "Service is temporarily unavailable." : error.message });
+  res.status(statusCode).json({ message: statusCode >= 500 && error?.expose !== true ? "Service is temporarily unavailable." : error.message });
 });
 
 if (serviceRunsWeb) await initializeDatabase();
