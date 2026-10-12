@@ -4041,16 +4041,16 @@ export default function HomePage() {
                           </div>
 
                           <label className="boost-order-field">
-                            <span className="boost-order-label">{selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "Discord Invite or Server ID" : "Server Invite"}</span>
+                            <span className="boost-order-label">Server Invite</span>
                             <div className="boost-invite-control">
-                              {selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? null : <span>discord.gg/</span>}
+                              <span>discord.gg/</span>
                               <input
                                 value={form.serverId}
                                 onChange={(event) => {
                                   const value = event.target.value;
                                   setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
                                 }}
-                                placeholder={selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "discord.gg/yourcode or server ID" : "yourcode"}
+                                placeholder="yourcode"
                                 required
                               />
                             </div>
@@ -4206,7 +4206,7 @@ export default function HomePage() {
                               <div className="orders-row-identity">
                                 <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
                                 <span className="min-w-0">
-                                  <h2 id={titleId}>{order.serverName || "Discord server"}</h2>
+                                  <h2 id={titleId}>{order.serverName || order.serverId || "Discord server"}</h2>
                                   <code title={order.uniqid}>{order.uniqid}</code>
                                 </span>
                               </div>

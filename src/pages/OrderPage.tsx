@@ -1290,7 +1290,7 @@ export default function OrderPage() {
                 {isDcordProvider || isCommunityProvider ? <Bot className="h-4 w-4" /> : <FileJson className="h-4 w-4" />}
               </span>
               <div className="min-w-0">
-                <h2>{serverName || "Discord server"}</h2>
+                <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
                   <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>
                     <small>Order status</small>
