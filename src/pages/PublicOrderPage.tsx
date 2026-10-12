@@ -9,7 +9,7 @@ import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Pla
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { cancelPublicCommunityOrderReactions, checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelPublicCommunityOrderReactions, checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
@@ -260,6 +260,7 @@ export default function PublicOrderPage() {
   const [liveStreamConnected, setLiveStreamConnected] = useState(false);
   const [updatingDelay, setUpdatingDelay] = useState(false);
   const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
+  const [togglingDcordPause, setTogglingDcordPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
@@ -490,6 +491,7 @@ export default function PublicOrderPage() {
   const isWaitingForBot = isWaiting && ["discord_401", "discord_403", "discord_404", "discord_missing"].includes(String(status?.waitingCode ?? ""));
   const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isDeliveryPaused = isCommunityOrder && normalizedStatus === "PAUSED";
+  const isDcordDeliveryPaused = isBoostOrder && normalizedStatus === "PAUSED";
   const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isErrorStatus = ["ERROR", "INVALID", "TERMINATED"].includes(normalizedStatus);
@@ -675,6 +677,23 @@ export default function PublicOrderPage() {
       toast.error(err instanceof Error ? err.message : "Delivery state could not be changed.");
     } finally {
       setTogglingDeliveryPause(false);
+    }
+  }
+
+  async function handleToggleDcordPause() {
+    if (!uniqid || !isBoostOrder || !canManageDcordTokens || isTerminalStatus || togglingDcordPause) return;
+
+    try {
+      setTogglingDcordPause(true);
+      const data = isDcordDeliveryPaused
+        ? await resumePublicDcordBoostOrder(uniqid)
+        : await pausePublicDcordBoostOrder(uniqid);
+      setStatus((current) => mergeOrderStatus(current, data));
+      toast.success(isDcordDeliveryPaused ? "Boost delivery resumed." : "Boost delivery paused.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Boost delivery state could not be changed.");
+    } finally {
+      setTogglingDcordPause(false);
     }
   }
 
@@ -882,6 +901,28 @@ export default function PublicOrderPage() {
     </div>
   ) : null;
 
+  const boostDeliveryControl = isBoostOrder && canManageDcordTokens && !isTerminalStatus ? (
+    <div className="monitor-control-panel">
+      <div className="monitor-panel-heading">
+        <span className="monitor-panel-icon">{isDcordDeliveryPaused ? <Pause className="h-4 w-4" aria-hidden="true" /> : <Rocket className="h-4 w-4" aria-hidden="true" />}</span>
+        <div>
+          <p className="app-kicker">Delivery control</p>
+          <h2>{isDcordDeliveryPaused ? "Boost delivery paused" : "Boost delivery running"}</h2>
+        </div>
+      </div>
+      <div className="monitor-delay-controls">
+        <Button type="button" variant="secondary" onClick={() => void handleToggleDcordPause()} disabled={togglingDcordPause}>
+          {isDcordDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+          {togglingDcordPause ? "Updating..." : isDcordDeliveryPaused ? "Resume" : "Pause"}
+        </Button>
+      </div>
+      <div className="monitor-safety-note" role="note">
+        <TriangleAlert className="h-4 w-4" aria-hidden="true" />
+        <p>Pause stops new tokens from being submitted. A token already sent to Dcord will finish its current request safely.</p>
+      </div>
+    </div>
+  ) : null;
+
   if (isInitialLoading) {
     return (
       <section className="session-loading-screen app-shell" role="status" aria-live="polite" aria-label="Loading order monitor">
@@ -1028,7 +1069,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
                       {isCompleted ? "Your order has been completed successfully." : isErrorStatus ? "Review the error above for the reason." : "We keep this page updated automatically while your order is processed."}
                     </p>
@@ -1085,6 +1126,7 @@ export default function PublicOrderPage() {
               ) : null}
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""} ${isCommunityOrder && reactionOrderLimit > 0 ? "has-reaction" : ""}`.trim()}>
+                {boostDeliveryControl}
                 {delayUpdatePanel}
 
                 {isCommunityOrder ? (

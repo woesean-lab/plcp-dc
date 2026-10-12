@@ -8,7 +8,7 @@ import { REACTION_MIXED_VALUE, ReactionPanel } from "@/components/ReactionPanel"
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelCommunityOrderReactions, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelCommunityOrderReactions, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { mergeOrderStatus } from "../lib/order-status";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -385,6 +385,7 @@ export default function OrderPage() {
   const [togglingDeliveryPause, setTogglingDeliveryPause] = useState(false);
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [resumingDcordOrder, setResumingDcordOrder] = useState(false);
+  const [togglingDcordPause, setTogglingDcordPause] = useState(false);
   const [cancellingDcordOrder, setCancellingDcordOrder] = useState(false);
   const [startingDcordRejoin, setStartingDcordRejoin] = useState(false);
   const [showCancelDcordModal, setShowCancelDcordModal] = useState(false);
@@ -437,6 +438,7 @@ export default function OrderPage() {
   const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
+  const isDcordDeliveryPaused = isDcordProvider && normalizedStatus === "PAUSED";
   const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
@@ -952,6 +954,24 @@ export default function OrderPage() {
     }
   }
 
+  async function handleToggleDcordPause() {
+    const target = String(result?.uniqid ?? uniqid).trim();
+    if (!target || !isDcordProvider || terminal || togglingDcordPause) return;
+
+    try {
+      setTogglingDcordPause(true);
+      const data = isDcordDeliveryPaused
+        ? await resumeDcordBoostOrder(target)
+        : await pauseDcordBoostOrder(target);
+      setResult((current) => mergeOrderStatus(current, data));
+      toast.success(isDcordDeliveryPaused ? "Boost delivery resumed." : "Boost delivery paused.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Boost delivery state could not be changed.");
+    } finally {
+      setTogglingDcordPause(false);
+    }
+  }
+
   async function handleRejoinDcordOrder() {
     const target = String(result?.uniqid ?? uniqid).trim();
     if (!target || startingDcordRejoin || dcordRejoinRunning) return;
@@ -1326,7 +1346,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
@@ -1442,6 +1462,21 @@ export default function OrderPage() {
                 </div>
               ) : null}
             </section>
+
+            {!terminal && isDcordProvider ? (
+              <section className="lookup-delay-control">
+                <div className="lookup-delay-heading">
+                  <p className={labelClass}>Boost delivery</p>
+                  <strong>{isDcordDeliveryPaused ? "Paused" : "Running"}</strong>
+                </div>
+                <div className="lookup-delay-actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDcordPause()} disabled={togglingDcordPause}>
+                    {isDcordDeliveryPaused ? <Play className="h-4 w-4" aria-hidden="true" /> : <Pause className="h-4 w-4" aria-hidden="true" />}
+                    {togglingDcordPause ? "Updating..." : isDcordDeliveryPaused ? "Resume" : "Pause"}
+                  </Button>
+                </div>
+              </section>
+            ) : null}
 
             {!terminal && !isInvitesPaused && !isDcordProvider ? (
               <section className={`lookup-delay-control ${isCommunityProvider ? "has-speed-profiles" : ""}`}>

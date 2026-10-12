@@ -55,6 +55,7 @@ const publicCommunityCheckCooldowns = new Map();
 const communityOrderMemberCheckProgress = new Map();
 const communityOrderLeaveAllActive = new Set();
 const dcordOrderProcessingJobs = new Set();
+const dcordOrderPausedJobs = new Set();
 const dcordOrderRetryTimers = new Map();
 const humanizerJobs = new Map();
 const humanizerDiscordIdentityCache = new Map();
@@ -7400,7 +7401,7 @@ async function checkDcordProviderAvailability() {
 
 function scheduleDcordOrderRetry(uniqid, delayMs) {
   const orderId = String(uniqid ?? "").trim();
-  if (!orderId || dcordOrderRetryTimers.has(orderId)) return;
+  if (!orderId || dcordOrderPausedJobs.has(orderId) || dcordOrderRetryTimers.has(orderId)) return;
   const timer = setTimeout(() => {
     dcordOrderRetryTimers.delete(orderId);
     void resumeDcordBoostOrder(orderId).catch((error) => {
@@ -7615,6 +7616,18 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
 async function processDcordBoostOrder(order, tokens, invite) {
   const orderId = String(order?.uniqid ?? "").trim();
   if (!orderId || dcordOrderProcessingJobs.has(orderId)) return;
+  if (order?.deliveryPaused === true || dcordOrderPausedJobs.has(orderId)) {
+    dcordOrderPausedJobs.add(orderId);
+    await saveTrackedOrderPayload({
+      ...order,
+      status: "PAUSED",
+      deliveryPaused: true,
+      providerStatus: "paused",
+      nextRetryAt: null,
+      details: "Boost delivery is paused. No new tokens will be submitted until it is resumed."
+    });
+    return;
+  }
   dcordOrderProcessingJobs.add(orderId);
 
   const results = tokens.map((token, index) => {
@@ -7653,15 +7666,21 @@ async function processDcordBoostOrder(order, tokens, invite) {
       const hasQueued = results.some((item) => String(item?.status ?? "").toLowerCase() === "queued");
       const hasRunning = results.some((item) => ["joining", "processing", "verifying", "pending"].includes(String(item?.status ?? "").toLowerCase()));
       const finished = !hasQueued && !hasRunning;
+      const pauseRequested = dcordOrderPausedJobs.has(orderId);
+      const manuallyPaused = pauseRequested && !finished;
+      if (pauseRequested && finished) dcordOrderPausedJobs.delete(orderId);
       const waitingForProvider = forceWaiting || providerPaused;
       await saveTrackedOrderPayload({
         ...order,
         added,
-        status: waitingForProvider ? "WAITING" : finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
-        providerStatus: waitingForProvider ? "unavailable" : "available",
+        status: manuallyPaused ? "PAUSED" : waitingForProvider ? "WAITING" : finished ? (added >= order.amount ? "COMPLETED" : added > 0 ? "PARTIAL" : "ERROR") : "PROCESS",
+        deliveryPaused: manuallyPaused,
+        providerStatus: manuallyPaused ? "paused" : waitingForProvider ? "unavailable" : "available",
         dcordRetryCount: waitingForProvider ? retryCount : 0,
-        nextRetryAt: waitingForProvider ? new Date(Date.now() + retryAfterMs).toISOString() : null,
-        details: waitingForProvider
+        nextRetryAt: manuallyPaused ? null : waitingForProvider ? new Date(Date.now() + retryAfterMs).toISOString() : null,
+        details: manuallyPaused
+          ? "Boost delivery is paused. No new tokens will be submitted until it is resumed."
+          : waitingForProvider
           ? hasQueued
             ? "Dcord is temporarily unavailable. Queued delivery will resume automatically."
             : "Dcord response is uncertain. The submitted tokens are being verified without a duplicate request."
@@ -7705,10 +7724,10 @@ async function processDcordBoostOrder(order, tokens, invite) {
   }
 
   async function runNextToken() {
-    if (providerPaused) return;
+    if (providerPaused || dcordOrderPausedJobs.has(orderId)) return;
     while (nextIndex < tokens.length && !isRunnableDcordResult(results[nextIndex])) nextIndex += 1;
     const index = nextIndex++;
-    if (index >= tokens.length || providerPaused) return;
+    if (index >= tokens.length || providerPaused || dcordOrderPausedJobs.has(orderId)) return;
 
     const token = tokens[index];
     const tokenStartedAt = Date.now();
@@ -7840,7 +7859,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const workerCount = Math.min(tokens.length, normalizeDcordBoostConcurrency(order.concurrency));
     await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
     await saveCurrentProgress();
-    if (providerPaused && (hasRunnable || results.some(isRunnableDcordResult))) {
+    if (!dcordOrderPausedJobs.has(orderId) && providerPaused && (hasRunnable || results.some(isRunnableDcordResult))) {
       await saveCurrentProgress(true);
       scheduleDcordOrderRetry(orderId, retryAfterMs);
     }
@@ -7853,6 +7872,7 @@ async function resumeDcordBoostOrder(uniqid) {
   const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
   const order = tracked.rows[0]?.payload;
   if (!order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) return;
+  if (order.deliveryPaused === true || dcordOrderPausedJobs.has(uniqid)) return;
   if (!order.dcordResults.some(isRunnableDcordResult)) {
     return;
   }
@@ -7864,7 +7884,7 @@ async function resumeDcordBoostOrder(uniqid) {
 
 async function recoverStaleDcordBoostOrder(order) {
   const orderId = String(order?.uniqid ?? "").trim();
-  if (!orderId || !order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) return order;
+  if (!orderId || !order || order.provider !== "dcord" || !Array.isArray(order.dcordResults) || order.deliveryPaused === true || String(order.status ?? "").toUpperCase() === "PAUSED") return order;
   if (dcordOrderProcessingJobs.has(orderId) || !order.dcordResults.some(isDcordUnconfirmedRunningResult)) return order;
 
   const recoveredOrder = {
@@ -13572,14 +13592,51 @@ app.post("/api/dcord/boost-orders/:uniqid/rejoin", requireSession, async (req, r
   }
 });
 
-app.post("/api/dcord/boost-orders/:uniqid/resume", requireSession, async (req, res, next) => {
+async function pauseDcordBoostOrder(req, res, next) {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
-    if (dcordOrderProcessingJobs.has(uniqid)) {
-      return res.status(409).json({ message: "This boost order is already running." });
+
+    const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || order.provider !== "dcord" || !Array.isArray(order.dcordResults)) {
+      return res.status(404).json({ message: "Boost order could not be found." });
+    }
+    const normalizedStatus = String(order.status ?? "").trim().toUpperCase();
+    if (["COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "CANCELED", "TERMINATED", "INVALID"].includes(normalizedStatus)) {
+      return res.status(409).json({ message: "This boost order has already finished." });
+    }
+    if (normalizedStatus === "PAUSED" || order.deliveryPaused === true || dcordOrderPausedJobs.has(uniqid)) {
+      return res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(order));
+    }
+
+    dcordOrderPausedJobs.add(uniqid);
+    const retryTimer = dcordOrderRetryTimers.get(uniqid);
+    if (retryTimer) clearTimeout(retryTimer);
+    dcordOrderRetryTimers.delete(uniqid);
+    const pausedOrder = {
+      ...order,
+      status: "PAUSED",
+      deliveryPaused: true,
+      providerStatus: "paused",
+      nextRetryAt: null,
+      pausedAt: new Date().toISOString(),
+      details: "Boost delivery is paused. No new tokens will be submitted until it is resumed."
+    };
+    await saveTrackedOrderPayload(pausedOrder);
+    res.set("Cache-Control", "no-store").json(await revealDcordOrderTokens(pausedOrder));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function resumeDcordBoostOrderHandler(req, res, next) {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) {
+      return res.status(400).json({ message: "A valid order ID is required." });
     }
 
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
@@ -13589,6 +13646,10 @@ app.post("/api/dcord/boost-orders/:uniqid/resume", requireSession, async (req, r
     }
     if (!order.dcordResults.some(isRunnableDcordResult)) {
       return res.status(409).json({ message: "This order has no queued or pending Dcord tasks to resume." });
+    }
+    const wasPaused = order.deliveryPaused === true || String(order.status ?? "").trim().toUpperCase() === "PAUSED" || dcordOrderPausedJobs.has(uniqid);
+    if (dcordOrderProcessingJobs.has(uniqid) && !wasPaused) {
+      return res.status(409).json({ message: "This boost order is already running." });
     }
 
     const tokens = await loadDcordOrderTokens(uniqid);
@@ -13601,24 +13662,33 @@ app.post("/api/dcord/boost-orders/:uniqid/resume", requireSession, async (req, r
     if (retryTimer) clearTimeout(retryTimer);
     dcordOrderRetryTimers.delete(uniqid);
     dcordCircuitOpenUntil = 0;
+    dcordOrderPausedJobs.delete(uniqid);
 
     const resumedOrder = {
       ...order,
       status: "PROCESS",
+      deliveryPaused: false,
       providerStatus: "checking",
       dcordRetryCount: 0,
       nextRetryAt: null,
       details: "Manual Dcord delivery check started."
     };
     await saveTrackedOrderPayload(resumedOrder);
-    void processDcordBoostOrder(resumedOrder, tokens, invite).catch((error) => {
-      console.error("Manual Dcord resume failed:", error instanceof Error ? error.message : error);
-    });
+    if (!dcordOrderProcessingJobs.has(uniqid)) {
+      void processDcordBoostOrder(resumedOrder, tokens, invite).catch((error) => {
+        console.error("Manual Dcord resume failed:", error instanceof Error ? error.message : error);
+      });
+    }
     res.json(await revealDcordOrderTokens(resumedOrder));
   } catch (error) {
     next(error);
   }
-});
+}
+
+app.post("/api/dcord/boost-orders/:uniqid/pause", requireSession, pauseDcordBoostOrder);
+app.post("/api/dcord/boost-orders/:uniqid/resume", requireSession, resumeDcordBoostOrderHandler);
+app.post("/api/public/orders/:uniqid/boost-pause", requireSession, pauseDcordBoostOrder);
+app.post("/api/public/orders/:uniqid/boost-resume", requireSession, resumeDcordBoostOrderHandler);
 
 app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, res, next) => {
   try {

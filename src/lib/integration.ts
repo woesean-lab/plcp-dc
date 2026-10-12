@@ -81,7 +81,7 @@ export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "reaction-message" | "reaction-cancel", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "boost-pause" | "boost-resume" | "reaction-message" | "reaction-cancel", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -119,6 +119,14 @@ export function resumePublicCommunityOrder(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "resume", { method: "POST" });
 }
 
+export function pausePublicDcordBoostOrder(uniqid: string) {
+  return requestPublicOrderApi<OrderStatusResponse>(uniqid, "boost-pause", { method: "POST" });
+}
+
+export function resumePublicDcordBoostOrder(uniqid: string) {
+  return requestPublicOrderApi<OrderStatusResponse>(uniqid, "boost-resume", { method: "POST" });
+}
+
 export function updatePublicCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojis: string[]) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "reaction-message", {
     method: "PUT",
@@ -152,6 +160,13 @@ export function rejoinDcordBoostOrder(uniqid: string) {
 export function resumeDcordBoostOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(
     `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/resume`,
+    { method: "POST" }
+  );
+}
+
+export function pauseDcordBoostOrder(uniqid: string) {
+  return requestJson<OrderStatusResponse>(
+    `/api/dcord/boost-orders/${encodeURIComponent(uniqid)}/pause`,
     { method: "POST" }
   );
 }
