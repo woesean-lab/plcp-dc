@@ -2038,8 +2038,16 @@ export default function HomePage() {
     try {
       setLeavingCommunityGuilds(true);
       setCommunityGuildLeaveProgress({ active: true, total: guildIds.length, completed: 0, currentGuilds: [], startedAt: new Date().toISOString(), finishedAt: null });
+      let progressPollingActive = true;
       const progressTimer = window.setInterval(() => {
-        void getCommunityGuildLeaveProgress().then(setCommunityGuildLeaveProgress).catch(() => {});
+        void getCommunityGuildLeaveProgress().then((progress) => {
+          if (!progressPollingActive || !progress.active) return;
+          setCommunityGuildLeaveProgress((current) => ({
+            ...progress,
+            total: Math.max(current?.total ?? 0, progress.total),
+            completed: Math.max(current?.completed ?? 0, progress.completed)
+          }));
+        }).catch(() => {});
       }, 400);
       let result;
       try {
@@ -2047,6 +2055,7 @@ export default function HomePage() {
         const finalProgress = await getCommunityGuildLeaveProgress().catch(() => null);
         if (finalProgress) setCommunityGuildLeaveProgress(finalProgress);
       } finally {
+        progressPollingActive = false;
         window.clearInterval(progressTimer);
       }
       setCommunityGuildsPendingLeave([]);
@@ -4891,7 +4900,7 @@ export default function HomePage() {
                             })}
                           </div>
                         )}
-                        {communityGuildLeaveProgress?.active ? (
+                        {leavingCommunityGuilds && communityGuildLeaveProgress ? (
                           <div className="community-guild-progress" role="status" aria-live="polite">
                             <LoaderCircle className="h-4 w-4 animate-spin" />
                             <span>
@@ -5097,7 +5106,7 @@ export default function HomePage() {
                 : ""}
               {communityGuildsPendingLeave.some((guild) => guild.configured) ? " The configured Members Stock server is also selected." : ""}
             </p>
-            {communityGuildLeaveProgress?.active ? (
+            {leavingCommunityGuilds && communityGuildLeaveProgress ? (
               <div className="community-guild-progress mt-4" role="status" aria-live="polite">
                 <LoaderCircle className="h-4 w-4 animate-spin" />
                 <span>
