@@ -110,7 +110,7 @@ const discordInviteResolutionStaleTtlMs = 6 * 60 * 60_000;
 let discordInviteRateLimitedUntil = 0;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
-async function resolveDiscordInvite(inviteValue) {
+async function resolveDiscordInvite(inviteValue, { botToken = "" } = {}) {
   const inviteCode = extractDiscordInviteCode(inviteValue);
   if (!inviteCode) {
     const error = new Error("Enter a Discord server ID or invite link.");
@@ -173,7 +173,11 @@ async function resolveDiscordInvite(inviteValue) {
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           response = await fetch(inviteUrl, {
-            headers: { Accept: "application/json", "User-Agent": "plcp-dc/0.1 Discord invite resolver" },
+            headers: {
+              Accept: "application/json",
+              "User-Agent": "plcp-dc/0.1 Discord invite resolver",
+              ...(String(botToken).trim() ? { Authorization: `Bot ${String(botToken).trim()}` } : {})
+            },
             signal: AbortSignal.timeout(8_000)
           });
           payload = await response.json().catch(() => ({}));
@@ -10717,13 +10721,30 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     error.statusCode = 503;
     throw error;
   }
-  const invite = extractDiscordInviteCode(inviteValue);
+  const rawTarget = String(inviteValue ?? "").trim();
+  const targetIsGuildId = isDiscordGuildId(rawTarget);
+  const invite = targetIsGuildId ? rawTarget : extractDiscordInviteCode(rawTarget);
   if (!invite) {
-    const error = new Error("A valid Discord invite is required.");
+    const error = new Error("A valid Discord server ID or invite is required.");
     error.statusCode = 400;
     throw error;
   }
-  const serverInfo = await resolveDiscordInvite(invite);
+  let targetGuildAccess = null;
+  let serverInfo;
+  if (targetIsGuildId) {
+    targetGuildAccess = await checkCommunityBotGuildAccess(config, rawTarget);
+    const payload = targetGuildAccess?.payload ?? {};
+    serverInfo = {
+      guildId: rawTarget,
+      guildName: typeof payload?.name === "string" && payload.name.trim() ? payload.name.trim() : undefined,
+      approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
+        ? payload.approximate_member_count
+        : Number.isFinite(payload?.member_count) ? payload.member_count : undefined,
+      bypassesJoinApplication: false
+    };
+  } else {
+    serverInfo = await resolveDiscordInvite(invite, { botToken: config.botToken });
+  }
   if (normalizedJoinMethod === "directly") {
     const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
     if (serverInfo.guildId !== config.guildId) {
@@ -10741,9 +10762,8 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
     }
     return { config: directConfig, invite, serverInfo, waitingForBot: false };
   }
-  let targetGuildAccess = null;
   if (serverInfo.guildId !== config.guildId) {
-    const invitedGuildAccess = await checkCommunityBotGuildAccess(config, serverInfo.guildId);
+    const invitedGuildAccess = targetGuildAccess ?? await checkCommunityBotGuildAccess(config, serverInfo.guildId);
     targetGuildAccess = invitedGuildAccess;
     const botInInvitedGuild = invitedGuildAccess.accessible;
 
@@ -10806,7 +10826,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       client.release();
     }
   } else {
-    const configuredGuildAccess = await checkCommunityBotGuildAccess(config, serverInfo.guildId);
+    const configuredGuildAccess = targetGuildAccess ?? await checkCommunityBotGuildAccess(config, serverInfo.guildId);
     targetGuildAccess = configuredGuildAccess;
     if (!configuredGuildAccess.accessible) {
       if (allowWaitingForBot) {
@@ -13372,7 +13392,10 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
       return res.json({ guildId: value });
     }
 
-    res.json(await resolveDiscordInvite(value));
+    const communityConfig = await getCommunityOAuthConfig().catch(() => null);
+    res.json(await resolveDiscordInvite(value, {
+      botToken: communityConfig?.configured ? communityConfig.botToken : ""
+    }));
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });

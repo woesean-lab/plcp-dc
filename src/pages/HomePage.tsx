@@ -3804,9 +3804,9 @@ export default function HomePage() {
                           </div>
 
                           <label className="boost-order-field">
-                            <span className="boost-order-label">Server Invite</span>
+                            <span className="boost-order-label">{selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "Server Invite or ID" : "Server Invite"}</span>
                             <div className="boost-invite-control">
-                              <span>discord.gg/</span>
+                              {selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? null : <span>discord.gg/</span>}
                               <input
                                 value={form.serverId}
                                 onChange={(event) => {
@@ -3816,7 +3816,7 @@ export default function HomePage() {
                                   setAvailabilityMaximum(null);
                                   setForm((current) => ({ ...current, serverId: extractDiscordInviteCode(value) ?? value }));
                                 }}
-                                placeholder="yourcode"
+                                placeholder={selectedIsCommunity && effectiveCommunityJoinMethod === "create_invite" ? "discord.gg/yourcode or server ID" : "yourcode"}
                                 required
                               />
                             </div>
