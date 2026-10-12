@@ -3607,14 +3607,14 @@
   .orders-table-head,
   .orders-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 105px;
+    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 125px;
     align-items: center;
     column-gap: .8rem;
   }
 
   .orders-table[data-reaction-use="true"] .orders-table-head,
   .orders-table[data-reaction-use="true"] .orders-row {
-    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 80px 105px;
+    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 80px 125px;
   }
 
   .orders-table-head {
