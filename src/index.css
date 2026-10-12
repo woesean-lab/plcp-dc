@@ -6946,6 +6946,11 @@
   font-size: 11px;
 }
 
+.monitor-error-action {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .monitor-footer {
   display: flex;
   align-items: center;

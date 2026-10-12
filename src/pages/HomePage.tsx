@@ -143,7 +143,6 @@ import {
   getAdminConfig,
   markBoostStockTokensUsed,
   restartCommunityOrder,
-  resumeCommunityOrder,
   returnUsedBoostToken,
   saveBoostStock,
   saveDcordApiKey,
@@ -2780,20 +2779,6 @@ export default function HomePage() {
     }
   }
 
-  async function handleResumeErroredOrder(order: TrackedOrder) {
-    if (restartingOrderId) return;
-    try {
-      setRestartingOrderId(order.uniqid);
-      const resumed = await resumeCommunityOrder(order.uniqid);
-      updateLocalOrder(mergeTrackedOrder(order, resumed));
-      notifySuccess(`Delivery resumed for ${order.uniqid}.`);
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Delivery could not be resumed.");
-    } finally {
-      setRestartingOrderId(null);
-    }
-  }
-
   async function syncTrackedOrders() {
     const syncTargets = activeOrders.filter((order) => order.uniqid);
     if (!syncTargets.length) {
@@ -4127,7 +4112,6 @@ export default function HomePage() {
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
-                        const isResumableError = order.provider === "community" && String(order.status ?? "").trim().toUpperCase() === "ERROR" && (progress?.remaining ?? 0) > 0;
                         const delayValue = order.statusDelay ?? order.delay;
                         const reactionUsage = getTrackedOrderReactionUsage(order);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
@@ -4159,7 +4143,6 @@ export default function HomePage() {
                               {showReactionUseColumn ? <dl className="orders-row-reaction-use">{reactionUsage ? <div><dt>Reaction Use</dt><dd>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</dd></div> : null}</dl> : null}
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {isResumableError ? <Button type="button" variant="secondary" size="icon" title="Resume unfinished delivery" aria-label={`Resume ${order.uniqid}`} disabled={restartingOrderId !== null} onClick={() => void handleResumeErroredOrder(order)}><RotateCcw className={`h-4 w-4 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title="Remove order" aria-label={`Remove ${order.uniqid}`} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>

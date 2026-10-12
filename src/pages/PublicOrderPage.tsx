@@ -493,6 +493,7 @@ export default function PublicOrderPage() {
   const isGuildAccessRestricted = isCommunityOrder && status?.waitingCode === "discord_guild_invites_limited";
   const isInvitesPaused = normalizedStatus.includes("INVITE") && normalizedStatus.includes("PAUSED");
   const isErrorStatus = ["ERROR", "INVALID", "TERMINATED"].includes(normalizedStatus);
+  const isResumableCommunityError = isCommunityOrder && normalizedStatus === "ERROR" && (membersRemaining ?? 0) > 0;
   const isTerminalStatus = ["COMPLETED", "PARTIAL", "CANCELED", "CANCELLED", "TERMINATED", "INVALID", "ERROR"].some(
     (value) => normalizedStatus.includes(value)
   );
@@ -661,15 +662,15 @@ export default function PublicOrderPage() {
   }
 
   async function handleToggleDeliveryPause() {
-    if (!uniqid || !isCommunityOrder || togglingDeliveryPause || isTerminalStatus) return;
+    if (!uniqid || !isCommunityOrder || togglingDeliveryPause || (isTerminalStatus && !isResumableCommunityError)) return;
 
     try {
       setTogglingDeliveryPause(true);
-      const data = isDeliveryPaused
+      const data = isDeliveryPaused || isResumableCommunityError
         ? await resumePublicCommunityOrder(uniqid)
         : await pausePublicCommunityOrder(uniqid);
       setStatus((current) => mergeOrderStatus(current, data));
-      toast.success(isDeliveryPaused ? "Delivery resumed." : "Delivery paused.");
+      toast.success(isDeliveryPaused || isResumableCommunityError ? "Delivery resumed." : "Delivery paused.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delivery state could not be changed.");
     } finally {
@@ -1014,6 +1015,12 @@ export default function PublicOrderPage() {
                 <div className="monitor-error" role="alert">
                   <TriangleAlert className="h-5 w-5" aria-hidden="true" />
                   <div><strong>Delivery stopped</strong><p>{typeof status?.details === "string" ? status.details : "The order could not continue."}</p></div>
+                  {isResumableCommunityError ? (
+                    <Button className="monitor-error-action" type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
+                      <RotateCcw className={`h-4 w-4 ${togglingDeliveryPause ? "animate-spin" : ""}`} aria-hidden="true" />
+                      {togglingDeliveryPause ? "Resuming..." : "Resume delivery"}
+                    </Button>
+                  ) : null}
                 </div>
               ) : null}
 
