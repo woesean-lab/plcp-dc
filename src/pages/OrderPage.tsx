@@ -437,7 +437,6 @@ export default function OrderPage() {
   const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
-  const isResumableCommunityError = isCommunityProvider && normalizedStatus === "ERROR" && (remainingAmount ?? 0) > 0;
   const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
@@ -458,6 +457,7 @@ export default function OrderPage() {
   const totalAmount = getNumberField(result, ["amount", "quantity"]);
   const addedAmount = getNumberField(result, ["added"]);
   const remainingAmount = typeof totalAmount === "number" && typeof addedAmount === "number" ? Math.max(totalAmount - addedAmount, 0) : undefined;
+  const isResumableCommunityError = isCommunityProvider && normalizedStatus === "ERROR" && (remainingAmount ?? 0) > 0;
   const progress = typeof totalAmount === "number" && typeof addedAmount === "number" && totalAmount > 0
     ? Math.min(Math.max(addedAmount / totalAmount, 0), 1)
     : null;
