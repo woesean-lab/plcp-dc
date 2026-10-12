@@ -732,6 +732,7 @@ export default function HomePage() {
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
   const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
+  const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
   const communityMemberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
@@ -3032,6 +3033,13 @@ export default function HomePage() {
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
   const communityVisibleRecords = communityCategoryRecords
+    .filter((record) => {
+      if (communityMemberFilter === "active") return record.status !== "failed";
+      if (communityMemberFilter === "inactive") return record.status === "failed";
+      if (communityMemberFilter === "onliner") return record.onlinerConnected;
+      if (communityMemberFilter === "not_onliner") return !record.onlinerConnected;
+      return true;
+    })
     .sort((left, right) => {
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
@@ -3138,6 +3146,7 @@ export default function HomePage() {
                   onClick={() => {
                     setCommunityStockType(category.id);
                     setSelectedCommunityMemberIds([]);
+                    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
                     setCommunityAccessTokens({});
                     setCommunityImportFile(null);
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
@@ -3220,7 +3229,7 @@ export default function HomePage() {
               ? `Importing ${communityImportProgress.processed}/${communityImportProgress.total}`
               : importingCommunityStock ? "Validating & importing..." : "Import stock"}
           </Button>
-          <Button type="button" variant="secondary" disabled={!communityStockConfigured || !communityVisibleRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
+          <Button type="button" variant="secondary" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
@@ -3233,6 +3242,7 @@ export default function HomePage() {
       </form>
 
       <div className="community-member-toolbar">
+        <div className="community-member-toolbar-filters">
           <label className="community-member-select-all">
             <input
               type="checkbox"
@@ -3243,6 +3253,25 @@ export default function HomePage() {
             />
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
           </label>
+          <FilterDropdown
+            label="Member filter"
+            showLabel={false}
+            className="community-member-filter"
+            value={communityMemberFilter}
+            options={[
+              { value: "all", label: `All members (${communityCategoryRecords.length})` },
+              { value: "active", label: `Active (${communityCategoryRecords.filter((record) => record.status !== "failed").length})` },
+              { value: "inactive", label: `Inactive (${communityCategoryRecords.filter((record) => record.status === "failed").length})` },
+              { value: "onliner", label: `Onliner (${communityCategoryRecords.filter((record) => record.onlinerConnected).length})` },
+              { value: "not_onliner", label: `Not on Onliner (${communityCategoryRecords.filter((record) => !record.onlinerConnected).length})` }
+            ]}
+            onChange={(value) => {
+              setCommunityMemberFilter(value as "all" | "active" | "inactive" | "onliner" | "not_onliner");
+              setSelectedCommunityMemberIds([]);
+              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+            }}
+          />
+        </div>
           <div className="community-member-priority-actions">
             <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
               {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
@@ -3414,7 +3443,7 @@ export default function HomePage() {
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
-          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members match this presence</strong><span>Choose another presence status to see members in this category.</span></div>
+          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members match this filter</strong><span>Choose another member filter to see accounts in this category.</span></div>
         ) : (
           <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
         )
