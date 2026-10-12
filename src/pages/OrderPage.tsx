@@ -437,6 +437,7 @@ export default function OrderPage() {
   const isRecoveringDelivery = normalizedStatus === "RECOVERING";
   const isWaitingForDcord = isDcordProvider && normalizedStatus === "WAITING";
   const isDeliveryPaused = isCommunityProvider && normalizedStatus === "PAUSED";
+  const isResumableCommunityError = isCommunityProvider && normalizedStatus === "ERROR" && (remainingAmount ?? 0) > 0;
   const canCancelCommunityOrder = isCommunityProvider && ["WAITING", "PROCESS", "PAUSED", "ERROR", "PARTIAL"].includes(normalizedStatus);
   const waitingForBotDetails = getPlainDetails(result?.details)
     || "Discord has not detected the configured delivery bot in the target server yet.";
@@ -869,15 +870,15 @@ export default function OrderPage() {
 
   async function handleToggleDeliveryPause() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !isCommunityProvider || togglingDeliveryPause || terminal) return;
+    if (!target || !isCommunityProvider || togglingDeliveryPause || (terminal && !isResumableCommunityError)) return;
 
     try {
       setTogglingDeliveryPause(true);
-      const data = isDeliveryPaused
+      const data = isDeliveryPaused || isResumableCommunityError
         ? await resumeCommunityOrder(target)
         : await pauseCommunityOrder(target);
       setResult((current) => mergeOrderStatus(current, data));
-      toast.success(isDeliveryPaused ? "Delivery resumed." : "Delivery paused.");
+      toast.success(isDeliveryPaused || isResumableCommunityError ? "Delivery resumed." : "Delivery paused.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Delivery state could not be changed.");
     } finally {
@@ -1415,6 +1416,13 @@ export default function OrderPage() {
                   <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelDcordModal(true)} disabled={cancellingDcordOrder || resumingDcordOrder}>
                     <X className="h-4 w-4" aria-hidden="true" />
                     {cancellingDcordOrder ? "Cancelling..." : "Cancel delivery"}
+                  </Button>
+                </div>
+              ) : isResumableCommunityError ? (
+                <div className="lookup-note-actions">
+                  <Button type="button" variant="secondary" size="sm" onClick={() => void handleToggleDeliveryPause()} disabled={togglingDeliveryPause}>
+                    <RotateCcw className={`h-4 w-4 ${togglingDeliveryPause ? "animate-spin" : ""}`} aria-hidden="true" />
+                    {togglingDeliveryPause ? "Resuming..." : "Resume delivery"}
                   </Button>
                 </div>
               ) : null}

@@ -11699,16 +11699,31 @@ async function resumeCommunityOrder(req, res, next) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
     }
-    if (String(order.status ?? "").toUpperCase() !== "PAUSED") {
+    const currentStatus = String(order.status ?? "").toUpperCase();
+    const resumesErroredDelivery = currentStatus === "ERROR";
+    if (!["PAUSED", "ERROR"].includes(currentStatus)) {
       await client.query("ROLLBACK");
-      return res.status(409).json({ message: "This Members delivery is not paused." });
+      return res.status(409).json({ message: "This Members delivery cannot be resumed." });
+    }
+    const resumableStates = new Set(["queued", "joining", "replacing"]);
+    const communityResults = Array.isArray(order.communityResults)
+      ? order.communityResults.map((item) => resumableStates.has(String(item?.state ?? "").toLowerCase())
+        ? { ...item, state: "queued", details: "Waiting for delivery." }
+        : item)
+      : [];
+    if (resumesErroredDelivery && !communityResults.some((item) => item?.state === "queued")) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This delivery has no unfinished members to resume." });
     }
 
     const resumedOrder = {
       ...order,
-      status: "WAITING",
-      details: "Preparing to resume delivery.",
-      waitingCode: order.pausedFromStatus === "WAITING" ? order.pausedWaitingCode : "manual_resume",
+      status: resumesErroredDelivery ? "RECOVERING" : "WAITING",
+      details: resumesErroredDelivery ? "Recovering the unfinished delivery." : "Preparing to resume delivery.",
+      waitingCode: resumesErroredDelivery
+        ? "manual_error_resume"
+        : order.pausedFromStatus === "WAITING" ? order.pausedWaitingCode : "manual_resume",
+      communityResults,
       resumedAt: new Date().toISOString()
     };
     delete resumedOrder.pausedAt;
