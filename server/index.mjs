@@ -1316,6 +1316,12 @@ function queueDiscordOnlinerLogPersist(entry) {
     `, [JSON.stringify(rows)]).then(() => pool.query(`
       DELETE FROM discord_onliner_persisted_logs
       WHERE id < COALESCE((SELECT MAX(id) - 5000 FROM discord_onliner_persisted_logs), 0)
+        AND id NOT IN (
+          SELECT id FROM discord_onliner_persisted_logs
+          WHERE level IN ('warn', 'error')
+          ORDER BY id DESC
+          LIMIT 2000
+        )
     `)).catch((error) => console.error("Onliner log persistence failed:", error instanceof Error ? error.message : error));
   }, 500);
   discordOnlinerLogFlushTimer.unref?.();
@@ -8756,6 +8762,12 @@ app.delete("/api/onliner/logs", requireSession, async (_req, res, next) => {
 app.get("/api/onliner/logs", requireSession, async (req, res, next) => {
   try {
     const after = Math.max(0, Number.parseInt(String(req.query.after ?? "0"), 10) || 0);
+    if (req.query.levels === "issues") {
+      const result = await pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE level IN ('warn', 'error') AND message NOT LIKE 'DISPATCH %' ORDER BY id DESC LIMIT 500");
+      return res.set("Cache-Control", "no-store").json({
+        logs: result.rows.reverse().map((row) => ({ id: Number(row.id), timestamp: new Date(row.timestamp).toISOString(), level: row.level, accountId: row.account_id, message: row.message }))
+      });
+    }
     if (serviceRunsOnliner) {
       return res.set("Cache-Control", "no-store").json({ logs: discordOnlinerLogs.filter((entry) => entry.id > after && !isNoisyDiscordOnlinerLogMessage(entry.message)).slice(-100) });
     }

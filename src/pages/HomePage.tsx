@@ -112,6 +112,7 @@ import {
   getDiscordOnliner,
   getDiscordOnlinerProxies,
   getDiscordOnlinerAccountCredentials,
+  getDiscordOnlinerIssueLogs,
   getDiscordOnlinerLogs,
   pauseDiscordOnlinerConnections,
   reconnectDiscordOnliner,
@@ -737,6 +738,8 @@ export default function HomePage() {
   const [savingOnliner, setSavingOnliner] = useState(false);
   const [onlinerCountdownNow, setOnlinerCountdownNow] = useState(() => Date.now());
   const [onlinerLogTransport, setOnlinerLogTransport] = useState<"connecting" | "live" | "polling">("connecting");
+  const [onlinerConsoleView, setOnlinerConsoleView] = useState<"all" | "issues">("all");
+  const [onlinerIssueLogs, setOnlinerIssueLogs] = useState<DiscordOnlinerLogEntry[]>([]);
   const onlinerLogCursorRef = useRef(0);
   const [addingOnlinerAccount, setAddingOnlinerAccount] = useState(false);
   const [showOnlinerBulkModal, setShowOnlinerBulkModal] = useState(false);
@@ -1156,6 +1159,13 @@ export default function HomePage() {
     if (activeTab !== "onliner") return;
     let cancelled = false;
     setLoadingOnliner(true);
+    setOnlinerConsoleView("all");
+    void getDiscordOnlinerIssueLogs().then((entries) => {
+      if (!cancelled) setOnlinerIssueLogs((current) => {
+        const logsById = new Map([...entries, ...current].map((entry) => [entry.id, entry]));
+        return [...logsById.values()].sort((left, right) => left.id - right.id).slice(-500);
+      });
+    }).catch(() => {});
     void getDiscordOnlinerProxies().then((result) => {
       if (cancelled) return;
       setOnlinerProxyDraft(result.proxies.join("\n"));
@@ -1212,6 +1222,13 @@ export default function HomePage() {
     }, 3000);
     const mergeLiveLogs = (entries: DiscordOnlinerLogEntry[]) => {
       if (cancelled || !entries.length) return;
+      const issueEntries = entries.filter((entry) => entry.level === "warn" || entry.level === "error");
+      if (issueEntries.length) {
+        setOnlinerIssueLogs((current) => {
+          const logsById = new Map([...current, ...issueEntries].map((entry) => [entry.id, entry]));
+          return [...logsById.values()].sort((left, right) => left.id - right.id).slice(-500);
+        });
+      }
       setOnlinerSnapshot((current) => {
         if (!current) return current;
         const logsById = new Map([...current.logs, ...entries].map((entry) => [entry.id, entry]));
@@ -1918,6 +1935,7 @@ export default function HomePage() {
     try {
       await clearDiscordOnlinerLogs();
       onlinerLogCursorRef.current = 0;
+      setOnlinerIssueLogs([]);
       setOnlinerSnapshot((current) => current ? { ...current, logs: [] } : current);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Onliner console could not be cleared.");
@@ -3340,6 +3358,8 @@ export default function HomePage() {
   const loadMoreOnlinerAccounts = () => {
     setVisibleOnlinerAccountCount((current) => Math.min(current + ONLINER_ACCOUNT_PAGE_SIZE, sortedOnlinerAccounts.length));
   };
+  const visibleGatewayLogs = (onlinerConsoleView === "issues" ? onlinerIssueLogs : onlinerSnapshot?.logs ?? [])
+    .filter((entry) => isVisibleGatewayConsoleLog(entry.message));
 
   return (
     <div className="relative">
@@ -4692,13 +4712,22 @@ export default function HomePage() {
                     <span className="onliner-console-live" data-state={onlinerLogTransport}>
                       <i />{onlinerLogTransport === "live" ? "Live" : onlinerLogTransport === "polling" ? "Live fallback" : "Connecting"}
                     </span>
-                    <Button type="button" size="xs" variant="secondary" disabled={!onlinerSnapshot?.logs?.length} onClick={() => void handleClearOnlinerLogs()}>
+                    <Button type="button" size="xs" variant="secondary" disabled={!visibleGatewayLogs.length} onClick={() => void handleClearOnlinerLogs()}>
                       <Trash2 className="h-3.5 w-3.5" /> Clear
                     </Button>
                   </div>
                 </div>
+                <div className="onliner-console-tabs" role="tablist" aria-label="Gateway console log type">
+                  <button type="button" role="tab" aria-selected={onlinerConsoleView === "all"} data-active={onlinerConsoleView === "all"} onClick={() => setOnlinerConsoleView("all")}>
+                    All logs
+                  </button>
+                  <button type="button" role="tab" aria-selected={onlinerConsoleView === "issues"} data-active={onlinerConsoleView === "issues"} onClick={() => setOnlinerConsoleView("issues")}>
+                    <TriangleAlert className="h-3.5 w-3.5" /> Warnings &amp; errors
+                    {onlinerIssueLogs.length ? <span>{onlinerIssueLogs.length}</span> : null}
+                  </button>
+                </div>
                 <div className="onliner-console" role="log" aria-live="polite">
-                  {onlinerSnapshot?.logs?.some((entry) => isVisibleGatewayConsoleLog(entry.message)) ? [...onlinerSnapshot.logs].filter((entry) => isVisibleGatewayConsoleLog(entry.message)).reverse().map((entry) => {
+                  {visibleGatewayLogs.length ? [...visibleGatewayLogs].reverse().map((entry) => {
                     const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
                     const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
                     const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
@@ -4711,7 +4740,7 @@ export default function HomePage() {
                       </div>
                     );
                   }) : (
-                    <div className="onliner-console-empty">Gateway events will appear here when the Onliner starts.</div>
+                    <div className="onliner-console-empty">{onlinerConsoleView === "issues" ? "No warnings or errors have been recorded." : "Gateway events will appear here when the Onliner starts."}</div>
                   )}
                 </div>
               </section>
