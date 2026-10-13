@@ -11,6 +11,11 @@ function isGuildId(value: string) {
   return /^\d{17,20}$/.test(value);
 }
 
+function normalizeGuildName(value: unknown) {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name && name.toLowerCase() !== "anonymous" ? name : undefined;
+}
+
 export function extractDiscordInviteCode(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
@@ -76,7 +81,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
       if (isGuildId(guildId)) {
         const resolution = {
           guildId,
-          guildName: typeof discordPayload.guild?.name === "string" ? discordPayload.guild.name : undefined,
+          guildName: normalizeGuildName(discordPayload.guild?.name),
           approximateMemberCount: typeof discordPayload.approximate_member_count === "number" ? discordPayload.approximate_member_count : undefined,
           bypassesJoinApplication: Number.isInteger(discordPayload.flags)
             ? (Number(discordPayload.flags) & (1 << 3)) !== 0
@@ -121,7 +126,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
 
   const resolution = {
     guildId,
-    guildName: typeof payload.guildName === "string" ? payload.guildName : undefined,
+    guildName: normalizeGuildName(payload.guildName),
     approximateMemberCount: typeof payload.approximateMemberCount === "number" ? payload.approximateMemberCount : undefined,
     bypassesJoinApplication: typeof payload.bypassesJoinApplication === "boolean" ? payload.bypassesJoinApplication : undefined
   };

@@ -119,12 +119,15 @@ function decodeDiscordInviteMetaText(value) {
     .replace(/&gt;/gi, ">");
 }
 
+function normalizeDiscordGuildName(value) {
+  const name = typeof value === "string" ? value.trim() : "";
+  return name && name.toLowerCase() !== "anonymous" ? name : undefined;
+}
+
 function normalizeSubmittedDiscordResolution(body) {
   const guildId = String(body?.resolvedGuildId ?? "").trim();
   if (!isDiscordGuildId(guildId)) return null;
-  const guildName = typeof body?.resolvedGuildName === "string" && body.resolvedGuildName.trim()
-    ? body.resolvedGuildName.trim().slice(0, 100)
-    : undefined;
+  const guildName = normalizeDiscordGuildName(body?.resolvedGuildName)?.slice(0, 100);
   const approximateMemberCount = Number(body?.resolvedMemberCount);
   return {
     guildId,
@@ -134,6 +137,29 @@ function normalizeSubmittedDiscordResolution(body) {
       : undefined,
     bypassesJoinApplication: body?.resolvedBypassesJoinApplication === true
   };
+}
+
+async function enrichDiscordResolutionWithBotInvite(inviteValue, serverInfo, botToken) {
+  if (normalizeDiscordGuildName(serverInfo?.guildName) || !String(botToken ?? "").trim()) return serverInfo;
+  const inviteCode = extractDiscordInviteCode(inviteValue);
+  if (!inviteCode) return serverInfo;
+  try {
+    const { response, payload } = await requestDiscord(
+      `invites/${encodeURIComponent(inviteCode)}?with_counts=true`,
+      { headers: { Authorization: `Bot ${String(botToken).trim()}` } }
+    );
+    const guildId = String(payload?.guild?.id ?? "");
+    if (!response.ok || guildId !== String(serverInfo?.guildId ?? "")) return serverInfo;
+    return {
+      ...serverInfo,
+      guildName: normalizeDiscordGuildName(payload?.guild?.name),
+      approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
+        ? payload.approximate_member_count
+        : serverInfo?.approximateMemberCount
+    };
+  } catch {
+    return serverInfo;
+  }
 }
 
 async function resolveDiscordInviteFromWebPage(inviteCode) {
@@ -152,7 +178,7 @@ async function resolveDiscordInviteFromWebPage(inviteCode) {
   if (!isDiscordGuildId(String(guildId ?? ""))) return null;
   const rawTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1] ?? "";
   const decodedTitle = decodeDiscordInviteMetaText(rawTitle);
-  const guildName = decodedTitle.match(/^Join the (.+?) Discord Server!?$/i)?.[1]?.trim() || undefined;
+  const guildName = normalizeDiscordGuildName(decodedTitle.match(/^Join the (.+?) Discord Server!?$/i)?.[1]);
   const description = decodeDiscordInviteMetaText(
     html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i)?.[1] ?? ""
   );
@@ -246,7 +272,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
         const tracked = trackedInvite.rows[0].payload ?? {};
         const resolved = {
           guildId: String(tracked.serverId),
-          guildName: typeof tracked.serverName === "string" && tracked.serverName.trim() ? tracked.serverName.trim() : undefined,
+          guildName: normalizeDiscordGuildName(tracked.serverName),
           approximateMemberCount: Number.isFinite(Number(tracked.serverMemberCount))
             ? Number(tracked.serverMemberCount)
             : undefined,
@@ -375,7 +401,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
 
       const resolved = {
         guildId: String(guildId),
-        guildName: typeof payload?.guild?.name === "string" && payload.guild.name.trim() ? payload.guild.name.trim() : undefined,
+        guildName: normalizeDiscordGuildName(payload?.guild?.name),
         approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
           ? payload.approximate_member_count
           : undefined,
@@ -10870,6 +10896,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       ? resolvedServerInfo
       : await resolveDiscordInvite(invite, { allowWebFallback: normalizedJoinMethod === "create_invite" });
   }
+  serverInfo = await enrichDiscordResolutionWithBotInvite(invite, serverInfo, config.botToken);
   if (normalizedJoinMethod === "directly") {
     const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
     if (serverInfo.guildId !== config.guildId) {
@@ -13638,7 +13665,11 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
     }
 
-    const serverInfo = normalizeSubmittedDiscordResolution(req.body) ?? await resolveDiscordInvite(invite);
+    let serverInfo = normalizeSubmittedDiscordResolution(req.body) ?? await resolveDiscordInvite(invite);
+    if (!normalizeDiscordGuildName(serverInfo.guildName)) {
+      const communityConfig = await getCommunityOAuthConfig();
+      serverInfo = await enrichDiscordResolutionWithBotInvite(invite, serverInfo, communityConfig.botToken);
+    }
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
     if (memberVerification.status === "open" && !allowMembershipScreening) {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
@@ -13725,6 +13756,9 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     })().catch((error) => console.error(error));
     res.json({
       uniqid,
+      serverId: order.serverId,
+      serverName: order.serverName,
+      serverMemberCount: order.serverMemberCount,
       stock: summarizeBoostTokenStock(nextStock)
     });
   } catch (error) {
@@ -14153,7 +14187,32 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
 app.get("/api/orders", requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query("SELECT payload FROM tracked_orders WHERE payload->>'provider' IN ('community', 'dcord') ORDER BY created_at DESC");
-    res.json(result.rows.map((row) => row.payload));
+    const orders = result.rows.map((row) => row.payload);
+    const missingNameOrder = orders.find((order) =>
+      !normalizeDiscordGuildName(order?.serverName) && extractDiscordInviteCode(order?.serverInvite)
+    );
+    if (missingNameOrder) {
+      const config = await getCommunityOAuthConfig();
+      const enriched = await enrichDiscordResolutionWithBotInvite(missingNameOrder.serverInvite, {
+        guildId: String(missingNameOrder.serverId ?? ""),
+        guildName: undefined,
+        approximateMemberCount: missingNameOrder.serverMemberCount
+      }, config.botToken);
+      const resolvedName = normalizeDiscordGuildName(enriched?.guildName);
+      if (resolvedName) {
+        missingNameOrder.serverName = resolvedName;
+        await pool.query(
+          `UPDATE tracked_orders
+           SET payload = jsonb_set(payload, '{serverName}', to_jsonb($2::text), TRUE), updated_at = NOW()
+           WHERE uniqid = $1`,
+          [missingNameOrder.uniqid, resolvedName]
+        );
+      }
+    }
+    res.json(orders.map((order) => ({
+      ...order,
+      serverName: normalizeDiscordGuildName(order?.serverName)
+    })));
   } catch (error) {
     next(error);
   }
@@ -14268,7 +14327,7 @@ if (serviceRunsOnliner) {
 }
 if (serviceRunsWeb) {
   app.listen(port, "0.0.0.0", () => {
-    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: browser-direct-v3).`);
+    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: bot-name-v4).`);
   });
   const communityRecoveryTimer = setInterval(() => {
     void recoverInterruptedCommunityOrders().catch((error) => {
