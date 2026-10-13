@@ -262,11 +262,19 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
           const webResolution = await resolveDiscordInviteFromWebPage(inviteCode).catch(() => null);
           if (webResolution) return persistDiscordInviteResolution(lockClient, inviteCode, webResolution);
         }
-        const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
-        const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
-        error.statusCode = 429;
-        error.expose = true;
-        throw error;
+        const waitMilliseconds = Math.max(0, discordInviteRateLimitedUntil - Date.now());
+        if (allowWebFallback && waitMilliseconds <= 35_000) {
+          // Keep this request in the shared resolver queue. Returning 429 makes
+          // clients retry independently and can continuously restart Discord's
+          // cooldown, especially when an old frontend preflight is still open.
+          await new Promise((resolve) => setTimeout(resolve, waitMilliseconds + 250));
+        } else {
+          const waitSeconds = Math.max(1, Math.ceil(waitMilliseconds / 1_000));
+          const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
+          error.statusCode = 429;
+          error.expose = true;
+          throw error;
+        }
       }
 
       const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
@@ -283,6 +291,22 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
             signal: AbortSignal.timeout(8_000)
           });
           payload = await response.json().catch(() => ({}));
+          const remainingRequests = Number(response.headers.get("x-ratelimit-remaining"));
+          const resetAfterSeconds = Number(response.headers.get("x-ratelimit-reset-after"));
+          if (response.ok && remainingRequests === 0 && Number.isFinite(resetAfterSeconds) && resetAfterSeconds > 0) {
+            discordInviteRateLimitedUntil = Math.max(
+              discordInviteRateLimitedUntil,
+              Date.now() + Math.min(resetAfterSeconds, 300) * 1_000
+            );
+            await lockClient.query(
+              `INSERT INTO discord_invite_resolution_state (singleton, rate_limited_until, updated_at)
+               VALUES (TRUE, $1, NOW())
+               ON CONFLICT (singleton) DO UPDATE
+               SET rate_limited_until = GREATEST(discord_invite_resolution_state.rate_limited_until, EXCLUDED.rate_limited_until),
+                   updated_at = NOW()`,
+              [new Date(discordInviteRateLimitedUntil)]
+            );
+          }
           if (response.status === 429) {
             const retrySeconds = Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 300);
             discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, Date.now() + retrySeconds * 1_000);
@@ -294,7 +318,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
                    updated_at = NOW()`,
               [new Date(discordInviteRateLimitedUntil)]
             );
-            if (retrySeconds > 2) break;
+            if (retrySeconds > 2 && (!allowWebFallback || retrySeconds > 35 || attempt > 0)) break;
           }
           if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
           requestError = null;
@@ -305,7 +329,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
         }
         if (attempt === 0) {
           const retrySeconds = response?.status === 429
-            ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 2)
+            ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), allowWebFallback ? 35 : 2)
             : 1;
           await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
         }
@@ -14232,7 +14256,7 @@ if (serviceRunsOnliner) {
 }
 if (serviceRunsWeb) {
   app.listen(port, "0.0.0.0", () => {
-    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: web-fallback-v1).`);
+    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: queued-fallback-v2).`);
   });
   const communityRecoveryTimer = setInterval(() => {
     void recoverInterruptedCommunityOrders().catch((error) => {
