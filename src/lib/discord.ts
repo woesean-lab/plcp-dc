@@ -67,36 +67,6 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
 
   let response: Response | null = null;
   try {
-    const discordResponse = await fetch(`https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`, {
-      cache: "no-store",
-      headers: { Accept: "application/json" }
-    });
-    if (discordResponse.ok) {
-      const discordPayload = (await discordResponse.json()) as {
-        guild?: { id?: string; name?: string };
-        approximate_member_count?: number;
-        flags?: number;
-      };
-      const guildId = String(discordPayload.guild?.id ?? "");
-      if (isGuildId(guildId)) {
-        const resolution = {
-          guildId,
-          guildName: normalizeGuildName(discordPayload.guild?.name),
-          approximateMemberCount: typeof discordPayload.approximate_member_count === "number" ? discordPayload.approximate_member_count : undefined,
-          bypassesJoinApplication: Number.isInteger(discordPayload.flags)
-            ? (Number(discordPayload.flags) & (1 << 3)) !== 0
-            : undefined
-        };
-        inviteResolutionCache.set(inviteCode, resolution);
-        return resolution;
-      }
-    }
-  } catch {
-    // Some browser/privacy configurations can block the direct Discord request.
-    // Keep the authenticated backend resolver as a compatibility fallback.
-  }
-
-  try {
     response = await fetch("/api/discord/resolve", {
       method: "POST",
       cache: "no-store",
