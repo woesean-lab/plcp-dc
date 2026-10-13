@@ -4762,7 +4762,8 @@ function isCommunityServiceType(service) {
   return service === "COMMUNITY-OFFLINE" || service === "COMMUNITY-ONLINE";
 }
 
-async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
+async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categoryId = null) {
+  const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
   const result = await queryable.query(
     `WITH member_history AS (
        SELECT
@@ -4782,6 +4783,12 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
        ) AS member_result
        WHERE payload->>'provider' = 'community'
          AND payload->>'serverId' = $1
+         AND ($2::text IS NULL OR LOWER(COALESCE(
+           NULLIF(member_result->>'categoryId', ''),
+           NULLIF(payload->>'categoryId', ''),
+           NULLIF(payload->>'stockType', ''),
+           CASE WHEN payload->>'service' = 'COMMUNITY-ONLINE' THEN 'online' ELSE 'offline' END
+         )) = $2)
          AND LOWER(COALESCE(member_result->>'state', '')) IN ('joined', 'pending_join', 'already_member')
          AND COALESCE(member_result->>'discordUserId', '') <> ''
      )
@@ -4789,13 +4796,14 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
      FROM member_history
      GROUP BY discord_user_id
      HAVING MAX(removed_at) < MAX(delivered_at)`,
-    [guildId]
+    [guildId, normalizedCategoryId]
   );
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
 }
 
-async function loadCommunityUnavailableUserIds(queryable, guildId) {
-  const deliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(queryable, guildId);
+async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
+  const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
+  const deliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, normalizedCategoryId);
   const activeAssignments = await queryable.query(
     `SELECT DISTINCT member_result->>'discordUserId' AS discord_user_id
      FROM tracked_orders
@@ -4807,10 +4815,16 @@ async function loadCommunityUnavailableUserIds(queryable, guildId) {
      ) AS member_result
      WHERE payload->>'provider' = 'community'
        AND payload->>'serverId' = $1
+       AND ($2::text IS NULL OR LOWER(COALESCE(
+         NULLIF(member_result->>'categoryId', ''),
+         NULLIF(payload->>'categoryId', ''),
+         NULLIF(payload->>'stockType', ''),
+         CASE WHEN payload->>'service' = 'COMMUNITY-ONLINE' THEN 'online' ELSE 'offline' END
+       )) = $2)
        AND UPPER(COALESCE(payload->>'status', '')) IN ('WAITING', 'RECOVERING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
        AND LOWER(COALESCE(member_result->>'state', '')) IN ('queued', 'joining', 'replacing')
        AND COALESCE(member_result->>'discordUserId', '') <> ''`,
-    [guildId]
+    [guildId, normalizedCategoryId]
   );
   return Array.from(new Set([
     ...deliveredUserIds,
@@ -11071,13 +11085,12 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       return res.status(400).json({ message: "The Discord invite could not be resolved for this server's availability." });
     }
     const previouslyDeliveredUserIds = availabilityGuildId
-      ? await loadCommunityUnavailableUserIds(pool, availabilityGuildId)
+      ? await loadCommunityUnavailableUserIds(pool, availabilityGuildId, stockType)
       : [];
     const result = await pool.query(
       `SELECT COUNT(*)::int AS available
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
-         AND reserved_order_id IS NULL
          AND (($4::boolean = TRUE AND encrypted_account_token IS NOT NULL)
            OR ($4::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
          AND NOT (discord_user_id = ANY($3::text[]))`,
@@ -11177,17 +11190,16 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
-    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId);
     const createdAt = new Date();
     const selectedGroups = [];
     const categoryAllocations = [];
     for (const allocation of requestedAllocations) {
       const category = categoriesById.get(allocation.categoryId);
+      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId, allocation.categoryId);
       const selected = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
-           AND reserved_order_id IS NULL
            AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
              OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
            AND NOT (discord_user_id = ANY($4::text[]))
@@ -11214,12 +11226,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       });
     }
     const selectedMembers = interleaveCommunityMembers(selectedGroups);
-    await client.query(
-      `UPDATE community_oauth_joins
-       SET reserved_order_id = $3
-       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-      [config.guildId, selectedMembers.map((member) => member.discord_user_id), uniqid]
-    );
     const primaryCategory = categoriesById.get(requestedAllocations[0].categoryId);
     const order = {
       uniqid,
@@ -11536,8 +11542,7 @@ async function activateWaitingCommunityOrder(order) {
       : [];
     const missing = Math.max(0, remainingAmount - members.length);
     if (missing > 0) {
-      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
-      const excludedUserIds = new Set([...usedDiscordUserIds, ...pendingUserIds, ...previouslyDeliveredUserIds]);
+      const excludedUserIds = new Set([...usedDiscordUserIds, ...pendingUserIds]);
       const availableByCategory = new Map();
       for (const member of members) {
         const categoryId = normalizeCommunityStockType(member.category_id);
@@ -11552,17 +11557,19 @@ async function activateWaitingCommunityOrder(order) {
       for (const [categoryId, required] of requiredByCategory) {
         const categoryMissing = Math.max(0, required - (availableByCategory.get(categoryId) ?? 0));
         if (!categoryMissing) continue;
+        const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId, categoryId);
+        const categoryExcludedUserIds = Array.from(new Set([...excludedUserIds, ...previouslyDeliveredUserIds]));
         const extra = await client.query(
           `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
            FROM community_oauth_joins
-           WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized' AND reserved_order_id IS NULL
+           WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
              AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
                OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
              AND NOT (discord_user_id = ANY($4::text[]))
            ORDER BY random()
            LIMIT $3
            FOR UPDATE SKIP LOCKED`,
-          [resolved.config.guildId, categoryId, categoryMissing, Array.from(excludedUserIds), communityJoinMethodUsesAccountToken(joinMethod)]
+          [resolved.config.guildId, categoryId, categoryMissing, categoryExcludedUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
         );
         for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
         members = [...members, ...extra.rows];
@@ -11602,12 +11609,6 @@ async function activateWaitingCommunityOrder(order) {
       serverMemberCount: resolved.serverInfo.approximateMemberCount,
       communityResults: [...settledResults, ...pendingResults]
     };
-    if (members.length) {
-      await client.query(
-        "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
-        [resolved.config.guildId, members.map((member) => member.discord_user_id), current.uniqid]
-      );
-    }
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [current.uniqid, JSON.stringify(activeOrder)]);
     await client.query("COMMIT");
     void processCommunityOrder(activeOrder, members, resolved.config).catch(async (error) => {
@@ -12598,10 +12599,6 @@ app.post("/api/community/orders/:uniqid/retry-failed", requireSession, async (re
       return res.status(409).json({ message: "The failed members are no longer available in Members Stock." });
     }
 
-    await client.query(
-      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
-      [order.serverId, [...retryUserIds], uniqid]
-    );
     const communityResults = order.communityResults.map((item) => retryUserIds.has(String(item?.discordUserId ?? ""))
       ? resetCommunityResultVerification(item, {
           state: "queued",
@@ -12724,9 +12721,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       return res.status(409).json({ message: "This order has no replaceable members." });
     }
 
-    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, targetGuildId);
     const usedUserIds = Array.from(new Set([
-      ...previouslyDeliveredUserIds,
       ...results.flatMap((item) => [
         String(item?.discordUserId ?? "").trim(),
         ...(Array.isArray(item?.replacementHistoryUserIds) ? item.replacementHistoryUserIds.map((value) => String(value ?? "").trim()) : [])
@@ -12744,13 +12739,14 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       indicesByCategory.set(categoryId, [...(indicesByCategory.get(categoryId) ?? []), resultIndex]);
     }
     for (const [categoryId, categoryIndices] of indicesByCategory) {
+      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, targetGuildId, categoryId);
+      const categoryUsedUserIds = Array.from(new Set([...usedUserIds, ...previouslyDeliveredUserIds]));
       const replacements = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
          WHERE guild_id = $1
            AND stock_type = $4
            AND status = 'authorized'
-           AND reserved_order_id IS NULL
            AND (($6::boolean = TRUE AND encrypted_account_token IS NOT NULL)
              OR ($6::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
            AND NOT (discord_user_id = ANY($2::text[]))
@@ -12758,7 +12754,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
          ORDER BY random()
          LIMIT $5
          FOR UPDATE SKIP LOCKED`,
-        [targetGuildId, usedUserIds, usedUsernames, categoryId, categoryIndices.length, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
+        [targetGuildId, categoryUsedUserIds, usedUsernames, categoryId, categoryIndices.length, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
       );
       replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
     }
@@ -12766,11 +12762,6 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "No connected replacement member is currently available." });
     }
-    await client.query(
-      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])",
-      [targetGuildId, replacementPairs.map(({ member }) => member.discord_user_id), uniqid]
-    );
-
     const queuedReplacementIndices = replacementPairs.map((pair) => pair.resultIndex);
     const failedUserIds = queuedReplacementIndices
       .map((index) => String(results[index]?.discordUserId ?? ""))
@@ -12972,7 +12963,8 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       failedResult.previousUsername,
       failedResult.username
     ].map((value) => String(value ?? "").trim()).filter(Boolean)));
-    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, config.guildId);
+    const failedCategoryId = getCommunityResultStockType(order, failedResult);
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, config.guildId, failedCategoryId);
     const usedUserIds = Array.from(new Set([
       ...replacementHistoryUserIds,
       ...previouslyDeliveredUserIds,
@@ -12995,7 +12987,6 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        WHERE guild_id = $1
          AND stock_type = $4
          AND status = 'authorized'
-         AND reserved_order_id IS NULL
          AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
            OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
          AND NOT (discord_user_id = ANY($2::text[]))
@@ -13003,7 +12994,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, getCommunityResultStockType(order, failedResult), communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
+      [config.guildId, usedUserIds, usedUsernames, failedCategoryId, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -13011,10 +13002,6 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     }
 
     const member = replacement.rows[0];
-    await client.query(
-      "UPDATE community_oauth_joins SET reserved_order_id = $3 WHERE guild_id = $1 AND discord_user_id = $2",
-      [config.guildId, member.discord_user_id, uniqid]
-    );
     results[resultIndex] = resetCommunityResultVerification(failedResult, {
       discordUserId: member.discord_user_id,
       username: member.username,
