@@ -110,7 +110,7 @@ const discordInviteResolutionStaleTtlMs = 6 * 60 * 60_000;
 let discordInviteRateLimitedUntil = 0;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
-async function resolveDiscordInvite(inviteValue, { botToken = "" } = {}) {
+async function resolveDiscordInvite(inviteValue) {
   const inviteCode = extractDiscordInviteCode(inviteValue);
   if (!inviteCode) {
     const error = new Error("Enter a Discord server ID or invite link.");
@@ -202,8 +202,7 @@ async function resolveDiscordInvite(inviteValue, { botToken = "" } = {}) {
           response = await fetch(inviteUrl, {
             headers: {
               Accept: "application/json",
-              "User-Agent": "plcp-dc/0.1 Discord invite resolver",
-              ...(String(botToken).trim() ? { Authorization: `Bot ${String(botToken).trim()}` } : {})
+              "User-Agent": "plcp-dc/0.1 Discord invite resolver"
             },
             signal: AbortSignal.timeout(8_000)
           });
@@ -10770,7 +10769,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       bypassesJoinApplication: false
     };
   } else {
-    serverInfo = await resolveDiscordInvite(invite, { botToken: config.botToken });
+    serverInfo = await resolveDiscordInvite(invite);
   }
   if (normalizedJoinMethod === "directly") {
     const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
@@ -13441,10 +13440,7 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
       return res.json({ guildId: value });
     }
 
-    const communityConfig = await getCommunityOAuthConfig().catch(() => null);
-    res.json(await resolveDiscordInvite(value, {
-      botToken: communityConfig?.configured ? communityConfig.botToken : ""
-    }));
+    res.json(await resolveDiscordInvite(value));
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });
