@@ -2,6 +2,7 @@ export interface DiscordGuildResolution {
   guildId: string;
   guildName?: string;
   approximateMemberCount?: number;
+  bypassesJoinApplication?: boolean;
 }
 
 const inviteResolutionCache = new Map<string, DiscordGuildResolution>();
@@ -59,7 +60,37 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
     return cached;
   }
 
-  let response: Response;
+  let response: Response | null = null;
+  try {
+    const discordResponse = await fetch(`https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`, {
+      cache: "no-store",
+      headers: { Accept: "application/json" }
+    });
+    if (discordResponse.ok) {
+      const discordPayload = (await discordResponse.json()) as {
+        guild?: { id?: string; name?: string };
+        approximate_member_count?: number;
+        flags?: number;
+      };
+      const guildId = String(discordPayload.guild?.id ?? "");
+      if (isGuildId(guildId)) {
+        const resolution = {
+          guildId,
+          guildName: typeof discordPayload.guild?.name === "string" ? discordPayload.guild.name : undefined,
+          approximateMemberCount: typeof discordPayload.approximate_member_count === "number" ? discordPayload.approximate_member_count : undefined,
+          bypassesJoinApplication: Number.isInteger(discordPayload.flags)
+            ? (Number(discordPayload.flags) & (1 << 3)) !== 0
+            : undefined
+        };
+        inviteResolutionCache.set(inviteCode, resolution);
+        return resolution;
+      }
+    }
+  } catch {
+    // Some browser/privacy configurations can block the direct Discord request.
+    // Keep the authenticated backend resolver as a compatibility fallback.
+  }
+
   try {
     response = await fetch("/api/discord/resolve", {
       method: "POST",
@@ -75,6 +106,7 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
     guildId?: string;
     guildName?: string;
     approximateMemberCount?: number;
+    bypassesJoinApplication?: boolean;
     message?: string;
   };
 
@@ -90,7 +122,8 @@ export async function resolveDiscordGuildInfo(value: string): Promise<DiscordGui
   const resolution = {
     guildId,
     guildName: typeof payload.guildName === "string" ? payload.guildName : undefined,
-    approximateMemberCount: typeof payload.approximateMemberCount === "number" ? payload.approximateMemberCount : undefined
+    approximateMemberCount: typeof payload.approximateMemberCount === "number" ? payload.approximateMemberCount : undefined,
+    bypassesJoinApplication: typeof payload.bypassesJoinApplication === "boolean" ? payload.bypassesJoinApplication : undefined
   };
   inviteResolutionCache.set(inviteCode, resolution);
   return resolution;

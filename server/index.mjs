@@ -119,6 +119,23 @@ function decodeDiscordInviteMetaText(value) {
     .replace(/&gt;/gi, ">");
 }
 
+function normalizeSubmittedDiscordResolution(body) {
+  const guildId = String(body?.resolvedGuildId ?? "").trim();
+  if (!isDiscordGuildId(guildId)) return null;
+  const guildName = typeof body?.resolvedGuildName === "string" && body.resolvedGuildName.trim()
+    ? body.resolvedGuildName.trim().slice(0, 100)
+    : undefined;
+  const approximateMemberCount = Number(body?.resolvedMemberCount);
+  return {
+    guildId,
+    guildName,
+    approximateMemberCount: Number.isFinite(approximateMemberCount) && approximateMemberCount >= 0
+      ? approximateMemberCount
+      : undefined,
+    bypassesJoinApplication: body?.resolvedBypassesJoinApplication === true
+  };
+}
+
 async function resolveDiscordInviteFromWebPage(inviteCode) {
   const response = await fetch(`https://discord.com/invite/${encodeURIComponent(inviteCode)}`, {
     headers: {
@@ -262,19 +279,11 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
           const webResolution = await resolveDiscordInviteFromWebPage(inviteCode).catch(() => null);
           if (webResolution) return persistDiscordInviteResolution(lockClient, inviteCode, webResolution);
         }
-        const waitMilliseconds = Math.max(0, discordInviteRateLimitedUntil - Date.now());
-        if (allowWebFallback && waitMilliseconds <= 35_000) {
-          // Keep this request in the shared resolver queue. Returning 429 makes
-          // clients retry independently and can continuously restart Discord's
-          // cooldown, especially when an old frontend preflight is still open.
-          await new Promise((resolve) => setTimeout(resolve, waitMilliseconds + 250));
-        } else {
-          const waitSeconds = Math.max(1, Math.ceil(waitMilliseconds / 1_000));
-          const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
-          error.statusCode = 429;
-          error.expose = true;
-          throw error;
-        }
+        const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
+        const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
+        error.statusCode = 429;
+        error.expose = true;
+        throw error;
       }
 
       const inviteUrl = `https://discord.com/api/v10/invites/${encodeURIComponent(inviteCode)}?with_counts=true`;
@@ -318,7 +327,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
                    updated_at = NOW()`,
               [new Date(discordInviteRateLimitedUntil)]
             );
-            if (retrySeconds > 2 && (!allowWebFallback || retrySeconds > 35 || attempt > 0)) break;
+            if (retrySeconds > 2) break;
           }
           if (response.ok || response.status === 404 || (response.status < 500 && response.status !== 429)) break;
           requestError = null;
@@ -329,7 +338,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
         }
         if (attempt === 0) {
           const retrySeconds = response?.status === 429
-            ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), allowWebFallback ? 35 : 2)
+            ? Math.min(Math.max(Number(payload?.retry_after) || 1, 1), 2)
             : 1;
           await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
         }
@@ -10827,7 +10836,7 @@ function createCommunityBotGuildAccessError(status, context = {}) {
   return error;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite" } = {}) {
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite", resolvedServerInfo = null } = {}) {
   const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod);
   let config = await getCommunityOAuthConfig();
   if (!config.configured) {
@@ -10857,7 +10866,9 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       bypassesJoinApplication: false
     };
   } else {
-    serverInfo = await resolveDiscordInvite(invite, { allowWebFallback: normalizedJoinMethod === "create_invite" });
+    serverInfo = isDiscordGuildId(String(resolvedServerInfo?.guildId ?? ""))
+      ? resolvedServerInfo
+      : await resolveDiscordInvite(invite, { allowWebFallback: normalizedJoinMethod === "create_invite" });
   }
   if (normalizedJoinMethod === "directly") {
     const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
@@ -11060,7 +11071,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     }
     const resolvedInvite = await resolveConfiguredCommunityInvite(req.body?.id, {
       allowWaitingForBot: true,
-      joinMethod
+      joinMethod,
+      resolvedServerInfo: normalizeSubmittedDiscordResolution(req.body)
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
     let { waitingForBot, waitingDetails, waitingCode, botInvite } = resolvedInvite;
@@ -13626,7 +13638,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "A valid Discord invite, even boost amount, and duration are required." });
     }
 
-    const serverInfo = await resolveDiscordInvite(invite);
+    const serverInfo = normalizeSubmittedDiscordResolution(req.body) ?? await resolveDiscordInvite(invite);
     const memberVerification = await checkDcordBoostMembershipScreening(invite, serverInfo);
     if (memberVerification.status === "open" && !allowMembershipScreening) {
       return res.status(409).json({ message: "Membership screening is enabled on this server. Disable the join form before boosting." });
@@ -14256,7 +14268,7 @@ if (serviceRunsOnliner) {
 }
 if (serviceRunsWeb) {
   app.listen(port, "0.0.0.0", () => {
-    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: queued-fallback-v2).`);
+    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: browser-direct-v3).`);
   });
   const communityRecoveryTimer = setInterval(() => {
     void recoverInterruptedCommunityOrders().catch((error) => {

@@ -44,6 +44,10 @@ export interface CreateOrderPayload {
   isEldoradoSale?: boolean;
   reactionLimit?: number;
   humanizerPackageId?: string;
+  resolvedGuildId?: string;
+  resolvedGuildName?: string;
+  resolvedMemberCount?: number;
+  resolvedBypassesJoinApplication?: boolean;
 }
 
 export interface CreateOrderResponse {

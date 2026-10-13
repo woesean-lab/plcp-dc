@@ -2874,10 +2874,14 @@ export default function HomePage() {
     const targetId = String(payload.id ?? "").trim();
     const payloadIsBoost = isBoostService(payload.service);
     const payloadIsCommunity = isCommunityService(payload.service);
-    const resolvedBeforeCreate = payloadIsCommunity ? null : await resolveDiscordGuildInfo(targetId);
+    const resolvedBeforeCreate = await resolveDiscordGuildInfo(targetId);
     const created = await createOrder({
       ...payload,
-      id: targetId
+      id: targetId,
+      resolvedGuildId: resolvedBeforeCreate.guildId,
+      resolvedGuildName: resolvedBeforeCreate.guildName,
+      resolvedMemberCount: resolvedBeforeCreate.approximateMemberCount,
+      resolvedBypassesJoinApplication: resolvedBeforeCreate.bypassesJoinApplication
     });
     const serverId = created.serverId ?? resolvedBeforeCreate?.guildId ?? "";
     const serverName = created.serverName ?? resolvedBeforeCreate?.guildName;
