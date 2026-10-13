@@ -11059,11 +11059,17 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     if (!isDiscordGuildId(inviteValue) && !extractDiscordInviteCode(inviteValue)) {
       return res.status(400).json({ message: "A valid Discord server ID or invite is required." });
     }
-    // Availability is a stock calculation and runs while the user edits the
-    // form. Resolving the invite here repeatedly consumed Discord's public
-    // invite rate-limit bucket. The invite is resolved once on order submit.
+    // The browser resolves the invite once and sends the guild ID so this
+    // calculation can remain server-specific without consuming the web
+    // service's shared Discord invite rate-limit bucket.
     const config = stockConfig;
-    const availabilityGuildId = isDiscordGuildId(inviteValue) ? inviteValue : "";
+    const resolvedGuildId = String(req.query?.guildId ?? "").trim();
+    const availabilityGuildId = isDiscordGuildId(resolvedGuildId)
+      ? resolvedGuildId
+      : isDiscordGuildId(inviteValue) ? inviteValue : "";
+    if (!availabilityGuildId) {
+      return res.status(400).json({ message: "The Discord invite could not be resolved for this server's availability." });
+    }
     const previouslyDeliveredUserIds = availabilityGuildId
       ? await loadCommunityUnavailableUserIds(pool, availabilityGuildId)
       : [];

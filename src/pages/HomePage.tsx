@@ -2389,6 +2389,7 @@ export default function HomePage() {
     try {
       const serverId = form.serverId.trim();
       if (selectedIsCommunity) {
+        const resolvedServer = await resolveDiscordGuildInfo(serverId);
         const allocations = form.communityMultiCategory
           ? communityCategories.flatMap((category) => Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : [])
           : communityCategories.filter((category) => category.id === form.communityCategoryId);
@@ -2399,7 +2400,8 @@ export default function HomePage() {
             serverId,
             form.duration,
             category.id,
-            effectiveCommunityJoinMethod
+            effectiveCommunityJoinMethod,
+            resolvedServer.guildId
           );
           return [category.id, data.maximum] as const;
         }));
