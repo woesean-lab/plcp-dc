@@ -110,7 +110,67 @@ const discordInviteResolutionStaleTtlMs = 6 * 60 * 60_000;
 let discordInviteRateLimitedUntil = 0;
 const DISCORD_INVITE_FLAG_APPLICATION_BYPASS = 1 << 3;
 
-async function resolveDiscordInvite(inviteValue) {
+function decodeDiscordInviteMetaText(value) {
+  return String(value ?? "")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#(?:39|x27);/gi, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">");
+}
+
+async function resolveDiscordInviteFromWebPage(inviteCode) {
+  const response = await fetch(`https://discord.com/invite/${encodeURIComponent(inviteCode)}`, {
+    headers: {
+      Accept: "text/html,application/xhtml+xml",
+      "User-Agent": "Mozilla/5.0 (compatible; plcp-dc/0.1; +https://discord.com)"
+    },
+    signal: AbortSignal.timeout(8_000)
+  });
+  if (!response.ok) return null;
+  const html = await response.text();
+  const imageUrl = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i)?.[1] ?? "";
+  const guildId = imageUrl.match(/\/(?:splashes|icons)\/(\d{17,20})\//i)?.[1];
+  if (!isDiscordGuildId(String(guildId ?? ""))) return null;
+  const rawTitle = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i)?.[1] ?? "";
+  const decodedTitle = decodeDiscordInviteMetaText(rawTitle);
+  const guildName = decodedTitle.match(/^Join the (.+?) Discord Server!?$/i)?.[1]?.trim() || undefined;
+  const description = decodeDiscordInviteMetaText(
+    html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i)?.[1] ?? ""
+  );
+  const memberCountText = description.match(/([\d.,]+)\s+members?\b/i)?.[1] ?? "";
+  const approximateMemberCount = Number(memberCountText.replace(/\D/g, ""));
+  return {
+    guildId: String(guildId),
+    guildName,
+    approximateMemberCount: Number.isFinite(approximateMemberCount) && approximateMemberCount > 0
+      ? approximateMemberCount
+      : undefined,
+    bypassesJoinApplication: false
+  };
+}
+
+async function persistDiscordInviteResolution(queryable, inviteCode, resolved) {
+  const cacheEntry = {
+    value: resolved,
+    expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
+    staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
+  };
+  discordInviteResolutionCache.set(inviteCode, cacheEntry);
+  await queryable.query(
+    `INSERT INTO discord_invite_resolution_cache (invite_code, payload, expires_at, stale_until, updated_at)
+     VALUES ($1, $2::jsonb, $3, $4, NOW())
+     ON CONFLICT (invite_code) DO UPDATE
+     SET payload = EXCLUDED.payload,
+         expires_at = EXCLUDED.expires_at,
+         stale_until = EXCLUDED.stale_until,
+         updated_at = NOW()`,
+    [inviteCode, JSON.stringify(resolved), new Date(cacheEntry.expiresAt), new Date(cacheEntry.staleUntil)]
+  );
+  return resolved;
+}
+
+async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = {}) {
   const inviteCode = extractDiscordInviteCode(inviteValue);
   if (!inviteCode) {
     const error = new Error("Enter a Discord server ID or invite link.");
@@ -186,6 +246,10 @@ async function resolveDiscordInvite(inviteValue) {
       discordInviteRateLimitedUntil = Math.max(discordInviteRateLimitedUntil, sharedRateLimitedUntil);
       if (discordInviteRateLimitedUntil > Date.now()) {
         if (cached?.staleUntil > Date.now()) return cached.value;
+        if (allowWebFallback) {
+          const webResolution = await resolveDiscordInviteFromWebPage(inviteCode).catch(() => null);
+          if (webResolution) return persistDiscordInviteResolution(lockClient, inviteCode, webResolution);
+        }
         const waitSeconds = Math.max(1, Math.ceil((discordInviteRateLimitedUntil - Date.now()) / 1_000));
         const error = new Error(`Discord is rate limiting invite checks. Try again in ${waitSeconds}s.`);
         error.statusCode = 429;
@@ -236,6 +300,10 @@ async function resolveDiscordInvite(inviteValue) {
       }
 
       if (!response?.ok) {
+        if (allowWebFallback && response?.status !== 404) {
+          const webResolution = await resolveDiscordInviteFromWebPage(inviteCode).catch(() => null);
+          if (webResolution) return persistDiscordInviteResolution(lockClient, inviteCode, webResolution);
+        }
         if (response?.status !== 404 && cached?.staleUntil > Date.now()) return cached.value;
         if (cached) discordInviteResolutionCache.delete(inviteCode);
         if (response?.status === 404) {
@@ -269,23 +337,7 @@ async function resolveDiscordInvite(inviteValue) {
         bypassesJoinApplication: Number.isInteger(payload?.flags)
           && (payload.flags & DISCORD_INVITE_FLAG_APPLICATION_BYPASS) !== 0
       };
-      const cacheEntry = {
-        value: resolved,
-        expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
-        staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
-      };
-      discordInviteResolutionCache.set(inviteCode, cacheEntry);
-      await lockClient.query(
-        `INSERT INTO discord_invite_resolution_cache (invite_code, payload, expires_at, stale_until, updated_at)
-         VALUES ($1, $2::jsonb, $3, $4, NOW())
-         ON CONFLICT (invite_code) DO UPDATE
-         SET payload = EXCLUDED.payload,
-             expires_at = EXCLUDED.expires_at,
-             stale_until = EXCLUDED.stale_until,
-             updated_at = NOW()`,
-        [inviteCode, JSON.stringify(resolved), new Date(cacheEntry.expiresAt), new Date(cacheEntry.staleUntil)]
-      );
-      return resolved;
+      return persistDiscordInviteResolution(lockClient, inviteCode, resolved);
     } finally {
       if (lockClient) {
         await lockClient.query("SELECT pg_advisory_unlock(hashtext($1))", ["discord-invite-resolution"]).catch(() => {});
@@ -10769,7 +10821,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       bypassesJoinApplication: false
     };
   } else {
-    serverInfo = await resolveDiscordInvite(invite);
+    serverInfo = await resolveDiscordInvite(invite, { allowWebFallback: normalizedJoinMethod === "create_invite" });
   }
   if (normalizedJoinMethod === "directly") {
     const directConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
@@ -13440,7 +13492,11 @@ app.post("/api/discord/resolve", requireSession, async (req, res, next) => {
       return res.json({ guildId: value });
     }
 
-    res.json(await resolveDiscordInvite(value));
+    // This endpoint is also called by older cached frontend bundles before a
+    // Members order is submitted. Let those clients use the same non-API
+    // fallback instead of turning Discord's invite API cooldown into a hard
+    // failure. Boost creation performs its own strict invite validation later.
+    res.json(await resolveDiscordInvite(value, { allowWebFallback: true }));
   } catch (error) {
     if (error?.name === "TimeoutError" || error?.name === "AbortError" || error instanceof TypeError) {
       return res.status(502).json({ message: "Discord could not be reached. Please try again." });
@@ -14140,7 +14196,7 @@ if (serviceRunsOnliner) {
 }
 if (serviceRunsWeb) {
   app.listen(port, "0.0.0.0", () => {
-    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}).`);
+    console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: web-fallback-v1).`);
   });
   const communityRecoveryTimer = setInterval(() => {
     void recoverInterruptedCommunityOrders().catch((error) => {
