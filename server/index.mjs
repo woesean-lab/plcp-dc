@@ -123,6 +123,7 @@ async function resolveDiscordInviteFromWebPage(inviteCode) {
   const response = await fetch(`https://discord.com/invite/${encodeURIComponent(inviteCode)}`, {
     headers: {
       Accept: "text/html,application/xhtml+xml",
+      "Accept-Language": "en-US,en;q=0.9",
       "User-Agent": "Mozilla/5.0 (compatible; plcp-dc/0.1; +https://discord.com)"
     },
     signal: AbortSignal.timeout(8_000)
@@ -151,8 +152,13 @@ async function resolveDiscordInviteFromWebPage(inviteCode) {
 }
 
 async function persistDiscordInviteResolution(queryable, inviteCode, resolved) {
+  const previous = discordInviteResolutionCache.get(inviteCode)?.value;
+  const definedResolution = Object.fromEntries(Object.entries(resolved).filter(([, value]) => value !== undefined));
+  const mergedResolution = previous?.guildId === resolved.guildId
+    ? { ...previous, ...definedResolution }
+    : definedResolution;
   const cacheEntry = {
-    value: resolved,
+    value: mergedResolution,
     expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
     staleUntil: Date.now() + discordInviteResolutionStaleTtlMs
   };
@@ -165,9 +171,9 @@ async function persistDiscordInviteResolution(queryable, inviteCode, resolved) {
          expires_at = EXCLUDED.expires_at,
          stale_until = EXCLUDED.stale_until,
          updated_at = NOW()`,
-    [inviteCode, JSON.stringify(resolved), new Date(cacheEntry.expiresAt), new Date(cacheEntry.staleUntil)]
+    [inviteCode, JSON.stringify(mergedResolution), new Date(cacheEntry.expiresAt), new Date(cacheEntry.staleUntil)]
   );
-  return resolved;
+  return mergedResolution;
 }
 
 async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = {}) {
@@ -179,7 +185,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
   }
 
   let cached = discordInviteResolutionCache.get(inviteCode);
-  if (cached?.expiresAt > Date.now()) return cached.value;
+  if (cached?.expiresAt > Date.now() && (!allowWebFallback || cached.value?.guildName)) return cached.value;
   const existingRequest = discordInviteResolutionPending.get(inviteCode);
   if (existingRequest) return existingRequest;
 
@@ -207,7 +213,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
         };
         if (!cached || persisted.staleUntil > cached.staleUntil) cached = persisted;
         discordInviteResolutionCache.set(inviteCode, persisted);
-        if (persisted.expiresAt > Date.now()) return persisted.value;
+        if (persisted.expiresAt > Date.now() && (!allowWebFallback || persisted.value?.guildName)) return persisted.value;
       }
 
       const trackedInvite = await lockClient.query(
@@ -215,7 +221,7 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
          FROM tracked_orders
          WHERE payload->>'serverInvite' = $1
            AND payload->>'serverId' ~ '^\\d{17,20}$'
-         ORDER BY updated_at DESC
+         ORDER BY (NULLIF(BTRIM(payload->>'serverName'), '') IS NOT NULL) DESC, updated_at DESC
          LIMIT 1`,
         [inviteCode]
       );
@@ -229,6 +235,12 @@ async function resolveDiscordInvite(inviteValue, { allowWebFallback = false } = 
             : undefined,
           bypassesJoinApplication: false
         };
+        if (!resolved.guildName && allowWebFallback) {
+          const webResolution = await resolveDiscordInviteFromWebPage(inviteCode).catch(() => null);
+          if (webResolution?.guildId === resolved.guildId) {
+            return persistDiscordInviteResolution(lockClient, inviteCode, { ...resolved, ...webResolution });
+          }
+        }
         discordInviteResolutionCache.set(inviteCode, {
           value: resolved,
           expiresAt: Date.now() + discordInviteResolutionCacheTtlMs,
@@ -10843,6 +10855,18 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
   if (serverInfo.guildId !== config.guildId) {
     const invitedGuildAccess = targetGuildAccess ?? await checkCommunityBotGuildAccess(config, serverInfo.guildId);
     targetGuildAccess = invitedGuildAccess;
+    const invitedGuildPayload = invitedGuildAccess?.payload ?? {};
+    serverInfo = {
+      ...serverInfo,
+      guildName: typeof invitedGuildPayload.name === "string" && invitedGuildPayload.name.trim()
+        ? invitedGuildPayload.name.trim()
+        : serverInfo.guildName,
+      approximateMemberCount: Number.isFinite(invitedGuildPayload.approximate_member_count)
+        ? invitedGuildPayload.approximate_member_count
+        : Number.isFinite(invitedGuildPayload.member_count)
+          ? invitedGuildPayload.member_count
+          : serverInfo.approximateMemberCount
+    };
     const botInInvitedGuild = invitedGuildAccess.accessible;
 
     if (allowWaitingForBot && !botInInvitedGuild) {
@@ -10906,6 +10930,18 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
   } else {
     const configuredGuildAccess = targetGuildAccess ?? await checkCommunityBotGuildAccess(config, serverInfo.guildId);
     targetGuildAccess = configuredGuildAccess;
+    const configuredGuildPayload = configuredGuildAccess?.payload ?? {};
+    serverInfo = {
+      ...serverInfo,
+      guildName: typeof configuredGuildPayload.name === "string" && configuredGuildPayload.name.trim()
+        ? configuredGuildPayload.name.trim()
+        : serverInfo.guildName,
+      approximateMemberCount: Number.isFinite(configuredGuildPayload.approximate_member_count)
+        ? configuredGuildPayload.approximate_member_count
+        : Number.isFinite(configuredGuildPayload.member_count)
+          ? configuredGuildPayload.member_count
+          : serverInfo.approximateMemberCount
+    };
     if (!configuredGuildAccess.accessible) {
       if (allowWaitingForBot) {
         return {
