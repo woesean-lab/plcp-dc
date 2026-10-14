@@ -266,18 +266,16 @@ export function ReactionPanel({
           <div className="monitor-reaction-member-check-copy">
             <span className="monitor-reaction-member-check-signal" aria-hidden="true"><Users /></span>
             <div>
-              <span>Availability scan</span>
-              <strong>{workspaceSummary.memberCheckComplete
-                ? `${workspaceSummary.checkedMembers} accounts checked`
-                : `${workspaceSummary.remainingUncheckedMembers} accounts waiting`}</strong>
-              <small>{workspaceSummary.memberCheckComplete ? "Ready for a fresh scan" : "Previously checked accounts will be skipped"}</small>
+              <strong>Check members</strong>
+              <small>{workspaceSummary.checkedMembers} checked · {workspaceSummary.remainingUncheckedMembers} remaining</small>
             </div>
           </div>
           <div className="monitor-reaction-member-check-action">
-            <label htmlFor={`${titleId}-member-check-quantity`}>
-              <span>Qty</span>
+            <label className="boost-order-field" htmlFor={`${titleId}-member-check-quantity`}>
+              <span className="boost-order-label">Quantity</span>
               <input
                 id={`${titleId}-member-check-quantity`}
+                className="boost-number-input"
                 type="number"
                 inputMode="numeric"
                 min={1}
@@ -288,14 +286,15 @@ export function ReactionPanel({
                 onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
               />
             </label>
-            <button
+            <Button
+              size="sm"
               type="button"
               onClick={onRefreshEligibleMembers}
               disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
             >
               <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-              {refreshingEligibleMembers ? "Scanning..." : workspaceSummary.memberCheckComplete ? "Scan again" : workspaceSummary.membersCheckRequired ? "Start scan" : "Continue"}
-            </button>
+              {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Check again" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
+            </Button>
           </div>
         </div>
       ) : null}
