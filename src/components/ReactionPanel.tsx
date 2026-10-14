@@ -266,11 +266,13 @@ export function ReactionPanel({
 
       {workspaceSummary && onRefreshEligibleMembers ? (
         <div className="monitor-reaction-member-check-bar">
-          <div className="monitor-reaction-member-check-copy">
+          <div className="monitor-reaction-member-check-copy" aria-live="polite">
             <span className="monitor-reaction-member-check-icon" aria-hidden="true"><RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} /></span>
             <span>
-              <strong>Check reaction availability</strong>
-              <small>{workspaceSummary.checkedMembers} of {workspaceSummary.deliveredMembers} delivered members checked</small>
+              <strong>{refreshingEligibleMembers ? `Checking ${memberCheckAmount} members` : "Check reaction availability"}</strong>
+              <small>{refreshingEligibleMembers
+                ? "Discord availability scan in progress"
+                : `${workspaceSummary.checkedMembers} of ${workspaceSummary.deliveredMembers} delivered members checked`}</small>
             </span>
           </div>
           <span className="monitor-reaction-member-check-progress" aria-hidden="true">
@@ -299,7 +301,7 @@ export function ReactionPanel({
               disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
             >
               <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
-              {refreshingEligibleMembers ? "Checking..." : "Check members"}
+              {refreshingEligibleMembers ? `Checking ${memberCheckAmount}...` : "Check members"}
             </Button>
           </div>
         </div>
