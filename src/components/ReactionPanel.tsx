@@ -142,6 +142,9 @@ export function ReactionPanel({
   const progress = workspaceSummary
     ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
+  const memberCheckProgress = workspaceSummary?.deliveredMembers
+    ? Math.min(100, Math.round((workspaceSummary.checkedMembers / workspaceSummary.deliveredMembers) * 100))
+    : 0;
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/.+/i.test(messageDraft.trim());
@@ -263,7 +266,17 @@ export function ReactionPanel({
 
       {workspaceSummary && onRefreshEligibleMembers ? (
         <div className="monitor-reaction-member-check-bar">
-          <span className="public-secure-mark gap-2">
+          <div className="monitor-reaction-member-check-copy">
+            <span className="monitor-reaction-member-check-icon" aria-hidden="true"><RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} /></span>
+            <span>
+              <strong>Check reaction availability</strong>
+              <small>{workspaceSummary.checkedMembers} of {workspaceSummary.deliveredMembers} delivered members checked</small>
+            </span>
+          </div>
+          <span className="monitor-reaction-member-check-progress" aria-hidden="true">
+            <i style={{ width: `${memberCheckProgress}%` }} />
+          </span>
+          <div className="monitor-reaction-member-check-actions">
             <label className="monitor-reaction-check-quantity">
               <span className="sr-only">Members to check</span>
               <input
@@ -281,7 +294,6 @@ export function ReactionPanel({
             <Button
               className="member-log-action-button"
               type="button"
-              variant="secondary"
               size="xs"
               onClick={onRefreshEligibleMembers}
               disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
@@ -289,8 +301,7 @@ export function ReactionPanel({
               <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
               {refreshingEligibleMembers ? "Checking..." : "Check members"}
             </Button>
-            <span><ShieldCheck className="inline h-3.5 w-3.5" /> {workspaceSummary.checkedMembers}/{workspaceSummary.deliveredMembers} processed</span>
-          </span>
+          </div>
         </div>
       ) : null}
 
