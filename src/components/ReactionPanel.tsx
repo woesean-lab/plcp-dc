@@ -81,6 +81,9 @@ type ReactionPanelProps = {
     deliveredMembers: number;
     unavailableMembers: number;
     availableForMessage: number;
+    membersCheckRequired: boolean;
+    membersCheckedAt?: string | null;
+    onlineDeliveredMembers: number;
   };
 };
 
@@ -125,7 +128,7 @@ export function ReactionPanel({
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const progress = workspaceSummary
-    ? (workspaceSummary.totalOrdered > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.totalOrdered) * 100)) : 0)
+    ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
@@ -202,7 +205,9 @@ export function ReactionPanel({
             <span className="monitor-reaction-overline">{workspaceSummary ? "Matched Discord server" : "Delivery progress"}</span>
             <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : `${completed} of ${limit} reactions delivered`}</strong>
             <p>{workspaceSummary
-              ? `${eligibleMembers} delivered members can react. ${remaining} have not been used on this message yet.`
+              ? workspaceSummary.membersCheckRequired
+                ? "Run Check Members to find delivered accounts that are online and still in this server."
+                : `${eligibleMembers} online members in this server can react. ${remaining} have not been used on this message yet.`
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
@@ -214,8 +219,15 @@ export function ReactionPanel({
             <strong>{workspaceSummary ? workspaceSummary.orderCount : completed}</strong>
             <small>{workspaceSummary ? "Members orders matched" : "successful reactions"}</small>
           </div>
-          <div data-tone="pending">
-            <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}</span>
+          <div data-tone="pending" className={workspaceSummary && onRefreshEligibleMembers ? "has-member-check" : undefined}>
+            <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}
+              {workspaceSummary && onRefreshEligibleMembers ? (
+                <button className="monitor-reaction-check-members" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers}>
+                  <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
+                  {refreshingEligibleMembers ? "Checking..." : "Check Members"}
+                </button>
+              ) : null}
+            </span>
             <strong>{workspaceSummary ? workspaceSummary.totalOrdered : pending}</strong>
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
           </div>
@@ -225,15 +237,21 @@ export function ReactionPanel({
             <small>{workspaceSummary ? "unused members available" : "ready to assign"}</small>
           </div>
           <div data-tone="members">
-            <span><Users aria-hidden="true" /> {workspaceSummary ? "Delivered" : "Eligible"}
-              {onRefreshEligibleMembers ? (
+            <span><Users aria-hidden="true" /> Eligible
+              {!workspaceSummary && onRefreshEligibleMembers ? (
                 <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh online members" title="Check members and refresh the online count">
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
                 </button>
               ) : null}
             </span>
             <strong>{eligibleMembers}</strong>
-            <small>{refreshingEligibleMembers ? "checking members" : workspaceSummary ? `${workspaceSummary.unavailableMembers} unavailable` : "members can react"}</small>
+            <small>{refreshingEligibleMembers
+              ? "checking Onliner and server"
+              : workspaceSummary
+                ? workspaceSummary.membersCheckRequired
+                  ? "check required"
+                  : `${workspaceSummary.onlineDeliveredMembers} online · ${workspaceSummary.unavailableMembers} unavailable`
+                : "members can react"}</small>
           </div>
         </div>
       </div>

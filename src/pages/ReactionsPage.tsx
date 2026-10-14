@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { extractBotInviteFromError } from "../lib/bot-invite";
-import { cancelReactionWorkspaceRequest, createReactionWorkspaceRequest, inspectReactionWorkspace } from "../lib/integration";
+import { cancelReactionWorkspaceRequest, checkReactionWorkspaceMembers, createReactionWorkspaceRequest, inspectReactionWorkspace } from "../lib/integration";
 import type { ReactionWorkspaceSummary } from "../types";
 
 const DISCORD_MESSAGE_LINK = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/\d{16,22}\/\d{16,22}\/\d{16,22}(?:[/?#].*)?$/i;
@@ -78,6 +78,7 @@ export default function ReactionsPage() {
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
   const [submitting, setSubmitting] = useState(false);
+  const [checkingMembers, setCheckingMembers] = useState(false);
   const [cancellingRequestId, setCancellingRequestId] = useState("");
   const [inspectNonce, setInspectNonce] = useState(0);
 
@@ -164,6 +165,25 @@ export default function ReactionsPage() {
       toast.error(error instanceof Error ? error.message : "Reactions could not be queued.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleCheckMembers() {
+    if (!summary || checkingMembers) return;
+    try {
+      setCheckingMembers(true);
+      const next = await checkReactionWorkspaceMembers(summary.messageLink);
+      setSummary(next);
+      setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.availableForMessage))));
+      toast.success(`${next.eligibleMembers} online members are in this server and ready to react.`);
+    } catch (error) {
+      if (isReactionBotRequiredError(error)) {
+        setSummary(null);
+        setBotInvite(extractBotInviteFromError(error));
+      }
+      toast.error(error instanceof Error ? error.message : "Members could not be checked.");
+    } finally {
+      setCheckingMembers(false);
     }
   }
 
@@ -256,12 +276,14 @@ export default function ReactionsPage() {
           countDraft={count}
           selectedEmojis={emojis}
           saving={submitting}
-          requestEnabled={!inspecting}
+          requestEnabled={!inspecting && !checkingMembers && !summary.membersCheckRequired}
           requests={requests}
           onMessageChange={handleMessageChange}
           onCountChange={setCount}
           onEmojiSelectionChange={setEmojis}
           onSubmit={() => void handleSubmit()}
+          onRefreshEligibleMembers={() => void handleCheckMembers()}
+          refreshingEligibleMembers={checkingMembers}
           onCancelPending={(requestId) => void handleCancel(requestId)}
           cancellingPending={Boolean(cancellingRequestId)}
           workspaceSummary={summary}

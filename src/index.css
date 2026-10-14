@@ -7882,6 +7882,8 @@
 .monitor-reaction-metrics span { display: flex; align-items: center; gap: 5px; color: var(--app-muted); font-size: 8px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
 .monitor-reaction-metrics span svg { width: 12px; height: 12px; color: var(--app-accent-bright); }
 .monitor-reaction-metrics [data-tone="success"] span svg { color: var(--app-success); }
+.monitor-reaction-metrics [data-tone="pending"] { position: relative; }
+.monitor-reaction-metrics [data-tone="pending"].has-member-check > span { padding-right: 96px; }
 .monitor-reaction-metrics [data-tone="members"] { position: relative; }
 .monitor-reaction-metrics [data-tone="members"] > span { padding-right: 22px; }
 .monitor-reaction-metrics > div > strong { display: block; margin-top: 10px; color: var(--app-text); font-size: 24px; font-weight: 720; letter-spacing: -.04em; }
@@ -7890,6 +7892,10 @@
 .monitor-reaction-metric-refresh:hover:not(:disabled) { color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .monitor-reaction-metric-refresh:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-metric-refresh svg { width: 11px !important; height: 11px !important; }
+.monitor-reaction-check-members { position: absolute; top: 9px; right: 8px; display: inline-flex; min-height: 24px; align-items: center; gap: 5px; padding: 0 7px; border: 1px solid var(--app-accent-border); border-radius: 7px; color: var(--app-accent-bright); background: var(--app-accent-soft); font-size: 8px; font-weight: 750; letter-spacing: 0; text-transform: none; transition: color .15s ease, border-color .15s ease, background .15s ease; }
+.monitor-reaction-check-members:hover:not(:disabled) { border-color: rgba(154,139,255,.42); background: rgba(127,107,221,.18); }
+.monitor-reaction-check-members:disabled { cursor: wait; opacity: .65; }
+.monitor-reaction-check-members svg { width: 10px !important; height: 10px !important; }
 
 .monitor-reaction-form {
   position: relative;

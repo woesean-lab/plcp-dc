@@ -218,6 +218,9 @@ export interface ReactionWorkspaceSummary {
   eligibleMembers: number;
   unavailableMembers: number;
   availableForMessage: number;
+  membersCheckRequired: boolean;
+  membersCheckedAt?: string | null;
+  onlineDeliveredMembers: number;
   requests: ReactionWorkspaceRequest[];
 }
 

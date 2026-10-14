@@ -12283,6 +12283,9 @@ function getReactionWorkspaceMembers(orders) {
 }
 
 const reactionWorkspaceBotAccessCache = new Map();
+const reactionWorkspaceMemberCheckCache = new Map();
+const reactionWorkspaceMemberCheckPromises = new Map();
+const reactionWorkspaceMemberCheckMaxAgeMs = 2 * 60_000;
 
 async function loadReactionWorkspaceBotContext(guildId) {
   const config = await getCommunityOAuthConfig();
@@ -12330,8 +12333,81 @@ function getReactionWorkspaceRequests(orders) {
     .sort((left, right) => new Date(left?.createdAt ?? 0).getTime() - new Date(right?.createdAt ?? 0).getTime());
 }
 
+function getReactionWorkspaceMemberCheck(guildId) {
+  const cached = reactionWorkspaceMemberCheckCache.get(guildId);
+  if (!cached || cached.expiresAt <= Date.now()) {
+    if (cached) reactionWorkspaceMemberCheckCache.delete(guildId);
+    return null;
+  }
+  return cached;
+}
+
+async function loadReactionWorkspaceGuildMemberIds(config, guildId, discordUserIds) {
+  const userIds = [...new Set(discordUserIds.map(String).filter(isDiscordGuildId))];
+  const memberIds = new Set();
+  if (!userIds.length) return memberIds;
+
+  const gateway = await ensureCommunityPresenceGateway(config);
+  if (!gateway.guildIds.has(guildId)) {
+    const error = new Error("The Members bot Gateway could not access this Discord server.");
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const batches = [];
+  for (let index = 0; index < userIds.length; index += 100) batches.push(userIds.slice(index, index + 100));
+  for (let index = 0; index < batches.length; index += 1) {
+    const statuses = await requestCommunityGatewayPresences(gateway, guildId, batches[index]);
+    for (const [discordUserId, status] of statuses) {
+      if (status !== "unknown") memberIds.add(discordUserId);
+    }
+    if (index < batches.length - 1) await new Promise((resolve) => setTimeout(resolve, 1_100));
+  }
+  return memberIds;
+}
+
+async function refreshReactionWorkspaceMembers(orders, botContext, guildId) {
+  const { deliveredMembers } = getReactionWorkspaceMembers(orders);
+  const onlinerConfig = await getDiscordOnlinerConfig();
+  const onlinerSnapshot = await getDiscordOnlinerSnapshotForApi(onlinerConfig);
+  const configuredAccounts = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
+  const connectedUserIds = new Set(onlinerSnapshot.accounts
+    .filter((account) => account.connectionState === "connected")
+    .map((account) => String(account?.bot?.id ?? configuredAccounts.get(account.id)?.discordUserId ?? "").trim())
+    .filter(isDiscordGuildId));
+  const onlineDeliveredMembers = deliveredMembers.filter((member) => connectedUserIds.has(String(member?.discordUserId ?? "")));
+  const eligibleMemberIds = await loadReactionWorkspaceGuildMemberIds(
+    botContext.config,
+    guildId,
+    onlineDeliveredMembers.map((member) => String(member?.discordUserId ?? ""))
+  );
+
+  const checkedAt = new Date().toISOString();
+  const check = {
+    eligibleMemberIds,
+    onlineDeliveredMembers: onlineDeliveredMembers.length,
+    checkedAt,
+    expiresAt: Date.now() + reactionWorkspaceMemberCheckMaxAgeMs
+  };
+  reactionWorkspaceMemberCheckCache.set(guildId, check);
+  return check;
+}
+
+async function runReactionWorkspaceMemberCheck(orders, botContext, guildId) {
+  const existing = reactionWorkspaceMemberCheckPromises.get(guildId);
+  if (existing) return existing;
+  const pending = refreshReactionWorkspaceMembers(orders, botContext, guildId)
+    .finally(() => reactionWorkspaceMemberCheckPromises.delete(guildId));
+  reactionWorkspaceMemberCheckPromises.set(guildId, pending);
+  return pending;
+}
+
 function buildReactionWorkspaceSummary(reactionMessage, orders) {
-  const { deliveredMembers, eligibleMembers } = getReactionWorkspaceMembers(orders);
+  const { deliveredMembers } = getReactionWorkspaceMembers(orders);
+  const memberCheck = getReactionWorkspaceMemberCheck(reactionMessage.guildId);
+  const eligibleMembers = memberCheck
+    ? deliveredMembers.filter((member) => memberCheck.eligibleMemberIds.has(String(member?.discordUserId ?? "")))
+    : [];
   const requests = getReactionWorkspaceRequests(orders);
   const usedMemberIds = new Set(requests
     .filter((request) => request?.messageLink === reactionMessage.url)
@@ -12351,8 +12427,11 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     totalOrdered,
     deliveredMembers: deliveredMembers.length,
     eligibleMembers: eligibleMembers.length,
-    unavailableMembers: Math.max(0, totalOrdered - eligibleMembers.length),
+    unavailableMembers: Math.max(0, deliveredMembers.length - eligibleMembers.length),
     availableForMessage: eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? ""))).length,
+    membersCheckRequired: !memberCheck,
+    membersCheckedAt: memberCheck?.checkedAt ?? null,
+    onlineDeliveredMembers: memberCheck?.onlineDeliveredMembers ?? 0,
     requests
   };
 }
@@ -12388,6 +12467,26 @@ app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {
   }
 });
 
+app.post("/api/reactions/check-members", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
+    if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
+    const orders = await loadReactionWorkspaceOrders(client, reactionMessage.guildId);
+    if (!orders.length) {
+      return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
+    }
+    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId);
+    if (!botContext.access.accessible) return sendReactionWorkspaceBotRequired(res, botContext);
+    await runReactionWorkspaceMemberCheck(orders, botContext, reactionMessage.guildId);
+    res.set("Cache-Control", "no-store").json(buildReactionWorkspaceSummary(reactionMessage, orders));
+  } catch (error) {
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
 app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
   const client = await pool.connect();
   try {
@@ -12414,6 +12513,10 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
       return sendReactionWorkspaceBotRequired(res, botContext);
     }
     const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
+    if (summary.membersCheckRequired) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Check members before creating a reaction request." });
+    }
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > summary.availableForMessage) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: summary.availableForMessage > 0
@@ -12421,7 +12524,9 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
         : "Every available member has already been assigned to this message." });
     }
 
-    const { eligibleMembers } = getReactionWorkspaceMembers(orders);
+    const memberCheck = getReactionWorkspaceMemberCheck(reactionMessage.guildId);
+    const { deliveredMembers } = getReactionWorkspaceMembers(orders);
+    const eligibleMembers = deliveredMembers.filter((member) => memberCheck?.eligibleMemberIds.has(String(member?.discordUserId ?? "")));
     const usedMemberIds = new Set(summary.requests
       .filter((request) => request?.messageLink === reactionMessage.url)
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])

@@ -344,6 +344,14 @@ export function inspectReactionWorkspace(messageLink: string) {
   return requestJson<ReactionWorkspaceSummary>(`/api/reactions/inspect?messageLink=${encodeURIComponent(messageLink)}`);
 }
 
+export function checkReactionWorkspaceMembers(messageLink: string) {
+  return requestJson<ReactionWorkspaceSummary>("/api/reactions/check-members", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messageLink })
+  });
+}
+
 export function createReactionWorkspaceRequest(messageLink: string, reactionCount: number, emojis: string[]) {
   return requestJson<ReactionWorkspaceSummary>("/api/reactions/requests", {
     method: "POST",
