@@ -136,6 +136,9 @@ export function ReactionPanel({
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const requestAmountLimit = workspaceSummary ? Math.max(1, workspaceSummary.deliveredMembers) : Math.max(1, remaining);
+  const memberCheckLimit = workspaceSummary
+    ? Math.max(1, workspaceSummary.memberCheckComplete ? workspaceSummary.deliveredMembers : workspaceSummary.remainingUncheckedMembers)
+    : 1;
   const progress = workspaceSummary
     ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
@@ -265,7 +268,7 @@ export function ReactionPanel({
             <div>
               <strong>Member check</strong>
               <small>{workspaceSummary.memberCheckComplete
-                ? `${workspaceSummary.checkedMembers} checked`
+                ? `${workspaceSummary.checkedMembers} checked · ready to run again`
                 : `${workspaceSummary.remainingUncheckedMembers} remaining · checked accounts are skipped`}</small>
             </div>
           </div>
@@ -277,10 +280,10 @@ export function ReactionPanel({
               type="number"
               inputMode="numeric"
               min={1}
-              max={Math.max(1, workspaceSummary.remainingUncheckedMembers)}
+              max={memberCheckLimit}
               value={memberCheckAmount}
               placeholder="Enter amount"
-              disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete}
+              disabled={refreshingEligibleMembers}
               onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
             />
           </label>
@@ -290,10 +293,10 @@ export function ReactionPanel({
             size="sm"
             type="button"
             onClick={onRefreshEligibleMembers}
-            disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+            disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
           >
             <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-            {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Completed" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
+            {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Check again" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
           </Button>
         </div>
       ) : null}

@@ -7890,7 +7890,7 @@
 .monitor-reaction-metric-refresh:hover:not(:disabled) { color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .monitor-reaction-metric-refresh:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-metric-refresh svg { width: 11px !important; height: 11px !important; }
-.monitor-reaction-member-check { display: grid; grid-template-columns: minmax(180px, 1fr) 116px auto; align-items: end; gap: 9px; margin: -3px 20px 14px; padding-top: 10px; border-top: 1px solid var(--app-divider); }
+.monitor-reaction-member-check { display: grid; width: fit-content; max-width: calc(100% - 40px); grid-template-columns: minmax(170px, 220px) 116px auto; align-items: end; gap: 9px; margin: -3px 20px 14px auto; padding: 9px; border: 1px solid var(--app-border); border-radius: 12px; background: rgba(5,6,14,.3); box-shadow: inset 0 1px 0 rgba(255,255,255,.018); }
 .monitor-reaction-member-check-copy { display: flex; min-width: 0; align-items: center; gap: 8px; align-self: center; }
 .monitor-reaction-member-check-copy > svg { width: 14px; height: 14px; flex: 0 0 14px; color: var(--app-accent-bright); }
 .monitor-reaction-member-check-copy strong { display: block; color: var(--app-text-secondary); font-size: 9px; font-weight: 720; }

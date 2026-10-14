@@ -12350,7 +12350,8 @@ function getReactionWorkspaceMemberCheck(guildId) {
 }
 
 async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) {
-  const previousCheck = getReactionWorkspaceMemberCheck(guildId);
+  const cachedCheck = getReactionWorkspaceMemberCheck(guildId);
+  const previousCheck = cachedCheck?.memberCheckComplete ? null : cachedCheck;
   const previouslyCheckedMemberIds = new Set(previousCheck?.checkedMemberIds ?? []);
   const previouslyEligibleMemberIds = new Set(previousCheck?.eligibleMemberIds ?? []);
   const { deliveredMembers: currentDeliveredMembers } = getReactionWorkspaceMembers(orders);
