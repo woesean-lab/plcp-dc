@@ -12264,8 +12264,6 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   }
 });
 
-const reactionWorkspaceMemberPresenceCache = new Map();
-
 function getReactionWorkspaceMembers(orders) {
   const delivered = new Map();
   for (const order of orders) {
@@ -12273,7 +12271,10 @@ function getReactionWorkspaceMembers(orders) {
       const discordUserId = String(member?.discordUserId ?? "").trim();
       const state = String(member?.state ?? "").toLowerCase();
       if (!discordUserId || !["joined", "already_member"].includes(state)) continue;
-      if (!delivered.has(discordUserId)) delivered.set(discordUserId, member);
+      const previous = delivered.get(discordUserId);
+      if (!previous || (previous.membershipStatus === "removed" && member?.membershipStatus !== "removed")) {
+        delivered.set(discordUserId, member);
+      }
     }
   }
   const deliveredMembers = [...delivered.values()];
@@ -12281,53 +12282,7 @@ function getReactionWorkspaceMembers(orders) {
   return { deliveredMembers, eligibleMembers };
 }
 
-async function checkReactionWorkspaceMemberPresence(config, guildId, discordUserId) {
-  const cacheKey = `${guildId}:${discordUserId}`;
-  const cached = reactionWorkspaceMemberPresenceCache.get(cacheKey);
-  if (cached?.expiresAt > Date.now()) return cached.present;
-
-  let result = await requestDiscord(
-    `guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(discordUserId)}`,
-    { headers: { Authorization: `Bot ${config.botToken}` } }
-  );
-  if (result.response.status === 429) {
-    const retrySeconds = Math.min(Math.max(Number(result.payload?.retry_after) || 1, 1), 5);
-    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1_000));
-    result = await requestDiscord(
-      `guilds/${encodeURIComponent(guildId)}/members/${encodeURIComponent(discordUserId)}`,
-      { headers: { Authorization: `Bot ${config.botToken}` } }
-    );
-  }
-
-  if (result.response.ok) {
-    reactionWorkspaceMemberPresenceCache.set(cacheKey, { present: true, expiresAt: Date.now() + 60_000 });
-    return true;
-  }
-
-  const discordCode = Number(result.payload?.code ?? 0);
-  if (result.response.status === 404 && [10007, 10013].includes(discordCode)) {
-    reactionWorkspaceMemberPresenceCache.set(cacheKey, { present: false, expiresAt: Date.now() + 5 * 60_000 });
-    return false;
-  }
-
-  const error = new Error(`Discord could not verify the delivered members right now (${result.response.status || "unknown"}). Please try again.`);
-  error.statusCode = result.response.status === 429 ? 429 : 502;
-  throw error;
-}
-
-async function verifyReactionWorkspaceMembers(orders, config, guildId) {
-  const { deliveredMembers } = getReactionWorkspaceMembers(orders);
-  const eligibleMembers = [];
-  for (let offset = 0; offset < deliveredMembers.length; offset += 8) {
-    const batch = deliveredMembers.slice(offset, offset + 8);
-    const checks = await Promise.all(batch.map(async (member) => ({
-      member,
-      present: await checkReactionWorkspaceMemberPresence(config, guildId, String(member.discordUserId))
-    })));
-    eligibleMembers.push(...checks.filter((check) => check.present).map((check) => check.member));
-  }
-  return { deliveredMembers, eligibleMembers };
-}
+const reactionWorkspaceBotAccessCache = new Map();
 
 async function loadReactionWorkspaceBotContext(guildId) {
   const config = await getCommunityOAuthConfig();
@@ -12336,7 +12291,24 @@ async function loadReactionWorkspaceBotContext(guildId) {
     error.statusCode = 503;
     throw error;
   }
-  const access = await checkCommunityBotGuildAccess(config, guildId);
+  const cacheKey = `${config.clientId}:${guildId}`;
+  const cached = reactionWorkspaceBotAccessCache.get(cacheKey);
+  let access = cached?.expiresAt > Date.now()
+    ? cached.access
+    : await checkCommunityBotGuildAccess(config, guildId);
+  for (let attempt = 0; !access.accessible && access.status === 429 && attempt < 2; attempt += 1) {
+    const retrySeconds = Math.min(Math.max(Number(access.payload?.retry_after) || 1, 1), 15);
+    await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1_000));
+    access = await checkCommunityBotGuildAccess(config, guildId);
+  }
+  if (access.accessible) {
+    reactionWorkspaceBotAccessCache.set(cacheKey, { access, expiresAt: Date.now() + 30_000 });
+  }
+  if (access.status === 429) {
+    const error = new Error("Discord is temporarily rate limiting the bot access check. Please try again shortly.");
+    error.statusCode = 503;
+    throw error;
+  }
   return {
     config,
     access,
@@ -12358,8 +12330,8 @@ function getReactionWorkspaceRequests(orders) {
     .sort((left, right) => new Date(left?.createdAt ?? 0).getTime() - new Date(right?.createdAt ?? 0).getTime());
 }
 
-function buildReactionWorkspaceSummary(reactionMessage, orders, verifiedMembers = getReactionWorkspaceMembers(orders)) {
-  const { deliveredMembers, eligibleMembers } = verifiedMembers;
+function buildReactionWorkspaceSummary(reactionMessage, orders) {
+  const { deliveredMembers, eligibleMembers } = getReactionWorkspaceMembers(orders);
   const requests = getReactionWorkspaceRequests(orders);
   const usedMemberIds = new Set(requests
     .filter((request) => request?.messageLink === reactionMessage.url)
@@ -12407,8 +12379,7 @@ app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {
     }
     const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId);
     if (!botContext.access.accessible) return sendReactionWorkspaceBotRequired(res, botContext);
-    const verifiedMembers = await verifyReactionWorkspaceMembers(orders, botContext.config, reactionMessage.guildId);
-    const summary = buildReactionWorkspaceSummary(reactionMessage, orders, verifiedMembers);
+    const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
     res.set("Cache-Control", "no-store").json(summary);
   } catch (error) {
     next(error);
@@ -12442,8 +12413,7 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
       await client.query("ROLLBACK");
       return sendReactionWorkspaceBotRequired(res, botContext);
     }
-    const verifiedMembers = await verifyReactionWorkspaceMembers(orders, botContext.config, reactionMessage.guildId);
-    const summary = buildReactionWorkspaceSummary(reactionMessage, orders, verifiedMembers);
+    const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
     if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > summary.availableForMessage) {
       await client.query("ROLLBACK");
       return res.status(400).json({ message: summary.availableForMessage > 0
@@ -12451,7 +12421,7 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
         : "Every available member has already been assigned to this message." });
     }
 
-    const { eligibleMembers } = verifiedMembers;
+    const { eligibleMembers } = getReactionWorkspaceMembers(orders);
     const usedMemberIds = new Set(summary.requests
       .filter((request) => request?.messageLink === reactionMessage.url)
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
@@ -12494,7 +12464,7 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [anchorOrder.uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
     const updatedOrders = orders.map((order) => order.uniqid === anchorOrder.uniqid ? updatedOrder : order);
-    res.status(201).set("Cache-Control", "no-store").json(buildReactionWorkspaceSummary(reactionMessage, updatedOrders, verifiedMembers));
+    res.status(201).set("Cache-Control", "no-store").json(buildReactionWorkspaceSummary(reactionMessage, updatedOrders));
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);

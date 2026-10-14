@@ -228,7 +228,7 @@ export default function ReactionsPage() {
               <span className="reactions-bot-required-icon" aria-hidden="true"><Bot /></span>
               <div className="reactions-bot-required-copy">
                 <strong>Reaction işlemi için botu yeniden sunucuya ekleyin.</strong>
-                <p>Bot sunucuda algılandıktan sonra uygun üyeler güncel üyelik durumlarına göre hesaplanır.</p>
+                <p>Bot sunucuda algılandıktan sonra teslim edilmiş uygun üyeler yüklenir.</p>
               </div>
               <div className="reactions-bot-required-actions">
                 <Button asChild type="button">
