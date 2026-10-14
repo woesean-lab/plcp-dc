@@ -1,15 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, LoaderCircle, MessageSquareText, Server, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Bot, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { REACTION_MIXED_VALUE, ReactionPanel, type ReactionPanelRequest } from "@/components/ReactionPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { extractBotInviteFromError } from "../lib/bot-invite";
 import { cancelReactionWorkspaceRequest, createReactionWorkspaceRequest, inspectReactionWorkspace } from "../lib/integration";
 import type { ReactionWorkspaceSummary } from "../types";
 
 const DISCORD_MESSAGE_LINK = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/\d{16,22}\/\d{16,22}\/\d{16,22}(?:[/?#].*)?$/i;
 const PAGE_SKELETON_DELAY = 300;
+
+function isReactionBotRequiredError(error: unknown) {
+  if (!error || typeof error !== "object" || !("payload" in error)) return false;
+  const payload = (error as { payload?: unknown }).payload;
+  return Boolean(payload && typeof payload === "object" && "code" in payload && payload.code === "REACTION_BOT_REQUIRED");
+}
 
 function ReactionsPageSkeleton() {
   return (
@@ -66,6 +73,7 @@ export default function ReactionsPage() {
   const [messageLink, setMessageLink] = useState("");
   const [summary, setSummary] = useState<ReactionWorkspaceSummary | null>(null);
   const [inspectError, setInspectError] = useState("");
+  const [botInvite, setBotInvite] = useState<string | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
@@ -86,6 +94,7 @@ export default function ReactionsPage() {
   useEffect(() => {
     if (!validLink) {
       setSummary(null);
+      setBotInvite(null);
       setInspectError(normalizedLink ? "Paste a complete Discord message link." : "");
       setInspecting(false);
       return;
@@ -93,6 +102,7 @@ export default function ReactionsPage() {
     let active = true;
     setInspecting(true);
     setInspectError("");
+    setBotInvite(null);
     const timer = window.setTimeout(() => {
       void inspectReactionWorkspace(normalizedLink)
         .then((nextSummary) => {
@@ -103,7 +113,12 @@ export default function ReactionsPage() {
         .catch((error) => {
           if (!active) return;
           setSummary(null);
-          setInspectError(error instanceof Error ? error.message : "The Discord message could not be inspected.");
+          if (isReactionBotRequiredError(error)) {
+            setBotInvite(extractBotInviteFromError(error));
+            setInspectError("");
+          } else {
+            setInspectError(error instanceof Error ? error.message : "The Discord message could not be inspected.");
+          }
         })
         .finally(() => {
           if (active) setInspecting(false);
@@ -131,6 +146,7 @@ export default function ReactionsPage() {
 
   function handleMessageChange(value: string) {
     setMessageLink(value);
+    setBotInvite(null);
     if (summary && value.trim() !== summary.messageLink) setSummary(null);
   }
 
@@ -207,6 +223,25 @@ export default function ReactionsPage() {
             {inspecting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
             {inspecting ? "Matching..." : "Match members"}
           </Button>
+          {botInvite ? (
+            <div className="reactions-bot-required" role="alert">
+              <span className="reactions-bot-required-icon" aria-hidden="true"><Bot /></span>
+              <div className="reactions-bot-required-copy">
+                <strong>Reaction işlemi için botu yeniden sunucuya ekleyin.</strong>
+                <p>Bot sunucuda algılandıktan sonra uygun üyeler güncel üyelik durumlarına göre hesaplanır.</p>
+              </div>
+              <div className="reactions-bot-required-actions">
+                <Button asChild type="button">
+                  <a href={botInvite} target="_blank" rel="noreferrer">
+                    <Bot className="h-4 w-4" aria-hidden="true" /> Botu Ekle <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                  </a>
+                </Button>
+                <Button type="button" variant="secondary" disabled={inspecting} onClick={() => setInspectNonce((current) => current + 1)}>
+                  <RefreshCw className={`h-4 w-4${inspecting ? " animate-spin" : ""}`} aria-hidden="true" /> Tekrar Kontrol Et
+                </Button>
+              </div>
+            </div>
+          ) : null}
           {inspectError ? <p className="reactions-lookup-error" role="alert">{inspectError}</p> : null}
         </div>
       ) : (
