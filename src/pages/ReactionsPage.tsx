@@ -42,7 +42,7 @@ function ReactionsPageSkeleton() {
           <Skeleton className="h-3 w-32" />
           <Skeleton className="mt-2 h-[46px] w-full rounded-xl" />
         </div>
-        <Skeleton className="h-[46px] w-40 rounded-xl" />
+        <Skeleton className="h-[46px] w-full rounded-xl" />
       </div>
     </section>
   );
