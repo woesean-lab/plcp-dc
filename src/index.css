@@ -7896,6 +7896,8 @@
 .monitor-reaction-purchased-check input:focus { border-color: var(--app-accent); box-shadow: 0 0 0 2px var(--app-accent-soft); }
 .monitor-reaction-purchased-check button { display: inline-flex; height: 27px; min-width: 48px; align-items: center; justify-content: center; gap: 4px; padding: 0 7px; border: 1px solid var(--app-accent-border); border-radius: 7px; color: var(--app-accent-bright); background: var(--app-accent-soft); font-size: 8px; font-weight: 750; white-space: nowrap; transition: border-color .15s ease, background .15s ease; }
 .monitor-reaction-purchased-check button:hover:not(:disabled) { border-color: rgba(154,139,255,.42); background: rgba(127,107,221,.18); }
+.monitor-reaction-purchased-check[data-repeat="true"] button { border-color: var(--app-border); color: var(--app-text-secondary); background: var(--app-control-bg); }
+.monitor-reaction-purchased-check[data-repeat="true"] button:hover:not(:disabled) { border-color: var(--app-border-strong); color: var(--app-text); background: var(--app-hover-strong); }
 .monitor-reaction-purchased-check button:disabled { cursor: not-allowed; opacity: .5; }
 .monitor-reaction-purchased-check button svg { width: 10px; height: 10px; }
 

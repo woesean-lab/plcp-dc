@@ -236,7 +236,7 @@ export function ReactionPanel({
             <strong>{workspaceSummary ? workspaceSummary.totalOrdered : pending}</strong>
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
             {workspaceSummary && onRefreshEligibleMembers ? (
-              <div className="monitor-reaction-purchased-check">
+              <div className="monitor-reaction-purchased-check" data-repeat={workspaceSummary.memberCheckComplete || undefined}>
                 <label>
                   <span className="sr-only">Members to check</span>
                   <input
