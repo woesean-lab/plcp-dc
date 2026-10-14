@@ -8125,10 +8125,9 @@
 .reactions-lookup-copy p { margin-top: 5px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
 .reactions-lookup-field { display: grid; gap: 7px; min-width: 0; }
 .reactions-lookup-field > span { color: var(--app-muted); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
-.reactions-lookup-field input { width: 100%; height: 44px; min-width: 0; border: 1px solid var(--app-border); border-radius: 12px; outline: none; padding: 0 13px; color: var(--app-text); background: var(--app-control-bg); font: inherit; font-size: 12px; transition: border-color .18s ease, box-shadow .18s ease; }
-.reactions-lookup-field input:focus { border-color: var(--app-accent-border); box-shadow: 0 0 0 3px var(--app-accent-soft); }
-.reactions-lookup-field input[aria-invalid="true"] { border-color: rgba(255,111,143,.34); }
-.reactions-lookup-card > .ui-button { height: 44px; align-self: end; }
+.reactions-lookup-field .ui-input { height: 46px; min-width: 0; font-size: 13px; }
+.reactions-lookup-field .ui-input[aria-invalid="true"] { border-color: rgba(255,111,143,.42); }
+.reactions-lookup-card > .ui-button { height: 46px; align-self: end; }
 .reactions-lookup-error, .reactions-lookup-note { grid-column: 3 / -1; margin: -5px 2px 0; font-size: 10px; line-height: 1.5; }
 .reactions-lookup-error { color: var(--app-danger-text); }
 .reactions-lookup-note { color: var(--app-muted); }

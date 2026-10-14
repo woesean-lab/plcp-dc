@@ -3,10 +3,42 @@ import { ArrowRight, LoaderCircle, MessageSquareText, Server, Sparkles, Users } 
 import toast from "react-hot-toast";
 import { REACTION_MIXED_VALUE, ReactionPanel, type ReactionPanelRequest } from "@/components/ReactionPanel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cancelReactionWorkspaceRequest, createReactionWorkspaceRequest, inspectReactionWorkspace } from "../lib/integration";
 import type { ReactionWorkspaceSummary } from "../types";
 
 const DISCORD_MESSAGE_LINK = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/\d{16,22}\/\d{16,22}\/\d{16,22}(?:[/?#].*)?$/i;
+const PAGE_SKELETON_DELAY = 300;
+
+function ReactionsPageSkeleton() {
+  return (
+    <section className="reactions-page tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label="Loading reactions">
+      <span className="sr-only">Loading reactions</span>
+      <div className="reactions-page-heading" aria-hidden="true">
+        <div className="min-w-0 flex-1">
+          <Skeleton className="h-3 w-40" />
+          <Skeleton className="mt-3 h-10 w-52" />
+          <Skeleton className="mt-3 h-4 w-full max-w-[720px]" />
+        </div>
+        <Skeleton className="h-[52px] w-[420px] max-w-full rounded-[14px]" />
+      </div>
+      <div className="reactions-lookup-card" aria-hidden="true">
+        <Skeleton className="h-12 w-12 shrink-0 rounded-[14px]" />
+        <div className="min-w-0">
+          <Skeleton className="h-4 w-56 max-w-full" />
+          <Skeleton className="mt-3 h-3 w-full" />
+          <Skeleton className="mt-2 h-3 w-4/5" />
+        </div>
+        <div className="min-w-0">
+          <Skeleton className="h-3 w-32" />
+          <Skeleton className="mt-2 h-[46px] w-full rounded-xl" />
+        </div>
+        <Skeleton className="h-[46px] w-40 rounded-xl" />
+      </div>
+    </section>
+  );
+}
 
 function toPanelRequests(summary: ReactionWorkspaceSummary): ReactionPanelRequest[] {
   return summary.requests.map((request) => {
@@ -30,6 +62,7 @@ function toPanelRequests(summary: ReactionWorkspaceSummary): ReactionPanelReques
 }
 
 export default function ReactionsPage() {
+  const [pageReady, setPageReady] = useState(false);
   const [messageLink, setMessageLink] = useState("");
   const [summary, setSummary] = useState<ReactionWorkspaceSummary | null>(null);
   const [inspectError, setInspectError] = useState("");
@@ -44,6 +77,11 @@ export default function ReactionsPage() {
   const validLink = DISCORD_MESSAGE_LINK.test(normalizedLink);
   const requests = useMemo(() => summary ? toPanelRequests(summary) : [], [summary]);
   const activeRequestCount = requests.filter((request) => request.assignedCount > request.completedCount + (request.failedCount ?? 0) + (request.cancelledCount ?? 0)).length;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setPageReady(true), PAGE_SKELETON_DELAY);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!validLink) {
@@ -128,8 +166,10 @@ export default function ReactionsPage() {
     }
   }
 
+  if (!pageReady) return <ReactionsPageSkeleton />;
+
   return (
-    <section className="reactions-page">
+    <section className="reactions-page tab-slide-in">
       <div className="reactions-page-heading">
         <div>
           <p className="app-kicker text-[var(--app-accent)]">Members-powered delivery</p>
@@ -154,7 +194,7 @@ export default function ReactionsPage() {
           </div>
           <label className="reactions-lookup-field">
             <span>Discord message URL</span>
-            <input
+            <Input
               autoFocus
               type="url"
               value={messageLink}
