@@ -193,7 +193,7 @@ export default function ReactionsPage() {
             <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
           </div>
           <label className="reactions-lookup-field">
-            <span>Discord message URL</span>
+            <span className="boost-order-label">Discord Message URL</span>
             <Input
               autoFocus
               type="url"
@@ -208,7 +208,6 @@ export default function ReactionsPage() {
             {inspecting ? "Matching..." : "Match members"}
           </Button>
           {inspectError ? <p className="reactions-lookup-error" role="alert">{inspectError}</p> : null}
-          {!messageLink ? <p className="reactions-lookup-note">Create a normal Members order first and wait for the members to join the target server.</p> : null}
         </div>
       ) : (
         <ReactionPanel
