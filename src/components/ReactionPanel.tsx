@@ -207,39 +207,6 @@ export function ReactionPanel({
         </div>
       </div>
 
-      {workspaceSummary && onRefreshEligibleMembers ? (
-        <div className="monitor-reaction-member-check-bar">
-          <span className="public-secure-mark gap-2">
-            <label className="monitor-reaction-check-quantity">
-              <span className="sr-only">Members to check</span>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={memberCheckLimit}
-                value={memberCheckAmount}
-                placeholder="Quantity"
-                disabled={refreshingEligibleMembers}
-                onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
-                aria-label="Members to check"
-              />
-            </label>
-            <Button
-              className="member-log-action-button"
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={onRefreshEligibleMembers}
-              disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
-            >
-              <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
-              {refreshingEligibleMembers ? "Checking..." : "Check members"}
-            </Button>
-            <span><ShieldCheck className="inline h-3.5 w-3.5" /> {workspaceSummary.checkedMembers}/{workspaceSummary.deliveredMembers} processed</span>
-          </span>
-        </div>
-      ) : null}
-
       <div className="monitor-reaction-dashboard">
         <div className="monitor-reaction-overview">
           <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${eligibleMembers} eligible members` : `${completed} of ${limit} reactions completed`}>
@@ -293,6 +260,39 @@ export function ReactionPanel({
           </div>
         </div>
       </div>
+
+      {workspaceSummary && onRefreshEligibleMembers ? (
+        <div className="monitor-reaction-member-check-bar">
+          <span className="public-secure-mark gap-2">
+            <label className="monitor-reaction-check-quantity">
+              <span className="sr-only">Members to check</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={memberCheckLimit}
+                value={memberCheckAmount}
+                placeholder="Quantity"
+                disabled={refreshingEligibleMembers}
+                onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
+                aria-label="Members to check"
+              />
+            </label>
+            <Button
+              className="member-log-action-button"
+              type="button"
+              variant="secondary"
+              size="xs"
+              onClick={onRefreshEligibleMembers}
+              disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+            >
+              <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
+              {refreshingEligibleMembers ? "Checking..." : "Check members"}
+            </Button>
+            <span><ShieldCheck className="inline h-3.5 w-3.5" /> {workspaceSummary.checkedMembers}/{workspaceSummary.deliveredMembers} processed</span>
+          </span>
+        </div>
+      ) : null}
 
       {remaining > 0 || workspaceSummary ? (
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
