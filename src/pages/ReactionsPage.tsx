@@ -80,6 +80,7 @@ export default function ReactionsPage() {
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
   const [submitting, setSubmitting] = useState(false);
   const [checkingMembers, setCheckingMembers] = useState(false);
+  const [memberCheckAmount, setMemberCheckAmount] = useState("");
   const [cancellingRequestId, setCancellingRequestId] = useState("");
   const [inspectNonce, setInspectNonce] = useState(0);
 
@@ -171,11 +172,17 @@ export default function ReactionsPage() {
 
   async function handleCheckMembers() {
     if (!summary || checkingMembers) return;
+    const requestedCheckCount = Number.parseInt(memberCheckAmount, 10);
+    if (!Number.isInteger(requestedCheckCount) || requestedCheckCount < 1) {
+      toast.error("Enter how many members to check.");
+      return;
+    }
     try {
       setCheckingMembers(true);
-      const next = await checkReactionWorkspaceMembers(summary.messageLink);
+      const next = await checkReactionWorkspaceMembers(summary.messageLink, requestedCheckCount);
       setSummary(next);
       setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.deliveredMembers))));
+      if (next.remainingUncheckedMembers > 0) setMemberCheckAmount((current) => String(Math.min(Number.parseInt(current, 10) || 1, next.remainingUncheckedMembers)));
       toast.success(next.memberCheckComplete
         ? `All ${next.checkedMembers} delivered members were checked. ${next.eligibleMembers} are ready to react.`
         : `${next.lastBatchChecked} members checked. ${next.eligibleMembers} are ready; ${next.remainingUncheckedMembers} remain.`);
@@ -291,6 +298,8 @@ export default function ReactionsPage() {
           onSubmit={() => void handleSubmit()}
           onRefreshEligibleMembers={() => void handleCheckMembers()}
           refreshingEligibleMembers={checkingMembers}
+          memberCheckAmount={memberCheckAmount}
+          onMemberCheckAmountChange={setMemberCheckAmount}
           onCancelPending={(requestId) => void handleCancel(requestId)}
           cancellingPending={Boolean(cancellingRequestId)}
           workspaceSummary={summary}

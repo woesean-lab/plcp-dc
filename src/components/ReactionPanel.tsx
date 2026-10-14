@@ -59,6 +59,8 @@ type ReactionPanelProps = {
   eligibleMembers: number;
   onRefreshEligibleMembers?: () => void;
   refreshingEligibleMembers?: boolean;
+  memberCheckAmount?: string;
+  onMemberCheckAmountChange?: (value: string) => void;
   onCancelPending?: (requestId?: string) => void;
   cancellingPending?: boolean;
   messageDraft: string;
@@ -89,7 +91,6 @@ type ReactionPanelProps = {
     remainingUncheckedMembers: number;
     lastBatchChecked: number;
     memberCheckComplete: boolean;
-    memberCheckBatchSize: number;
   };
 };
 
@@ -107,6 +108,8 @@ export function ReactionPanel({
   eligibleMembers,
   onRefreshEligibleMembers,
   refreshingEligibleMembers = false,
+  memberCheckAmount = "",
+  onMemberCheckAmountChange,
   onCancelPending,
   cancellingPending = false,
   messageDraft,
@@ -212,7 +215,7 @@ export function ReactionPanel({
             <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : `${completed} of ${limit} reactions delivered`}</strong>
             <p>{workspaceSummary
               ? workspaceSummary.membersCheckRequired
-                ? `Check the first ${Math.min(workspaceSummary.memberCheckBatchSize, workspaceSummary.deliveredMembers)} delivered members to find accounts ready to react.`
+                ? "Choose how many delivered members to check for reaction availability."
                 : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} have not been used on this message yet.`}`
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
@@ -228,17 +231,31 @@ export function ReactionPanel({
           <div data-tone="pending" className={workspaceSummary && onRefreshEligibleMembers ? "has-member-check" : undefined}>
             <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}
               {workspaceSummary && onRefreshEligibleMembers ? (
-                <button
-                  className="monitor-reaction-check-members"
-                  type="button"
-                  onClick={onRefreshEligibleMembers}
-                  disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete}
-                  aria-label={workspaceSummary.membersCheckRequired ? `Check first ${workspaceSummary.memberCheckBatchSize} members` : `Check next ${workspaceSummary.memberCheckBatchSize} members`}
-                  title={workspaceSummary.memberCheckComplete ? "All delivered members have been checked" : workspaceSummary.membersCheckRequired ? `Check first ${workspaceSummary.memberCheckBatchSize} members` : `Check next ${workspaceSummary.memberCheckBatchSize} members`}
-                >
-                  <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-                  {refreshingEligibleMembers ? "..." : workspaceSummary.memberCheckComplete ? "Done" : workspaceSummary.membersCheckRequired ? `Check ${workspaceSummary.memberCheckBatchSize}` : `Next ${workspaceSummary.memberCheckBatchSize}`}
-                </button>
+                <span className="monitor-reaction-check-control">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={Math.max(1, workspaceSummary.remainingUncheckedMembers)}
+                    value={memberCheckAmount}
+                    placeholder="Qty"
+                    disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete}
+                    onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
+                    aria-label="Members to check"
+                    title="Members to check"
+                  />
+                  <button
+                    className="monitor-reaction-check-members"
+                    type="button"
+                    onClick={onRefreshEligibleMembers}
+                    disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+                    aria-label={workspaceSummary.membersCheckRequired ? "Check members" : "Check next members"}
+                    title={workspaceSummary.memberCheckComplete ? "All delivered members have been checked" : "Check the specified number of members"}
+                  >
+                    <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
+                    {refreshingEligibleMembers ? "..." : workspaceSummary.memberCheckComplete ? "Done" : workspaceSummary.membersCheckRequired ? "Check" : "Next"}
+                  </button>
+                </span>
               ) : null}
             </span>
             <strong>{workspaceSummary ? workspaceSummary.totalOrdered : pending}</strong>

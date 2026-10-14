@@ -344,11 +344,11 @@ export function inspectReactionWorkspace(messageLink: string) {
   return requestJson<ReactionWorkspaceSummary>(`/api/reactions/inspect?messageLink=${encodeURIComponent(messageLink)}`);
 }
 
-export function checkReactionWorkspaceMembers(messageLink: string) {
+export function checkReactionWorkspaceMembers(messageLink: string, checkCount: number) {
   return requestJson<ReactionWorkspaceSummary>("/api/reactions/check-members", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messageLink })
+    body: JSON.stringify({ messageLink, checkCount })
   });
 }
 

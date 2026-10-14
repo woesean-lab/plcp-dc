@@ -225,7 +225,6 @@ export interface ReactionWorkspaceSummary {
   remainingUncheckedMembers: number;
   lastBatchChecked: number;
   memberCheckComplete: boolean;
-  memberCheckBatchSize: number;
   requests: ReactionWorkspaceRequest[];
 }
 
