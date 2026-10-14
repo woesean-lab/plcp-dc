@@ -222,9 +222,9 @@ export function ReactionPanel({
           <div data-tone="pending" className={workspaceSummary && onRefreshEligibleMembers ? "has-member-check" : undefined}>
             <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}
               {workspaceSummary && onRefreshEligibleMembers ? (
-                <button className="monitor-reaction-check-members" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers}>
+                <button className="monitor-reaction-check-members" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Check members" title="Check Members">
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-                  {refreshingEligibleMembers ? "Checking..." : "Check Members"}
+                  {refreshingEligibleMembers ? "..." : "Check"}
                 </button>
               ) : null}
             </span>
