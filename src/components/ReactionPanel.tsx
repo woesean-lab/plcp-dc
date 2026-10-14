@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 
@@ -207,6 +207,39 @@ export function ReactionPanel({
         </div>
       </div>
 
+      {workspaceSummary && onRefreshEligibleMembers ? (
+        <div className="monitor-reaction-member-check-bar">
+          <span className="public-secure-mark gap-2">
+            <label className="monitor-reaction-check-quantity">
+              <span className="sr-only">Members to check</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={memberCheckLimit}
+                value={memberCheckAmount}
+                placeholder="Quantity"
+                disabled={refreshingEligibleMembers}
+                onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
+                aria-label="Members to check"
+              />
+            </label>
+            <Button
+              className="member-log-action-button"
+              type="button"
+              variant="secondary"
+              size="xs"
+              onClick={onRefreshEligibleMembers}
+              disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+            >
+              <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
+              {refreshingEligibleMembers ? "Checking..." : "Check members"}
+            </Button>
+            <span><ShieldCheck className="inline h-3.5 w-3.5" /> {workspaceSummary.checkedMembers}/{workspaceSummary.deliveredMembers} processed</span>
+          </span>
+        </div>
+      ) : null}
+
       <div className="monitor-reaction-dashboard">
         <div className="monitor-reaction-overview">
           <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${eligibleMembers} eligible members` : `${completed} of ${limit} reactions completed`}>
@@ -235,33 +268,6 @@ export function ReactionPanel({
             <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}</span>
             <strong>{workspaceSummary ? workspaceSummary.totalOrdered : pending}</strong>
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
-            {workspaceSummary && onRefreshEligibleMembers ? (
-              <div className="monitor-reaction-purchased-check" data-repeat={workspaceSummary.memberCheckComplete || undefined}>
-                <label>
-                  <span className="sr-only">Members to check</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    max={memberCheckLimit}
-                    value={memberCheckAmount}
-                    placeholder="Qty"
-                    disabled={refreshingEligibleMembers}
-                    onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
-                    aria-label="Members to check"
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={onRefreshEligibleMembers}
-                  disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
-                  title={workspaceSummary.memberCheckComplete ? "Check members again" : "Check members"}
-                >
-                  <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-                  {refreshingEligibleMembers ? "..." : workspaceSummary.memberCheckComplete ? "Again" : "Check"}
-                </button>
-              </div>
-            ) : null}
           </div>
           <div data-tone="available">
             <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "This message" : "Available"}</span>

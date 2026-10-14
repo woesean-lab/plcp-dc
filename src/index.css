@@ -7890,16 +7890,14 @@
 .monitor-reaction-metric-refresh:hover:not(:disabled) { color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .monitor-reaction-metric-refresh:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-metric-refresh svg { width: 11px !important; height: 11px !important; }
-.monitor-reaction-purchased-check { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; margin-top: 9px; }
-.monitor-reaction-purchased-check label { min-width: 0; }
-.monitor-reaction-purchased-check input { width: 100%; height: 27px; min-width: 0; padding: 0 7px; border: 1px solid var(--app-border); border-radius: 7px; outline: 0; color: var(--app-text); background: var(--app-input-bg); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; transition: border-color .15s ease, box-shadow .15s ease; }
-.monitor-reaction-purchased-check input:focus { border-color: var(--app-accent); box-shadow: 0 0 0 2px var(--app-accent-soft); }
-.monitor-reaction-purchased-check button { display: inline-flex; height: 27px; min-width: 48px; align-items: center; justify-content: center; gap: 4px; padding: 0 7px; border: 1px solid var(--app-accent-border); border-radius: 7px; color: var(--app-accent-bright); background: var(--app-accent-soft); font-size: 8px; font-weight: 750; white-space: nowrap; transition: border-color .15s ease, background .15s ease; }
-.monitor-reaction-purchased-check button:hover:not(:disabled) { border-color: rgba(154,139,255,.42); background: rgba(127,107,221,.18); }
-.monitor-reaction-purchased-check[data-repeat="true"] button { border-color: var(--app-border); color: var(--app-text-secondary); background: var(--app-control-bg); }
-.monitor-reaction-purchased-check[data-repeat="true"] button:hover:not(:disabled) { border-color: var(--app-border-strong); color: var(--app-text); background: var(--app-hover-strong); }
-.monitor-reaction-purchased-check button:disabled { cursor: not-allowed; opacity: .5; }
-.monitor-reaction-purchased-check button svg { width: 10px; height: 10px; }
+.monitor-reaction-member-check-bar { display: flex; justify-content: flex-end; overflow-x: auto; padding: 12px 20px 0; }
+.monitor-reaction-member-check-bar .public-secure-mark { flex: 0 0 auto; }
+.monitor-reaction-member-check-bar .public-secure-mark { padding: .4rem .55rem; background: rgba(15,17,29,.82); }
+.monitor-reaction-check-quantity { display: inline-flex; }
+.monitor-reaction-check-quantity input { width: 104px; height: 32px; padding: 0 10px; border: 1px solid var(--app-border-strong); border-radius: 10px; outline: 0; color: var(--app-text); background: var(--app-input-bg); font-family: inherit; font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; transition: border-color .15s ease, box-shadow .15s ease; }
+.monitor-reaction-check-quantity input::placeholder { color: var(--app-placeholder); }
+.monitor-reaction-check-quantity input:focus { border-color: var(--app-accent); box-shadow: 0 0 0 3px var(--app-accent-soft); }
+.monitor-reaction-member-check-bar .member-log-action-button { height: 32px; }
 
 .monitor-reaction-form {
   position: relative;
