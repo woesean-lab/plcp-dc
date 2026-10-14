@@ -5936,7 +5936,7 @@ async function refreshCommunityOAuthTokensDue(config, limit = 5_000) {
   return summary;
 }
 
-async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
+async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, options = {}) {
   if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
     const error = new Error("This order does not contain Members 2 delivery results.");
     error.statusCode = 400;
@@ -5957,11 +5957,17 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
     throw error;
   }
 
-  const discordUserIds = order.communityResults
+  const requestedDiscordUserIds = Array.isArray(options.discordUserIds)
+    ? new Set(options.discordUserIds.map((value) => String(value ?? "").trim()).filter(isDiscordGuildId))
+    : null;
+  const resultsToCheck = requestedDiscordUserIds
+    ? order.communityResults.filter((item) => requestedDiscordUserIds.has(String(item?.discordUserId ?? "")))
+    : order.communityResults;
+  const discordUserIds = [...new Set(resultsToCheck
     .map((item) => String(item?.discordUserId ?? ""))
-    .filter(isDiscordGuildId);
+    .filter(isDiscordGuildId))];
   onProgress({ active: true, total: discordUserIds.length, checked: 0, stage: "onliner" });
-  const onlinerEnabledUserIds = new Set(order.communityResults
+  const onlinerEnabledUserIds = new Set(resultsToCheck
     .filter((item) => isCommunityOnlinerCheckEnabled(order, item))
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId));
@@ -6159,7 +6165,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}) {
   return { order: checkedOrder, summary };
 }
 
-async function runCommunityOrderMemberCheck(order) {
+async function runCommunityOrderMemberCheck(order, options = {}) {
   const uniqid = String(order?.uniqid ?? "").trim();
   const existing = communityOrderMemberCheckProgress.get(uniqid);
   if (existing?.active) {
@@ -6169,7 +6175,9 @@ async function runCommunityOrderMemberCheck(order) {
   }
   const initial = {
     active: true,
-    total: Array.isArray(order?.communityResults) ? order.communityResults.length : 0,
+    total: Array.isArray(options.discordUserIds)
+      ? new Set(options.discordUserIds.map((value) => String(value ?? "").trim()).filter(isDiscordGuildId)).size
+      : Array.isArray(order?.communityResults) ? order.communityResults.length : 0,
     checked: 0,
     stage: "starting",
     startedAt: new Date().toISOString()
@@ -6178,7 +6186,7 @@ async function runCommunityOrderMemberCheck(order) {
   try {
     const result = await checkCommunityOrderAuthorizations(order, (progress) => {
       communityOrderMemberCheckProgress.set(uniqid, { ...initial, ...progress });
-    });
+    }, options);
     communityOrderMemberCheckProgress.set(uniqid, {
       ...initial,
       active: false,
@@ -12284,7 +12292,8 @@ function getReactionWorkspaceMembers(orders) {
 
 const reactionWorkspaceBotAccessCache = new Map();
 const reactionWorkspaceMemberCheckCache = new Map();
-const reactionWorkspaceMemberCheckMaxAgeMs = 2 * 60_000;
+const reactionWorkspaceMemberCheckMaxAgeMs = 10 * 60_000;
+const reactionWorkspaceMemberCheckBatchSize = 200;
 
 async function loadReactionWorkspaceBotContext(guildId) {
   const config = await getCommunityOAuthConfig();
@@ -12342,22 +12351,55 @@ function getReactionWorkspaceMemberCheck(guildId) {
 }
 
 async function refreshReactionWorkspaceMembers(orders, guildId) {
+  const previousCheck = getReactionWorkspaceMemberCheck(guildId);
+  const previouslyCheckedMemberIds = new Set(previousCheck?.checkedMemberIds ?? []);
+  const previouslyEligibleMemberIds = new Set(previousCheck?.eligibleMemberIds ?? []);
+  const { deliveredMembers: currentDeliveredMembers } = getReactionWorkspaceMembers(orders);
+  const nextMemberIds = currentDeliveredMembers
+    .map((member) => String(member?.discordUserId ?? ""))
+    .filter((discordUserId) => isDiscordGuildId(discordUserId) && !previouslyCheckedMemberIds.has(discordUserId))
+    .slice(0, reactionWorkspaceMemberCheckBatchSize);
+  const nextMemberIdSet = new Set(nextMemberIds);
+  const pendingMemberIds = new Set(nextMemberIds);
   const checkedOrders = [];
+
   for (const order of orders) {
+    const orderMemberIds = [...new Set((Array.isArray(order?.communityResults) ? order.communityResults : [])
+      .filter((member) => ["joined", "already_member"].includes(String(member?.state ?? "").toLowerCase()))
+      .map((member) => String(member?.discordUserId ?? ""))
+      .filter((discordUserId) => pendingMemberIds.has(discordUserId)))];
+    if (!orderMemberIds.length) {
+      checkedOrders.push(order);
+      continue;
+    }
     const hydratedOrder = await hydrateCommunityOrderCategories(order);
-    const checked = await runCommunityOrderMemberCheck(hydratedOrder);
+    const checked = await runCommunityOrderMemberCheck(hydratedOrder, { discordUserIds: orderMemberIds });
     checkedOrders.push(checked.order);
+    orderMemberIds.forEach((discordUserId) => pendingMemberIds.delete(discordUserId));
   }
   const { deliveredMembers } = getReactionWorkspaceMembers(checkedOrders);
-  const onlineDeliveredMembers = deliveredMembers.filter((member) => member?.onlinerLive === true);
-  const eligibleMemberIds = new Set(onlineDeliveredMembers
-    .filter((member) => String(member?.membershipStatus ?? "").toLowerCase() === "present")
-    .map((member) => String(member?.discordUserId ?? ""))
-    .filter(isDiscordGuildId));
+  const checkedMemberIds = new Set([...previouslyCheckedMemberIds, ...nextMemberIds]);
+  const eligibleMemberIds = new Set(previouslyEligibleMemberIds);
+  for (const member of deliveredMembers) {
+    const discordUserId = String(member?.discordUserId ?? "");
+    if (!nextMemberIdSet.has(discordUserId)) continue;
+    if (member?.onlinerLive === true && String(member?.membershipStatus ?? "").toLowerCase() === "present") {
+      eligibleMemberIds.add(discordUserId);
+    } else {
+      eligibleMemberIds.delete(discordUserId);
+    }
+  }
+  const onlineDeliveredMembers = deliveredMembers.filter((member) => checkedMemberIds.has(String(member?.discordUserId ?? "")) && member?.onlinerLive === true);
+  const remainingUncheckedMembers = Math.max(0, deliveredMembers.length - checkedMemberIds.size);
 
   const checkedAt = new Date().toISOString();
   const check = {
     eligibleMemberIds,
+    checkedMemberIds,
+    checkedMembers: checkedMemberIds.size,
+    remainingUncheckedMembers,
+    lastBatchChecked: nextMemberIds.length,
+    memberCheckComplete: remainingUncheckedMembers === 0,
     onlineDeliveredMembers: onlineDeliveredMembers.length,
     checkedAt,
     expiresAt: Date.now() + reactionWorkspaceMemberCheckMaxAgeMs
@@ -12391,11 +12433,16 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     totalOrdered,
     deliveredMembers: deliveredMembers.length,
     eligibleMembers: eligibleMembers.length,
-    unavailableMembers: Math.max(0, deliveredMembers.length - eligibleMembers.length),
+    unavailableMembers: Math.max(0, (memberCheck?.checkedMembers ?? 0) - eligibleMembers.length),
     availableForMessage: eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? ""))).length,
     membersCheckRequired: !memberCheck,
     membersCheckedAt: memberCheck?.checkedAt ?? null,
     onlineDeliveredMembers: memberCheck?.onlineDeliveredMembers ?? 0,
+    checkedMembers: memberCheck?.checkedMembers ?? 0,
+    remainingUncheckedMembers: memberCheck?.remainingUncheckedMembers ?? deliveredMembers.length,
+    lastBatchChecked: memberCheck?.lastBatchChecked ?? 0,
+    memberCheckComplete: memberCheck?.memberCheckComplete ?? false,
+    memberCheckBatchSize: reactionWorkspaceMemberCheckBatchSize,
     requests
   };
 }

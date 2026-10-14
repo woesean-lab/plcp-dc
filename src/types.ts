@@ -221,6 +221,11 @@ export interface ReactionWorkspaceSummary {
   membersCheckRequired: boolean;
   membersCheckedAt?: string | null;
   onlineDeliveredMembers: number;
+  checkedMembers: number;
+  remainingUncheckedMembers: number;
+  lastBatchChecked: number;
+  memberCheckComplete: boolean;
+  memberCheckBatchSize: number;
   requests: ReactionWorkspaceRequest[];
 }
 

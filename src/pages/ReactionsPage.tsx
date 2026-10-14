@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Bot, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { REACTION_MIXED_VALUE, ReactionPanel, type ReactionPanelRequest } from "@/components/ReactionPanel";
+import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -174,8 +175,10 @@ export default function ReactionsPage() {
       setCheckingMembers(true);
       const next = await checkReactionWorkspaceMembers(summary.messageLink);
       setSummary(next);
-      setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.availableForMessage))));
-      toast.success(`${next.eligibleMembers} online members are in this server and ready to react.`);
+      setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.deliveredMembers))));
+      toast.success(next.memberCheckComplete
+        ? `All ${next.checkedMembers} delivered members were checked. ${next.eligibleMembers} are ready to react.`
+        : `${next.lastBatchChecked} members checked. ${next.eligibleMembers} are ready; ${next.remainingUncheckedMembers} remain.`);
     } catch (error) {
       if (isReactionBotRequiredError(error)) {
         setSummary(null);
@@ -228,9 +231,13 @@ export default function ReactionsPage() {
             <strong>Find the server’s delivered members</strong>
             <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
           </div>
-          <label className="reactions-lookup-field">
-            <span className="boost-order-label">Discord Message URL</span>
+          <div className="reactions-lookup-field">
+            <span className="boost-order-label monitor-reaction-url-label">
+              <label htmlFor="reactions-message-url">Discord Message URL</label>
+              <DiscordMessageLinkHelp />
+            </span>
             <Input
+              id="reactions-message-url"
               autoFocus
               type="url"
               value={messageLink}
@@ -238,7 +245,7 @@ export default function ReactionsPage() {
               placeholder="https://discord.com/channels/server/channel/message"
               aria-invalid={Boolean(inspectError)}
             />
-          </label>
+          </div>
           <Button type="button" disabled={!validLink || inspecting} onClick={() => setInspectNonce((current) => current + 1)}>
             {inspecting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
             {inspecting ? "Matching..." : "Match members"}

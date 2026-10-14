@@ -1,8 +1,9 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { CheckCircle2, ChevronDown, CircleHelp, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
@@ -84,6 +85,11 @@ type ReactionPanelProps = {
     membersCheckRequired: boolean;
     membersCheckedAt?: string | null;
     onlineDeliveredMembers: number;
+    checkedMembers: number;
+    remainingUncheckedMembers: number;
+    lastBatchChecked: number;
+    memberCheckComplete: boolean;
+    memberCheckBatchSize: number;
   };
 };
 
@@ -120,13 +126,13 @@ export function ReactionPanel({
 }: ReactionPanelProps) {
   const titleId = useId();
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
-  const [messageLinkHelpOpen, setMessageLinkHelpOpen] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
+  const requestAmountLimit = workspaceSummary ? Math.max(1, workspaceSummary.deliveredMembers) : Math.max(1, remaining);
   const progress = workspaceSummary
     ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
@@ -152,7 +158,7 @@ export function ReactionPanel({
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    if (requestEnabled && !saving && isValidMessageUrl && remaining > 0 && selectedEmojis.length > 0) onSubmit();
+    if (requestEnabled && !saving && isValidMessageUrl && remaining > 0 && countDraft <= remaining && selectedEmojis.length > 0) onSubmit();
   }
 
   function toggleEmoji(emoji: string) {
@@ -206,8 +212,8 @@ export function ReactionPanel({
             <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : `${completed} of ${limit} reactions delivered`}</strong>
             <p>{workspaceSummary
               ? workspaceSummary.membersCheckRequired
-                ? "Run Check Members to find delivered accounts that are online and still in this server."
-                : `${eligibleMembers} online members in this server can react. ${remaining} have not been used on this message yet.`
+                ? `Check the first ${Math.min(workspaceSummary.memberCheckBatchSize, workspaceSummary.deliveredMembers)} delivered members to find accounts ready to react.`
+                : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} have not been used on this message yet.`}`
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
@@ -222,9 +228,16 @@ export function ReactionPanel({
           <div data-tone="pending" className={workspaceSummary && onRefreshEligibleMembers ? "has-member-check" : undefined}>
             <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}
               {workspaceSummary && onRefreshEligibleMembers ? (
-                <button className="monitor-reaction-check-members" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Check members" title="Check Members">
+                <button
+                  className="monitor-reaction-check-members"
+                  type="button"
+                  onClick={onRefreshEligibleMembers}
+                  disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete}
+                  aria-label={workspaceSummary.membersCheckRequired ? `Check first ${workspaceSummary.memberCheckBatchSize} members` : `Check next ${workspaceSummary.memberCheckBatchSize} members`}
+                  title={workspaceSummary.memberCheckComplete ? "All delivered members have been checked" : workspaceSummary.membersCheckRequired ? `Check first ${workspaceSummary.memberCheckBatchSize} members` : `Check next ${workspaceSummary.memberCheckBatchSize} members`}
+                >
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-                  {refreshingEligibleMembers ? "..." : "Check"}
+                  {refreshingEligibleMembers ? "..." : workspaceSummary.memberCheckComplete ? "Done" : workspaceSummary.membersCheckRequired ? `Check ${workspaceSummary.memberCheckBatchSize}` : `Next ${workspaceSummary.memberCheckBatchSize}`}
                 </button>
               ) : null}
             </span>
@@ -250,7 +263,7 @@ export function ReactionPanel({
               : workspaceSummary
                 ? workspaceSummary.membersCheckRequired
                   ? "check required"
-                  : `${workspaceSummary.onlineDeliveredMembers} online · ${workspaceSummary.unavailableMembers} unavailable`
+                  : `${workspaceSummary.checkedMembers}/${workspaceSummary.deliveredMembers} checked · ${workspaceSummary.onlineDeliveredMembers} online`
                 : "members can react"}</small>
           </div>
         </div>
@@ -265,9 +278,7 @@ export function ReactionPanel({
           <div className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
             <span className="boost-order-label monitor-reaction-url-label">
               <label htmlFor={`${titleId}-message-url`}>Discord Message URL</label>
-              <button className="monitor-reaction-url-help" type="button" onClick={() => setMessageLinkHelpOpen(true)} aria-label="How to copy a Discord message URL" title="How to copy a Discord message URL">
-                <CircleHelp aria-hidden="true" />
-              </button>
+              <DiscordMessageLinkHelp />
             </span>
             <input
               id={`${titleId}-message-url`}
@@ -290,13 +301,13 @@ export function ReactionPanel({
               type="number"
               inputMode="numeric"
               min={1}
-              max={remaining}
-              value={Math.min(countDraft, remaining)}
+              max={requestAmountLimit}
+              value={Math.min(countDraft, requestAmountLimit)}
               aria-label="Reaction amount"
               disabled={!requestEnabled || remaining <= 0}
               onChange={(event) => {
                 const next = Number.parseInt(event.target.value, 10);
-                const nextCount = Number.isFinite(next) ? Math.min(remaining, Math.max(1, next)) : 1;
+                const nextCount = Number.isFinite(next) ? Math.min(requestAmountLimit, Math.max(1, next)) : 1;
                 onCountChange(nextCount);
                 if (selectedEmojis.length > nextCount) onEmojiSelectionChange(selectedEmojis.slice(0, nextCount));
               }}
@@ -391,7 +402,7 @@ export function ReactionPanel({
               </div>
             </div>
           </div>
-          <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || remaining <= 0 || saving || !messageDraft.trim() || !selectedEmojis.length}>
+          <Button className="monitor-reaction-submit" type="submit" disabled={!requestEnabled || remaining <= 0 || countDraft > remaining || saving || !messageDraft.trim() || !selectedEmojis.length}>
             {saving ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Send className="h-4 w-4" aria-hidden="true" />}
             {saving ? "Queuing..." : "Queue reactions"}
           </Button>
@@ -476,21 +487,6 @@ export function ReactionPanel({
         </div>
       ), document.body) : null}
 
-      {messageLinkHelpOpen && typeof document !== "undefined" ? createPortal((
-        <div className="reaction-help-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setMessageLinkHelpOpen(false); }}>
-          <div className="reaction-help-dialog" role="dialog" aria-modal="true" aria-labelledby={`${titleId}-message-link-help-title`}>
-            <header>
-              <div><span>Discord message URL</span><h2 id={`${titleId}-message-link-help-title`}>Copy the message link</h2></div>
-              <button type="button" onClick={() => setMessageLinkHelpOpen(false)} aria-label="Close"><X aria-hidden="true" /></button>
-            </header>
-            <img src="/discord-copy-message-link-guide.png" alt="Discord message menu with step 1 pointing to the three-dot menu and step 2 pointing to Copy Message Link" />
-            <div className="reaction-help-steps">
-              <span><b>1</b><small>Click the three-dot menu on the message.</small></span>
-              <span><b>2</b><small>Select Copy Message Link.</small></span>
-            </div>
-          </div>
-        </div>
-      ), document.body) : null}
     </section>
   );
 }
