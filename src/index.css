@@ -7890,17 +7890,14 @@
 .monitor-reaction-metric-refresh:hover:not(:disabled) { color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .monitor-reaction-metric-refresh:disabled { cursor: wait; opacity: .6; }
 .monitor-reaction-metric-refresh svg { width: 11px !important; height: 11px !important; }
-.monitor-reaction-member-check { display: flex; width: min(100% - 40px, 520px); align-items: center; justify-content: space-between; gap: 16px; margin: -3px 20px 14px auto; padding: 10px 11px; border: 1px solid var(--app-border); border-radius: 14px; background: rgba(5,6,14,.34); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
-.monitor-reaction-member-check-copy { display: flex; min-width: 0; align-items: center; gap: 9px; }
-.monitor-reaction-member-check-signal { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border: 1px solid var(--app-accent-border); border-radius: 10px; color: var(--app-accent-bright); background: var(--app-accent-soft); }
-.monitor-reaction-member-check-signal svg { width: 15px; height: 15px; }
-.monitor-reaction-member-check-copy strong { display: block; color: var(--app-text); font-size: 10px; font-weight: 720; }
-.monitor-reaction-member-check-copy small { display: block; margin-top: 3px; color: var(--app-subtle); font-size: 8px; line-height: 1.3; white-space: nowrap; }
-.monitor-reaction-member-check-action { display: flex; flex: 0 0 auto; align-items: end; gap: 7px; }
-.monitor-reaction-member-check-action .boost-order-field { width: 104px; gap: 4px; }
-.monitor-reaction-member-check-action .boost-number-input { min-height: 40px; height: 40px; border-radius: 10px; padding: 0 11px; font-size: 11px; }
-.monitor-reaction-member-check-action .ui-button { min-width: 112px; height: 40px; border-radius: 10px; font-size: 9px; }
-.monitor-reaction-member-check-action .ui-button svg { width: 12px; height: 12px; }
+.monitor-reaction-purchased-check { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 5px; margin-top: 9px; }
+.monitor-reaction-purchased-check label { min-width: 0; }
+.monitor-reaction-purchased-check input { width: 100%; height: 27px; min-width: 0; padding: 0 7px; border: 1px solid var(--app-border); border-radius: 7px; outline: 0; color: var(--app-text); background: var(--app-input-bg); font-size: 9px; font-weight: 700; font-variant-numeric: tabular-nums; transition: border-color .15s ease, box-shadow .15s ease; }
+.monitor-reaction-purchased-check input:focus { border-color: var(--app-accent); box-shadow: 0 0 0 2px var(--app-accent-soft); }
+.monitor-reaction-purchased-check button { display: inline-flex; height: 27px; min-width: 48px; align-items: center; justify-content: center; gap: 4px; padding: 0 7px; border: 1px solid var(--app-accent-border); border-radius: 7px; color: var(--app-accent-bright); background: var(--app-accent-soft); font-size: 8px; font-weight: 750; white-space: nowrap; transition: border-color .15s ease, background .15s ease; }
+.monitor-reaction-purchased-check button:hover:not(:disabled) { border-color: rgba(154,139,255,.42); background: rgba(127,107,221,.18); }
+.monitor-reaction-purchased-check button:disabled { cursor: not-allowed; opacity: .5; }
+.monitor-reaction-purchased-check button svg { width: 10px; height: 10px; }
 
 .monitor-reaction-form {
   position: relative;
@@ -8102,10 +8099,6 @@
 .monitor-reaction-panel.is-side .monitor-reaction-heading,
 .monitor-reaction-panel.is-side .monitor-reaction-dashboard,
 .monitor-reaction-panel.is-side .monitor-reaction-form { grid-template-columns: 1fr; }
-.monitor-reaction-panel.is-side .monitor-reaction-member-check { width: calc(100% - 40px); align-items: stretch; flex-direction: column; gap: 9px; }
-.monitor-reaction-panel.is-side .monitor-reaction-member-check-action { width: 100%; }
-.monitor-reaction-panel.is-side .monitor-reaction-member-check-action .boost-order-field,
-.monitor-reaction-panel.is-side .monitor-reaction-member-check-action .ui-button { flex: 1; }
 .monitor-reaction-panel.is-side .monitor-reaction-emoji-field,
 .monitor-reaction-panel.is-side .monitor-reaction-form .monitor-reaction-submit { grid-column: 1 / -1; grid-row: auto; }
 .monitor-reaction-panel.is-side .monitor-reaction-emoji-popover { position: absolute; top: calc(100% + 7px); right: 0; bottom: auto; width: min(360px, calc(100vw - 40px)); margin: 0; box-shadow: 0 20px 55px rgba(0,0,0,.5); }
@@ -11726,11 +11719,6 @@
   .monitor-reaction-metrics > div:nth-child(n+3) { border-top: 1px solid var(--app-divider); }
   .monitor-reaction-metrics > div > strong { font-size: 20px; }
   .monitor-reaction-metrics > div > small { display: none; }
-  .monitor-reaction-member-check { width: calc(100% - 24px); align-items: stretch; flex-direction: column; gap: 9px; margin: -2px 12px 12px; padding: 10px; }
-  .monitor-reaction-member-check-copy small { white-space: normal; }
-  .monitor-reaction-member-check-action { width: 100%; }
-  .monitor-reaction-member-check-action .boost-order-field,
-  .monitor-reaction-member-check-action .ui-button { flex: 1; }
   .monitor-reaction-form { grid-template-columns: minmax(0, 1fr); margin: 0 12px 12px; padding: 12px; }
   .monitor-reaction-form-copy,
   .monitor-reaction-url-field { grid-column: 1 / -1; }

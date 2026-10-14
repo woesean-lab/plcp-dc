@@ -235,6 +235,33 @@ export function ReactionPanel({
             <span><Clock3 aria-hidden="true" /> {workspaceSummary ? "Purchased" : "In queue"}</span>
             <strong>{workspaceSummary ? workspaceSummary.totalOrdered : pending}</strong>
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
+            {workspaceSummary && onRefreshEligibleMembers ? (
+              <div className="monitor-reaction-purchased-check">
+                <label>
+                  <span className="sr-only">Members to check</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    max={memberCheckLimit}
+                    value={memberCheckAmount}
+                    placeholder="Qty"
+                    disabled={refreshingEligibleMembers}
+                    onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
+                    aria-label="Members to check"
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={onRefreshEligibleMembers}
+                  disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+                  title={workspaceSummary.memberCheckComplete ? "Check members again" : "Check members"}
+                >
+                  <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
+                  {refreshingEligibleMembers ? "..." : workspaceSummary.memberCheckComplete ? "Again" : "Check"}
+                </button>
+              </div>
+            ) : null}
           </div>
           <div data-tone="available">
             <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "This message" : "Available"}</span>
@@ -260,44 +287,6 @@ export function ReactionPanel({
           </div>
         </div>
       </div>
-
-      {workspaceSummary && onRefreshEligibleMembers ? (
-        <div className="monitor-reaction-member-check" data-complete={workspaceSummary.memberCheckComplete || undefined}>
-          <div className="monitor-reaction-member-check-copy">
-            <span className="monitor-reaction-member-check-signal" aria-hidden="true"><Users /></span>
-            <div>
-              <strong>Check members</strong>
-              <small>{workspaceSummary.checkedMembers} checked · {workspaceSummary.remainingUncheckedMembers} remaining</small>
-            </div>
-          </div>
-          <div className="monitor-reaction-member-check-action">
-            <label className="boost-order-field" htmlFor={`${titleId}-member-check-quantity`}>
-              <span className="boost-order-label">Quantity</span>
-              <input
-                id={`${titleId}-member-check-quantity`}
-                className="boost-number-input"
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={memberCheckLimit}
-                value={memberCheckAmount}
-                placeholder="0"
-                disabled={refreshingEligibleMembers}
-                onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
-              />
-            </label>
-            <Button
-              size="sm"
-              type="button"
-              onClick={onRefreshEligibleMembers}
-              disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
-            >
-              <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-              {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Check again" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
-            </Button>
-          </div>
-        </div>
-      ) : null}
 
       {remaining > 0 || workspaceSummary ? (
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
