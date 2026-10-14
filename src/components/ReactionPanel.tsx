@@ -261,18 +261,19 @@ export function ReactionPanel({
       {workspaceSummary && onRefreshEligibleMembers ? (
         <div className="monitor-reaction-member-check" data-complete={workspaceSummary.memberCheckComplete || undefined}>
           <div className="monitor-reaction-member-check-copy">
-            <span aria-hidden="true"><Users /></span>
+            <Users aria-hidden="true" />
             <div>
-              <strong>Check delivered members</strong>
+              <strong>Member check</strong>
               <small>{workspaceSummary.memberCheckComplete
-                ? `All ${workspaceSummary.checkedMembers} delivered members have been checked.`
-                : `${workspaceSummary.remainingUncheckedMembers} members remain unchecked. Previously checked accounts are skipped.`}</small>
+                ? `${workspaceSummary.checkedMembers} checked`
+                : `${workspaceSummary.remainingUncheckedMembers} remaining · checked accounts are skipped`}</small>
             </div>
           </div>
-          <label className="monitor-reaction-member-check-field" htmlFor={`${titleId}-member-check-quantity`}>
-            <span>Quantity</span>
+          <label className="boost-order-field monitor-reaction-member-check-field" htmlFor={`${titleId}-member-check-quantity`}>
+            <span className="boost-order-label">Quantity</span>
             <input
               id={`${titleId}-member-check-quantity`}
+              className="boost-number-input"
               type="number"
               inputMode="numeric"
               min={1}
@@ -283,15 +284,17 @@ export function ReactionPanel({
               onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
             />
           </label>
-          <button
-            className="monitor-reaction-check-members"
+          <Button
+            className="monitor-reaction-member-check-button"
+            variant="secondary"
+            size="sm"
             type="button"
             onClick={onRefreshEligibleMembers}
             disabled={refreshingEligibleMembers || workspaceSummary.memberCheckComplete || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
           >
             <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
             {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Completed" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
-          </button>
+          </Button>
         </div>
       ) : null}
 
