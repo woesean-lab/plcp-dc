@@ -264,40 +264,39 @@ export function ReactionPanel({
       {workspaceSummary && onRefreshEligibleMembers ? (
         <div className="monitor-reaction-member-check" data-complete={workspaceSummary.memberCheckComplete || undefined}>
           <div className="monitor-reaction-member-check-copy">
-            <Users aria-hidden="true" />
+            <span className="monitor-reaction-member-check-signal" aria-hidden="true"><Users /></span>
             <div>
-              <strong>Member check</strong>
-              <small>{workspaceSummary.memberCheckComplete
-                ? `${workspaceSummary.checkedMembers} checked · ready to run again`
-                : `${workspaceSummary.remainingUncheckedMembers} remaining · checked accounts are skipped`}</small>
+              <span>Availability scan</span>
+              <strong>{workspaceSummary.memberCheckComplete
+                ? `${workspaceSummary.checkedMembers} accounts checked`
+                : `${workspaceSummary.remainingUncheckedMembers} accounts waiting`}</strong>
+              <small>{workspaceSummary.memberCheckComplete ? "Ready for a fresh scan" : "Previously checked accounts will be skipped"}</small>
             </div>
           </div>
-          <label className="boost-order-field monitor-reaction-member-check-field" htmlFor={`${titleId}-member-check-quantity`}>
-            <span className="boost-order-label">Quantity</span>
-            <input
-              id={`${titleId}-member-check-quantity`}
-              className="boost-number-input"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={memberCheckLimit}
-              value={memberCheckAmount}
-              placeholder="Enter amount"
-              disabled={refreshingEligibleMembers}
-              onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
-            />
-          </label>
-          <Button
-            className="monitor-reaction-member-check-button"
-            variant="secondary"
-            size="sm"
-            type="button"
-            onClick={onRefreshEligibleMembers}
-            disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
-          >
-            <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
-            {refreshingEligibleMembers ? "Checking..." : workspaceSummary.memberCheckComplete ? "Check again" : workspaceSummary.membersCheckRequired ? "Check members" : "Check next"}
-          </Button>
+          <div className="monitor-reaction-member-check-action">
+            <label htmlFor={`${titleId}-member-check-quantity`}>
+              <span>Qty</span>
+              <input
+                id={`${titleId}-member-check-quantity`}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={memberCheckLimit}
+                value={memberCheckAmount}
+                placeholder="0"
+                disabled={refreshingEligibleMembers}
+                onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              onClick={onRefreshEligibleMembers}
+              disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
+            >
+              <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
+              {refreshingEligibleMembers ? "Scanning..." : workspaceSummary.memberCheckComplete ? "Scan again" : workspaceSummary.membersCheckRequired ? "Start scan" : "Continue"}
+            </button>
+          </div>
         </div>
       ) : null}
 
