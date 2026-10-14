@@ -1,4 +1,4 @@
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionWorkspaceSummary } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -338,6 +338,22 @@ export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit:
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ reactionLimit })
   });
+}
+
+export function inspectReactionWorkspace(messageLink: string) {
+  return requestJson<ReactionWorkspaceSummary>(`/api/reactions/inspect?messageLink=${encodeURIComponent(messageLink)}`);
+}
+
+export function createReactionWorkspaceRequest(messageLink: string, reactionCount: number, emojis: string[]) {
+  return requestJson<ReactionWorkspaceSummary>("/api/reactions/requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messageLink, reactionCount, emojis })
+  });
+}
+
+export function cancelReactionWorkspaceRequest(requestId: string) {
+  return requestJson<{ cancelledCount: number }>(`/api/reactions/requests/${encodeURIComponent(requestId)}/cancel`, { method: "POST" });
 }
 
 export function saveDcordApiKey(apiKey: string) {

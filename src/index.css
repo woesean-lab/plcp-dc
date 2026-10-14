@@ -8111,6 +8111,44 @@
 .lookup-reaction-limit-field { margin-top: 18px; }
 .lookup-reaction-limit-note { display: block; margin-top: 9px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
 
+.reactions-page { display: grid; width: min(100%, 1180px); margin: 0 auto; gap: 18px; }
+.reactions-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 14px 2px 4px; }
+.reactions-page-heading .page-description { max-width: 720px; margin-top: 9px; color: var(--app-muted); font-size: 13px; line-height: 1.65; }
+.reactions-flow { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--app-border); border-radius: 14px; background: rgba(8,9,20,.62); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
+.reactions-flow > span { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 10px; border-radius: 9px; color: var(--app-text-secondary); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 700; white-space: nowrap; }
+.reactions-flow svg { width: 13px; height: 13px; color: var(--app-accent-bright); }
+.reactions-flow > svg { width: 12px; color: var(--app-subtle); }
+.reactions-lookup-card { display: grid; grid-template-columns: auto minmax(220px, .8fr) minmax(340px, 1.2fr) auto; align-items: center; gap: 16px; padding: 22px; border: 1px solid var(--app-border); border-radius: 20px; background: linear-gradient(145deg, rgba(19,20,41,.94), rgba(8,9,20,.9)); box-shadow: 0 24px 70px rgba(0,0,0,.24), inset 0 1px 0 rgba(255,255,255,.035); }
+.reactions-lookup-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--app-accent-border); border-radius: 14px; color: var(--app-accent-bright); background: var(--app-accent-soft); }
+.reactions-lookup-icon svg { width: 21px; height: 21px; }
+.reactions-lookup-copy strong { display: block; color: var(--app-text); font-size: 13px; }
+.reactions-lookup-copy p { margin-top: 5px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
+.reactions-lookup-field { display: grid; gap: 7px; min-width: 0; }
+.reactions-lookup-field > span { color: var(--app-muted); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
+.reactions-lookup-field input { width: 100%; height: 44px; min-width: 0; border: 1px solid var(--app-border); border-radius: 12px; outline: none; padding: 0 13px; color: var(--app-text); background: var(--app-control-bg); font: inherit; font-size: 12px; transition: border-color .18s ease, box-shadow .18s ease; }
+.reactions-lookup-field input:focus { border-color: var(--app-accent-border); box-shadow: 0 0 0 3px var(--app-accent-soft); }
+.reactions-lookup-field input[aria-invalid="true"] { border-color: rgba(255,111,143,.34); }
+.reactions-lookup-error, .reactions-lookup-note { grid-column: 3 / -1; margin: -5px 2px 0; font-size: 10px; line-height: 1.5; }
+.reactions-lookup-error { color: var(--app-danger-text); }
+.reactions-lookup-note { color: var(--app-muted); }
+.monitor-reaction-panel.is-workspace { min-height: 0; }
+.monitor-reaction-panel.is-workspace .monitor-reaction-overview-copy strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 980px) {
+  .reactions-page-heading { align-items: stretch; flex-direction: column; }
+  .reactions-flow { align-self: flex-start; }
+  .reactions-lookup-card { grid-template-columns: auto minmax(0, 1fr); }
+  .reactions-lookup-field, .reactions-lookup-card > .ui-button, .reactions-lookup-error, .reactions-lookup-note { grid-column: 1 / -1; }
+}
+
+@media (max-width: 640px) {
+  .reactions-page-heading { padding-top: 4px; }
+  .reactions-flow { width: 100%; overflow-x: auto; }
+  .reactions-flow > span { flex: 0 0 auto; }
+  .reactions-lookup-card { grid-template-columns: 1fr; padding: 16px; border-radius: 16px; }
+  .reactions-lookup-icon { width: 42px; height: 42px; }
+}
+
 .monitor-safety-note { align-items: flex-start; line-height: 1.55; }
 .monitor-progress-panel { padding: 22px; }
 .monitor-panel-heading h2,

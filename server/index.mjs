@@ -1287,6 +1287,19 @@ function createNaturalCommunityReactionAssignments(deliveredMembers, requestedCo
   }
   return [];
 }
+
+function createWorkspaceReactionAssignments(deliveredMembers, requestedCount, requestedEmojis = null) {
+  const members = shuffleReactionValues(deliveredMembers).slice(0, requestedCount);
+  const selectedPalette = Array.isArray(requestedEmojis) && requestedEmojis.length
+    ? shuffleReactionValues(requestedEmojis)
+    : shuffleReactionValues(communityNaturalReactionEmojis).slice(0, Math.min(8, requestedCount));
+  return members.map((member, index) => ({
+    discordUserId: String(member.discordUserId),
+    reactionEmoji: selectedPalette[index % selectedPalette.length],
+    reactionState: "pending",
+    reactionDetails: "Waiting for the delivered member's Onliner Gateway connection before reacting."
+  }));
+}
 const discordOnlinerProxyHealth = new Map();
 let discordOnlinerProxySelectionSequence = 0;
 function createDiscordGatewayIdentityProperties() {
@@ -11184,16 +11197,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(409).json({ message: "The selected join method must be enabled for every selected category." });
     }
     const categoriesById = new Map(categoryResult.rows.map((category) => [category.id, category]));
-    const reactionCategoryIds = new Set(categoryResult.rows
-      .filter((category) => category.reaction_use_enabled === true)
-      .map((category) => category.id));
-    const availableReactionMembers = requestedAllocations.reduce((total, allocation) => (
-      reactionCategoryIds.has(allocation.categoryId) ? total + allocation.amount : total
-    ), 0);
-    const reactionCapacity = availableReactionMembers > 0 ? Number.parseInt(req.body?.reactionLimit, 10) : 0;
-    if (availableReactionMembers > 0 && (!Number.isInteger(reactionCapacity) || reactionCapacity < 1 || reactionCapacity > availableReactionMembers)) {
-      return res.status(400).json({ message: `Choose a reaction limit between 1 and ${availableReactionMembers}.` });
-    }
     const hasPeriodicCategory = categoryResult.rows.some((category) => category.is_periodic === true);
     const durationMonths = hasPeriodicCategory ? Number.parseInt(req.body?.durationMonths, 10) : null;
     if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
@@ -11249,9 +11252,6 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryAllocations,
       categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
       categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
-      reactionCapacity,
-      reactionMessageLink: null,
-      reactionMessage: null,
       reactionRequests: [],
       durationMonths,
       serverId: serverInfo.guildId,
@@ -11275,23 +11275,15 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       experimentalJoin: joinMethod === "experimental_join",
       botApplicationId: config.clientId,
       botInvite,
-      communityResults: (() => {
-        let availableReactions = 0;
-        return selectedMembers.map((row) => {
-          const reactionAvailable = reactionCategoryIds.has(row.category_id) && availableReactions < reactionCapacity;
-          if (reactionAvailable) availableReactions += 1;
-          return {
-            discordUserId: row.discord_user_id,
-            username: row.username,
-            avatarUrl: row.avatar_url ?? null,
-            categoryId: row.category_id,
-            categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
-            state: "queued",
-            details: "Waiting for delivery.",
-            ...(reactionAvailable ? { reactionAvailable: true } : {})
-          };
-        });
-      })()
+      communityResults: selectedMembers.map((row) => ({
+        discordUserId: row.discord_user_id,
+        username: row.username,
+        avatarUrl: row.avatar_url ?? null,
+        categoryId: row.category_id,
+        categoryName: categoriesById.get(row.category_id)?.name ?? row.category_id,
+        state: "queued",
+        details: "Waiting for delivery."
+      }))
     };
     await client.query(
       `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
@@ -12269,6 +12261,210 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
     res.json(updated.rows[0].payload);
   } catch (error) {
     next(error);
+  }
+});
+
+function getReactionWorkspaceMembers(orders) {
+  const delivered = new Map();
+  for (const order of orders) {
+    for (const member of Array.isArray(order?.communityResults) ? order.communityResults : []) {
+      const discordUserId = String(member?.discordUserId ?? "").trim();
+      const state = String(member?.state ?? "").toLowerCase();
+      if (!discordUserId || !["joined", "already_member"].includes(state)) continue;
+      const previous = delivered.get(discordUserId);
+      if (!previous || (previous.membershipStatus === "removed" && member?.membershipStatus !== "removed")) {
+        delivered.set(discordUserId, member);
+      }
+    }
+  }
+  const deliveredMembers = [...delivered.values()];
+  const eligibleMembers = deliveredMembers.filter((member) => member?.membershipStatus !== "removed");
+  return { deliveredMembers, eligibleMembers };
+}
+
+function getReactionWorkspaceRequests(orders) {
+  return orders.flatMap((order) => (Array.isArray(order?.reactionRequests) ? order.reactionRequests : [])
+    .map((request) => ({ ...request, orderId: order.uniqid })))
+    .sort((left, right) => new Date(left?.createdAt ?? 0).getTime() - new Date(right?.createdAt ?? 0).getTime());
+}
+
+function buildReactionWorkspaceSummary(reactionMessage, orders) {
+  const { deliveredMembers, eligibleMembers } = getReactionWorkspaceMembers(orders);
+  const requests = getReactionWorkspaceRequests(orders);
+  const usedMemberIds = new Set(requests
+    .filter((request) => request?.messageLink === reactionMessage.url)
+    .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
+    .filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase()))
+    .map((assignment) => String(assignment?.discordUserId ?? ""))
+    .filter(Boolean));
+  const totalOrdered = orders.reduce((total, order) => total + Math.max(0, Number(order?.amount) || 0), 0);
+  const serverName = orders.map((order) => normalizeDiscordGuildName(order?.serverName)).find(Boolean) ?? null;
+  return {
+    messageLink: reactionMessage.url,
+    guildId: reactionMessage.guildId,
+    channelId: reactionMessage.channelId,
+    messageId: reactionMessage.messageId,
+    serverName,
+    orderCount: orders.length,
+    totalOrdered,
+    deliveredMembers: deliveredMembers.length,
+    eligibleMembers: eligibleMembers.length,
+    unavailableMembers: Math.max(0, totalOrdered - eligibleMembers.length),
+    availableForMessage: eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? ""))).length,
+    requests
+  };
+}
+
+async function loadReactionWorkspaceOrders(client, guildId, lock = false) {
+  const result = await client.query(
+    `SELECT uniqid, payload
+     FROM tracked_orders
+     WHERE payload->>'provider' = 'community' AND payload->>'serverId' = $1
+     ORDER BY created_at ASC${lock ? " FOR UPDATE" : ""}`,
+    [guildId]
+  );
+  return result.rows.map((row) => ({ ...row.payload, uniqid: row.uniqid }));
+}
+
+app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const reactionMessage = parseDiscordMessageLink(req.query?.messageLink);
+    if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
+    const orders = await loadReactionWorkspaceOrders(client, reactionMessage.guildId);
+    if (!orders.length) {
+      return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
+    }
+    const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
+    res.set("Cache-Control", "no-store").json(summary);
+  } catch (error) {
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
+    const requestedCount = Number.parseInt(req.body?.reactionCount, 10);
+    const requestedEmojis = [...new Set((Array.isArray(req.body?.emojis) ? req.body.emojis : [])
+      .map((emoji) => String(emoji ?? "").trim())
+      .filter(Boolean))];
+    const mixedEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "mixed";
+    if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
+    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji) && !isCommunityCustomReactionSelector(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
+      return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, Math.max(1, requestedCount || 1))} supported emojis.` });
+    }
+
+    await client.query("BEGIN");
+    const orders = await loadReactionWorkspaceOrders(client, reactionMessage.guildId, true);
+    if (!orders.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
+    }
+    const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
+    if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > summary.availableForMessage) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: summary.availableForMessage > 0
+        ? `Choose a reaction amount between 1 and ${summary.availableForMessage}.`
+        : "Every available member has already been assigned to this message." });
+    }
+
+    const { eligibleMembers } = getReactionWorkspaceMembers(orders);
+    const usedMemberIds = new Set(summary.requests
+      .filter((request) => request?.messageLink === reactionMessage.url)
+      .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
+      .filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase()))
+      .map((assignment) => String(assignment?.discordUserId ?? "")));
+    const availableMembers = eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? "")));
+    const assignmentEmojis = mixedEmojiMode ? null : requestedEmojis.map((emoji) => {
+      if (!isCommunityCustomReactionSelector(emoji)) return emoji;
+      const match = emoji.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
+      return `${match[1]}:${match[2]}`;
+    });
+    const assignments = createWorkspaceReactionAssignments(availableMembers, requestedCount, assignmentEmojis);
+    const anchorOrder = orders[0];
+    const requestId = crypto.randomUUID();
+    for (const assignment of assignments) {
+      await client.query(
+        `INSERT INTO community_reaction_jobs (order_id, request_id, discord_user_id, channel_id, message_id, emoji)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [anchorOrder.uniqid, requestId, assignment.discordUserId, reactionMessage.channelId, reactionMessage.messageId, assignment.reactionEmoji]
+      );
+    }
+    const request = {
+      id: requestId,
+      workspace: true,
+      serverId: reactionMessage.guildId,
+      messageLink: reactionMessage.url,
+      requestedCount,
+      emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
+      emojis: requestedEmojis,
+      assignedCount: assignments.length,
+      assignments,
+      createdAt: new Date().toISOString()
+    };
+    const updatedOrder = {
+      ...anchorOrder,
+      reactionMessageLink: reactionMessage.url,
+      reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId },
+      reactionRequests: [...(Array.isArray(anchorOrder.reactionRequests) ? anchorOrder.reactionRequests : []), request]
+    };
+    await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [anchorOrder.uniqid, JSON.stringify(updatedOrder)]);
+    await client.query("COMMIT");
+    const updatedOrders = orders.map((order) => order.uniqid === anchorOrder.uniqid ? updatedOrder : order);
+    res.status(201).set("Cache-Control", "no-store").json(buildReactionWorkspaceSummary(reactionMessage, updatedOrders));
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/reactions/requests/:requestId/cancel", requireSession, async (req, res, next) => {
+  const client = await pool.connect();
+  try {
+    const requestId = String(req.params.requestId ?? "").trim();
+    if (!requestId || requestId.length > 160) return res.status(400).json({ message: "A valid reaction request is required." });
+    await client.query("BEGIN");
+    const job = await client.query("SELECT order_id FROM community_reaction_jobs WHERE request_id = $1 LIMIT 1", [requestId]);
+    const orderId = String(job.rows[0]?.order_id ?? "");
+    if (!orderId) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Reaction request could not be found." });
+    }
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
+    const order = tracked.rows[0]?.payload;
+    if (!order || !Array.isArray(order.reactionRequests)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Reaction request could not be found." });
+    }
+    const cancelledJobs = await client.query(
+      `UPDATE community_reaction_jobs
+       SET status = 'cancelled', completed_at = NOW(), last_error = 'Cancelled by request.'
+       WHERE order_id = $1 AND request_id = $2 AND status = 'pending'
+       RETURNING discord_user_id, emoji`,
+      [orderId, requestId]
+    );
+    const cancelledKeys = new Set(cancelledJobs.rows.map((item) => `${item.discord_user_id}:${item.emoji}`));
+    const cancelledAt = new Date().toISOString();
+    const reactionRequests = order.reactionRequests.map((request) => String(request?.id) === requestId ? {
+      ...request,
+      assignments: Array.isArray(request?.assignments) ? request.assignments.map((assignment) => cancelledKeys.has(`${assignment?.discordUserId}:${assignment?.reactionEmoji}`)
+        ? { ...assignment, reactionState: "cancelled", reactionDetails: "Cancelled before delivery.", reactionCompletedAt: cancelledAt }
+        : assignment) : request?.assignments
+    } : request);
+    await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [orderId, JSON.stringify({ ...order, reactionRequests })]);
+    await client.query("COMMIT");
+    res.set("Cache-Control", "no-store").json({ cancelledCount: cancelledJobs.rowCount });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally {
+    client.release();
   }
 });
 

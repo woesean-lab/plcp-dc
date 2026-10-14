@@ -4,11 +4,10 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { REACTION_MIXED_VALUE, ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X, Zap } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
-import { cancelCommunityOrder, cancelCommunityOrderReactions, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateCommunityOrderReactionLimit, updateCommunityOrderReactionMessage, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -405,14 +404,6 @@ export default function OrderPage() {
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [delayDraft, setDelayDraft] = useState("");
-  const [reactionMessageDraft, setReactionMessageDraft] = useState("");
-  const [reactionCountDraft, setReactionCountDraft] = useState(1);
-  const [reactionEmojiDraft, setReactionEmojiDraft] = useState<string[]>([REACTION_MIXED_VALUE]);
-  const [savingReactionMessage, setSavingReactionMessage] = useState(false);
-  const [cancellingReactions, setCancellingReactions] = useState(false);
-  const [showReactionLimitModal, setShowReactionLimitModal] = useState(false);
-  const [reactionLimitDraft, setReactionLimitDraft] = useState(1);
-  const [updatingReactionLimit, setUpdatingReactionLimit] = useState(false);
   const [showHumanizeAllModal, setShowHumanizeAllModal] = useState(false);
   const [humanizerPackages, setHumanizerPackages] = useState<HumanizerPackage[]>([]);
   const [selectedHumanizerPackageId, setSelectedHumanizerPackageId] = useState("");
@@ -504,37 +495,7 @@ export default function OrderPage() {
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
-  const reactionMessageLink = getStringField(result, ["reactionMessageLink"]);
-  const reactionCapacity = typeof result?.reactionCapacity === "number"
-    ? result.reactionCapacity
-    : categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + allocation.amount : total, 0);
-  const reactionCategoryEnabled = communityMemberResults.some((item) => item.reactionEligible)
-    || categoryAllocations.some((allocation) => allocation.reactionUseEnabled === true);
-  const reactionUseEnabled = reactionCategoryEnabled && reactionCapacity > 0;
-  const reactionRequests = Array.isArray(result?.reactionRequests) ? result.reactionRequests : [];
-  const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
-  const legacyReactionMembers = communityMemberResults.filter((item) => item.reactionEligible);
-  const reactionDeliveredMembers = communityMemberResults.filter((item) => ["joined", "already_member"].includes(item.state.toLowerCase())
-    && item.membershipStatus !== "removed"
-    && item.authorizationStatus !== "inactive");
-  const reactionMembersHaveOnlinerCheck = reactionDeliveredMembers.some((item) => typeof item.onlinerLive === "boolean");
-  const reactionEligibleMemberCount = reactionMembersHaveOnlinerCheck
-    ? reactionDeliveredMembers.filter((item) => item.onlinerLive === true).length
-    : reactionDeliveredMembers.length;
-  const reactionCompletedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => item.reactionState === "completed").length
-    : legacyReactionMembers.filter((item) => item.reactionState === "completed").length;
-  const reactionFailedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => item.reactionState === "failed").length
-    : legacyReactionMembers.filter((item) => item.reactionState === "failed").length;
-  const reactionAssignedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length
-    : legacyReactionMembers.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length;
-  const reactionRemainingCount = Math.max(0, reactionCapacity - reactionAssignedCount);
-  const reactionWorkPending = Boolean(reactionMessageLink) && (reactionAssignments.length
-    ? reactionAssignments.some((item) => item.reactionState === "pending")
-    : communityMemberResults.some((item) => item.reactionState === "pending"));
-  const refreshComplete = terminal && !reactionWorkPending;
+  const refreshComplete = terminal;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -597,18 +558,17 @@ export default function OrderPage() {
   }, [nextMemberTimestamp, normalizedStatus]);
 
   useEffect(() => {
-    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal && !showReactionLimitModal && !showHumanizeAllModal) return;
+    if (!showCancelDcordModal && !showCancelCommunityModal && !showExtendCommunityModal && !showLeaveAllCommunityModal && !showHumanizeAllModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !cancellingDcordOrder) setShowCancelDcordModal(false);
       if (event.key === "Escape" && !cancellingCommunityOrder) setShowCancelCommunityModal(false);
       if (event.key === "Escape" && !extendingCommunityOrder) setShowExtendCommunityModal(false);
       if (event.key === "Escape" && !leavingAllCommunityMembers) setShowLeaveAllCommunityModal(false);
-      if (event.key === "Escape" && !updatingReactionLimit) setShowReactionLimitModal(false);
       if (event.key === "Escape" && !humanizingAll) setShowHumanizeAllModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, showReactionLimitModal, showHumanizeAllModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers, updatingReactionLimit, humanizingAll]);
+  }, [showCancelDcordModal, showCancelCommunityModal, showExtendCommunityModal, showLeaveAllCommunityModal, showHumanizeAllModal, cancellingDcordOrder, cancellingCommunityOrder, extendingCommunityOrder, leavingAllCommunityMembers, humanizingAll]);
 
   useEffect(() => {
     const jobId = typeof result?.humanizerJobId === "string" ? result.humanizerJobId : "";
@@ -714,7 +674,7 @@ export default function OrderPage() {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [provider, reactionWorkPending, refreshComplete, result?.uniqid, uniqid]);
+  }, [provider, refreshComplete, result?.uniqid, uniqid]);
 
   async function lookup(customId?: string) {
     const target = (customId ?? uniqid).trim();
@@ -730,7 +690,6 @@ export default function OrderPage() {
       setResult(data);
       setCommunityCheckNeedsBot(false);
       setDelayDraft(String(typeof data.delay === "number" ? data.delay : data.delay ?? ""));
-      setReactionMessageDraft("");
       toast.success(`Loaded ${target}.`);
       setParams({ uniqid: target, provider });
     } catch (error) {
@@ -738,77 +697,6 @@ export default function OrderPage() {
       toast.error(error instanceof Error ? error.message : "Order could not be found.");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function handleSaveReactionMessage() {
-    const target = String(result?.uniqid ?? uniqid).trim();
-    const messageLink = reactionMessageDraft.trim();
-    if (!target || !isCommunityProvider || !reactionUseEnabled || savingReactionMessage) return;
-    if (!messageLink) {
-      toast.error("Discord message link is required.");
-      return;
-    }
-    try {
-      setSavingReactionMessage(true);
-      const reactionAmount = Math.min(reactionCountDraft, reactionRemainingCount);
-      const selectedEmojis = reactionEmojiDraft.slice(0, Math.min(reactionAmount, 20));
-      if (!selectedEmojis.length) {
-        toast.error("Choose at least one emoji.");
-        return;
-      }
-      const updated = await updateCommunityOrderReactionMessage(target, messageLink, reactionAmount, selectedEmojis);
-      setResult((current) => mergeOrderStatus(current, updated));
-      setReactionMessageDraft("");
-      setReactionCountDraft(1);
-      setReactionEmojiDraft([REACTION_MIXED_VALUE]);
-      toast.success("Reaction request added. Eligible members were queued.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Reaction message could not be saved.");
-    } finally {
-      setSavingReactionMessage(false);
-    }
-  }
-
-  async function handleCancelPendingReactions() {
-    const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || cancellingReactions) return;
-    try {
-      setCancellingReactions(true);
-      const data = await cancelCommunityOrderReactions(target);
-      setResult((current) => mergeOrderStatus(current, data.order));
-      toast.success(data.cancelledCount
-        ? `${data.cancelledCount} pending reaction${data.cancelledCount === 1 ? " was" : "s were"} cancelled and returned to the available limit.`
-        : "No queued reactions remained to cancel.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Pending reactions could not be cancelled.");
-    } finally {
-      setCancellingReactions(false);
-    }
-  }
-
-  function openReactionLimitModal() {
-    setReactionLimitDraft(1);
-    setShowReactionLimitModal(true);
-  }
-
-  async function handleUpdateReactionLimit() {
-    const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || !isCommunityProvider || updatingReactionLimit) return;
-    if (!Number.isSafeInteger(reactionLimitDraft) || reactionLimitDraft < 1) {
-      toast.error("Enter at least 1 reaction to add.");
-      return;
-    }
-    try {
-      setUpdatingReactionLimit(true);
-      const updated = await updateCommunityOrderReactionLimit(target, reactionCapacity + reactionLimitDraft);
-      setResult((current) => mergeOrderStatus(current, updated));
-      setShowReactionLimitModal(false);
-      toast.success(`${reactionLimitDraft} reactions added to the limit.`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Reaction limit could not be updated.");
-    } finally {
-      setUpdatingReactionLimit(false);
     }
   }
 
@@ -1241,11 +1129,6 @@ export default function OrderPage() {
           "📊 Order Monitor:",
           getPublicMonitorLink(target),
           "",
-          ...(reactionCapacity > 0 ? [
-            `✨ EMOJI REACTIONS INCLUDED: ${reactionCapacity} reactions`,
-            "Submit Discord message links from the Order Monitor whenever you are ready.",
-            ""
-          ] : []),
           "🛡️ CHECK MEMBERS & REPLACEMENT",
           "If you purchased Online Members, use Check Members during the guarantee period. Offline members can be replaced within the guarantee period.",
           "",
@@ -1573,11 +1456,6 @@ export default function OrderPage() {
                           : "Humanize all"}
                     </Button>
                   ) : null}
-                  {reactionMessageLink ? (
-                    <Button asChild className="member-log-action-button" variant="secondary" size="xs">
-                      <a href={reactionMessageLink} target="_blank" rel="noreferrer"><MessageSquareText className="h-3.5 w-3.5" /> Reaction message</a>
-                    </Button>
-                  ) : null}
                   {replaceableDcordTokenIndices.length || dcordReplaceQueue.length ? (
                     <Button type="button" variant="secondary" size="xs" onClick={handleReplaceAllDcordTokens} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS" || dcordReplaceQueue.length > 0}>
                       <RefreshCw className={`h-3.5 w-3.5 ${dcordReplaceQueue.length > 0 || replacingTokenIndex !== null ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -1749,54 +1627,6 @@ export default function OrderPage() {
             </section>
           ) : null}
 
-          {isCommunityProvider && reactionCategoryEnabled && communityMemberResults.length > 0 && reactionCapacity <= 0 ? (
-            <div className="lookup-reaction-limit-shortcut">
-              <button className="monitor-reaction-message-link" type="button" onClick={openReactionLimitModal}>
-                <MessageSquareText aria-hidden="true" /> Add reaction limit
-              </button>
-            </div>
-          ) : null}
-
-          {reactionUseEnabled ? (
-            <div className="lookup-reaction-section">
-              <ReactionPanel
-                className="is-orders"
-                limit={reactionCapacity}
-                completed={reactionCompletedCount}
-                failed={reactionFailedCount}
-                remaining={reactionRemainingCount}
-                eligibleMembers={reactionEligibleMemberCount}
-                onRefreshEligibleMembers={["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? () => void handleCheckCommunityMembers() : undefined}
-                refreshingEligibleMembers={checkingCommunityMembers}
-                messageDraft={reactionMessageDraft}
-                countDraft={reactionCountDraft}
-                selectedEmojis={reactionEmojiDraft}
-                saving={savingReactionMessage}
-                requestEnabled={["PARTIAL", "COMPLETED"].includes(normalizedStatus)}
-                requests={reactionRequests.map((request) => {
-                  const assignments = Array.isArray(request.assignments)
-                    ? request.assignments
-                    : communityMemberResults.filter((item) => item.reactionRequestId === request.id);
-                  const failedAssignments = assignments.filter((item) => item.reactionState === "failed");
-                  return {
-                    ...request,
-                    completedCount: assignments.filter((item) => item.reactionState === "completed").length,
-                    failedCount: failedAssignments.length,
-                    cancelledCount: assignments.filter((item) => item.reactionState === "cancelled").length,
-                    failureMessages: [...new Set(failedAssignments.map((item) => `${item.reactionEmoji ?? "Reaction"}${item.discordUserId ? ` · ${item.discordUserId}` : ""}: ${item.reactionDetails || "Discord returned no detail."}`))]
-                  };
-                })}
-                onMessageChange={setReactionMessageDraft}
-                onCountChange={setReactionCountDraft}
-                onEmojiSelectionChange={setReactionEmojiDraft}
-                onSubmit={() => void handleSaveReactionMessage()}
-                onCancelPending={() => void handleCancelPendingReactions()}
-                cancellingPending={cancellingReactions}
-                onEditLimit={openReactionLimitModal}
-              />
-            </div>
-          ) : null}
-
           <details className="lookup-technical-details">
             <summary>
               <span><Server className="h-4 w-4" aria-hidden="true" /> Order &amp; server details</span>
@@ -1874,41 +1704,6 @@ export default function OrderPage() {
               <Button type="button" disabled={humanizingAll || loadingHumanizerPackages || !selectedHumanizerPackageId} onClick={() => void handleHumanizeAll()}>
                 <Sparkles className={`h-4 w-4 ${humanizingAll ? "animate-pulse" : ""}`} aria-hidden="true" />
                 {humanizingAll ? "Starting..." : "Humanize all"}
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      ) : null}
-      {showReactionLimitModal ? createPortal(
-        <div
-          className="confirm-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !updatingReactionLimit) setShowReactionLimitModal(false);
-          }}
-        >
-          <div className="confirm-modal lookup-reaction-limit-modal" role="dialog" aria-modal="true" aria-labelledby="reaction-limit-title">
-            <span className="confirm-modal-icon is-success" aria-hidden="true"><MessageSquareText className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
-            <h2 id="reaction-limit-title">Add reaction limit</h2>
-            <p>Add more reactions to this order’s allowance. Current limit: <strong>{reactionCapacity}</strong>.</p>
-            <label className="boost-order-field lookup-reaction-limit-field">
-              <span className="boost-order-label">Amount to add</span>
-              <input
-                autoFocus
-                className="boost-number-input"
-                type="number"
-                min={1}
-                value={reactionLimitDraft}
-                onChange={(event) => setReactionLimitDraft(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
-              />
-            </label>
-            <small className="lookup-reaction-limit-note">New total: {reactionCapacity + reactionLimitDraft} reactions</small>
-            <div className="confirm-modal-actions">
-              <Button type="button" variant="secondary" disabled={updatingReactionLimit} onClick={() => setShowReactionLimitModal(false)}>Cancel</Button>
-              <Button type="button" disabled={updatingReactionLimit} onClick={() => void handleUpdateReactionLimit()}>
-                <MessageSquareText className={`h-4 w-4 ${updatingReactionLimit ? "animate-pulse" : ""}`} aria-hidden="true" />
-                {updatingReactionLimit ? "Adding..." : `Add ${reactionLimitDraft}`}
               </Button>
             </div>
           </div>

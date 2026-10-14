@@ -4,19 +4,17 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { REACTION_MIXED_VALUE, ReactionPanel } from "@/components/ReactionPanel";
 import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { cancelPublicCommunityOrderReactions, checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicCommunityOrderReactionMessage, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
-const ELDORADO_REACTION_LIMIT_URL = "https://www.eldorado.gg/discord-boosts-and-decorations/oi/89cc60ad-68d8-461b-1dc9-08df239a2c0d";
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 const MONITOR_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -267,11 +265,6 @@ export default function PublicOrderPage() {
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
-  const [reactionMessageDraft, setReactionMessageDraft] = useState("");
-  const [reactionCountDraft, setReactionCountDraft] = useState(1);
-  const [reactionEmojiDraft, setReactionEmojiDraft] = useState<string[]>([REACTION_MIXED_VALUE]);
-  const [savingReactionMessage, setSavingReactionMessage] = useState(false);
-  const [cancellingReactions, setCancellingReactions] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
@@ -280,7 +273,6 @@ export default function PublicOrderPage() {
   const [supportClock, setSupportClock] = useState(() => Date.now());
   const [deliveryClock, setDeliveryClock] = useState(() => Date.now());
   const [showExtensionModal, setShowExtensionModal] = useState(false);
-  const [showReactionPurchaseModal, setShowReactionPurchaseModal] = useState(false);
   const refreshInFlightRef = useRef(false);
   const countdownRef = useRef(AUTO_REFRESH_SECONDS);
   const delayUpdateInFlightRef = useRef(false);
@@ -297,14 +289,13 @@ export default function PublicOrderPage() {
   }, []);
 
   useEffect(() => {
-    if (!showExtensionModal && !showReactionPurchaseModal) return;
+    if (!showExtensionModal) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setShowExtensionModal(false);
-      if (event.key === "Escape") setShowReactionPurchaseModal(false);
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showExtensionModal, showReactionPurchaseModal]);
+  }, [showExtensionModal]);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -510,32 +501,6 @@ export default function PublicOrderPage() {
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
-  const reactionMembers = communityMemberResults.filter((item) => item.reactionEligible === true);
-  const reactionDeliveredMembers = communityMemberResults.filter((item) => ["joined", "already_member"].includes(item.state.toLowerCase())
-    && item.membershipStatus !== "removed"
-    && item.authorizationStatus !== "inactive");
-  const reactionMembersHaveOnlinerCheck = reactionDeliveredMembers.some((item) => typeof item.onlinerLive === "boolean");
-  const reactionEligibleMemberCount = reactionMembersHaveOnlinerCheck
-    ? reactionDeliveredMembers.filter((item) => item.onlinerLive === true).length
-    : reactionDeliveredMembers.length;
-  const configuredReactionCapacity = categoryAllocations.reduce((total, allocation) => {
-    if (allocation?.reactionUseEnabled !== true) return total;
-    const amount = Number.isFinite(allocation.amount) ? Math.max(0, allocation.amount) : 0;
-    return total + amount;
-  }, 0);
-  const reactionOrderLimit = typeof status?.reactionCapacity === "number" ? status.reactionCapacity : configuredReactionCapacity;
-  const reactionMessageLink = typeof status?.reactionMessageLink === "string" ? status.reactionMessageLink : "";
-  const reactionRequests = Array.isArray(status?.reactionRequests) ? status.reactionRequests : [];
-  const reactionAssignments = reactionRequests.flatMap((request) => Array.isArray(request.assignments) ? request.assignments : []);
-  const reactionCompletedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => item.reactionState === "completed").length
-    : reactionMembers.filter((item) => item.reactionState === "completed").length;
-  const visibleReactionFailedCount = (reactionAssignments.length ? reactionAssignments : reactionMembers)
-    .filter((item) => item.reactionState === "failed").length;
-  const reactionAssignedCount = reactionAssignments.length
-    ? reactionAssignments.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length
-    : reactionMembers.filter((item) => !["failed", "cancelled"].includes(String(item.reactionState))).length;
-  const reactionRemainingCount = Math.max(0, reactionOrderLimit - reactionAssignedCount);
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -572,45 +537,6 @@ export default function PublicOrderPage() {
     return () => window.clearTimeout(timer);
   }, [expiredAt, supportClock]);
 
-  async function handleSaveReactionMessage() {
-    const messageLink = reactionMessageDraft.trim();
-    if (!uniqid || !messageLink || savingReactionMessage) return;
-    try {
-      setSavingReactionMessage(true);
-      const reactionAmount = Math.min(reactionCountDraft, reactionRemainingCount);
-      const selectedEmojis = reactionEmojiDraft.slice(0, Math.min(reactionAmount, 20));
-      if (!selectedEmojis.length) {
-        toast.error("Choose at least one emoji.");
-        return;
-      }
-      const updated = await updatePublicCommunityOrderReactionMessage(uniqid, messageLink, reactionAmount, selectedEmojis);
-      setStatus((current) => mergeOrderStatus(current, updated));
-      setReactionMessageDraft("");
-      setReactionCountDraft(1);
-      setReactionEmojiDraft([REACTION_MIXED_VALUE]);
-      toast.success("Reaction request added. Eligible members were queued.");
-    } catch (saveError) {
-      toast.error(saveError instanceof Error ? saveError.message : "Reaction message could not be saved.");
-    } finally {
-      setSavingReactionMessage(false);
-    }
-  }
-
-  async function handleCancelPendingReactions() {
-    if (!uniqid || cancellingReactions) return;
-    try {
-      setCancellingReactions(true);
-      const data = await cancelPublicCommunityOrderReactions(uniqid);
-      setStatus((current) => mergeOrderStatus(current, data.order));
-      toast.success(data.cancelledCount
-        ? `${data.cancelledCount} pending reaction${data.cancelledCount === 1 ? " was" : "s were"} cancelled and returned to your available limit.`
-        : "No queued reactions remained to cancel.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Pending reactions could not be cancelled.");
-    } finally {
-      setCancellingReactions(false);
-    }
-  }
   useEffect(() => {
     if (normalizedStatus !== "PROCESS" || nextMemberTimestamp === undefined || nextMemberTimestamp <= Date.now()) return;
     setDeliveryClock(Date.now());
@@ -1125,7 +1051,7 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""} ${isCommunityOrder && reactionOrderLimit > 0 ? "has-reaction" : ""}`.trim()}>
+              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`.trim()}>
                 {boostDeliveryControl}
                 {delayUpdatePanel}
 
@@ -1211,46 +1137,6 @@ export default function PublicOrderPage() {
                   </div>
                 ) : null}
 
-                {isCommunityOrder && reactionOrderLimit > 0 ? (
-                  <ReactionPanel
-                    limit={reactionOrderLimit}
-                    completed={reactionCompletedCount}
-                    failed={visibleReactionFailedCount}
-                    remaining={reactionRemainingCount}
-                    eligibleMembers={reactionEligibleMemberCount}
-                    onRefreshEligibleMembers={(isCompleted || normalizedStatus === "PARTIAL") && canManageCommunityMembers ? () => void handleCheckCommunityMembers() : undefined}
-                    refreshingEligibleMembers={checkingCommunityMembers}
-                    messageDraft={reactionMessageDraft}
-                    countDraft={reactionCountDraft}
-                    selectedEmojis={reactionEmojiDraft}
-                    saving={savingReactionMessage}
-                    requestEnabled={["PARTIAL", "COMPLETED"].includes(normalizedStatus)}
-                    requests={reactionRequests.map((request) => {
-                      const assignments = Array.isArray(request.assignments)
-                        ? request.assignments
-                        : reactionMembers.filter((item) => item.reactionRequestId === request.id);
-                      const failedAssignments = assignments.filter((item) => item.reactionState === "failed");
-                      const failureMessages = [...new Set(failedAssignments.map((item) => `${item.reactionEmoji ?? "Reaction"}${item.discordUserId ? ` · ${item.discordUserId}` : ""}: ${item.reactionDetails || "Discord returned no detail."}`))];
-                      return {
-                        ...request,
-                        completedCount: assignments.filter((item) => item.reactionState === "completed").length,
-                        failedCount: failedAssignments.length,
-                        cancelledCount: assignments.filter((item) => item.reactionState === "cancelled").length,
-                        failureMessages
-                      };
-                    })}
-                    onMessageChange={setReactionMessageDraft}
-                    onCountChange={setReactionCountDraft}
-                    onEmojiSelectionChange={setReactionEmojiDraft}
-                    onSubmit={() => void handleSaveReactionMessage()}
-                    onCancelPending={() => void handleCancelPendingReactions()}
-                    cancellingPending={cancellingReactions}
-                    onEditLimit={() => setShowReactionPurchaseModal(true)}
-                    limitActionLabel="Buy reaction limit"
-                    limitActionVariant="purchase"
-                  />
-                ) : null}
-
                 {isBoostOrder && canManageDcordTokens ? (
                   <div className="monitor-token-panel">
                     <div className="monitor-token-heading">
@@ -1334,31 +1220,6 @@ export default function PublicOrderPage() {
               <Button type="button" variant="secondary" onClick={() => setShowExtensionModal(false)}>Close</Button>
               <Button asChild>
                 <a href={ELDORADO_STORE_URL} target="_blank" rel="noreferrer">
-                  Buy on Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
-                </a>
-              </Button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      ) : null}
-      {showReactionPurchaseModal ? createPortal(
-        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowReactionPurchaseModal(false); }}>
-          <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-reaction-purchase-title">
-            <span className="confirm-modal-icon is-success" aria-hidden="true"><Rocket className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-accent)]">Reaction allowance</p>
-            <h2 id="public-reaction-purchase-title">Buy reaction limit</h2>
-            <p>Copy the order ID below, then open Eldorado and send it to Pulcip Store with the amount of additional reactions you need.</p>
-            <div className="public-extension-order-id">
-              <span><small>Order ID</small><code>{uniqid}</code></span>
-              <Button type="button" variant="secondary" size="sm" onClick={() => void copyOrderIdForExtension()}>
-                <Copy className="h-4 w-4" aria-hidden="true" /> Copy ID
-              </Button>
-            </div>
-            <div className="confirm-modal-actions">
-              <Button type="button" variant="secondary" onClick={() => setShowReactionPurchaseModal(false)}>Close</Button>
-              <Button asChild>
-                <a href={ELDORADO_REACTION_LIMIT_URL} target="_blank" rel="noreferrer">
                   Buy on Eldorado <ExternalLink className="h-4 w-4" aria-hidden="true" />
                 </a>
               </Button>

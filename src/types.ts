@@ -184,6 +184,43 @@ export interface TrackedOrder {
   reactionRequests?: OrderStatusResponse["reactionRequests"];
 }
 
+export interface ReactionWorkspaceAssignment {
+  discordUserId: string;
+  reactionState?: string;
+  reactionEmoji?: string;
+  reactionDetails?: string;
+  reactionCompletedAt?: string;
+}
+
+export interface ReactionWorkspaceRequest {
+  id: string;
+  orderId?: string;
+  messageLink: string;
+  requestedCount: number;
+  assignedCount: number;
+  emojiCount?: number;
+  emojis?: string[];
+  createdAt: string;
+  autoStopReason?: string;
+  autoStoppedAt?: string;
+  assignments?: ReactionWorkspaceAssignment[];
+}
+
+export interface ReactionWorkspaceSummary {
+  messageLink: string;
+  guildId: string;
+  channelId: string;
+  messageId: string;
+  serverName?: string | null;
+  orderCount: number;
+  totalOrdered: number;
+  deliveredMembers: number;
+  eligibleMembers: number;
+  unavailableMembers: number;
+  availableForMessage: number;
+  requests: ReactionWorkspaceRequest[];
+}
+
 export interface BoostStock {
   oneMonth: number;
   threeMonth: number;

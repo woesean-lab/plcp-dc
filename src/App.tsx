@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck, WandSparkles } from "lucide-react";
+import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -9,6 +9,7 @@ import LandingPage from "./pages/LandingPage";
 import OrderPage from "./pages/OrderPage";
 import PublicOrderPage from "./pages/PublicOrderPage";
 import HumanizerPage from "./pages/HumanizerPage";
+import ReactionsPage from "./pages/ReactionsPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
 
@@ -30,6 +31,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const tab = normalizeAdminTab(search.get("tab"));
   const isOrders = location.pathname.startsWith("/orders");
   const isHumanizer = location.pathname.startsWith("/humanizer");
+  const isReactions = location.pathname.startsWith("/reactions");
   const isManage = location.pathname.startsWith("/manage") || location.pathname.startsWith("/admin");
 
   return (
@@ -75,6 +77,16 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 >
                   <ListChecks className="h-4 w-4" aria-hidden="true" />
                   <span>Orders</span>
+                </Link>
+                <Link
+                  to="/reactions"
+                  aria-label="Reactions"
+                  title="Reactions"
+                  className={`app-nav-button ${isReactions ? "is-active" : ""}`}
+                  aria-current={isReactions ? "page" : undefined}
+                >
+                  <Sparkles className="h-4 w-4" aria-hidden="true" />
+                  <span>Reactions</span>
                 </Link>
                 <Link
                   to="/manage?tab=stock"
@@ -150,6 +162,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
             <Route path="/manage" element={<HomePage />} />
             <Route path="/admin" element={<HomePage />} />
             <Route path="/humanizer" element={<HumanizerPage />} />
+            <Route path="/reactions" element={<ReactionsPage />} />
             <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
           </Routes>
         </main>

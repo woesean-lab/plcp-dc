@@ -33,7 +33,6 @@ import {
   ListChecks,
   LoaderCircle,
   LogOut,
-  MessageSquareText,
   Minus,
   Pencil,
   Pause,
@@ -151,8 +150,6 @@ import {
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
 
-const DEFAULT_REACTION_LIMIT = 5;
-
 const EMPTY_FORM = {
   service: "COMMUNITY-OFFLINE" as ServiceType,
   serverId: "",
@@ -168,7 +165,6 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
-  reactionLimit: DEFAULT_REACTION_LIMIT,
   humanizerEnabled: false,
   humanizerPackageId: "",
   isEldoradoSale: true
@@ -508,25 +504,6 @@ function getOrderProgress(order: TrackedOrder) {
   };
 }
 
-function getTrackedOrderReactionUsage(order: TrackedOrder) {
-  const explicitCapacity = Number(order.reactionCapacity);
-  const derivedCapacity = Array.isArray(order.categoryAllocations)
-    ? order.categoryAllocations.reduce((total, allocation) => allocation.reactionUseEnabled === true ? total + Math.max(0, Number(allocation.amount) || 0) : total, 0)
-    : 0;
-  const total = Number.isFinite(explicitCapacity) ? Math.max(0, explicitCapacity) : derivedCapacity;
-  if (total <= 0) return null;
-
-  const used = (Array.isArray(order.reactionRequests) ? order.reactionRequests : []).reduce((count, request) => {
-    const assignments = Array.isArray(request.assignments) ? request.assignments : [];
-    if (assignments.length) {
-      return count + assignments.filter((assignment) => !["failed", "cancelled"].includes(String(assignment.reactionState ?? "pending").toLowerCase())).length;
-    }
-    return count + Math.max(0, Number(request.assignedCount) || 0);
-  }, 0);
-
-  return { used: Math.min(used, total), total };
-}
-
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
   const [delayElapsed, setDelayElapsed] = useState(false);
   const [maxDelayElapsed, setMaxDelayElapsed] = useState(false);
@@ -854,7 +831,6 @@ export default function HomePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [orderHumanizerPackages, setOrderHumanizerPackages] = useState<HumanizerPackage[]>([]);
   const [loadingOrderHumanizerPackages, setLoadingOrderHumanizerPackages] = useState(false);
-  const reactionLimitManuallyEditedRef = useRef(false);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -933,10 +909,6 @@ export default function HomePage() {
     ? form.communityJoinMethod
     : selectedCommunityJoinMethods[0] ?? form.communityJoinMethod;
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
-  const selectedCommunityReactionCapacity = selectedCommunityAllocations.reduce((total, { category, amount }) => (
-    category.reactionUseEnabled ? total + amount : total
-  ), 0);
-  const selectedCommunityHasReaction = selectedCommunityReactionCapacity > 0;
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
   const selectedApiConfigured = selectedIsBoost ? dcordConfigured : Boolean(communityStatus?.configured);
@@ -949,7 +921,6 @@ export default function HomePage() {
       selectedCommunityJoinMethods.length > 0 &&
       availabilityMaximum > 0 &&
       selectedCommunityAmount === form.amount &&
-      (!selectedCommunityHasReaction || form.reactionLimit >= 1) &&
       selectedCommunityAllocations.every(({ category, amount }) => amount <= (communityAvailability[category.id] ?? 0))
     )
   );
@@ -969,15 +940,6 @@ export default function HomePage() {
       .catch((error) => notifyError(error instanceof Error ? error.message : "Humanizer packages could not be loaded."))
       .finally(() => setLoadingOrderHumanizerPackages(false));
   }, [form.humanizerEnabled, loadingOrderHumanizerPackages, orderHumanizerPackages.length, selectedIsBoost]);
-  useEffect(() => {
-    if (!selectedIsCommunity || !selectedCommunityHasReaction || selectedCommunityReactionCapacity < 1) return;
-    setForm((current) => {
-      const nextLimit = reactionLimitManuallyEditedRef.current
-        ? Math.min(current.reactionLimit, selectedCommunityReactionCapacity)
-        : Math.min(DEFAULT_REACTION_LIMIT, selectedCommunityReactionCapacity);
-      return current.reactionLimit === nextLimit ? current : { ...current, reactionLimit: Math.max(1, nextLimit) };
-    });
-  }, [form.amount, selectedCommunityHasReaction, selectedCommunityReactionCapacity, selectedIsCommunity]);
   const filteredUsedBoostTokens = useMemo(
     () => {
       const durationFiltered = usedTokenDurationFilter === "all"
@@ -1005,10 +967,6 @@ export default function HomePage() {
     const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
     return filteredOrders.slice(start, start + ORDER_PAGE_SIZE);
   }, [currentOrderPage, filteredOrders]);
-  const showReactionUseColumn = useMemo(
-    () => paginatedOrders.some((order) => getTrackedOrderReactionUsage(order) !== null),
-    [paginatedOrders]
-  );
 
   useEffect(() => {
     if (activeTab === "manage") {
@@ -2762,8 +2720,6 @@ export default function HomePage() {
   }
 
   function areTrackedOrdersEqual(a: TrackedOrder, b: TrackedOrder) {
-    const aReactionUsage = getTrackedOrderReactionUsage(a);
-    const bReactionUsage = getTrackedOrderReactionUsage(b);
     return (
       a.uniqid === b.uniqid &&
       a.status === b.status &&
@@ -2779,11 +2735,7 @@ export default function HomePage() {
       a.service === b.service &&
       a.provider === b.provider &&
       a.duration === b.duration &&
-      a.expiredAt === b.expiredAt &&
-      a.reactionCapacity === b.reactionCapacity &&
-      a.reactionMessageLink === b.reactionMessageLink &&
-      aReactionUsage?.used === bReactionUsage?.used &&
-      aReactionUsage?.total === bReactionUsage?.total
+      a.expiredAt === b.expiredAt
     );
   }
 
@@ -2946,7 +2898,6 @@ export default function HomePage() {
       return;
     }
 
-    const reactionLimit = Math.min(form.reactionLimit, selectedCommunityReactionCapacity);
     const payload: CreateOrderPayload = {
       service: form.service,
       id: form.serverId.trim(),
@@ -2960,15 +2911,9 @@ export default function HomePage() {
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? effectiveCommunityJoinMethod : undefined,
-      reactionLimit: selectedIsCommunity && selectedCommunityHasReaction ? reactionLimit : undefined,
       humanizerPackageId: selectedIsBoost && form.humanizerEnabled ? form.humanizerPackageId : undefined,
       isEldoradoSale: form.isEldoradoSale
     };
-
-    if (selectedIsCommunity && selectedCommunityHasReaction && (!Number.isInteger(reactionLimit) || reactionLimit < 1 || reactionLimit > selectedCommunityReactionCapacity)) {
-      notifyError(`Choose between 1 and ${selectedCommunityReactionCapacity} reactions.`);
-      return;
-    }
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
       notifyError("Boost amount must be an even number.");
@@ -3170,11 +3115,6 @@ export default function HomePage() {
                       {category.checkReplacementEnabled ? (
                         <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled">
                           <RefreshCw aria-hidden="true" />
-                        </span>
-                      ) : null}
-                      {category.reactionUseEnabled ? (
-                        <span className="community-category-rule-indicator" title="Reaction enabled" aria-label="Reaction enabled">
-                          <MessageSquareText aria-hidden="true" />
                         </span>
                       ) : null}
                       {(category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).map((method) => {
@@ -4027,7 +3967,7 @@ export default function HomePage() {
 
                           </>
                         ) : null}
-                        <div className={`boost-order-grid members-order-grid ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""} ${selectedIsCommunity && selectedCommunityHasReaction ? "has-reaction" : ""}`}>
+                        <div className={`boost-order-grid members-order-grid ${selectedIsCommunity ? "is-community" : ""} ${selectedIsCommunity && selectedCommunityHasPeriodic ? "is-periodic" : ""}`}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Members</span>
                             <input
@@ -4062,26 +4002,6 @@ export default function HomePage() {
                             </div>
                           </label>
 
-                          {selectedIsCommunity && selectedCommunityHasReaction ? (
-                            <label className="boost-order-field community-order-reaction-limit-field">
-                              <span className="boost-order-label">Reaction limit</span>
-                              <input
-                                className="boost-number-input"
-                                type="number"
-                                min={1}
-                                max={selectedCommunityReactionCapacity}
-                                value={Math.min(form.reactionLimit, selectedCommunityReactionCapacity)}
-                                onChange={(event) => {
-                                  reactionLimitManuallyEditedRef.current = true;
-                                  setForm((current) => ({
-                                    ...current,
-                                    reactionLimit: Math.min(selectedCommunityReactionCapacity, Math.max(1, Number.parseInt(event.target.value, 10) || 1))
-                                  }));
-                                }}
-                                required
-                              />
-                            </label>
-                          ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasPeriodic ? (
                             <div className="boost-order-field community-order-month-field">
@@ -4183,9 +4103,9 @@ export default function HomePage() {
                 </div>
 
                 {filteredOrders.length ? (
-                  <div className="orders-table" data-reaction-use={showReactionUseColumn ? "true" : "false"} role="table" aria-label="Tracked orders">
+                  <div className="orders-table" role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span>{showReactionUseColumn ? <span>Reaction Use</span> : null}<span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
@@ -4202,13 +4122,12 @@ export default function HomePage() {
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
                         const delayValue = order.statusDelay ?? order.delay;
-                        const reactionUsage = getTrackedOrderReactionUsage(order);
                         const supportExpiration = getOrderSupportExpiration(order);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
                           <li key={order.uniqid}>
-                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} data-has-reaction-use={reactionUsage ? "true" : "false"} aria-labelledby={titleId}>
+                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
                               <div className="orders-row-identity">
                                 <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
                                 <span className="min-w-0">
@@ -4238,7 +4157,6 @@ export default function HomePage() {
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
-                              {showReactionUseColumn ? <dl className="orders-row-reaction-use">{reactionUsage ? <div><dt>Reaction Use</dt><dd>{formatNumber(reactionUsage.used)}/{formatNumber(reactionUsage.total)}</dd></div> : null}</dl> : null}
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
@@ -5438,10 +5356,6 @@ export default function HomePage() {
                     <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check is informational only</small></span>
                   </label>
                 </div>
-                <label className={`onliner-enabled-card ${communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}`}>
-                  <input type="checkbox" checked={communityCategoryDraft.reactionUseEnabled} onChange={(event) => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: event.target.checked }))} />
-                  <span><strong>Reaction</strong><small>Allow reaction requests for orders using this category.</small></span>
-                </label>
               </div>
             </div>
             <div className="confirm-modal-actions">
@@ -5534,7 +5448,6 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
-                  {orderConfirmationPayload.reactionLimit ? <span><MessageSquareText className="h-3.5 w-3.5" />{orderConfirmationPayload.reactionLimit} reaction limit</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                 </div>
               ) : null}
