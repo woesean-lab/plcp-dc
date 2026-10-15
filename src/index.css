@@ -7976,6 +7976,9 @@
 .monitor-reaction-form-copy strong { display: block; color: var(--app-text); font-size: 11px; }
 .monitor-reaction-form-copy small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 8px; line-height: 1.35; }
 .monitor-reaction-field { min-width: 0; grid-template-rows: 14px 44px; }
+.monitor-reaction-amount-label { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.monitor-reaction-amount-label small { display: inline-flex; min-width: 0; align-items: center; gap: 3px; color: var(--app-accent-bright); font-size: 8px; font-weight: 750; white-space: nowrap; }
+.monitor-reaction-amount-label small svg { width: 10px; height: 10px; }
 .monitor-reaction-form .boost-number-input {
   height: 44px;
   min-width: 0;

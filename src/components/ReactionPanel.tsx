@@ -342,7 +342,10 @@ export function ReactionPanel({
             />
           </div>
           <label className="boost-order-field monitor-reaction-field">
-            <span className="boost-order-label">Amount</span>
+            <span className="boost-order-label monitor-reaction-amount-label">
+              <span>Amount</span>
+              {workspaceSummary ? <small title="Available reaction slots with the selected emojis"><Sparkles aria-hidden="true" /> {remaining} slots</small> : null}
+            </span>
             <input
               className="boost-number-input"
               type="number"
