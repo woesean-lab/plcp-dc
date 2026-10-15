@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { Calculator, CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 
@@ -154,13 +154,6 @@ export function ReactionPanel({
   const activeCheckTotal = memberCheckProgress?.total || Number.parseInt(memberCheckAmount, 10) || 0;
   const activeCheckCompleted = Math.min(activeCheckTotal, memberCheckProgress?.checked ?? 0);
   const activeCheckRemaining = Math.max(0, memberCheckProgress?.remaining ?? activeCheckTotal - activeCheckCompleted);
-  const automaticMixedEmojiCount = countDraft <= 12 ? 2 : countDraft <= 35 ? 3 : countDraft <= 75 ? 8 : countDraft <= 200 ? 9 : 10;
-  const mixedEmojiCountForAvailableMembers = eligibleMembers > 0 ? Math.ceil(Math.max(1, countDraft) / eligibleMembers) : automaticMixedEmojiCount;
-  const selectedEmojiCount = selectedEmojis.includes(REACTION_MIXED_VALUE)
-    ? Math.min(workspaceSummary?.reactionEmojiLimit ?? REACTION_EMOJI_SELECTION_LIMIT, Math.max(1, countDraft), Math.max(automaticMixedEmojiCount, mixedEmojiCountForAvailableMembers))
-    : Math.max(1, selectedEmojis.length);
-  const requiredMembers = Math.ceil(Math.max(1, countDraft) / selectedEmojiCount);
-  const missingMembers = Math.max(0, requiredMembers - eligibleMembers);
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/.+/i.test(messageDraft.trim());
@@ -321,29 +314,6 @@ export function ReactionPanel({
             </Button>
           </div>
         </div>
-      ) : null}
-
-      {workspaceSummary ? (
-        <section className="monitor-reaction-requirement" aria-label="Reaction order requirement">
-          <div className="monitor-reaction-requirement-heading">
-            <span aria-hidden="true"><Calculator /></span>
-            <div><strong>Order requirement</strong><small>Calculated from the reaction amount and selected emojis.</small></div>
-          </div>
-          <div className="monitor-reaction-requirement-table" role="table" aria-label="Required member calculation">
-            <div role="row" className="monitor-reaction-requirement-head">
-              <span role="columnheader">Reactions</span>
-              <span role="columnheader">Emoji count</span>
-              <span role="columnheader">Members required</span>
-              <span role="columnheader">Ready members</span>
-            </div>
-            <div role="row" className="monitor-reaction-requirement-row">
-              <strong role="cell">{countDraft}</strong>
-              <strong role="cell">{selectedEmojis.includes(REACTION_MIXED_VALUE) ? `Auto · ${selectedEmojiCount}` : selectedEmojiCount}</strong>
-              <strong role="cell">{requiredMembers}</strong>
-              <strong role="cell" data-state={missingMembers > 0 ? "short" : "ready"}>{eligibleMembers}<small>{missingMembers > 0 ? `${missingMembers} more needed` : "Enough"}</small></strong>
-            </div>
-          </div>
-        </section>
       ) : null}
 
       {remaining > 0 || workspaceSummary ? (

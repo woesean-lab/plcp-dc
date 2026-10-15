@@ -90,7 +90,8 @@ export default function ReactionsPage() {
   const [botInvite, setBotInvite] = useState<string | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [count, setCount] = useState(1);
-  const [requestedEmojiCount, setRequestedEmojiCount] = useState(1);
+  const [calculatorReactionAmount, setCalculatorReactionAmount] = useState(50);
+  const [calculatorEmojiCount, setCalculatorEmojiCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
   const [submitting, setSubmitting] = useState(false);
   const [checkingMembers, setCheckingMembers] = useState(false);
@@ -104,7 +105,7 @@ export default function ReactionsPage() {
   const requests = useMemo(() => summary ? toPanelRequests(summary) : [], [summary]);
   const reactionCapacity = useMemo(() => summary ? getReactionCapacity(summary, emojis) : 0, [emojis, summary]);
   const activeRequestCount = requests.filter((request) => request.assignedCount > request.completedCount + (request.failedCount ?? 0) + (request.cancelledCount ?? 0)).length;
-  const requiredMemberCount = Math.ceil(Math.max(1, count) / Math.max(1, requestedEmojiCount));
+  const requiredMemberCount = Math.ceil(calculatorReactionAmount / calculatorEmojiCount);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPageReady(true), PAGE_SKELETON_DELAY);
@@ -282,8 +283,8 @@ export default function ReactionsPage() {
                 type="number"
                 inputMode="numeric"
                 min={1}
-                value={count}
-                onChange={(event) => setCount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
+                value={calculatorReactionAmount}
+                onChange={(event) => setCalculatorReactionAmount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
               />
             </label>
             <label>
@@ -293,14 +294,14 @@ export default function ReactionsPage() {
                 inputMode="numeric"
                 min={1}
                 max={20}
-                value={requestedEmojiCount}
-                onChange={(event) => setRequestedEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
+                value={calculatorEmojiCount}
+                onChange={(event) => setCalculatorEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
               />
             </label>
             <div className="reactions-order-planner-result">
               <span>Members required</span>
               <strong>{requiredMemberCount}</strong>
-              <small>{count} reactions ÷ {requestedEmojiCount} emojis</small>
+              <small>{calculatorReactionAmount} reactions ÷ {calculatorEmojiCount} emojis</small>
             </div>
           </div>
           <div className="reactions-lookup-field">
