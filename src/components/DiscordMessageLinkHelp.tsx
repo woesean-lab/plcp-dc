@@ -5,6 +5,7 @@ import { CircleHelp, X } from "lucide-react";
 export function DiscordMessageLinkHelp() {
   const titleId = useId();
   const [open, setOpen] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
 
   return (
     <>
@@ -25,7 +26,14 @@ export function DiscordMessageLinkHelp() {
               <div><span>Discord message URL</span><h2 id={titleId}>Copy the message link</h2></div>
               <button type="button" onClick={() => setOpen(false)} aria-label="Close"><X aria-hidden="true" /></button>
             </header>
-            <img src="/discord-copy-message-link-guide.png" alt="Discord message menu with step 1 pointing to the three-dot menu and step 2 pointing to Copy Message Link" />
+            <div className="reaction-help-visual" data-loaded={imageLoaded || undefined}>
+              {!imageLoaded ? <div className="app-skeleton reaction-help-image-skeleton" aria-hidden="true" /> : null}
+              <img
+                src="/discord-copy-message-link-guide.png"
+                alt="Discord message menu with step 1 pointing to the three-dot menu and step 2 pointing to Copy Message Link"
+                onLoad={() => setImageLoaded(true)}
+              />
+            </div>
             <div className="reaction-help-steps">
               <span><b>1</b><small>Click the three-dot menu on the message.</small></span>
               <span><b>2</b><small>Select Copy Message Link.</small></span>

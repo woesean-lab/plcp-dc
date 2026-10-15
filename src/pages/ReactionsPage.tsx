@@ -263,8 +263,7 @@ export default function ReactionsPage() {
       </div>
 
       <div className="reactions-page-tools">
-        {!summary ? (
-          <details className="reactions-calculator">
+        <details className="reactions-calculator">
             <summary>
               <span className="reactions-calculator-icon" aria-hidden="true"><Calculator /></span>
               <span className="reactions-calculator-copy">
@@ -302,8 +301,7 @@ export default function ReactionsPage() {
                 <small>{calculatorReactionAmount} reactions ÷ {calculatorEmojiCount} emojis</small>
               </div>
             </div>
-          </details>
-        ) : <span />}
+        </details>
         <div className="reactions-flow" aria-label="Reaction workflow">
           <span><Users aria-hidden="true" /> Deliver members</span>
           <ArrowRight aria-hidden="true" />
