@@ -8144,6 +8144,7 @@
 .reactions-page { display: grid; width: 100%; margin: 0 auto; gap: 18px; }
 .reactions-page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; padding: 14px 2px 4px; }
 .reactions-page-heading .page-description { max-width: 720px; margin-top: 9px; color: var(--app-muted); font-size: 13px; line-height: 1.65; }
+.reactions-page-tools { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .reactions-flow { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 8px; border: 1px solid var(--app-border); border-radius: 14px; background: rgba(8,9,20,.62); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
 .reactions-flow > span { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 10px; border-radius: 9px; color: var(--app-text-secondary); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .reactions-flow svg { width: 13px; height: 13px; color: var(--app-accent-bright); }
@@ -8153,7 +8154,7 @@
 .reactions-lookup-icon svg { width: 21px; height: 21px; }
 .reactions-lookup-copy strong { display: block; color: var(--app-text); font-size: 13px; }
 .reactions-lookup-copy p { margin-top: 5px; color: var(--app-muted); font-size: 10px; line-height: 1.5; }
-.reactions-calculator { width: min(100%, 760px); justify-self: end; overflow: hidden; border: 1px dashed rgba(155,140,255,.24); border-radius: 14px; background: rgba(8,9,20,.4); }
+.reactions-calculator { width: min(100%, 760px); overflow: hidden; border: 1px dashed rgba(155,140,255,.24); border-radius: 14px; background: rgba(8,9,20,.4); }
 .reactions-calculator summary { display: flex; align-items: center; gap: 10px; padding: 11px 13px; cursor: pointer; list-style: none; user-select: none; }
 .reactions-calculator summary::-webkit-details-marker { display: none; }
 .reactions-calculator-icon { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border: 1px solid var(--app-accent-border); border-radius: 9px; color: var(--app-accent-bright); background: var(--app-accent-soft); }
@@ -8195,6 +8196,7 @@
 
 @media (max-width: 980px) {
   .reactions-page-heading { align-items: stretch; flex-direction: column; }
+  .reactions-page-tools { align-items: stretch; flex-direction: column; }
   .reactions-flow { align-self: flex-start; }
   .reactions-lookup-card { grid-template-columns: auto minmax(0, 1fr); }
   .reactions-lookup-field, .reactions-lookup-card > .ui-button, .reactions-lookup-error { grid-column: 1 / -1; grid-row: auto; }

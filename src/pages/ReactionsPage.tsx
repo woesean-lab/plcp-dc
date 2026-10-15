@@ -260,6 +260,50 @@ export default function ReactionsPage() {
           <h1 className="page-title">Reactions</h1>
           <p className="page-description">Paste a Discord message link. We’ll match every Members order delivered to that server and show the accounts ready to react.</p>
         </div>
+      </div>
+
+      <div className="reactions-page-tools">
+        {!summary ? (
+          <details className="reactions-calculator">
+            <summary>
+              <span className="reactions-calculator-icon" aria-hidden="true"><Calculator /></span>
+              <span className="reactions-calculator-copy">
+                <strong>Member calculator</strong>
+                <small>Optional planning tool · Does not affect the request</small>
+              </span>
+              <span className="reactions-calculator-badge">Optional</span>
+              <ChevronDown className="reactions-calculator-chevron" aria-hidden="true" />
+            </summary>
+            <div className="reactions-calculator-body" aria-label="Member requirement calculator">
+              <label>
+                <span>Reaction amount</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  value={calculatorReactionAmount}
+                  onChange={(event) => setCalculatorReactionAmount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
+                />
+              </label>
+              <label>
+                <span>Emoji count</span>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={20}
+                  value={calculatorEmojiCount}
+                  onChange={(event) => setCalculatorEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
+                />
+              </label>
+              <div className="reactions-calculator-result">
+                <span>Members required</span>
+                <strong>{requiredMemberCount}</strong>
+                <small>{calculatorReactionAmount} reactions ÷ {calculatorEmojiCount} emojis</small>
+              </div>
+            </div>
+          </details>
+        ) : <span />}
         <div className="reactions-flow" aria-label="Reaction workflow">
           <span><Users aria-hidden="true" /> Deliver members</span>
           <ArrowRight aria-hidden="true" />
@@ -271,45 +315,6 @@ export default function ReactionsPage() {
 
       {!summary ? (
         <>
-        <details className="reactions-calculator">
-          <summary>
-            <span className="reactions-calculator-icon" aria-hidden="true"><Calculator /></span>
-            <span className="reactions-calculator-copy">
-              <strong>Member calculator</strong>
-              <small>Optional planning tool · Does not affect the request</small>
-            </span>
-            <span className="reactions-calculator-badge">Optional</span>
-            <ChevronDown className="reactions-calculator-chevron" aria-hidden="true" />
-          </summary>
-          <div className="reactions-calculator-body" aria-label="Member requirement calculator">
-            <label>
-              <span>Reaction amount</span>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={calculatorReactionAmount}
-                onChange={(event) => setCalculatorReactionAmount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
-              />
-            </label>
-            <label>
-              <span>Emoji count</span>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                max={20}
-                value={calculatorEmojiCount}
-                onChange={(event) => setCalculatorEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
-              />
-            </label>
-            <div className="reactions-calculator-result">
-              <span>Members required</span>
-              <strong>{requiredMemberCount}</strong>
-              <small>{calculatorReactionAmount} reactions ÷ {calculatorEmojiCount} emojis</small>
-            </div>
-          </div>
-        </details>
         <div className="reactions-lookup-card">
           <span className="reactions-lookup-icon" aria-hidden="true"><Server /></span>
           <div className="reactions-lookup-copy">
