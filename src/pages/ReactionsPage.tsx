@@ -287,7 +287,7 @@ export default function ReactionsPage() {
             />
           </div>
           <Button type="button" disabled={!validLink || inspecting} onClick={() => setInspectNonce((current) => current + 1)}>
-            {inspecting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Sparkles className="h-4 w-4" aria-hidden="true" />}
+            {inspecting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Users className="h-4 w-4" aria-hidden="true" />}
             {inspecting ? "Matching..." : "Match members"}
           </Button>
           {botInvite ? (
