@@ -249,9 +249,9 @@ export function ReactionPanel({
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
           </div>
           <div data-tone="available">
-            <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "Ready now" : "Available"}</span>
-            <strong>{remaining}</strong>
-            <small>{workspaceSummary ? "slots with selected emojis" : "ready to assign"}</small>
+            <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "Ready members" : "Available"}</span>
+            <strong>{workspaceSummary ? eligibleMembers : remaining}</strong>
+            <small>{workspaceSummary ? "online and can react" : "ready to assign"}</small>
           </div>
           <div data-tone="members">
             <span><Users aria-hidden="true" /> {workspaceSummary ? "Checked" : "Eligible"}
@@ -267,7 +267,7 @@ export function ReactionPanel({
               : workspaceSummary
                 ? workspaceSummary.membersCheckRequired
                   ? "check required"
-                  : `${workspaceSummary.remainingUncheckedMembers} unchecked · ${eligibleMembers} ready`
+                  : `${workspaceSummary.remainingUncheckedMembers} members unchecked`
                 : "members can react"}</small>
           </div>
         </div>
