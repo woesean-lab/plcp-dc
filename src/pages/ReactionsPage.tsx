@@ -13,6 +13,19 @@ import type { ReactionMemberCheckProgress, ReactionWorkspaceSummary } from "../t
 const DISCORD_MESSAGE_LINK = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/\d{16,22}\/\d{16,22}\/\d{16,22}(?:[/?#].*)?$/i;
 const PAGE_SKELETON_DELAY = 300;
 
+function normalizeReactionEmojiKey(emoji: string) {
+  const customEmoji = emoji.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
+  return customEmoji ? `${customEmoji[1]}:${customEmoji[2]}` : emoji;
+}
+
+function getReactionCapacity(summary: ReactionWorkspaceSummary, selectedEmojis: string[]) {
+  if (selectedEmojis.includes(REACTION_MIXED_VALUE)) return summary.availableForMessage;
+  return selectedEmojis.reduce((total, emoji) => {
+    const used = summary.usedReactionCounts?.[normalizeReactionEmojiKey(emoji)] ?? 0;
+    return total + Math.max(0, summary.eligibleMembers - used);
+  }, 0);
+}
+
 function isReactionBotRequiredError(error: unknown) {
   if (!error || typeof error !== "object" || !("payload" in error)) return false;
   const payload = (error as { payload?: unknown }).payload;
@@ -88,6 +101,7 @@ export default function ReactionsPage() {
   const normalizedLink = messageLink.trim();
   const validLink = DISCORD_MESSAGE_LINK.test(normalizedLink);
   const requests = useMemo(() => summary ? toPanelRequests(summary) : [], [summary]);
+  const reactionCapacity = useMemo(() => summary ? getReactionCapacity(summary, emojis) : 0, [emojis, summary]);
   const activeRequestCount = requests.filter((request) => request.assignedCount > request.completedCount + (request.failedCount ?? 0) + (request.cancelledCount ?? 0)).length;
 
   useEffect(() => {
@@ -112,7 +126,7 @@ export default function ReactionsPage() {
         .then((nextSummary) => {
           if (!active) return;
           setSummary(nextSummary);
-          setCount((current) => Math.max(1, Math.min(current, Math.max(1, nextSummary.availableForMessage))));
+          setCount((current) => Math.max(1, Math.min(current, Math.max(1, getReactionCapacity(nextSummary, emojis)))));
         })
         .catch((error) => {
           if (!active) return;
@@ -153,7 +167,7 @@ export default function ReactionsPage() {
     let active = true;
     const refreshProgress = () => {
       void getReactionWorkspaceMemberCheckProgress(summary.messageLink).then((progress) => {
-        if (active && progress.total > 0) setMemberCheckProgress(progress);
+        if (active && progress.active && progress.total > 0) setMemberCheckProgress(progress);
       }).catch(() => {});
     };
     refreshProgress();
@@ -171,10 +185,10 @@ export default function ReactionsPage() {
   }
 
   async function handleSubmit() {
-    if (!summary || !summary.availableForMessage || submitting) return;
+    if (!summary || !reactionCapacity || submitting) return;
     try {
       setSubmitting(true);
-      const reactionCount = Math.min(count, summary.availableForMessage);
+      const reactionCount = Math.min(count, reactionCapacity);
       const next = await createReactionWorkspaceRequest(summary.messageLink, reactionCount, emojis.slice(0, Math.min(reactionCount, 20)));
       setSummary(next);
       setCount(1);
@@ -200,8 +214,8 @@ export default function ReactionsPage() {
       const next = await checkReactionWorkspaceMembers(summary.messageLink, requestedCheckCount);
       setMemberCheckProgress({ active: false, total: next.lastBatchChecked, checked: next.lastBatchChecked, remaining: 0, stage: "complete" });
       setSummary(next);
-      setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.deliveredMembers))));
-      if (next.remainingUncheckedMembers > 0) setMemberCheckAmount((current) => String(Math.min(Number.parseInt(current, 10) || 1, next.remainingUncheckedMembers)));
+      setCount((current) => Math.max(1, Math.min(current, Math.max(1, getReactionCapacity(next, emojis)))));
+      setMemberCheckAmount(String(next.remainingUncheckedMembers));
       toast.success(next.memberCheckComplete
         ? `All ${next.checkedMembers} delivered members were checked. ${next.eligibleMembers} are ready to react.`
         : `${next.lastBatchChecked} members checked. ${next.eligibleMembers} are ready; ${next.remainingUncheckedMembers} remain.`);
@@ -311,7 +325,7 @@ export default function ReactionsPage() {
           limit={summary.eligibleMembers}
           completed={requests.reduce((total, request) => total + request.completedCount, 0)}
           failed={requests.reduce((total, request) => total + (request.failedCount ?? 0), 0)}
-          remaining={summary.availableForMessage}
+          remaining={reactionCapacity}
           eligibleMembers={summary.eligibleMembers}
           messageDraft={messageLink}
           countDraft={count}

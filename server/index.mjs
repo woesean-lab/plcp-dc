@@ -12449,12 +12449,21 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     ? deliveredMembers.filter((member) => memberCheck.eligibleMemberIds.has(String(member?.discordUserId ?? "")))
     : [];
   const requests = getReactionWorkspaceRequests(orders);
-  const usedMemberIds = new Set(requests
+  const activeAssignments = requests
     .filter((request) => request?.messageLink === reactionMessage.url)
     .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
-    .filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase()))
-    .map((assignment) => String(assignment?.discordUserId ?? ""))
-    .filter(Boolean));
+    .filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase()));
+  const eligibleMemberIds = new Set(eligibleMembers.map((member) => String(member?.discordUserId ?? "")));
+  const usedReactionPairs = new Set(activeAssignments
+    .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`)
+    .filter((pair) => eligibleMemberIds.has(pair.split(":", 1)[0])));
+  const usedReactionCounts = {};
+  for (const assignment of activeAssignments) {
+    const discordUserId = String(assignment?.discordUserId ?? "");
+    const emoji = String(assignment?.reactionEmoji ?? "");
+    if (!eligibleMemberIds.has(discordUserId) || !emoji) continue;
+    usedReactionCounts[emoji] = (usedReactionCounts[emoji] ?? 0) + 1;
+  }
   const totalOrdered = orders.reduce((total, order) => total + Math.max(0, Number(order?.amount) || 0), 0);
   const serverName = orders.map((order) => normalizeDiscordGuildName(order?.serverName)).find(Boolean) ?? null;
   return {
@@ -12468,7 +12477,9 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     deliveredMembers: deliveredMembers.length,
     eligibleMembers: eligibleMembers.length,
     unavailableMembers: Math.max(0, (memberCheck?.checkedMembers ?? 0) - eligibleMembers.length),
-    availableForMessage: eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? ""))).length,
+    availableForMessage: Math.max(0, eligibleMembers.length * communityReactionEmojiLimit - usedReactionPairs.size),
+    reactionEmojiLimit: communityReactionEmojiLimit,
+    usedReactionCounts,
     membersCheckRequired: !memberCheck,
     membersCheckedAt: memberCheck?.checkedAt ?? null,
     onlineDeliveredMembers: memberCheck?.onlineDeliveredMembers ?? 0,
@@ -12573,28 +12584,33 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "Check members before creating a reaction request." });
     }
-    if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > summary.availableForMessage) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: summary.availableForMessage > 0
-        ? `Choose a reaction amount between 1 and ${summary.availableForMessage}.`
-        : "Every available member has already been assigned to this message." });
-    }
-
     const memberCheck = getReactionWorkspaceMemberCheck(reactionMessage.guildId);
     const { deliveredMembers } = getReactionWorkspaceMembers(orders);
     const eligibleMembers = deliveredMembers.filter((member) => memberCheck?.eligibleMemberIds.has(String(member?.discordUserId ?? "")));
-    const usedMemberIds = new Set(summary.requests
+    const usedPairs = new Set(summary.requests
       .filter((request) => request?.messageLink === reactionMessage.url)
       .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
       .filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase()))
-      .map((assignment) => String(assignment?.discordUserId ?? "")));
-    const availableMembers = eligibleMembers.filter((member) => !usedMemberIds.has(String(member?.discordUserId ?? "")));
+      .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
     const assignmentEmojis = mixedEmojiMode ? null : requestedEmojis.map((emoji) => {
       if (!isCommunityCustomReactionSelector(emoji)) return emoji;
       const match = emoji.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
       return `${match[1]}:${match[2]}`;
     });
-    const assignments = createWorkspaceReactionAssignments(availableMembers, requestedCount, assignmentEmojis);
+    const selectedCapacity = mixedEmojiMode
+      ? Math.max(0, eligibleMembers.length * communityReactionEmojiLimit - usedPairs.size)
+      : assignmentEmojis.reduce((total, emoji) => total + eligibleMembers.filter((member) => !usedPairs.has(`${member.discordUserId}:${emoji}`)).length, 0);
+    if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > selectedCapacity) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ message: selectedCapacity > 0
+        ? `With the selected emojis, choose a reaction amount between 1 and ${selectedCapacity}.`
+        : "Every available member and emoji combination has already been assigned to this message." });
+    }
+    const assignments = createNaturalCommunityReactionAssignments(eligibleMembers, requestedCount, usedPairs, assignmentEmojis);
+    if (assignments.length !== requestedCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "The available members do not have enough unused emoji combinations for this request." });
+    }
     const anchorOrder = orders[0];
     const requestId = crypto.randomUUID();
     for (const assignment of assignments) {

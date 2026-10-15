@@ -218,6 +218,8 @@ export interface ReactionWorkspaceSummary {
   eligibleMembers: number;
   unavailableMembers: number;
   availableForMessage: number;
+  reactionEmojiLimit: number;
+  usedReactionCounts: Record<string, number>;
   membersCheckRequired: boolean;
   membersCheckedAt?: string | null;
   onlineDeliveredMembers: number;

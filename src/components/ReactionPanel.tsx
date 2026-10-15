@@ -85,6 +85,8 @@ type ReactionPanelProps = {
     deliveredMembers: number;
     unavailableMembers: number;
     availableForMessage: number;
+    reactionEmojiLimit: number;
+    usedReactionCounts: Record<string, number>;
     membersCheckRequired: boolean;
     membersCheckedAt?: string | null;
     onlineDeliveredMembers: number;
@@ -137,12 +139,12 @@ export function ReactionPanel({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
-  const requestAmountLimit = workspaceSummary ? Math.max(1, workspaceSummary.deliveredMembers) : Math.max(1, remaining);
+  const requestAmountLimit = Math.max(1, remaining);
   const memberCheckLimit = workspaceSummary
     ? Math.max(1, workspaceSummary.memberCheckComplete ? workspaceSummary.deliveredMembers : workspaceSummary.remainingUncheckedMembers)
     : 1;
   const progress = workspaceSummary
-    ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
+    ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((workspaceSummary.checkedMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
   const memberCheckProgressPercent = refreshingEligibleMembers && memberCheckProgress?.total
     ? Math.min(100, Math.round((memberCheckProgress.checked / memberCheckProgress.total) * 100))
@@ -219,8 +221,8 @@ export function ReactionPanel({
 
       <div className="monitor-reaction-dashboard">
         <div className="monitor-reaction-overview">
-          <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${eligibleMembers} eligible members` : `${completed} of ${limit} reactions completed`}>
-            <span><strong>{progress}%</strong><small>{workspaceSummary ? "ready" : "complete"}</small></span>
+          <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${workspaceSummary.checkedMembers} of ${workspaceSummary.deliveredMembers} members checked` : `${completed} of ${limit} reactions completed`}>
+            <span><strong>{progress}%</strong><small>{workspaceSummary ? "checked" : "complete"}</small></span>
           </div>
 
           <div className="monitor-reaction-overview-copy">
@@ -229,7 +231,7 @@ export function ReactionPanel({
             <p>{workspaceSummary
               ? workspaceSummary.membersCheckRequired
                 ? "Choose how many delivered members to check for reaction availability."
-                : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} have not been used on this message yet.`}`
+                : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} reaction slots are available with the selected emojis.`}`
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
@@ -247,25 +249,25 @@ export function ReactionPanel({
             <small>{workspaceSummary ? "members ordered" : "assigned and pending"}</small>
           </div>
           <div data-tone="available">
-            <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "This message" : "Available"}</span>
-            <strong>{workspaceSummary ? workspaceSummary.availableForMessage : remaining}</strong>
-            <small>{workspaceSummary ? "unused members available" : "ready to assign"}</small>
+            <span><Sparkles aria-hidden="true" /> {workspaceSummary ? "Ready now" : "Available"}</span>
+            <strong>{remaining}</strong>
+            <small>{workspaceSummary ? "slots with selected emojis" : "ready to assign"}</small>
           </div>
           <div data-tone="members">
-            <span><Users aria-hidden="true" /> Eligible
+            <span><Users aria-hidden="true" /> {workspaceSummary ? "Checked" : "Eligible"}
               {!workspaceSummary && onRefreshEligibleMembers ? (
                 <button className="monitor-reaction-metric-refresh" type="button" onClick={onRefreshEligibleMembers} disabled={refreshingEligibleMembers} aria-label="Refresh online members" title="Check members and refresh the online count">
                   <RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} aria-hidden="true" />
                 </button>
               ) : null}
             </span>
-            <strong>{eligibleMembers}</strong>
+            <strong>{workspaceSummary ? workspaceSummary.checkedMembers : eligibleMembers}</strong>
             <small>{refreshingEligibleMembers
               ? "checking Onliner and server"
               : workspaceSummary
                 ? workspaceSummary.membersCheckRequired
                   ? "check required"
-                  : `${workspaceSummary.checkedMembers}/${workspaceSummary.deliveredMembers} checked · ${workspaceSummary.onlineDeliveredMembers} online`
+                  : `${workspaceSummary.remainingUncheckedMembers} unchecked · ${eligibleMembers} ready`
                 : "members can react"}</small>
           </div>
         </div>
