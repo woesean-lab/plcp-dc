@@ -378,13 +378,14 @@ export function ReactionPanel({
               type="number"
               inputMode="numeric"
               min={1}
-              max={requestAmountLimit}
-              value={Math.min(countDraft, requestAmountLimit)}
+              max={workspaceSummary ? undefined : requestAmountLimit}
+              value={countDraft}
               aria-label="Reaction amount"
               disabled={!requestEnabled || remaining <= 0}
               onChange={(event) => {
                 const next = Number.parseInt(event.target.value, 10);
-                const nextCount = Number.isFinite(next) ? Math.min(requestAmountLimit, Math.max(1, next)) : 1;
+                const normalizedCount = Number.isFinite(next) ? Math.max(1, next) : 1;
+                const nextCount = workspaceSummary ? normalizedCount : Math.min(requestAmountLimit, normalizedCount);
                 onCountChange(nextCount);
                 if (selectedEmojis.length > nextCount) onEmojiSelectionChange(selectedEmojis.slice(0, nextCount));
               }}

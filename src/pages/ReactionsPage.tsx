@@ -90,6 +90,7 @@ export default function ReactionsPage() {
   const [botInvite, setBotInvite] = useState<string | null>(null);
   const [inspecting, setInspecting] = useState(false);
   const [count, setCount] = useState(1);
+  const [requestedEmojiCount, setRequestedEmojiCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
   const [submitting, setSubmitting] = useState(false);
   const [checkingMembers, setCheckingMembers] = useState(false);
@@ -103,6 +104,7 @@ export default function ReactionsPage() {
   const requests = useMemo(() => summary ? toPanelRequests(summary) : [], [summary]);
   const reactionCapacity = useMemo(() => summary ? getReactionCapacity(summary, emojis) : 0, [emojis, summary]);
   const activeRequestCount = requests.filter((request) => request.assignedCount > request.completedCount + (request.failedCount ?? 0) + (request.cancelledCount ?? 0)).length;
+  const requiredMemberCount = Math.ceil(Math.max(1, count) / Math.max(1, requestedEmojiCount));
 
   useEffect(() => {
     const timer = window.setTimeout(() => setPageReady(true), PAGE_SKELETON_DELAY);
@@ -126,7 +128,6 @@ export default function ReactionsPage() {
         .then((nextSummary) => {
           if (!active) return;
           setSummary(nextSummary);
-          setCount((current) => Math.max(1, Math.min(current, Math.max(1, getReactionCapacity(nextSummary, emojis)))));
         })
         .catch((error) => {
           if (!active) return;
@@ -185,10 +186,14 @@ export default function ReactionsPage() {
   }
 
   async function handleSubmit() {
-    if (!summary || !reactionCapacity || submitting) return;
+    if (!summary || submitting) return;
+    if (!reactionCapacity || count > reactionCapacity) {
+      toast.error(`The selected emojis currently support up to ${reactionCapacity} reactions.`);
+      return;
+    }
     try {
       setSubmitting(true);
-      const reactionCount = Math.min(count, reactionCapacity);
+      const reactionCount = count;
       const next = await createReactionWorkspaceRequest(summary.messageLink, reactionCount, emojis.slice(0, Math.min(reactionCount, 20)));
       setSummary(next);
       setCount(1);
@@ -214,7 +219,6 @@ export default function ReactionsPage() {
       const next = await checkReactionWorkspaceMembers(summary.messageLink, requestedCheckCount);
       setMemberCheckProgress({ active: false, total: next.lastBatchChecked, checked: next.lastBatchChecked, remaining: 0, stage: "complete" });
       setSummary(next);
-      setCount((current) => Math.max(1, Math.min(current, Math.max(1, getReactionCapacity(next, emojis)))));
       setMemberCheckAmount(String(next.remainingUncheckedMembers));
       toast.success(next.memberCheckComplete
         ? `All ${next.checkedMembers} delivered members were checked. ${next.eligibleMembers} are ready to react.`
@@ -270,6 +274,34 @@ export default function ReactionsPage() {
           <div className="reactions-lookup-copy">
             <strong>Find the server’s delivered members</strong>
             <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
+          </div>
+          <div className="reactions-order-planner" aria-label="Reaction order details">
+            <label>
+              <span>Reaction amount</span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={count}
+                onChange={(event) => setCount(Math.max(1, Number.parseInt(event.target.value, 10) || 1))}
+              />
+            </label>
+            <label>
+              <span>Emoji count</span>
+              <Input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={20}
+                value={requestedEmojiCount}
+                onChange={(event) => setRequestedEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
+              />
+            </label>
+            <div className="reactions-order-planner-result">
+              <span>Members required</span>
+              <strong>{requiredMemberCount}</strong>
+              <small>{count} reactions ÷ {requestedEmojiCount} emojis</small>
+            </div>
           </div>
           <div className="reactions-lookup-field">
             <span className="boost-order-label monitor-reaction-url-label">
