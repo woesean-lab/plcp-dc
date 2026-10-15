@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { extractBotInviteFromError } from "../lib/bot-invite";
-import { cancelReactionWorkspaceRequest, checkReactionWorkspaceMembers, createReactionWorkspaceRequest, inspectReactionWorkspace } from "../lib/integration";
-import type { ReactionWorkspaceSummary } from "../types";
+import { cancelReactionWorkspaceRequest, checkReactionWorkspaceMembers, createReactionWorkspaceRequest, getReactionWorkspaceMemberCheckProgress, inspectReactionWorkspace } from "../lib/integration";
+import type { ReactionMemberCheckProgress, ReactionWorkspaceSummary } from "../types";
 
 const DISCORD_MESSAGE_LINK = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/\d{16,22}\/\d{16,22}\/\d{16,22}(?:[/?#].*)?$/i;
 const PAGE_SKELETON_DELAY = 300;
@@ -81,6 +81,7 @@ export default function ReactionsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [checkingMembers, setCheckingMembers] = useState(false);
   const [memberCheckAmount, setMemberCheckAmount] = useState("");
+  const [memberCheckProgress, setMemberCheckProgress] = useState<ReactionMemberCheckProgress | null>(null);
   const [cancellingRequestId, setCancellingRequestId] = useState("");
   const [inspectNonce, setInspectNonce] = useState(0);
 
@@ -147,6 +148,22 @@ export default function ReactionsPage() {
     };
   }, [activeRequestCount, summary?.messageLink]);
 
+  useEffect(() => {
+    if (!checkingMembers || !summary?.messageLink) return;
+    let active = true;
+    const refreshProgress = () => {
+      void getReactionWorkspaceMemberCheckProgress(summary.messageLink).then((progress) => {
+        if (active && progress.total > 0) setMemberCheckProgress(progress);
+      }).catch(() => {});
+    };
+    refreshProgress();
+    const timer = window.setInterval(refreshProgress, 500);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [checkingMembers, summary?.messageLink]);
+
   function handleMessageChange(value: string) {
     setMessageLink(value);
     setBotInvite(null);
@@ -178,8 +195,10 @@ export default function ReactionsPage() {
       return;
     }
     try {
+      setMemberCheckProgress({ active: true, total: requestedCheckCount, checked: 0, remaining: requestedCheckCount, stage: "starting" });
       setCheckingMembers(true);
       const next = await checkReactionWorkspaceMembers(summary.messageLink, requestedCheckCount);
+      setMemberCheckProgress({ active: false, total: next.lastBatchChecked, checked: next.lastBatchChecked, remaining: 0, stage: "complete" });
       setSummary(next);
       setCount((current) => Math.max(1, Math.min(current, Math.max(1, next.deliveredMembers))));
       if (next.remainingUncheckedMembers > 0) setMemberCheckAmount((current) => String(Math.min(Number.parseInt(current, 10) || 1, next.remainingUncheckedMembers)));
@@ -307,6 +326,7 @@ export default function ReactionsPage() {
           onRefreshEligibleMembers={() => void handleCheckMembers()}
           refreshingEligibleMembers={checkingMembers}
           memberCheckAmount={memberCheckAmount}
+          memberCheckProgress={memberCheckProgress}
           onMemberCheckAmountChange={setMemberCheckAmount}
           onCancelPending={(requestId) => void handleCancel(requestId)}
           cancellingPending={Boolean(cancellingRequestId)}

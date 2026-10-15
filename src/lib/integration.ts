@@ -1,4 +1,4 @@
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionWorkspaceSummary } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -350,6 +350,10 @@ export function checkReactionWorkspaceMembers(messageLink: string, checkCount: n
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ messageLink, checkCount })
   });
+}
+
+export function getReactionWorkspaceMemberCheckProgress(messageLink: string) {
+  return requestJson<ReactionMemberCheckProgress>(`/api/reactions/check-progress?messageLink=${encodeURIComponent(messageLink)}`);
 }
 
 export function createReactionWorkspaceRequest(messageLink: string, reactionCount: number, emojis: string[]) {

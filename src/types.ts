@@ -228,6 +228,14 @@ export interface ReactionWorkspaceSummary {
   requests: ReactionWorkspaceRequest[];
 }
 
+export interface ReactionMemberCheckProgress {
+  active: boolean;
+  total: number;
+  checked: number;
+  remaining: number;
+  stage: string;
+}
+
 export interface BoostStock {
   oneMonth: number;
   threeMonth: number;

@@ -53,6 +53,7 @@ const publicCommunityReplaceCooldowns = new Map();
 const publicCommunityCheckCooldownMs = 60 * 1000;
 const publicCommunityCheckCooldowns = new Map();
 const communityOrderMemberCheckProgress = new Map();
+const reactionWorkspaceMemberCheckProgress = new Map();
 const communityOrderLeaveAllActive = new Set();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderPausedJobs = new Set();
@@ -6186,6 +6187,7 @@ async function runCommunityOrderMemberCheck(order, options = {}) {
   try {
     const result = await checkCommunityOrderAuthorizations(order, (progress) => {
       communityOrderMemberCheckProgress.set(uniqid, { ...initial, ...progress });
+      options.onProgress?.(progress);
     }, options);
     communityOrderMemberCheckProgress.set(uniqid, {
       ...initial,
@@ -12363,20 +12365,50 @@ async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) 
   const nextMemberIdSet = new Set(nextMemberIds);
   const pendingMemberIds = new Set(nextMemberIds);
   const checkedOrders = [];
+  const progressExpiresAt = Date.now() + reactionWorkspaceMemberCheckMaxAgeMs;
+  const updateProgress = (values) => reactionWorkspaceMemberCheckProgress.set(guildId, {
+    active: true,
+    total: nextMemberIds.length,
+    checked: 0,
+    remaining: nextMemberIds.length,
+    stage: "starting",
+    expiresAt: progressExpiresAt,
+    ...values
+  });
+  updateProgress({});
+  let batchChecked = 0;
 
-  for (const order of orders) {
-    const orderMemberIds = [...new Set((Array.isArray(order?.communityResults) ? order.communityResults : [])
-      .filter((member) => ["joined", "already_member"].includes(String(member?.state ?? "").toLowerCase()))
-      .map((member) => String(member?.discordUserId ?? ""))
-      .filter((discordUserId) => pendingMemberIds.has(discordUserId)))];
-    if (!orderMemberIds.length) {
-      checkedOrders.push(order);
-      continue;
+  try {
+    for (const order of orders) {
+      const orderMemberIds = [...new Set((Array.isArray(order?.communityResults) ? order.communityResults : [])
+        .filter((member) => ["joined", "already_member"].includes(String(member?.state ?? "").toLowerCase()))
+        .map((member) => String(member?.discordUserId ?? ""))
+        .filter((discordUserId) => pendingMemberIds.has(discordUserId)))];
+      if (!orderMemberIds.length) {
+        checkedOrders.push(order);
+        continue;
+      }
+      const hydratedOrder = await hydrateCommunityOrderCategories(order);
+      const checkedBeforeOrder = batchChecked;
+      const checked = await runCommunityOrderMemberCheck(hydratedOrder, {
+        discordUserIds: orderMemberIds,
+        onProgress: (progress) => {
+          const currentChecked = Math.min(nextMemberIds.length, checkedBeforeOrder + Math.max(0, Number(progress?.checked) || 0));
+          updateProgress({
+            checked: currentChecked,
+            remaining: Math.max(0, nextMemberIds.length - currentChecked),
+            stage: progress?.stage ?? "members"
+          });
+        }
+      });
+      checkedOrders.push(checked.order);
+      orderMemberIds.forEach((discordUserId) => pendingMemberIds.delete(discordUserId));
+      batchChecked += orderMemberIds.length;
+      updateProgress({ checked: batchChecked, remaining: Math.max(0, nextMemberIds.length - batchChecked), stage: "members" });
     }
-    const hydratedOrder = await hydrateCommunityOrderCategories(order);
-    const checked = await runCommunityOrderMemberCheck(hydratedOrder, { discordUserIds: orderMemberIds });
-    checkedOrders.push(checked.order);
-    orderMemberIds.forEach((discordUserId) => pendingMemberIds.delete(discordUserId));
+  } catch (error) {
+    updateProgress({ active: false, checked: batchChecked, remaining: Math.max(0, nextMemberIds.length - batchChecked), stage: "failed" });
+    throw error;
   }
   const { deliveredMembers } = getReactionWorkspaceMembers(checkedOrders);
   const checkedMemberIds = new Set([...previouslyCheckedMemberIds, ...nextMemberIds]);
@@ -12406,6 +12438,7 @@ async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) 
     expiresAt: Date.now() + reactionWorkspaceMemberCheckMaxAgeMs
   };
   reactionWorkspaceMemberCheckCache.set(guildId, check);
+  updateProgress({ active: false, checked: nextMemberIds.length, remaining: 0, stage: "complete" });
   return { check, orders: checkedOrders };
 }
 
@@ -12476,6 +12509,16 @@ app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {
   } finally {
     client.release();
   }
+});
+
+app.get("/api/reactions/check-progress", requireSession, (req, res) => {
+  const reactionMessage = parseDiscordMessageLink(req.query?.messageLink);
+  if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
+  const progress = reactionWorkspaceMemberCheckProgress.get(reactionMessage.guildId);
+  if (progress?.expiresAt <= Date.now()) reactionWorkspaceMemberCheckProgress.delete(reactionMessage.guildId);
+  return res.set("Cache-Control", "no-store").json(progress && progress.expiresAt > Date.now()
+    ? progress
+    : { active: false, total: 0, checked: 0, remaining: 0, stage: "idle" });
 });
 
 app.post("/api/reactions/check-members", requireSession, async (req, res, next) => {

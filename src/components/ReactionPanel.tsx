@@ -60,6 +60,7 @@ type ReactionPanelProps = {
   onRefreshEligibleMembers?: () => void;
   refreshingEligibleMembers?: boolean;
   memberCheckAmount?: string;
+  memberCheckProgress?: { total: number; checked: number; remaining: number } | null;
   onMemberCheckAmountChange?: (value: string) => void;
   onCancelPending?: (requestId?: string) => void;
   cancellingPending?: boolean;
@@ -109,6 +110,7 @@ export function ReactionPanel({
   onRefreshEligibleMembers,
   refreshingEligibleMembers = false,
   memberCheckAmount = "",
+  memberCheckProgress = null,
   onMemberCheckAmountChange,
   onCancelPending,
   cancellingPending = false,
@@ -142,9 +144,14 @@ export function ReactionPanel({
   const progress = workspaceSummary
     ? (workspaceSummary.deliveredMembers > 0 ? Math.min(100, Math.round((eligibleMembers / workspaceSummary.deliveredMembers) * 100)) : 0)
     : (limit > 0 ? Math.min(100, Math.round((completed / limit) * 100)) : 0);
-  const memberCheckProgress = workspaceSummary?.deliveredMembers
+  const memberCheckProgressPercent = refreshingEligibleMembers && memberCheckProgress?.total
+    ? Math.min(100, Math.round((memberCheckProgress.checked / memberCheckProgress.total) * 100))
+    : workspaceSummary?.deliveredMembers
     ? Math.min(100, Math.round((workspaceSummary.checkedMembers / workspaceSummary.deliveredMembers) * 100))
     : 0;
+  const activeCheckTotal = memberCheckProgress?.total || Number.parseInt(memberCheckAmount, 10) || 0;
+  const activeCheckCompleted = Math.min(activeCheckTotal, memberCheckProgress?.checked ?? 0);
+  const activeCheckRemaining = Math.max(0, memberCheckProgress?.remaining ?? activeCheckTotal - activeCheckCompleted);
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/.+/i.test(messageDraft.trim());
@@ -269,14 +276,14 @@ export function ReactionPanel({
           <div className="monitor-reaction-member-check-copy" aria-live="polite">
             <span className="monitor-reaction-member-check-icon" aria-hidden="true"><RefreshCw className={refreshingEligibleMembers ? "animate-spin" : ""} /></span>
             <span>
-              <strong>{refreshingEligibleMembers ? `Checking ${memberCheckAmount} members` : "Check reaction availability"}</strong>
+              <strong>{refreshingEligibleMembers ? `Checking ${activeCheckCompleted} / ${activeCheckTotal} members` : "Check reaction availability"}</strong>
               <small>{refreshingEligibleMembers
-                ? "Discord availability scan in progress"
+                ? `${activeCheckRemaining} members remaining`
                 : `${workspaceSummary.checkedMembers} of ${workspaceSummary.deliveredMembers} delivered members checked`}</small>
             </span>
           </div>
           <span className="monitor-reaction-member-check-progress" aria-hidden="true">
-            <i style={{ width: `${memberCheckProgress}%` }} />
+            <i style={{ width: `${memberCheckProgressPercent}%` }} />
           </span>
           <div className="monitor-reaction-member-check-actions">
             <label className="monitor-reaction-check-quantity">
@@ -286,7 +293,7 @@ export function ReactionPanel({
                 inputMode="numeric"
                 min={1}
                 max={memberCheckLimit}
-                value={memberCheckAmount}
+                value={refreshingEligibleMembers ? activeCheckRemaining : memberCheckAmount}
                 placeholder="Quantity"
                 disabled={refreshingEligibleMembers}
                 onChange={(event) => onMemberCheckAmountChange?.(event.target.value)}
@@ -301,7 +308,7 @@ export function ReactionPanel({
               disabled={refreshingEligibleMembers || !Number.isInteger(Number(memberCheckAmount)) || Number(memberCheckAmount) < 1}
             >
               <ShieldCheck className={`h-3.5 w-3.5${refreshingEligibleMembers ? " animate-pulse" : ""}`} aria-hidden="true" />
-              {refreshingEligibleMembers ? `Checking ${memberCheckAmount}...` : "Check members"}
+              {refreshingEligibleMembers ? `${activeCheckRemaining} left` : "Check members"}
             </Button>
           </div>
         </div>
