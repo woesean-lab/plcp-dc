@@ -8149,7 +8149,7 @@
 .reactions-flow > span { display: inline-flex; min-height: 34px; align-items: center; gap: 7px; padding: 0 10px; border-radius: 9px; color: var(--app-text-secondary); background: rgba(255,255,255,.025); font-size: 10px; font-weight: 700; white-space: nowrap; }
 .reactions-flow svg { width: 13px; height: 13px; color: var(--app-accent-bright); }
 .reactions-flow > svg { width: 12px; color: var(--app-subtle); }
-.reactions-lookup-card { display: grid; grid-template-columns: auto minmax(280px, .85fr) minmax(440px, 1.35fr) 148px; align-items: center; gap: 18px; padding: 22px; border: 1px solid var(--app-border); border-radius: 20px; background: linear-gradient(145deg, rgba(255,255,255,.025), rgba(255,255,255,.01)); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); }
+.reactions-lookup-card { display: grid; grid-template-columns: auto minmax(280px, .85fr) minmax(440px, 1.35fr) 148px; align-items: center; gap: 18px; padding: 22px; border: 1px solid var(--app-border); border-radius: var(--app-radius-xl); background: linear-gradient(145deg, rgba(23,24,40,.94), rgba(13,14,25,.91)); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 22px 65px rgba(0,0,0,.22); backdrop-filter: blur(16px); }
 .reactions-lookup-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--app-accent-border); border-radius: 14px; color: var(--app-accent-bright); background: var(--app-accent-soft); }
 .reactions-lookup-icon svg { width: 21px; height: 21px; }
 .reactions-lookup-copy strong { display: block; color: var(--app-text); font-size: 13px; }
