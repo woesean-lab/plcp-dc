@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Bot, CircleAlert, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Bot, Calculator, ChevronDown, CircleAlert, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { REACTION_MIXED_VALUE, ReactionPanel, type ReactionPanelRequest } from "@/components/ReactionPanel";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
@@ -270,13 +270,18 @@ export default function ReactionsPage() {
       </div>
 
       {!summary ? (
-        <div className="reactions-lookup-card">
-          <span className="reactions-lookup-icon" aria-hidden="true"><Server /></span>
-          <div className="reactions-lookup-copy">
-            <strong>Find the server’s delivered members</strong>
-            <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
-          </div>
-          <div className="reactions-order-planner" aria-label="Reaction order details">
+        <>
+        <details className="reactions-calculator">
+          <summary>
+            <span className="reactions-calculator-icon" aria-hidden="true"><Calculator /></span>
+            <span className="reactions-calculator-copy">
+              <strong>Member calculator</strong>
+              <small>Optional planning tool · Does not affect the request</small>
+            </span>
+            <span className="reactions-calculator-badge">Optional</span>
+            <ChevronDown className="reactions-calculator-chevron" aria-hidden="true" />
+          </summary>
+          <div className="reactions-calculator-body" aria-label="Member requirement calculator">
             <label>
               <span>Reaction amount</span>
               <Input
@@ -298,11 +303,18 @@ export default function ReactionsPage() {
                 onChange={(event) => setCalculatorEmojiCount(Math.min(20, Math.max(1, Number.parseInt(event.target.value, 10) || 1)))}
               />
             </label>
-            <div className="reactions-order-planner-result">
+            <div className="reactions-calculator-result">
               <span>Members required</span>
               <strong>{requiredMemberCount}</strong>
               <small>{calculatorReactionAmount} reactions ÷ {calculatorEmojiCount} emojis</small>
             </div>
+          </div>
+        </details>
+        <div className="reactions-lookup-card">
+          <span className="reactions-lookup-icon" aria-hidden="true"><Server /></span>
+          <div className="reactions-lookup-copy">
+            <strong>Find the server’s delivered members</strong>
+            <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
           </div>
           <div className="reactions-lookup-field">
             <span className="boost-order-label monitor-reaction-url-label">
@@ -352,6 +364,7 @@ export default function ReactionsPage() {
             </div>
           ) : null}
         </div>
+        </>
       ) : (
         <ReactionPanel
           className="is-workspace"
