@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ArrowRight, Bot, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
+import { ArrowRight, Bot, CircleAlert, ExternalLink, LoaderCircle, MessageSquareText, RefreshCw, Server, Sparkles, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { REACTION_MIXED_VALUE, ReactionPanel, type ReactionPanelRequest } from "@/components/ReactionPanel";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
@@ -276,7 +276,15 @@ export default function ReactionsPage() {
               </div>
             </div>
           ) : null}
-          {inspectError ? <p className="reactions-lookup-error" role="alert">{inspectError}</p> : null}
+          {inspectError ? (
+            <div className="reactions-lookup-error" role="alert">
+              <span className="reactions-lookup-error-icon" aria-hidden="true"><CircleAlert /></span>
+              <span>
+                <strong>Members couldn’t be matched</strong>
+                <small>{inspectError}</small>
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : (
         <ReactionPanel
