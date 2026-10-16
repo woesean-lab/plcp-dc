@@ -8047,11 +8047,11 @@
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-category-nav { display: none !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input { border: 1px solid var(--app-border) !important; border-radius: 9px !important; color: var(--app-text) !important; background: rgba(255,255,255,.035) !important; font-family: inherit !important; font-size: 11px !important; box-shadow: none !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: rgba(152,135,255,.38) !important; background: rgba(255,255,255,.045) !important; box-shadow: none !important; }
-.monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 52px 0 0; display: grid; place-items: start center; padding: 18px; background: rgba(10,11,22,.99); }
-.monitor-reaction-emoji-direct-result button { display: flex; width: 100%; align-items: center; gap: 11px; border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; color: var(--app-text); background: rgba(255,255,255,.03); cursor: pointer; font-family: inherit; text-align: left; }
+.monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 52px 0 0; display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 13px 14px; background: rgba(10,11,22,.99); }
+.monitor-reaction-emoji-direct-result > small { color: var(--app-muted); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
+.monitor-reaction-emoji-direct-result button { display: grid; width: 42px; height: 42px; place-items: center; border: 1px solid transparent; border-radius: 9px; padding: 0; color: var(--app-text); background: transparent; cursor: pointer; font-family: inherit; }
 .monitor-reaction-emoji-direct-result button:hover { border-color: rgba(152,135,255,.3); background: rgba(139,112,255,.07); }
 .monitor-reaction-emoji-direct-result button > span { font-size: 25px; line-height: 1; }
-.monitor-reaction-emoji-direct-result button small { color: var(--app-muted); font-size: 10px; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-emoji-category-label { color: var(--app-muted) !important; font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important; font-size: 9px !important; font-weight: 750 !important; letter-spacing: .045em !important; line-height: 1 !important; text-transform: uppercase; }
 .monitor-reaction-form .monitor-reaction-submit {
   grid-column: 5;

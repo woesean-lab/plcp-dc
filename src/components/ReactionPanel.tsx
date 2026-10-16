@@ -218,6 +218,13 @@ export function ReactionPanel({
     onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
   }
 
+  function selectSearchedEmoji(emoji: string) {
+    toggleEmoji(emoji);
+    emojiPickerStageRef.current?.querySelector<HTMLButtonElement>(".epr-btn-clear-search")?.click();
+    setEmojiSearchMatch("");
+    setEmojiPickerOpen(false);
+  }
+
   function addCustomEmoji() {
     const emojiId = parseDiscordEmojiId(customEmojiUrlDraft);
     if (!emojiId) return;
@@ -500,9 +507,9 @@ export function ReactionPanel({
                     /></Suspense> : null}
                   {emojiSearchMatch ? (
                     <div className="monitor-reaction-emoji-direct-result">
-                      <button type="button" onClick={() => toggleEmoji(emojiSearchMatch)} aria-label={`Select ${emojiSearchMatch}`}>
+                      <small>Search result</small>
+                      <button type="button" onClick={() => selectSearchedEmoji(emojiSearchMatch)} aria-label={`Select ${emojiSearchMatch}`}>
                         <span>{emojiSearchMatch}</span>
-                        <small>Select emoji</small>
                       </button>
                     </div>
                   ) : null}
