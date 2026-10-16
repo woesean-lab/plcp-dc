@@ -135,6 +135,7 @@ export function ReactionPanel({
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
+  const [emojiPickerContentVisible, setEmojiPickerContentVisible] = useState(false);
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
@@ -173,6 +174,15 @@ export function ReactionPanel({
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [emojiPickerOpen]);
+
+  useEffect(() => {
+    if (!emojiPickerOpen || !emojiPickerMounted) {
+      setEmojiPickerContentVisible(false);
+      return undefined;
+    }
+    const timer = window.setTimeout(() => setEmojiPickerContentVisible(true), 120);
+    return () => window.clearTimeout(timer);
+  }, [emojiPickerMounted, emojiPickerOpen]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -344,7 +354,13 @@ export function ReactionPanel({
           <label className="boost-order-field monitor-reaction-field">
             <span className="boost-order-label monitor-reaction-amount-label">
               <span>Amount</span>
-              {workspaceSummary ? <small title="Available reaction slots with the selected emojis"><Sparkles aria-hidden="true" /> {remaining} slots</small> : null}
+              {workspaceSummary ? (
+                <small title="Available reaction slots with the selected emojis">
+                  <Sparkles aria-hidden="true" />
+                  <strong>{remaining}</strong>
+                  <span>available</span>
+                </small>
+              ) : null}
             </span>
             <input
               className="boost-number-input"
@@ -372,6 +388,8 @@ export function ReactionPanel({
                 className="monitor-reaction-emoji-trigger"
                 aria-expanded={emojiPickerOpen}
                 aria-controls={`${titleId}-emoji-picker`}
+                onPointerEnter={() => void import("emoji-picker-react")}
+                onFocus={() => void import("emoji-picker-react")}
                 onClick={() => {
                   if (!emojiPickerOpen) setEmojiPickerMounted(true);
                   setEmojiPickerOpen((current) => !current);
@@ -439,13 +457,20 @@ export function ReactionPanel({
                     ))}
                   </div>
                 </div>
-                {emojiPickerMounted ? <Suspense fallback={<div className="monitor-reaction-emoji-loading">Loading emojis...</div>}><EmojiPicker
+                {!emojiPickerContentVisible ? (
+                  <div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis">
+                    <span className="monitor-reaction-emoji-loading-search" />
+                    <span className="monitor-reaction-emoji-loading-title" />
+                    <span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span>
+                  </div>
+                ) : null}
+                {emojiPickerMounted && emojiPickerContentVisible ? <Suspense fallback={<div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis"><span className="monitor-reaction-emoji-loading-search" /><span className="monitor-reaction-emoji-loading-title" /><span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span></div>}><EmojiPicker
                     theme={"dark" as Theme}
                     emojiStyle={"native" as EmojiStyle}
                     width="100%"
                     height={280}
                     lazyLoadEmojis
-                    searchDisabled
+                    searchPlaceHolder="Search emojis"
                     categories={EMOJI_PICKER_CATEGORIES}
                     previewConfig={{ showPreview: false }}
                     onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
@@ -462,7 +487,7 @@ export function ReactionPanel({
               <span aria-hidden="true"><LockKeyhole /></span>
               <div>
                 <strong>Reaction requests are locked</strong>
-                <small>The order isn’t complete yet. You can use reactions when delivery is Partial or Completed.</small>
+                <small>Waiting for member delivery. You can queue reactions as soon as the order is partially or fully delivered.</small>
               </div>
             </div>
           ) : null}
