@@ -10915,16 +10915,23 @@
 }
 
 .monitor-reaction-store-action {
-  border-color: rgba(155,140,255,.22);
-  background: linear-gradient(135deg, rgba(155,140,255,.1), rgba(255,255,255,.045));
+  border-color: rgba(201,193,255,.62);
+  color: #0d0a1d;
+  background: linear-gradient(135deg, #c9c1ff, #8f7cff);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.38), 0 8px 24px rgba(139,112,255,.26);
 }
 
 .monitor-reaction-store-action:hover {
-  border-color: rgba(155,140,255,.38);
-  background: linear-gradient(135deg, rgba(155,140,255,.16), rgba(255,255,255,.065));
+  border-color: #ded9ff;
+  color: #080610;
+  background: linear-gradient(135deg, #ded9ff, #a18fff);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.48), 0 10px 30px rgba(139,112,255,.38);
+  transform: translateY(-1px);
 }
 
-.monitor-reaction-store-icon { color: var(--app-accent-bright); }
+.monitor-reaction-store-action strong { color: #0d0a1d; font-weight: 800; }
+.monitor-reaction-store-action small { color: rgba(13,10,29,.68); font-weight: 650; }
+.monitor-reaction-store-icon { color: #281d69; filter: drop-shadow(0 0 5px rgba(255,255,255,.5)); }
 
 .monitor-store-action .monitor-store-star {
   color: #f4be4e;
