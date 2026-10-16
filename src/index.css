@@ -8034,6 +8034,7 @@
 .monitor-reaction-popular-emojis button { display: grid; width: 100%; aspect-ratio: 1; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; font-size: 20px; line-height: 1; transition: border-color .16s ease, background-color .16s ease; }
 .monitor-reaction-popular-emojis button:hover { border-color: rgba(152,135,255,.18); background: rgba(139,112,255,.07); }
 .monitor-reaction-popular-emojis button.is-selected { border-color: rgba(152,135,255,.38); background: rgba(139,112,255,.14); }
+.monitor-reaction-emoji-picker-stage { position: relative; height: 280px; overflow: hidden; border-top: 1px solid rgba(255,255,255,.045); }
 .monitor-reaction-emoji-loading { display: flex; height: 280px; flex-direction: column; gap: 12px; padding: 12px 14px; overflow: hidden; }
 .monitor-reaction-emoji-loading-search { display: block; width: 100%; height: 34px; flex: 0 0 34px; border-radius: 9px; }
 .monitor-reaction-emoji-loading-title { display: block; width: 92px; height: 8px; flex: 0 0 8px; border-radius: 999px; }
@@ -8042,10 +8043,15 @@
 .monitor-reaction-emoji-loading-search, .monitor-reaction-emoji-loading-title, .monitor-reaction-emoji-loading-grid i { background: linear-gradient(100deg, var(--app-skeleton) 22%, var(--app-skeleton-highlight) 42%, var(--app-skeleton) 62%); background-size: 220% 100%; animation: app-shimmer 1.45s ease-in-out infinite; }
 .monitor-reaction-emoji-loading-grid i:nth-child(3n) { animation-delay: .1s; }
 .monitor-reaction-emoji-loading-grid i:nth-child(4n) { animation-delay: .18s; }
-.monitor-reaction-emoji-popover .EmojiPickerReact { --epr-bg-color: rgba(10,11,22,.99); --epr-category-label-bg-color: rgba(10,11,22,.96); --epr-picker-border-color: transparent; --epr-hover-bg-color: rgba(139,112,255,.09); --epr-hover-bg-color-reduced-opacity: rgba(139,112,255,.055); --epr-emoji-hover-color: rgba(139,112,255,.09); border: 0 !important; border-radius: 0 !important; }
+.monitor-reaction-emoji-popover .EmojiPickerReact { --epr-bg-color: rgba(10,11,22,.99); --epr-category-label-bg-color: rgba(10,11,22,.96); --epr-picker-border-color: transparent; --epr-hover-bg-color: rgba(139,112,255,.09); --epr-hover-bg-color-reduced-opacity: rgba(139,112,255,.055); --epr-emoji-hover-color: rgba(139,112,255,.09); --epr-search-input-bg-color: rgba(255,255,255,.035); --epr-search-input-bg-color-active: rgba(255,255,255,.045); border: 0 !important; border-radius: 0 !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-category-nav { display: none !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input { border: 1px solid var(--app-border) !important; border-radius: 9px !important; color: var(--app-text) !important; background: rgba(255,255,255,.035) !important; font-family: inherit !important; font-size: 11px !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: var(--app-accent-border) !important; box-shadow: 0 0 0 2px var(--app-accent-soft) !important; }
+.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input { border: 1px solid var(--app-border) !important; border-radius: 9px !important; color: var(--app-text) !important; background: rgba(255,255,255,.035) !important; font-family: inherit !important; font-size: 11px !important; box-shadow: none !important; }
+.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: rgba(152,135,255,.38) !important; background: rgba(255,255,255,.045) !important; box-shadow: none !important; }
+.monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 52px 0 0; display: grid; place-items: start center; padding: 18px; background: rgba(10,11,22,.99); }
+.monitor-reaction-emoji-direct-result button { display: flex; width: 100%; align-items: center; gap: 11px; border: 1px solid var(--app-border); border-radius: 10px; padding: 10px 12px; color: var(--app-text); background: rgba(255,255,255,.03); cursor: pointer; font-family: inherit; text-align: left; }
+.monitor-reaction-emoji-direct-result button:hover { border-color: rgba(152,135,255,.3); background: rgba(139,112,255,.07); }
+.monitor-reaction-emoji-direct-result button > span { font-size: 25px; line-height: 1; }
+.monitor-reaction-emoji-direct-result button small { color: var(--app-muted); font-size: 10px; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-emoji-category-label { color: var(--app-muted) !important; font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important; font-size: 9px !important; font-weight: 750 !important; letter-spacing: .045em !important; line-height: 1 !important; text-transform: uppercase; }
 .monitor-reaction-form .monitor-reaction-submit {
   grid-column: 5;

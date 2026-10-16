@@ -35,6 +35,10 @@ function parseDiscordEmojiId(value: string) {
   return input.match(/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d{16,22})(?:\.[a-z0-9]+)?(?:\?.*)?$/i)?.[1] ?? null;
 }
 
+function findEmojiInSearch(value: string) {
+  return value.match(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*/u)?.[0] ?? "";
+}
+
 export type ReactionPanelRequest = {
   id: string;
   messageLink: string;
@@ -136,6 +140,7 @@ export function ReactionPanel({
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
   const [emojiPickerContentVisible, setEmojiPickerContentVisible] = useState(false);
+  const [emojiSearchMatch, setEmojiSearchMatch] = useState("");
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
@@ -457,24 +462,41 @@ export function ReactionPanel({
                     ))}
                   </div>
                 </div>
-                {!emojiPickerContentVisible ? (
-                  <div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis">
-                    <span className="monitor-reaction-emoji-loading-search" />
-                    <span className="monitor-reaction-emoji-loading-title" />
-                    <span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span>
-                  </div>
-                ) : null}
-                {emojiPickerMounted && emojiPickerContentVisible ? <Suspense fallback={<div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis"><span className="monitor-reaction-emoji-loading-search" /><span className="monitor-reaction-emoji-loading-title" /><span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span></div>}><EmojiPicker
-                    theme={"dark" as Theme}
-                    emojiStyle={"native" as EmojiStyle}
-                    width="100%"
-                    height={280}
-                    lazyLoadEmojis
-                    searchPlaceHolder="Search emojis"
-                    categories={EMOJI_PICKER_CATEGORIES}
-                    previewConfig={{ showPreview: false }}
-                    onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
-                  /></Suspense> : null}
+                <div
+                  className="monitor-reaction-emoji-picker-stage"
+                  onInput={(event) => {
+                    const target = event.target as HTMLInputElement;
+                    if (target.matches(".epr-search")) setEmojiSearchMatch(findEmojiInSearch(target.value));
+                  }}
+                >
+                  {!emojiPickerContentVisible ? (
+                    <div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis">
+                      <span className="monitor-reaction-emoji-loading-search" />
+                      <span className="monitor-reaction-emoji-loading-title" />
+                      <span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span>
+                    </div>
+                  ) : null}
+                  {emojiPickerMounted && emojiPickerContentVisible ? <Suspense fallback={<div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis"><span className="monitor-reaction-emoji-loading-search" /><span className="monitor-reaction-emoji-loading-title" /><span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span></div>}><EmojiPicker
+                      theme={"dark" as Theme}
+                      emojiStyle={"native" as EmojiStyle}
+                      width="100%"
+                      height={280}
+                      lazyLoadEmojis
+                      skinTonesDisabled
+                      searchPlaceHolder="Search by name or paste an emoji"
+                      categories={EMOJI_PICKER_CATEGORIES}
+                      previewConfig={{ showPreview: false }}
+                      onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
+                    /></Suspense> : null}
+                  {emojiSearchMatch ? (
+                    <div className="monitor-reaction-emoji-direct-result">
+                      <button type="button" onClick={() => toggleEmoji(emojiSearchMatch)} aria-label={`Select ${emojiSearchMatch}`}>
+                        <span>{emojiSearchMatch}</span>
+                        <small>Select emoji</small>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </div>
           </div>
