@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Sparkles, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -15,6 +15,7 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
+const ELDORADO_REACTIONS_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?searchQuery=reaction";
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 const MONITOR_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -888,6 +889,16 @@ export default function PublicOrderPage() {
                 <span>
                   <strong>Eldorado Top Seller</strong>
                   <small>30,000+ sales · 99.7% positive</small>
+                </span>
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              </a>
+            </Button> : null}
+            {isCommunityOrder ? <Button asChild variant="secondary" size="sm" className="monitor-store-action monitor-reaction-store-action">
+              <a href={ELDORADO_REACTIONS_URL} target="_blank" rel="noreferrer">
+                <Sparkles className="monitor-reaction-store-icon h-3.5 w-3.5" aria-hidden="true" />
+                <span>
+                  <strong>Need reactions?</strong>
+                  <small>Add reactions to any message</small>
                 </span>
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>

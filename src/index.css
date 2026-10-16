@@ -10914,6 +10914,18 @@
   line-height: 1;
 }
 
+.monitor-reaction-store-action {
+  border-color: rgba(155,140,255,.22);
+  background: linear-gradient(135deg, rgba(155,140,255,.1), rgba(255,255,255,.045));
+}
+
+.monitor-reaction-store-action:hover {
+  border-color: rgba(155,140,255,.38);
+  background: linear-gradient(135deg, rgba(155,140,255,.16), rgba(255,255,255,.065));
+}
+
+.monitor-reaction-store-icon { color: var(--app-accent-bright); }
+
 .monitor-store-action .monitor-store-star {
   color: #f4be4e;
 }
@@ -11099,6 +11111,10 @@
     grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
     align-items: stretch;
     gap: 8px;
+  }
+
+  .monitor-topbar-actions:has(.monitor-reaction-store-action) .monitor-live-refresh {
+    grid-column: 1 / -1;
   }
 
   .monitor-live-refresh {
