@@ -143,6 +143,7 @@ export function ReactionPanel({
   const [emojiSearchMatch, setEmojiSearchMatch] = useState("");
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const emojiPickerStageRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const requestAmountLimit = Math.max(1, remaining);
@@ -188,6 +189,18 @@ export function ReactionPanel({
     const timer = window.setTimeout(() => setEmojiPickerContentVisible(true), 120);
     return () => window.clearTimeout(timer);
   }, [emojiPickerMounted, emojiPickerOpen]);
+
+  useEffect(() => {
+    const stage = emojiPickerStageRef.current;
+    if (!stage || !emojiPickerContentVisible) return undefined;
+    const handleSearchInput = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLInputElement) || !target.closest(".epr-search-container")) return;
+      setEmojiSearchMatch(findEmojiInSearch(target.value));
+    };
+    stage.addEventListener("input", handleSearchInput, true);
+    return () => stage.removeEventListener("input", handleSearchInput, true);
+  }, [emojiPickerContentVisible]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -464,10 +477,7 @@ export function ReactionPanel({
                 </div>
                 <div
                   className="monitor-reaction-emoji-picker-stage"
-                  onInput={(event) => {
-                    const target = event.target as HTMLInputElement;
-                    if (target.matches(".epr-search")) setEmojiSearchMatch(findEmojiInSearch(target.value));
-                  }}
+                  ref={emojiPickerStageRef}
                 >
                   {!emojiPickerContentVisible ? (
                     <div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis">
