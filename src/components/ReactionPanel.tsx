@@ -193,13 +193,25 @@ export function ReactionPanel({
   useEffect(() => {
     const stage = emojiPickerStageRef.current;
     if (!stage || !emojiPickerContentVisible) return undefined;
-    const handleSearchInput = (event: Event) => {
+    const syncSearchValue = (event: Event) => {
       const target = event.target;
       if (!(target instanceof HTMLInputElement) || !target.closest(".epr-search-container")) return;
       setEmojiSearchMatch(findEmojiInSearch(target.value));
     };
-    stage.addEventListener("input", handleSearchInput, true);
-    return () => stage.removeEventListener("input", handleSearchInput, true);
+    const handleClearSearch = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Element && target.closest(".epr-btn-clear-search")) setEmojiSearchMatch("");
+    };
+    stage.addEventListener("input", syncSearchValue, true);
+    stage.addEventListener("change", syncSearchValue, true);
+    stage.addEventListener("keyup", syncSearchValue, true);
+    stage.addEventListener("click", handleClearSearch, true);
+    return () => {
+      stage.removeEventListener("input", syncSearchValue, true);
+      stage.removeEventListener("change", syncSearchValue, true);
+      stage.removeEventListener("keyup", syncSearchValue, true);
+      stage.removeEventListener("click", handleClearSearch, true);
+    };
   }, [emojiPickerContentVisible]);
 
   function handleSubmit(event: FormEvent) {
