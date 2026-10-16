@@ -342,17 +342,17 @@ export default function ReactionsPage() {
             <div className="reactions-bot-required" role="alert">
               <span className="reactions-bot-required-icon" aria-hidden="true"><Bot /></span>
               <div className="reactions-bot-required-copy">
-                <strong>Reaction işlemi için botu yeniden sunucuya ekleyin.</strong>
-                <p>Bot sunucuda algılandıktan sonra teslim edilmiş uygun üyeler yüklenir.</p>
+                <strong>Add the bot back to continue with reactions.</strong>
+                <p>Once the bot is detected, eligible delivered members will be loaded.</p>
               </div>
               <div className="reactions-bot-required-actions">
                 <Button asChild type="button">
                   <a href={botInvite} target="_blank" rel="noreferrer">
-                    <Bot className="h-4 w-4" aria-hidden="true" /> Botu Ekle <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Bot className="h-4 w-4" aria-hidden="true" /> Add bot <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
                   </a>
                 </Button>
                 <Button type="button" variant="secondary" disabled={inspecting} onClick={() => setInspectNonce((current) => current + 1)}>
-                  <RefreshCw className={`h-4 w-4${inspecting ? " animate-spin" : ""}`} aria-hidden="true" /> Tekrar Kontrol Et
+                  <RefreshCw className={`h-4 w-4${inspecting ? " animate-spin" : ""}`} aria-hidden="true" /> Check again
                 </Button>
               </div>
             </div>
