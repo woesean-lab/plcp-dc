@@ -10931,7 +10931,9 @@
 
 .monitor-reaction-store-action strong { color: #0d0a1d; font-weight: 800; }
 .monitor-reaction-store-action small { color: rgba(13,10,29,.68); font-weight: 650; }
-.monitor-reaction-store-icon { color: #281d69; filter: drop-shadow(0 0 5px rgba(255,255,255,.5)); }
+.monitor-reaction-store-emojis { display: inline-flex; align-items: center; padding-right: 2px; font-size: 13px; font-style: normal; letter-spacing: -5px; filter: drop-shadow(0 2px 4px rgba(48,32,110,.2)); }
+.monitor-reaction-store-emojis span { display: inline-block; }
+.monitor-reaction-store-emojis span:nth-child(2) { transform: translateY(-2px); }
 
 .monitor-store-action .monitor-store-star {
   color: #f4be4e;

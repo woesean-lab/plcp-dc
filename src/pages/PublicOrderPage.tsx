@@ -4,7 +4,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Sparkles, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -895,7 +895,7 @@ export default function PublicOrderPage() {
             </Button> : null}
             {isCommunityOrder ? <Button asChild variant="secondary" size="sm" className="monitor-store-action monitor-reaction-store-action">
               <a href={ELDORADO_REACTIONS_URL} target="_blank" rel="noreferrer">
-                <Sparkles className="monitor-reaction-store-icon h-3.5 w-3.5" aria-hidden="true" />
+                <i className="monitor-reaction-store-emojis" aria-hidden="true"><span>👍</span><span>❤️</span><span>😂</span></i>
                 <span>
                   <strong>Need reactions?</strong>
                   <small>Get instant Discord reactions</small>
