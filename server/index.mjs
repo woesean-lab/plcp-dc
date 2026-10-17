@@ -11879,7 +11879,7 @@ async function hydrateCommunityOrderCategories(order) {
   if (!config.guildId) return order;
   if (communityCategoryDisplayCache.guildId !== config.guildId || communityCategoryDisplayCache.expiresAt <= Date.now()) {
     const result = await pool.query(
-      "SELECT id, name, color_key, check_replacement_enabled FROM community_stock_categories WHERE guild_id = $1",
+      "SELECT id, name, color_key, check_replacement_enabled, reaction_use_enabled FROM community_stock_categories WHERE guild_id = $1",
       [config.guildId]
     );
     communityCategoryDisplayCache.guildId = config.guildId;
@@ -11895,7 +11895,8 @@ async function hydrateCommunityOrderCategories(order) {
           ...allocation,
           categoryName: current.name,
           colorKey: current.color_key,
-          checkReplacementEnabled: current.check_replacement_enabled !== false
+          checkReplacementEnabled: current.check_replacement_enabled !== false,
+          reactionUseEnabled: current.reaction_use_enabled === true
         } : allocation;
       })
     : order.categoryAllocations;
@@ -11909,12 +11910,15 @@ async function hydrateCommunityOrderCategories(order) {
     categoryCheckReplacementEnabled: primaryCategory
       ? primaryCategory.check_replacement_enabled !== false
       : order.categoryCheckReplacementEnabled,
+    categoryReactionUseEnabled: primaryCategory
+      ? primaryCategory.reaction_use_enabled === true
+      : order.categoryReactionUseEnabled,
     categoryAllocations,
     communityResults: Array.isArray(order.communityResults)
       ? order.communityResults.map((item) => {
           const current = currentCategories.get(String(item?.categoryId ?? order.categoryId ?? ""));
           if (!current) return item;
-          const next = { ...item, categoryName: current.name, colorKey: current.color_key };
+          const next = { ...item, categoryName: current.name, colorKey: current.color_key, reactionUseEnabled: current.reaction_use_enabled === true };
           if (current.check_replacement_enabled === false) {
             delete next.onlinerLive;
             delete next.onlinerConnectionState;
@@ -12277,9 +12281,20 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
 function getReactionWorkspaceMembers(orders) {
   const delivered = new Map();
   for (const order of orders) {
+    const reactionCategoryIds = new Set((Array.isArray(order?.categoryAllocations) ? order.categoryAllocations : [])
+      .filter((allocation) => allocation?.reactionUseEnabled === true)
+      .map((allocation) => String(allocation?.categoryId ?? "").trim())
+      .filter(Boolean));
     for (const member of Array.isArray(order?.communityResults) ? order.communityResults : []) {
       const discordUserId = String(member?.discordUserId ?? "").trim();
       const state = String(member?.state ?? "").toLowerCase();
+      const categoryId = String(member?.categoryId ?? order?.categoryId ?? "").trim();
+      const reactionEnabled = member?.reactionEligible === true
+        || member?.reactionAvailable === true
+        || member?.reactionUseEnabled === true
+        || reactionCategoryIds.has(categoryId)
+        || (!categoryId && order?.categoryReactionUseEnabled === true);
+      if (!reactionEnabled) continue;
       if (!discordUserId || !["joined", "already_member"].includes(state)) continue;
       const previous = delivered.get(discordUserId);
       if (!previous || (previous.membershipStatus === "removed" && member?.membershipStatus !== "removed")) {
@@ -12354,9 +12369,10 @@ function getReactionWorkspaceMemberCheck(guildId) {
 async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) {
   const cachedCheck = getReactionWorkspaceMemberCheck(guildId);
   const previousCheck = cachedCheck?.memberCheckComplete ? null : cachedCheck;
-  const previouslyCheckedMemberIds = new Set(previousCheck?.checkedMemberIds ?? []);
-  const previouslyEligibleMemberIds = new Set(previousCheck?.eligibleMemberIds ?? []);
   const { deliveredMembers: currentDeliveredMembers } = getReactionWorkspaceMembers(orders);
+  const currentDeliveredMemberIds = new Set(currentDeliveredMembers.map((member) => String(member?.discordUserId ?? "")));
+  const previouslyCheckedMemberIds = new Set([...(previousCheck?.checkedMemberIds ?? [])].filter((discordUserId) => currentDeliveredMemberIds.has(discordUserId)));
+  const previouslyEligibleMemberIds = new Set([...(previousCheck?.eligibleMemberIds ?? [])].filter((discordUserId) => currentDeliveredMemberIds.has(discordUserId)));
   const checkCount = Math.min(Math.max(Number.parseInt(requestedCount, 10) || 1, 1), currentDeliveredMembers.length);
   const nextMemberIds = currentDeliveredMembers
     .map((member) => String(member?.discordUserId ?? ""))
@@ -12445,6 +12461,10 @@ async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) 
 function buildReactionWorkspaceSummary(reactionMessage, orders) {
   const { deliveredMembers } = getReactionWorkspaceMembers(orders);
   const memberCheck = getReactionWorkspaceMemberCheck(reactionMessage.guildId);
+  const deliveredMemberIds = new Set(deliveredMembers.map((member) => String(member?.discordUserId ?? "")));
+  const scopedCheckedMembers = memberCheck
+    ? [...memberCheck.checkedMemberIds].filter((discordUserId) => deliveredMemberIds.has(discordUserId)).length
+    : 0;
   const eligibleMembers = memberCheck
     ? deliveredMembers.filter((member) => memberCheck.eligibleMemberIds.has(String(member?.discordUserId ?? "")))
     : [];
@@ -12464,7 +12484,19 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     if (!eligibleMemberIds.has(discordUserId) || !emoji) continue;
     usedReactionCounts[emoji] = (usedReactionCounts[emoji] ?? 0) + 1;
   }
-  const totalOrdered = orders.reduce((total, order) => total + Math.max(0, Number(order?.amount) || 0), 0);
+  const scopedOrderAmounts = orders.map((order) => {
+    const allocations = Array.isArray(order?.categoryAllocations) ? order.categoryAllocations : [];
+    if (allocations.length) {
+      return allocations.reduce((total, allocation) => allocation?.reactionUseEnabled === true
+        ? total + Math.max(0, Number(allocation?.amount) || 0)
+        : total, 0);
+    }
+    return order?.categoryReactionUseEnabled === true
+      || (Array.isArray(order?.communityResults) && order.communityResults.some((member) => member?.reactionEligible === true || member?.reactionAvailable === true))
+      ? Math.max(0, Number(order?.amount) || 0)
+      : 0;
+  });
+  const totalOrdered = scopedOrderAmounts.reduce((total, amount) => total + amount, 0);
   const serverName = orders.map((order) => normalizeDiscordGuildName(order?.serverName)).find(Boolean) ?? null;
   return {
     messageLink: reactionMessage.url,
@@ -12472,21 +12504,21 @@ function buildReactionWorkspaceSummary(reactionMessage, orders) {
     channelId: reactionMessage.channelId,
     messageId: reactionMessage.messageId,
     serverName,
-    orderCount: orders.length,
+    orderCount: scopedOrderAmounts.filter((amount) => amount > 0).length,
     totalOrdered,
     deliveredMembers: deliveredMembers.length,
     eligibleMembers: eligibleMembers.length,
-    unavailableMembers: Math.max(0, (memberCheck?.checkedMembers ?? 0) - eligibleMembers.length),
+    unavailableMembers: Math.max(0, scopedCheckedMembers - eligibleMembers.length),
     availableForMessage: Math.max(0, eligibleMembers.length * communityReactionEmojiLimit - usedReactionPairs.size),
     reactionEmojiLimit: communityReactionEmojiLimit,
     usedReactionCounts,
     membersCheckRequired: !memberCheck,
     membersCheckedAt: memberCheck?.checkedAt ?? null,
     onlineDeliveredMembers: memberCheck?.onlineDeliveredMembers ?? 0,
-    checkedMembers: memberCheck?.checkedMembers ?? 0,
-    remainingUncheckedMembers: memberCheck?.remainingUncheckedMembers ?? deliveredMembers.length,
+    checkedMembers: scopedCheckedMembers,
+    remainingUncheckedMembers: Math.max(0, deliveredMembers.length - scopedCheckedMembers),
     lastBatchChecked: memberCheck?.lastBatchChecked ?? 0,
-    memberCheckComplete: memberCheck?.memberCheckComplete ?? false,
+    memberCheckComplete: Boolean(memberCheck && scopedCheckedMembers >= deliveredMembers.length),
     requests
   };
 }
@@ -12499,7 +12531,7 @@ async function loadReactionWorkspaceOrders(client, guildId, lock = false) {
      ORDER BY created_at ASC${lock ? " FOR UPDATE" : ""}`,
     [guildId]
   );
-  return result.rows.map((row) => ({ ...row.payload, uniqid: row.uniqid }));
+  return Promise.all(result.rows.map((row) => hydrateCommunityOrderCategories({ ...row.payload, uniqid: row.uniqid })));
 }
 
 app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {

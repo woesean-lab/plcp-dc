@@ -5356,6 +5356,17 @@ export default function HomePage() {
                     <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check is informational only</small></span>
                   </label>
                 </div>
+                <div className="community-category-rule-heading"><strong>Reaction workspace</strong><small>Choose whether this category can be scanned and used for reactions.</small></div>
+                <div className="community-category-period-options community-category-replacement-options">
+                  <label className={communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryReactionUse" checked={communityCategoryDraft.reactionUseEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: true }))} />
+                    <Sparkles className="h-4 w-4" /><span><strong>Enabled</strong><small>Include this category in Check members</small></span>
+                  </label>
+                  <label className={!communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryReactionUse" checked={!communityCategoryDraft.reactionUseEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: false }))} />
+                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Exclude this category from reactions</small></span>
+                  </label>
+                </div>
               </div>
             </div>
             <div className="confirm-modal-actions">
