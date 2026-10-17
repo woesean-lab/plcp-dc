@@ -5961,6 +5961,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
   const requestedDiscordUserIds = Array.isArray(options.discordUserIds)
     ? new Set(options.discordUserIds.map((value) => String(value ?? "").trim()).filter(isDiscordGuildId))
     : null;
+  const skipAuthorizationCheck = options.skipAuthorizationCheck === true;
   const resultsToCheck = requestedDiscordUserIds
     ? order.communityResults.filter((item) => requestedDiscordUserIds.has(String(item?.discordUserId ?? "")))
     : order.communityResults;
@@ -5984,7 +5985,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
     if (isDiscordGuildId(discordUserId)) onlinerAccountByUserId.set(discordUserId, account);
   }
   const onlinerCheckedAt = new Date().toISOString();
-  const stock = discordUserIds.length
+  const stock = !skipAuthorizationCheck && discordUserIds.length
     ? await pool.query(
         `SELECT DISTINCT ON (discord_user_id)
                 discord_user_id, encrypted_access_token, encrypted_refresh_token, access_token_expires_at
@@ -6053,6 +6054,15 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
         }
       } catch {
         // Keep membership unknown; an unknown result must not grant replacement.
+      }
+      if (skipAuthorizationCheck) {
+        return [discordUserId, {
+          status: "skipped",
+          details: "OAuth authorization check was skipped for reaction availability.",
+          membershipStatus,
+          membershipDetails,
+          ...onlinerFields
+        }];
       }
       let accessToken = null;
       try {
@@ -6137,15 +6147,17 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
     const check = checks.get(String(item?.discordUserId ?? ""));
     return check ? {
       ...item,
-      authorizationStatus: check.status,
-      authorizationDetails: check.details,
+      ...(skipAuthorizationCheck ? {} : {
+        authorizationStatus: check.status,
+        authorizationDetails: check.details,
+        authorizationCheckedAt: checkedAt
+      }),
       membershipStatus: check.membershipStatus,
       membershipDetails: check.membershipDetails,
       onlinerLive: check.onlinerLive,
       onlinerConnectionState: check.onlinerConnectionState,
       onlinerDetails: check.onlinerDetails,
-      onlinerCheckedAt: check.onlinerCheckedAt,
-      authorizationCheckedAt: checkedAt
+      onlinerCheckedAt: check.onlinerCheckedAt
     } : item;
   });
   const summary = {
@@ -6153,6 +6165,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
     active: [...checks.values()].filter((check) => check.status === "active").length,
     inactive: inactiveUserIds.length,
     unknown: [...checks.values()].filter((check) => check.status === "unknown").length,
+    skipped: [...checks.values()].filter((check) => check.status === "skipped").length,
     onliner: {
       live: [...checks.values()].filter((check) => check.onlinerLive === true).length,
       offline: [...checks.values()].filter((check) => check.onlinerLive === false).length,
@@ -12408,6 +12421,7 @@ async function refreshReactionWorkspaceMembers(orders, guildId, requestedCount) 
       const checkedBeforeOrder = batchChecked;
       const checked = await runCommunityOrderMemberCheck(hydratedOrder, {
         discordUserIds: orderMemberIds,
+        skipAuthorizationCheck: true,
         onProgress: (progress) => {
           const currentChecked = Math.min(nextMemberIds.length, checkedBeforeOrder + Math.max(0, Number(progress?.checked) || 0));
           updateProgress({
