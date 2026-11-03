@@ -384,6 +384,19 @@ function formatTrackedDate(value: string) {
   }).format(date);
 }
 
+function formatAutoLeaveCountdown(value: string | null | undefined, now: number) {
+  const target = value ? new Date(value).getTime() : Number.NaN;
+  if (!Number.isFinite(target)) return "Preparing...";
+  const totalSeconds = Math.max(0, Math.ceil((target - now) / 1_000));
+  if (totalSeconds === 0) return "Processing...";
+  const hours = Math.floor(totalSeconds / 3_600);
+  const minutes = Math.floor((totalSeconds % 3_600) / 60);
+  const seconds = totalSeconds % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
+    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function formatOnlinerProxyLabel(proxy: string) {
   try {
     const parsed = new URL(proxy);
@@ -816,6 +829,7 @@ export default function HomePage() {
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [orderPendingAutoLeave, setOrderPendingAutoLeave] = useState<TrackedOrder | null>(null);
   const [autoLeavingOrderId, setAutoLeavingOrderId] = useState<string | null>(null);
+  const [autoLeaveClock, setAutoLeaveClock] = useState(() => Date.now());
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
@@ -863,6 +877,13 @@ export default function HomePage() {
     [orders]
   );
   const runningAutoLeaveOrderKey = runningAutoLeaveOrderIds.join("|");
+
+  useEffect(() => {
+    if (activeTab !== "manage" || !runningAutoLeaveOrderIds.length) return;
+    setAutoLeaveClock(Date.now());
+    const timer = window.setInterval(() => setAutoLeaveClock(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab, runningAutoLeaveOrderKey]);
   const completedOrderCount = useMemo(
     () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("COMPLETED")).length,
     [orders]
@@ -4262,11 +4283,13 @@ export default function HomePage() {
                               </div> : null}
                               {autoLeaveJob ? <div className="orders-row-alert" data-tone={autoLeaveJob.failed ? "danger" : "auto-leave"}>
                                 <span>
-                                  <LogOut className="h-4 w-4" />
+                                  <LogOut className={`h-4 w-4 ${autoLeaveJob.status === "running" ? "animate-pulse" : ""}`} />
                                   <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
-                                  <small>{autoLeaveJob.status === "running"
-                                    ? `${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed${autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""} · Next: ${autoLeaveJob.nextRunAt ? formatTrackedDate(autoLeaveJob.nextRunAt) : "preparing"} · 5 minute interval`
-                                    : `${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed${autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}`}</small>
+                                  <small className="orders-auto-leave-status">
+                                    <span>{autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span>
+                                    {autoLeaveJob.status === "running" ? <b className="orders-auto-leave-live"><Timer className="h-3 w-3" /> Next member in {formatAutoLeaveCountdown(autoLeaveJob.nextRunAt, autoLeaveClock)}</b> : <b>Finished</b>}
+                                    {autoLeaveJob.status === "running" ? <span>5 minute interval</span> : null}
+                                  </small>
                                 </span>
                                 <Button asChild type="button" size="xs" variant="secondary"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}&provider=community#member-log`}><Eye className="h-3.5 w-3.5" /> View details</Link></Button>
                               </div> : null}
