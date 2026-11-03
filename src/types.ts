@@ -178,6 +178,7 @@ export interface TrackedOrder {
   categoryIsPeriodic?: boolean;
   durationMonths?: number | null;
   expiredAt?: string | null;
+  membersLeftAt?: string | null;
   isEldoradoSale?: boolean;
   reactionMessageLink?: string;
   reactionCapacity?: number;

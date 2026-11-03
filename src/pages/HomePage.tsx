@@ -141,6 +141,7 @@ import {
   getDcordProxies,
   getOrderStatus,
   getAdminConfig,
+  leaveAllCommunityOrderMembers,
   markBoostStockTokensUsed,
   restartCommunityOrder,
   returnUsedBoostToken,
@@ -813,6 +814,8 @@ export default function HomePage() {
   const [refreshingManage, setRefreshingManage] = useState(false);
   const [restartingOrderId, setRestartingOrderId] = useState<string | null>(null);
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
+  const [orderPendingAutoLeave, setOrderPendingAutoLeave] = useState<TrackedOrder | null>(null);
+  const [autoLeavingOrderId, setAutoLeavingOrderId] = useState<string | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
@@ -1023,12 +1026,13 @@ export default function HomePage() {
   }, []);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
+    if (!orderPendingDeletion && !orderPendingAutoLeave && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       if (orderPendingDeletion && !deletingTrackedOrder) setOrderPendingDeletion(null);
+      if (orderPendingAutoLeave && autoLeavingOrderId === null) setOrderPendingAutoLeave(null);
       if (communityMemberPendingDeletion && removingCommunityUserId === null) setCommunityMemberPendingDeletion(null);
       if (communityBulkDeleteOpen && communityBulkAction === null) setCommunityBulkDeleteOpen(false);
       if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
@@ -1041,7 +1045,7 @@ export default function HomePage() {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, deletingTrackedOrder, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
+  }, [orderPendingDeletion, orderPendingAutoLeave, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, deletingTrackedOrder, autoLeavingOrderId, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -2711,6 +2715,7 @@ export default function HomePage() {
       serverName: typeof status.serverName === "string" ? status.serverName : order.serverName,
       duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
       expiredAt: typeof (status.expiredAt ?? status.expired_at) === "string" ? String(status.expiredAt ?? status.expired_at) : order.expiredAt,
+      membersLeftAt: typeof status.membersLeftAt === "string" ? status.membersLeftAt : order.membersLeftAt,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details,
       reactionMessageLink: typeof status.reactionMessageLink === "string" ? status.reactionMessageLink : order.reactionMessageLink,
@@ -2821,6 +2826,28 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Order could not be removed.");
     } finally {
       setDeletingTrackedOrder(false);
+    }
+  }
+
+  async function confirmExpiredOrderAutoLeave() {
+    if (!orderPendingAutoLeave || autoLeavingOrderId) return;
+    const target = orderPendingAutoLeave;
+
+    try {
+      setAutoLeavingOrderId(target.uniqid);
+      const result = await leaveAllCommunityOrderMembers(target.uniqid, true);
+      updateLocalOrder(mergeTrackedOrder(target, result.order));
+      setOrderPendingAutoLeave(null);
+      const completed = result.summary.left + result.summary.alreadyLeft;
+      if (result.summary.failed) {
+        notifyError(`${completed} accounts left; ${result.summary.failed} could not leave.`);
+      } else {
+        notifySuccess(`${completed} accounts left the expired order's server.`);
+      }
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Expired order members could not leave the server.");
+    } finally {
+      setAutoLeavingOrderId(null);
     }
   }
 
@@ -4123,6 +4150,12 @@ export default function HomePage() {
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
                         const delayValue = order.statusDelay ?? order.delay;
                         const supportExpiration = getOrderSupportExpiration(order);
+                        const supportExpirationTime = supportExpiration ? new Date(supportExpiration).getTime() : Number.NaN;
+                        const canAutoLeaveExpired = order.provider === "community"
+                          && Number.isFinite(supportExpirationTime)
+                          && supportExpirationTime <= Date.now()
+                          && Number(order.added ?? 0) > 0
+                          && !order.membersLeftAt;
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -4159,6 +4192,7 @@ export default function HomePage() {
                               <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
+                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title="Remove order" aria-label={`Remove ${order.uniqid}`} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
@@ -4790,8 +4824,8 @@ export default function HomePage() {
                 </div>
                 <div className="onliner-console" role="log" aria-live="polite">
                   {visibleGatewayLogs.length ? [...visibleGatewayLogs].reverse().map((entry) => {
-                    const accountIndex = entry.accountId ? onlinerSnapshot.accounts.findIndex((account) => account.id === entry.accountId) : -1;
-                    const account = accountIndex >= 0 ? onlinerSnapshot.accounts[accountIndex] : null;
+                    const accountIndex = entry.accountId ? (onlinerSnapshot?.accounts.findIndex((account) => account.id === entry.accountId) ?? -1) : -1;
+                    const account = accountIndex >= 0 ? onlinerSnapshot?.accounts[accountIndex] ?? null : null;
                     const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
                     return (
                       <div key={entry.id} className="onliner-console-line" data-level={entry.level}>
@@ -5415,6 +5449,31 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={deletingTrackedOrder} onClick={() => void confirmTrackedOrderDeletion()}>
                 {deletingTrackedOrder ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Trash2 className="h-4 w-4" aria-hidden="true" />}
                 {deletingTrackedOrder ? "Removing..." : "Remove order"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {orderPendingAutoLeave ? (
+        <div
+          className="confirm-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && autoLeavingOrderId === null) setOrderPendingAutoLeave(null);
+          }}
+        >
+          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="auto-leave-order-title" aria-describedby="auto-leave-order-description">
+            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-danger)]">Expired support</p>
+            <h2 id="auto-leave-order-title">Auto leave expired members?</h2>
+            <p id="auto-leave-order-description">
+              Every remaining account delivered by <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} using its saved token and assigned Onliner proxy. Failed accounts can be retried later.
+            </p>
+            <div className="confirm-modal-actions">
+              <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
+                {autoLeavingOrderId ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
+                {autoLeavingOrderId ? "Leaving..." : "Auto leave"}
               </Button>
             </div>
           </div>

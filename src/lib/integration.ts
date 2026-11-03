@@ -251,12 +251,12 @@ export function checkCommunityOrderMembers(uniqid: string) {
   );
 }
 
-export function leaveAllCommunityOrderMembers(uniqid: string) {
+export function leaveAllCommunityOrderMembers(uniqid: string, expiredOnly = false) {
   return requestJson<{
     order: OrderStatusResponse;
     summary: { total: number; left: number; alreadyLeft: number; failed: number };
   }>(
-    `/api/community/orders/${encodeURIComponent(uniqid)}/leave-all`,
+    `/api/community/orders/${encodeURIComponent(uniqid)}/leave-all${expiredOnly ? "?expiredOnly=true" : ""}`,
     { method: "POST" }
   );
 }

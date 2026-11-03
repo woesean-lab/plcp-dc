@@ -3469,6 +3469,10 @@ async function stopCommunityReactionRequestAfterAccessFailures(orderId, requestI
 async function diagnoseCommunityReactionFailure(job, account, reactionResult) {
   const failure = getDiscordRequestFailureDetails("Discord reaction", reactionResult);
   if (![403, 404].includes(Number(reactionResult?.response?.status))) return failure;
+  const reactionDiscordCode = Number(reactionResult?.payload?.code ?? 0);
+  if (reactionDiscordCode === 50009) {
+    return `${failure} Diagnosis: Discord blocked this member because the server verification level is too high for the account. This is not a channel permission error. Lower the server verification level or make sure the member satisfies the server's account age, membership time, verified email, and verified phone requirements.`;
+  }
 
   try {
     const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
@@ -6225,7 +6229,7 @@ async function runCommunityOrderMemberCheck(order, options = {}) {
   }
 }
 
-async function leaveAllCommunityOrderMembers(order) {
+async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}) {
   const orderId = String(order?.uniqid ?? "").trim();
   const guildId = String(order?.serverId ?? "").trim();
   const results = Array.isArray(order?.communityResults) ? order.communityResults : [];
@@ -6243,11 +6247,15 @@ async function leaveAllCommunityOrderMembers(order) {
   communityOrderLeaveAllActive.add(orderId);
   try {
     const userIds = [...new Set(results
+      .filter((item) => String(item?.state ?? "").toLowerCase() === "joined")
       .filter((item) => String(item?.membershipStatus ?? "").toLowerCase() !== "removed")
+      .filter((item) => !expiredOnly || isCommunityResultManagementExpired(order, item))
       .map((item) => String(item?.discordUserId ?? ""))
       .filter(isDiscordGuildId))];
     if (!userIds.length) {
-      const error = new Error("Every account in this order has already left the server.");
+      const error = new Error(expiredOnly
+        ? "This order has no delivered members with an expired support period."
+        : "This order has no delivered members remaining in the server.");
       error.statusCode = 409;
       throw error;
     }
@@ -6344,20 +6352,25 @@ async function leaveAllCommunityOrderMembers(order) {
           leftServerAt: checkedAt
         };
       });
-      const updatedOrder = { ...current, communityResults };
+      const outcomes = [...outcomeByUserId.values()];
+      const failedCount = outcomes.filter((item) => item.state === "failed").length;
+      const updatedOrder = {
+        ...current,
+        communityResults,
+        ...(failedCount === 0 ? { membersLeftAt: checkedAt } : {})
+      };
       await client.query(
         "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
         [orderId, JSON.stringify(updatedOrder)]
       );
       await client.query("COMMIT");
-      const outcomes = [...outcomeByUserId.values()];
       return {
         order: updatedOrder,
         summary: {
           total: userIds.length,
           left: outcomes.filter((item) => item.state === "left").length,
           alreadyLeft: outcomes.filter((item) => item.state === "already_left").length,
-          failed: outcomes.filter((item) => item.state === "failed").length
+          failed: failedCount
         }
       };
     } catch (error) {
@@ -11984,10 +11997,14 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
-    if (String(order.status ?? "").toUpperCase() !== "COMPLETED") {
+    const expiredOnly = String(req.query?.expiredOnly ?? "").toLowerCase() === "true";
+    if (!expiredOnly && String(order.status ?? "").toUpperCase() !== "COMPLETED") {
       return res.status(409).json({ message: "Leave all is available after the Members order is completed." });
     }
-    const result = await leaveAllCommunityOrderMembers(order);
+    if (expiredOnly && Number(order.added ?? 0) <= 0) {
+      return res.status(409).json({ message: "This order has no delivered members to remove." });
+    }
+    const result = await leaveAllCommunityOrderMembers(order, { expiredOnly });
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
