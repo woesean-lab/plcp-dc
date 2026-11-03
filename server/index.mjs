@@ -52,6 +52,8 @@ const publicCommunityReplaceCooldownMs = 60 * 1000;
 const publicCommunityReplaceCooldowns = new Map();
 const publicCommunityCheckCooldownMs = 60 * 1000;
 const publicCommunityCheckCooldowns = new Map();
+const communityAutoLeaveIntervalMs = 5 * 60_000;
+const communityAutoLeavePollMs = 10_000;
 const communityOrderMemberCheckProgress = new Map();
 const reactionWorkspaceMemberCheckProgress = new Map();
 const communityOrderLeaveAllActive = new Set();
@@ -63,6 +65,7 @@ const humanizerDiscordIdentityCache = new Map();
 let humanizerDiscordBuildCache = { value: null, expiresAt: 0, pending: null };
 let dcordCircuitOpenUntil = 0;
 let dcordCircuitFailureCount = 0;
+let communityAutoLeavePollRunning = false;
 
 function isDiscordGuildId(value) {
   return /^\d{17,20}$/.test(value);
@@ -6229,6 +6232,65 @@ async function runCommunityOrderMemberCheck(order, options = {}) {
   }
 }
 
+async function leaveCommunityOrderMember(guildId, discordUserId, stockByUserId = null, onlinerConfig = null) {
+  let member = stockByUserId?.get(discordUserId);
+  if (!stockByUserId) {
+    const stock = await pool.query(
+      `SELECT discord_user_id, encrypted_account_token
+       FROM community_oauth_joins
+       WHERE guild_id = $1 AND discord_user_id = $2
+       LIMIT 1`,
+      [guildId, discordUserId]
+    );
+    member = stock.rows[0];
+  }
+  if (!member?.encrypted_account_token) {
+    return { state: "failed", details: "No saved user token exists for this stock account." };
+  }
+
+  let accountToken = "";
+  try {
+    accountToken = decryptCredential(member.encrypted_account_token);
+  } catch {
+    return { state: "failed", details: "The saved user token could not be decrypted." };
+  }
+  const resolvedOnlinerConfig = onlinerConfig ?? await getDiscordOnlinerConfig();
+  const onlinerAccount = resolvedOnlinerConfig.accounts.find((account) => String(account.discordUserId ?? "") === discordUserId)
+    ?? resolvedOnlinerConfig.accounts.find((account) => account.botToken === accountToken);
+  const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
+  if (!proxyUrl) {
+    return { state: "failed", details: "The account has no assigned Onliner proxy; no direct request was sent." };
+  }
+
+  try {
+    let leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
+      method: "DELETE",
+      cache: "no-store",
+      headers: { Authorization: accountToken }
+    });
+    if (leave.response.status === 429) {
+      const retrySeconds = Math.min(Math.max(Number(leave.payload?.retry_after) || 1, 1), 10);
+      await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
+      leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
+        method: "DELETE",
+        cache: "no-store",
+        headers: { Authorization: accountToken }
+      });
+    }
+    if (leave.response.status === 204) {
+      communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
+      return { state: "left", details: "Account left the Discord server through its assigned Onliner proxy." };
+    }
+    if (leave.response.status === 404) {
+      communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
+      return { state: "already_left", details: "Account was already outside the Discord server." };
+    }
+    return { state: "failed", details: getDiscordRequestFailureDetails("Discord leave server", leave) };
+  } catch (error) {
+    return { state: "failed", details: error instanceof Error ? error.message : "The proxied leave request failed." };
+  }
+}
+
 async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}) {
   const orderId = String(order?.uniqid ?? "").trim();
   const guildId = String(order?.serverId ?? "").trim();
@@ -6270,60 +6332,7 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
     const outcomeByUserId = new Map();
 
     await forEachWithConcurrency(userIds, 6, async (discordUserId) => {
-      const member = stockByUserId.get(discordUserId);
-      if (!member?.encrypted_account_token) {
-        outcomeByUserId.set(discordUserId, { state: "failed", details: "No saved user token exists for this stock account." });
-        return;
-      }
-
-      let accountToken = "";
-      try {
-        accountToken = decryptCredential(member.encrypted_account_token);
-      } catch {
-        outcomeByUserId.set(discordUserId, { state: "failed", details: "The saved user token could not be decrypted." });
-        return;
-      }
-      const onlinerAccount = onlinerConfig.accounts.find((account) => String(account.discordUserId ?? "") === discordUserId)
-        ?? onlinerConfig.accounts.find((account) => account.botToken === accountToken);
-      const proxyUrl = normalizeDiscordOnlinerProxyUrl(onlinerAccount?.proxyUrl);
-      if (!proxyUrl) {
-        outcomeByUserId.set(discordUserId, { state: "failed", details: "The account has no assigned Onliner proxy; no direct request was sent." });
-        return;
-      }
-
-      try {
-        let leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
-          method: "DELETE",
-          cache: "no-store",
-          headers: { Authorization: accountToken }
-        });
-        if (leave.response.status === 429) {
-          const retrySeconds = Math.min(Math.max(Number(leave.payload?.retry_after) || 1, 1), 10);
-          await new Promise((resolve) => setTimeout(resolve, retrySeconds * 1000));
-          leave = await requestDiscordThroughProxy(`users/@me/guilds/${encodeURIComponent(guildId)}`, proxyUrl, {
-            method: "DELETE",
-            cache: "no-store",
-            headers: { Authorization: accountToken }
-          });
-        }
-        if (leave.response.status === 204) {
-          outcomeByUserId.set(discordUserId, { state: "left", details: "Account left the Discord server through its assigned Onliner proxy." });
-          communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
-        } else if (leave.response.status === 404) {
-          outcomeByUserId.set(discordUserId, { state: "already_left", details: "Account was already outside the Discord server." });
-          communityMemberPresenceCache.set(`${guildId}:${discordUserId}`, { present: false, expiresAt: Date.now() + 60_000 });
-        } else {
-          outcomeByUserId.set(discordUserId, {
-            state: "failed",
-            details: getDiscordRequestFailureDetails("Discord leave server", leave)
-          });
-        }
-      } catch (error) {
-        outcomeByUserId.set(discordUserId, {
-          state: "failed",
-          details: error instanceof Error ? error.message : "The proxied leave request failed."
-        });
-      }
+      outcomeByUserId.set(discordUserId, await leaveCommunityOrderMember(guildId, discordUserId, stockByUserId, onlinerConfig));
     });
 
     const checkedAt = new Date().toISOString();
@@ -6381,6 +6390,259 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
     }
   } finally {
     communityOrderLeaveAllActive.delete(orderId);
+  }
+}
+
+async function scheduleExpiredCommunityAutoLeave(orderId) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
+    const current = tracked.rows[0]?.payload;
+    if (!current || current.provider !== "community" || !Array.isArray(current.communityResults)) {
+      await client.query("ROLLBACK");
+      const error = new Error("Members order could not be found.");
+      error.statusCode = 404;
+      throw error;
+    }
+    if (current.autoLeaveJob?.status === "running") {
+      await client.query("ROLLBACK");
+      const error = new Error("Auto Leave is already running for this order.");
+      error.statusCode = 409;
+      throw error;
+    }
+    if (communityOrderLeaveAllActive.has(orderId)) {
+      await client.query("ROLLBACK");
+      const error = new Error("A Leave all operation is already running for this order.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const candidateIndices = current.communityResults.flatMap((item, index) => {
+      const delivered = String(item?.state ?? "").toLowerCase() === "joined";
+      const stillPresent = String(item?.membershipStatus ?? "").toLowerCase() !== "removed";
+      return delivered && stillPresent && isCommunityResultManagementExpired(current, item) ? [index] : [];
+    });
+    if (!candidateIndices.length) {
+      await client.query("ROLLBACK");
+      const error = new Error("This order has no delivered members with an expired support period.");
+      error.statusCode = 409;
+      throw error;
+    }
+
+    const startedAt = new Date();
+    const jobId = crypto.randomUUID();
+    const candidatePositions = new Map(candidateIndices.map((resultIndex, position) => [resultIndex, position]));
+    const communityResults = current.communityResults.map((item, index) => {
+      const position = candidatePositions.get(index);
+      if (position === undefined) return item;
+      const scheduledAt = new Date(startedAt.getTime() + communityAutoLeaveIntervalMs * (position + 1)).toISOString();
+      return {
+        ...item,
+        autoLeaveJobId: jobId,
+        autoLeaveStatus: "waiting",
+        autoLeaveDetails: `Scheduled to leave the server at ${scheduledAt}.`,
+        autoLeaveScheduledAt: scheduledAt,
+        autoLeaveAttemptedAt: null,
+        autoLeaveCompletedAt: null
+      };
+    });
+    const autoLeaveJob = {
+      id: jobId,
+      status: "running",
+      total: candidateIndices.length,
+      processed: 0,
+      left: 0,
+      alreadyLeft: 0,
+      failed: 0,
+      intervalSeconds: Math.round(communityAutoLeaveIntervalMs / 1000),
+      startedAt: startedAt.toISOString(),
+      nextRunAt: new Date(startedAt.getTime() + communityAutoLeaveIntervalMs).toISOString(),
+      completedAt: null
+    };
+    const updatedOrder = { ...current, communityResults, autoLeaveJob };
+    delete updatedOrder.membersLeftAt;
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [orderId, JSON.stringify(updatedOrder)]
+    );
+    await client.query("COMMIT");
+    return {
+      order: updatedOrder,
+      summary: { total: candidateIndices.length, scheduled: candidateIndices.length, left: 0, alreadyLeft: 0, failed: 0 }
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function claimNextCommunityAutoLeaveMember() {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const due = await client.query(
+      `SELECT uniqid, payload
+       FROM tracked_orders
+       WHERE payload->>'provider' = 'community'
+         AND payload->'autoLeaveJob'->>'status' = 'running'
+         AND NULLIF(payload->'autoLeaveJob'->>'nextRunAt', '')::timestamptz <= NOW()
+       ORDER BY NULLIF(payload->'autoLeaveJob'->>'nextRunAt', '')::timestamptz ASC
+       LIMIT 1
+       FOR UPDATE SKIP LOCKED`
+    );
+    const row = due.rows[0];
+    if (!row) {
+      await client.query("COMMIT");
+      return null;
+    }
+    const order = row.payload;
+    const now = new Date();
+    const staleProcessingBefore = now.getTime() - 2 * 60_000;
+    const resultIndex = order.communityResults.findIndex((item) => {
+      if (item?.autoLeaveJobId !== order.autoLeaveJob?.id) return false;
+      if (item?.autoLeaveStatus === "waiting") return new Date(item.autoLeaveScheduledAt).getTime() <= now.getTime();
+      return item?.autoLeaveStatus === "processing"
+        && new Date(item.autoLeaveAttemptedAt).getTime() <= staleProcessingBefore;
+    });
+    if (resultIndex < 0) {
+      const waitingTimes = order.communityResults
+        .filter((item) => item?.autoLeaveJobId === order.autoLeaveJob?.id && item?.autoLeaveStatus === "waiting")
+        .map((item) => new Date(item.autoLeaveScheduledAt).getTime())
+        .filter(Number.isFinite);
+      const nextRunAt = waitingTimes.length ? new Date(Math.min(...waitingTimes)).toISOString() : null;
+      const autoLeaveJob = {
+        ...order.autoLeaveJob,
+        status: nextRunAt ? "running" : "completed_with_errors",
+        nextRunAt,
+        ...(nextRunAt ? {} : { completedAt: now.toISOString() })
+      };
+      await client.query(
+        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+        [row.uniqid, JSON.stringify({ ...order, autoLeaveJob })]
+      );
+      await client.query("COMMIT");
+      return null;
+    }
+
+    const selected = order.communityResults[resultIndex];
+    const attemptedAt = now.toISOString();
+    const communityResults = order.communityResults.map((item, index) => index === resultIndex ? {
+      ...item,
+      autoLeaveStatus: "processing",
+      autoLeaveDetails: "Auto Leave request is being sent through the assigned Onliner proxy.",
+      autoLeaveAttemptedAt: attemptedAt
+    } : item);
+    const claimedOrder = {
+      ...order,
+      communityResults,
+      autoLeaveJob: {
+        ...order.autoLeaveJob,
+        nextRunAt: new Date(now.getTime() + communityAutoLeaveIntervalMs).toISOString()
+      }
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [row.uniqid, JSON.stringify(claimedOrder)]
+    );
+    await client.query("COMMIT");
+    return {
+      orderId: row.uniqid,
+      jobId: order.autoLeaveJob?.id,
+      guildId: String(order.serverId ?? ""),
+      discordUserId: String(selected?.discordUserId ?? "")
+    };
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function finishCommunityAutoLeaveMember(claim, outcome) {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [claim.orderId]);
+    const current = tracked.rows[0]?.payload;
+    if (!current || !Array.isArray(current.communityResults)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    if (!claim.jobId || current.autoLeaveJob?.id !== claim.jobId) {
+      await client.query("ROLLBACK");
+      return;
+    }
+    const completedAt = new Date().toISOString();
+    const communityResults = current.communityResults.map((item) => {
+      if (item?.autoLeaveJobId !== claim.jobId || String(item?.discordUserId ?? "") !== claim.discordUserId || item?.autoLeaveStatus !== "processing") return item;
+      const base = {
+        ...item,
+        autoLeaveStatus: outcome.state,
+        autoLeaveDetails: outcome.details,
+        autoLeaveCompletedAt: completedAt
+      };
+      return outcome.state === "failed" ? base : {
+        ...base,
+        membershipStatus: "removed",
+        membershipDetails: outcome.details,
+        membershipCheckedAt: completedAt,
+        leftServerAt: completedAt
+      };
+    });
+    const scopedResults = communityResults.filter((item) => item?.autoLeaveJobId === claim.jobId);
+    const jobResults = scopedResults.filter((item) => ["left", "already_left", "failed"].includes(String(item?.autoLeaveStatus ?? "")));
+    const waitingResults = scopedResults.filter((item) => ["waiting", "processing"].includes(String(item?.autoLeaveStatus ?? "")));
+    const left = jobResults.filter((item) => item.autoLeaveStatus === "left").length;
+    const alreadyLeft = jobResults.filter((item) => item.autoLeaveStatus === "already_left").length;
+    const failed = jobResults.filter((item) => item.autoLeaveStatus === "failed").length;
+    const finished = waitingResults.length === 0;
+    const autoLeaveJob = {
+      ...current.autoLeaveJob,
+      status: finished ? (failed ? "completed_with_errors" : "completed") : "running",
+      processed: jobResults.length,
+      left,
+      alreadyLeft,
+      failed,
+      nextRunAt: finished ? null : current.autoLeaveJob?.nextRunAt,
+      completedAt: finished ? completedAt : null
+    };
+    const updatedOrder = {
+      ...current,
+      communityResults,
+      autoLeaveJob,
+      ...(finished && failed === 0 ? { membersLeftAt: completedAt } : {})
+    };
+    await client.query(
+      "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
+      [claim.orderId, JSON.stringify(updatedOrder)]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function processCommunityAutoLeaveJobs() {
+  if (communityAutoLeavePollRunning) return;
+  communityAutoLeavePollRunning = true;
+  try {
+    for (let processed = 0; processed < 20; processed += 1) {
+      const claim = await claimNextCommunityAutoLeaveMember();
+      if (!claim) break;
+      const outcome = isDiscordGuildId(claim.guildId) && isDiscordGuildId(claim.discordUserId)
+        ? await leaveCommunityOrderMember(claim.guildId, claim.discordUserId)
+        : { state: "failed", details: "The saved server or member ID is invalid." };
+      await finishCommunityAutoLeaveMember(claim, outcome);
+    }
+  } finally {
+    communityAutoLeavePollRunning = false;
   }
 }
 
@@ -11998,13 +12260,15 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
     const expiredOnly = String(req.query?.expiredOnly ?? "").toLowerCase() === "true";
+    if (!expiredOnly && order.autoLeaveJob?.status === "running") {
+      return res.status(409).json({ message: "Auto Leave is already running for this order." });
+    }
     if (!expiredOnly && String(order.status ?? "").toUpperCase() !== "COMPLETED") {
       return res.status(409).json({ message: "Leave all is available after the Members order is completed." });
     }
-    if (expiredOnly && Number(order.added ?? 0) <= 0) {
-      return res.status(409).json({ message: "This order has no delivered members to remove." });
-    }
-    const result = await leaveAllCommunityOrderMembers(order, { expiredOnly });
+    const result = expiredOnly
+      ? await scheduleExpiredCommunityAutoLeave(uniqid)
+      : await leaveAllCommunityOrderMembers(order);
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) {
     next(error);
@@ -14736,6 +15000,10 @@ app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
 
     const payload = tracked.rows[0].payload;
     const locallyManaged = payload?.provider === "community" || payload?.provider === "dcord" || payload?.service === "DCORD-BOOSTS";
+    if (payload?.autoLeaveJob?.status === "running") {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Wait for Auto Leave to finish before removing this order." });
+    }
     if (locallyManaged && String(payload?.status ?? "").toUpperCase() === "PROCESS") {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "An actively processing local order cannot be removed until it finishes." });
@@ -14836,6 +15104,14 @@ if (serviceRunsWeb) {
     });
   }, 10_000);
   communityRecoveryTimer.unref();
+
+  const runCommunityAutoLeaveJobs = () => void processCommunityAutoLeaveJobs().catch((error) => {
+    console.error("Members Auto Leave scan failed:", error instanceof Error ? error.message : error);
+  });
+  const communityAutoLeaveTimer = setInterval(runCommunityAutoLeaveJobs, communityAutoLeavePollMs);
+  communityAutoLeaveTimer.unref();
+  const communityAutoLeaveInitialTimer = setTimeout(runCommunityAutoLeaveJobs, 1_000);
+  communityAutoLeaveInitialTimer.unref();
 
   const runCommunityReactionJobs = () => void processCommunityReactionJobs().catch((error) => {
     console.error("Members reaction scan failed:", error instanceof Error ? error.message : error);

@@ -59,10 +59,17 @@ type CommunityMemberResult = {
   reactionDetails?: string;
   reactionEligible?: boolean;
   reactionRequestId?: string;
+  autoLeaveStatus?: string;
+  autoLeaveDetails?: string;
+  autoLeaveScheduledAt?: string;
+  autoLeaveAttemptedAt?: string;
+  autoLeaveCompletedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
+  if (item.autoLeaveStatus === "failed") return 0;
+  if (["waiting", "processing"].includes(item.autoLeaveStatus ?? "")) return 1;
   if (item.onlinerLive === false) return 0;
   if (item.authorizationStatus === "inactive") return 1;
   if (item.membershipStatus === "removed") return 2;
@@ -106,6 +113,11 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
       reactionEligible: row.reactionEligible === true,
       reactionRequestId: typeof row.reactionRequestId === "string" ? row.reactionRequestId : undefined,
+      autoLeaveStatus: typeof row.autoLeaveStatus === "string" ? row.autoLeaveStatus : undefined,
+      autoLeaveDetails: typeof row.autoLeaveDetails === "string" ? row.autoLeaveDetails : undefined,
+      autoLeaveScheduledAt: typeof row.autoLeaveScheduledAt === "string" ? row.autoLeaveScheduledAt : undefined,
+      autoLeaveAttemptedAt: typeof row.autoLeaveAttemptedAt === "string" ? row.autoLeaveAttemptedAt : undefined,
+      autoLeaveCompletedAt: typeof row.autoLeaveCompletedAt === "string" ? row.autoLeaveCompletedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -495,7 +507,9 @@ export default function OrderPage() {
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
   const communityMemberResults = getCommunityMemberResults(result);
-  const refreshComplete = terminal;
+  const autoLeaveJob = result?.autoLeaveJob;
+  const autoLeaveRunning = autoLeaveJob?.status === "running";
+  const refreshComplete = terminal && !autoLeaveRunning;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -507,7 +521,7 @@ export default function OrderPage() {
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
-  const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.membershipStatus !== "removed").length;
+  const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed").length;
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const failedCommunityMemberCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "failed").length;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
@@ -541,6 +555,12 @@ export default function OrderPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (!result || window.location.hash !== "#member-log") return;
+    const frame = window.requestAnimationFrame(() => document.getElementById("member-log")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [result?.uniqid]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -1522,7 +1542,7 @@ export default function OrderPage() {
           ) : null}
 
           {isCommunityProvider ? (
-            <section className="lookup-token-panel community-order-log">
+            <section id="member-log" className="lookup-token-panel community-order-log">
               <div className="lookup-section-heading">
                 <div>
                   <p className="app-kicker">Member results</p>
@@ -1531,7 +1551,7 @@ export default function OrderPage() {
                 <span className="public-secure-mark gap-2">
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
-                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || communityMembersStillInServerCount === 0}>
+                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || autoLeaveRunning || communityMembersStillInServerCount === 0}>
                         <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                         {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
                       </Button>
@@ -1563,6 +1583,10 @@ export default function OrderPage() {
                       {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                     </Button>
                   ) : null}
+                  {autoLeaveJob ? <span title={autoLeaveJob.nextRunAt ? `Next attempt: ${formatTime(autoLeaveJob.nextRunAt)}` : undefined}>
+                    <LogOut className="inline h-3.5 w-3.5" /> Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}
+                    {autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}
+                  </span> : null}
                   <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
                 </span>
               </div>
@@ -1597,6 +1621,7 @@ export default function OrderPage() {
                         {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? (
                           <small>{item.reactionEmoji} {item.reactionDetails}</small>
                         ) : null}
+                        {item.autoLeaveDetails ? <small>{item.autoLeaveDetails}</small> : null}
                       </span>
                       <span className="community-order-result-state">
                         {item.authorizationStatus ? (
@@ -1604,7 +1629,21 @@ export default function OrderPage() {
                             OAuth {item.authorizationStatus}
                           </span>
                         ) : null}
-                        {item.membershipStatus === "removed" ? (
+                        {item.autoLeaveStatus ? (
+                          <span className="public-token-result-pill" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
+                            {item.autoLeaveStatus === "waiting"
+                              ? `Leave queued${item.autoLeaveScheduledAt ? ` · ${formatTime(item.autoLeaveScheduledAt)}` : ""}`
+                              : item.autoLeaveStatus === "processing"
+                                ? "Leaving..."
+                                : item.autoLeaveStatus === "left"
+                                  ? "Auto leave"
+                                  : item.autoLeaveStatus === "already_left"
+                                    ? "Already outside"
+                                    : item.autoLeaveStatus === "failed"
+                                      ? "Leave failed"
+                                      : item.autoLeaveStatus}
+                          </span>
+                        ) : item.membershipStatus === "removed" ? (
                           <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
                             Left server
                           </span>
@@ -1616,7 +1655,11 @@ export default function OrderPage() {
                         ) : null}
                         <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                       </span>
-                      <time dateTime={item.completedAt}>{item.completedAt ? formatTime(item.completedAt) : "-"}</time>
+                      <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
+                        ? formatTime(item.autoLeaveCompletedAt)
+                        : item.autoLeaveScheduledAt
+                          ? formatTime(item.autoLeaveScheduledAt)
+                          : item.completedAt ? formatTime(item.completedAt) : "-"}</time>
                     </div>
                   ))}
                 </div>

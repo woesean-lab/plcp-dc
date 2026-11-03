@@ -254,7 +254,7 @@ export function checkCommunityOrderMembers(uniqid: string) {
 export function leaveAllCommunityOrderMembers(uniqid: string, expiredOnly = false) {
   return requestJson<{
     order: OrderStatusResponse;
-    summary: { total: number; left: number; alreadyLeft: number; failed: number };
+    summary: { total: number; left: number; alreadyLeft: number; failed: number; scheduled?: number };
   }>(
     `/api/community/orders/${encodeURIComponent(uniqid)}/leave-all${expiredOnly ? "?expiredOnly=true" : ""}`,
     { method: "POST" }

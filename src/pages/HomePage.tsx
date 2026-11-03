@@ -639,7 +639,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                       </div>
                       <Skeleton className="orders-row-date h-3 w-20" />
                       <Skeleton className="orders-row-expiration h-3 w-20" />
-                      <div className="orders-row-actions"><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /><Skeleton className="h-8 w-8" /></div>
+                      <div className="orders-row-actions"><Skeleton className="h-10 w-10" /><Skeleton className="h-10 w-10" /><Skeleton className="h-10 w-10" /></div>
                     </div>
                   </li>
                 ))}
@@ -854,9 +854,14 @@ export default function HomePage() {
   }, [orders]);
 
   const activeOrders = useMemo(
-    () => orders.filter((order) => !isTerminalOrder(order.status)),
+    () => orders.filter((order) => !isTerminalOrder(order.status) || order.autoLeaveJob?.status === "running"),
     [orders]
   );
+  const runningAutoLeaveOrderIds = useMemo(
+    () => orders.filter((order) => order.provider === "community" && order.autoLeaveJob?.status === "running").map((order) => order.uniqid),
+    [orders]
+  );
+  const runningAutoLeaveOrderKey = runningAutoLeaveOrderIds.join("|");
   const completedOrderCount = useMemo(
     () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("COMPLETED")).length,
     [orders]
@@ -1024,6 +1029,38 @@ export default function HomePage() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (activeTab !== "manage" || !runningAutoLeaveOrderIds.length) return;
+    let active = true;
+    let requestRunning = false;
+    const refreshAutoLeaveJobs = async () => {
+      if (requestRunning) return;
+      requestRunning = true;
+      try {
+        const updates = await Promise.all(runningAutoLeaveOrderIds.map(async (uniqid) => {
+          try {
+            return [uniqid, await getOrderStatus(uniqid, "community")] as const;
+          } catch {
+            return null;
+          }
+        }));
+        if (!active) return;
+        const updatesById = new Map(updates.filter((entry): entry is NonNullable<typeof entry> => entry !== null));
+        setOrders((current) => current.map((order) => {
+          const status = updatesById.get(order.uniqid);
+          return status ? mergeTrackedOrder(order, status) : order;
+        }));
+      } finally {
+        requestRunning = false;
+      }
+    };
+    const timer = window.setInterval(() => void refreshAutoLeaveJobs(), 10_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [activeTab, runningAutoLeaveOrderKey]);
 
   useEffect(() => {
     if (!orderPendingDeletion && !orderPendingAutoLeave && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
@@ -2716,11 +2753,15 @@ export default function HomePage() {
       duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
       expiredAt: typeof (status.expiredAt ?? status.expired_at) === "string" ? String(status.expiredAt ?? status.expired_at) : order.expiredAt,
       membersLeftAt: typeof status.membersLeftAt === "string" ? status.membersLeftAt : order.membersLeftAt,
+      autoLeaveJob: status.autoLeaveJob && typeof status.autoLeaveJob === "object" && !Array.isArray(status.autoLeaveJob)
+        ? status.autoLeaveJob
+        : order.autoLeaveJob,
       statusDelay: typeof resolvedStatusDelay === "number" ? resolvedStatusDelay : order.statusDelay,
       details: typeof status.details === "string" ? status.details : order.details,
       reactionMessageLink: typeof status.reactionMessageLink === "string" ? status.reactionMessageLink : order.reactionMessageLink,
       reactionCapacity: typeof status.reactionCapacity === "number" ? status.reactionCapacity : order.reactionCapacity,
-      reactionRequests: Array.isArray(status.reactionRequests) ? status.reactionRequests : order.reactionRequests
+      reactionRequests: Array.isArray(status.reactionRequests) ? status.reactionRequests : order.reactionRequests,
+      communityResults: Array.isArray(status.communityResults) ? status.communityResults as Array<Record<string, unknown>> : order.communityResults
     };
   }
 
@@ -2740,7 +2781,8 @@ export default function HomePage() {
       a.service === b.service &&
       a.provider === b.provider &&
       a.duration === b.duration &&
-      a.expiredAt === b.expiredAt
+      a.expiredAt === b.expiredAt &&
+      JSON.stringify(a.autoLeaveJob ?? null) === JSON.stringify(b.autoLeaveJob ?? null)
     );
   }
 
@@ -2838,12 +2880,7 @@ export default function HomePage() {
       const result = await leaveAllCommunityOrderMembers(target.uniqid, true);
       updateLocalOrder(mergeTrackedOrder(target, result.order));
       setOrderPendingAutoLeave(null);
-      const completed = result.summary.left + result.summary.alreadyLeft;
-      if (result.summary.failed) {
-        notifyError(`${completed} accounts left; ${result.summary.failed} could not leave.`);
-      } else {
-        notifySuccess(`${completed} accounts left the expired order's server.`);
-      }
+      notifySuccess(`${result.summary.scheduled ?? result.summary.total} members scheduled. The first leave attempt starts in 5 minutes.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Expired order members could not leave the server.");
     } finally {
@@ -4151,11 +4188,22 @@ export default function HomePage() {
                         const delayValue = order.statusDelay ?? order.delay;
                         const supportExpiration = getOrderSupportExpiration(order);
                         const supportExpirationTime = supportExpiration ? new Date(supportExpiration).getTime() : Number.NaN;
+                        const expiredCategoryIds = new Set((order.categoryAllocations ?? [])
+                          .filter((allocation) => allocation.isPeriodic === true && allocation.expiredAt && new Date(allocation.expiredAt).getTime() <= Date.now())
+                          .map((allocation) => allocation.categoryId));
+                        const directSupportExpired = Number.isFinite(supportExpirationTime) && supportExpirationTime <= Date.now();
+                        const autoLeaveCandidateCount = (order.communityResults ?? []).filter((item) => {
+                          if (String(item.state ?? "").toLowerCase() !== "joined" || String(item.membershipStatus ?? "").toLowerCase() === "removed") return false;
+                          const categoryId = String(item.categoryId ?? order.categoryId ?? "");
+                          return expiredCategoryIds.size ? expiredCategoryIds.has(categoryId) : directSupportExpired;
+                        }).length;
                         const canAutoLeaveExpired = order.provider === "community"
-                          && Number.isFinite(supportExpirationTime)
-                          && supportExpirationTime <= Date.now()
-                          && Number(order.added ?? 0) > 0
+                          && (autoLeaveCandidateCount > 0 || (!order.communityResults?.length && directSupportExpired && Number(order.added ?? 0) > 0))
+                          && order.autoLeaveJob?.status !== "running"
                           && !order.membersLeftAt;
+                        const autoLeaveJob = order.autoLeaveJob;
+                        const autoLeaveProcessed = Math.max(0, Number(autoLeaveJob?.processed) || 0);
+                        const autoLeaveTotal = Math.max(0, Number(autoLeaveJob?.total) || 0);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -4194,7 +4242,7 @@ export default function HomePage() {
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
-                                <Button variant="dangerGhost" size="icon" type="button" title="Remove order" aria-label={`Remove ${order.uniqid}`} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
+                                <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
 
                               {botInviteRequired ? <div className="orders-row-alert" data-tone="waiting">
@@ -4205,6 +4253,16 @@ export default function HomePage() {
                               {isInvitesPaused && !boostOrder ? <div className="orders-row-alert" data-tone="danger">
                                 <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
                                 <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
+                              </div> : null}
+                              {autoLeaveJob ? <div className="orders-row-alert" data-tone={autoLeaveJob.failed ? "danger" : "auto-leave"}>
+                                <span>
+                                  <LogOut className="h-4 w-4" />
+                                  <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
+                                  <small>{autoLeaveJob.status === "running"
+                                    ? `${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed${autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""} · Next: ${autoLeaveJob.nextRunAt ? formatTrackedDate(autoLeaveJob.nextRunAt) : "preparing"} · 5 minute interval`
+                                    : `${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed${autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}`}</small>
+                                </span>
+                                <Button asChild type="button" size="xs" variant="secondary"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}&provider=community#member-log`}><Eye className="h-3.5 w-3.5" /> View details</Link></Button>
                               </div> : null}
                             </article>
                           </li>
@@ -5467,13 +5525,13 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">Expired support</p>
             <h2 id="auto-leave-order-title">Auto leave expired members?</h2>
             <p id="auto-leave-order-description">
-              Every remaining account delivered by <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} using its saved token and assigned Onliner proxy. Failed accounts can be retried later.
+              Delivered members in <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} one at a time. The first attempt starts after 5 minutes, then one member is processed every 5 minutes using its saved token and assigned Onliner proxy. Progress and errors will appear in the per-member log.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
               <Button type="button" variant="destructive" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
                 {autoLeavingOrderId ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
-                {autoLeavingOrderId ? "Leaving..." : "Auto leave"}
+                {autoLeavingOrderId ? "Scheduling..." : "Schedule auto leave"}
               </Button>
             </div>
           </div>

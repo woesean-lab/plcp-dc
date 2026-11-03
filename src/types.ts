@@ -18,6 +18,20 @@ export interface CommunityCategoryAllocation {
   expiredAt?: string | null;
 }
 
+export interface CommunityAutoLeaveJob {
+  id: string;
+  status: "running" | "completed" | "completed_with_errors" | string;
+  total: number;
+  processed: number;
+  left: number;
+  alreadyLeft: number;
+  failed: number;
+  intervalSeconds: number;
+  startedAt: string;
+  nextRunAt?: string | null;
+  completedAt?: string | null;
+}
+
 export type OrderStatus =
   | "NEW"
   | "PROCESS"
@@ -140,6 +154,8 @@ export interface OrderStatusResponse {
   joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
+  autoLeaveJob?: CommunityAutoLeaveJob | null;
+  membersLeftAt?: string | null;
   isEldoradoSale?: boolean;
   liveBoostStock?: {
     oneMonth: number;
@@ -179,10 +195,12 @@ export interface TrackedOrder {
   durationMonths?: number | null;
   expiredAt?: string | null;
   membersLeftAt?: string | null;
+  autoLeaveJob?: CommunityAutoLeaveJob | null;
   isEldoradoSale?: boolean;
   reactionMessageLink?: string;
   reactionCapacity?: number;
   reactionRequests?: OrderStatusResponse["reactionRequests"];
+  communityResults?: Array<Record<string, unknown>>;
 }
 
 export interface ReactionWorkspaceAssignment {

@@ -59,6 +59,8 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     categoryIsPeriodic: order.categoryIsPeriodic,
     durationMonths: order.durationMonths,
     expiredAt: order.expiredAt,
+    membersLeftAt: order.membersLeftAt,
+    autoLeaveJob: order.autoLeaveJob,
     isEldoradoSale: order.isEldoradoSale,
     reactionMessageLink: order.reactionMessageLink,
     reactionCapacity: order.reactionCapacity,
