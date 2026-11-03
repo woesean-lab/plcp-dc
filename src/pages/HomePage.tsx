@@ -844,6 +844,7 @@ export default function HomePage() {
     const statuses = Array.from(new Set([...knownStatuses, ...actualStatuses]));
     return [
       { value: "all", label: "All statuses" },
+      { value: "__expired", label: "Expired" },
       ...statuses.map((status) => ({
         value: status,
         label: status === "INVITES PAUSED"
@@ -879,6 +880,10 @@ export default function HomePage() {
     return orders.filter((order) => {
       const normalizedStatus = String(order.status ?? "NEW").trim().toUpperCase();
       const boostOrder = order.provider === "dcord" || isBoostService(order.service);
+      const supportExpiration = getOrderSupportExpiration(order);
+      const supportExpired = supportExpiration !== null
+        && Number.isFinite(new Date(supportExpiration).getTime())
+        && new Date(supportExpiration).getTime() <= Date.now();
       const matchesSearch = !query || [
         order.uniqid,
         order.serverName,
@@ -889,6 +894,7 @@ export default function HomePage() {
       ].some((value) => String(value ?? "").toLowerCase().includes(query));
       const matchesStatus =
         orderStatusFilter === "all" ||
+        (orderStatusFilter === "__expired" && supportExpired) ||
         normalizedStatus === orderStatusFilter;
       const matchesType =
         orderTypeFilter === "all" ||
