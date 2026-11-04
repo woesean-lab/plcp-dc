@@ -4833,8 +4833,13 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
 }
 
-async function loadCommunityAtServerCapacityUserIds(queryable) {
-  const result = await queryable.query(
+let communityMemberServerMembershipCache = null;
+let communityMemberServerMembershipCachePromise = null;
+
+async function loadCommunityMemberServerMemberships() {
+  if (communityMemberServerMembershipCache) return communityMemberServerMembershipCache;
+  if (communityMemberServerMembershipCachePromise) return communityMemberServerMembershipCachePromise;
+  communityMemberServerMembershipCachePromise = pool.query(
     `WITH member_server_history AS (
        SELECT
          member_result->>'discordUserId' AS discord_user_id,
@@ -4872,12 +4877,42 @@ async function loadCommunityAtServerCapacityUserIds(queryable) {
        FROM member_server_history
        WHERE removed_at < joined_at
      )
-     SELECT discord_user_id
-     FROM active_member_servers
-     GROUP BY discord_user_id
-     HAVING COUNT(*) >= 100`
-  );
-  return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
+     SELECT discord_user_id, server_id
+     FROM active_member_servers`
+  ).then((result) => {
+    const memberships = new Map();
+    for (const row of result.rows) {
+      const discordUserId = String(row.discord_user_id ?? "").trim();
+      const serverId = String(row.server_id ?? "").trim();
+      if (!isDiscordGuildId(discordUserId) || !isDiscordGuildId(serverId)) continue;
+      const servers = memberships.get(discordUserId) ?? new Set();
+      servers.add(serverId);
+      memberships.set(discordUserId, servers);
+    }
+    communityMemberServerMembershipCache = memberships;
+    return memberships;
+  }).finally(() => {
+    communityMemberServerMembershipCachePromise = null;
+  });
+  return communityMemberServerMembershipCachePromise;
+}
+
+function updateCommunityMemberServerMembershipCache(discordUserId, serverId, active) {
+  if (!communityMemberServerMembershipCache || !isDiscordGuildId(String(discordUserId)) || !isDiscordGuildId(String(serverId))) return;
+  const normalizedUserId = String(discordUserId);
+  const normalizedServerId = String(serverId);
+  const servers = communityMemberServerMembershipCache.get(normalizedUserId) ?? new Set();
+  if (active) servers.add(normalizedServerId);
+  else servers.delete(normalizedServerId);
+  if (servers.size) communityMemberServerMembershipCache.set(normalizedUserId, servers);
+  else communityMemberServerMembershipCache.delete(normalizedUserId);
+}
+
+async function loadCommunityAtServerCapacityUserIds() {
+  const memberships = await loadCommunityMemberServerMemberships();
+  return [...memberships.entries()]
+    .filter(([, serverIds]) => serverIds.size >= 100)
+    .map(([discordUserId]) => discordUserId);
 }
 
 async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
@@ -4906,7 +4941,7 @@ async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = 
        AND COALESCE(member_result->>'discordUserId', '') <> ''`,
       [guildId, normalizedCategoryId]
     ),
-    loadCommunityAtServerCapacityUserIds(queryable)
+    loadCommunityAtServerCapacityUserIds()
   ]);
   return Array.from(new Set([
     ...deliveredUserIds,
@@ -6424,6 +6459,9 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
         [orderId, JSON.stringify(updatedOrder)]
       );
       await client.query("COMMIT");
+      for (const [discordUserId, outcome] of outcomeByUserId) {
+        if (outcome.state !== "failed") updateCommunityMemberServerMembershipCache(discordUserId, guildId, false);
+      }
       return {
         order: updatedOrder,
         summary: {
@@ -6678,6 +6716,7 @@ async function finishCommunityAutoLeaveMember(claim, outcome) {
       [claim.orderId, JSON.stringify(updatedOrder)]
     );
     await client.query("COMMIT");
+    if (outcome.state !== "failed") updateCommunityMemberServerMembershipCache(claim.discordUserId, claim.guildId, false);
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     throw error;
@@ -7601,6 +7640,7 @@ async function runCommunityOrder(order, members, config) {
         present: true,
         expiresAt: Date.now() + 60_000
       });
+      if (state === "joined") updateCommunityMemberServerMembershipCache(member.discord_user_id, order.serverId, true);
     }
     const reactionMessage = results[resultIndex]?.reactionMessage;
     if (state === "joined" && results[resultIndex]?.reactionEmoji && reactionMessage?.channelId && reactionMessage?.messageId) {
@@ -7844,6 +7884,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         present: true,
         expiresAt: Date.now() + 60_000
       });
+      if (state === "joined") updateCommunityMemberServerMembershipCache(member.discord_user_id, order.serverId, true);
     }
     if (state === "joined" && current?.reactionEmoji && current?.reactionMessage) {
       await client.query(
@@ -10639,10 +10680,17 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     const activeCategoryId = stockCategories.some((category) => category.id === requestedCategoryId)
       ? requestedCategoryId
       : stockCategories[0]?.id ?? null;
-    const [bot, guild, summary, recentResult, joinedServerCountResult] = await Promise.all([
+    const summary = stockCategories.reduce((total, category) => ({
+      joined: total.joined + category.summary.joined,
+      authorized: total.authorized + category.summary.authorized,
+      ready: total.ready + category.summary.ready,
+      alreadyMember: total.alreadyMember + category.summary.alreadyMember,
+      failed: total.failed + category.summary.failed,
+      categories: { ...total.categories, [category.id]: category.summary }
+    }), { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0, categories: {} });
+    const [bot, guild, recentResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
-      loadCommunityJoinSummary(config),
       pool.query(
         `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position,
                 encrypted_account_token IS NOT NULL AS has_stored_account_token
@@ -10654,51 +10702,17 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
                   sort_position ASC,
                   authorized_at ASC`,
         [config.guildId, activeCategoryId]
-      ),
-      pool.query(
-        `WITH member_server_history AS (
-           SELECT
-             member_result->>'discordUserId' AS discord_user_id,
-             payload->>'serverId' AS server_id,
-             MAX(COALESCE(member_result->>'completedAt', payload->>'createdAt', '')) AS joined_at,
-             MAX(
-               CASE
-                 WHEN LOWER(COALESCE(member_result->>'membershipStatus', '')) = 'removed'
-                   THEN COALESCE(
-                     NULLIF(member_result->>'leftServerAt', ''),
-                     NULLIF(member_result->>'membershipCheckedAt', ''),
-                     NULLIF(member_result->>'autoLeaveCompletedAt', ''),
-                     NULLIF(member_result->>'authorizationCheckedAt', ''),
-                     member_result->>'completedAt',
-                     payload->>'createdAt',
-                     ''
-                   )
-                 ELSE ''
-               END
-             ) AS removed_at
-           FROM tracked_orders
-           CROSS JOIN LATERAL jsonb_array_elements(
-             CASE
-               WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
-               ELSE '[]'::jsonb
-             END
-           ) AS member_result
-           WHERE payload->>'provider' = 'community'
-             AND LOWER(COALESCE(member_result->>'state', '')) = 'joined'
-             AND COALESCE(member_result->>'discordUserId', '') <> ''
-             AND COALESCE(payload->>'serverId', '') <> ''
-           GROUP BY member_result->>'discordUserId', payload->>'serverId'
-         )
-         SELECT discord_user_id, COUNT(*)::int AS joined_server_count
-         FROM member_server_history
-         WHERE removed_at < joined_at
-         GROUP BY discord_user_id`
       )
     ]);
-    const joinedServerCountByUserId = new Map(joinedServerCountResult.rows.map((row) => [
-      String(row.discord_user_id),
-      Number(row.joined_server_count) || 0
-    ]));
+    const joinedServerCountByUserId = new Map(
+      [...(communityMemberServerMembershipCache ?? new Map()).entries()]
+        .map(([discordUserId, serverIds]) => [discordUserId, serverIds.size])
+    );
+    if (!communityMemberServerMembershipCache && !communityMemberServerMembershipCachePromise) {
+      void loadCommunityMemberServerMemberships().catch((error) => {
+        console.error("Members server-count cache could not be prepared:", error instanceof Error ? error.message : error);
+      });
+    }
     const onlinerConfig = await getDiscordOnlinerConfig();
     const onlinerAccountByUserId = new Map(
       onlinerConfig.accounts
@@ -11931,7 +11945,7 @@ async function activateWaitingCommunityOrder(order) {
       .filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase()))
       .map((item) => String(item?.discordUserId ?? ""))
       .filter(isDiscordGuildId);
-    const atServerCapacityUserIdSet = new Set(await loadCommunityAtServerCapacityUserIds(client));
+    const atServerCapacityUserIdSet = new Set(await loadCommunityAtServerCapacityUserIds());
     const eligiblePendingUserIds = pendingUserIds.filter((discordUserId) => !atServerCapacityUserIdSet.has(discordUserId));
 
     let members = (await client.query(
@@ -15200,6 +15214,11 @@ app.use((error, _req, res, _next) => {
 
 if (serviceRunsWeb) await initializeDatabase();
 else await initializeDiscordOnlinerDatabase();
+if (serviceRunsWeb) {
+  void loadCommunityMemberServerMemberships().catch((error) => {
+    console.error("Members server-count cache warmup failed:", error instanceof Error ? error.message : error);
+  });
+}
 if (serviceRunsOnliner) {
   await tryStartDiscordOnlinerWorker();
 }
