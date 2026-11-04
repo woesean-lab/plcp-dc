@@ -456,22 +456,6 @@
 
   .header-dcord-check:disabled { cursor: not-allowed; opacity: .48; }
 
-  .header-members-count {
-    display: inline-flex;
-    min-height: 32px;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid color-mix(in srgb, var(--app-success) 22%, var(--app-border));
-    border-radius: 9px;
-    padding: 0 9px;
-    color: var(--app-success);
-    background: color-mix(in srgb, var(--app-success) 7%, var(--app-control-bg));
-    white-space: nowrap;
-  }
-
-  .header-members-count > span { min-width: 0; }
-  .header-members-count small { display: block; color: var(--app-muted); font-size: 7px; font-weight: 750; letter-spacing: .06em; line-height: 1; text-transform: uppercase; }
-  .header-members-count strong { display: block; margin-top: 3px; color: currentColor; font-size: 9px; font-weight: 800; line-height: 1; }
 
   .status-indicator {
     position: relative;

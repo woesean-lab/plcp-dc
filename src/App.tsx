@@ -31,27 +31,18 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [checkingDcord, setCheckingDcord] = useState(false);
   const [checkingAutoLeave, setCheckingAutoLeave] = useState(false);
-  const [membersBotServers, setMembersBotServers] = useState<{ count: number | null; exact: boolean; limit: number | null }>({ count: null, exact: true, limit: null });
+  const [checkingMembersBot, setCheckingMembersBot] = useState(false);
 
   useEffect(() => {
     let active = true;
     const loadHeaderOperations = async () => {
-      const [adminResult, communityResult] = await Promise.allSettled([getAdminConfig(), getCommunityConfig()]);
+      const adminResult = await getAdminConfig().catch(() => null);
       if (!active) return;
-      if (adminResult.status === "fulfilled") setDcordConfigured(adminResult.value.dcordConfigured);
-      if (communityResult.status === "fulfilled") {
-        setMembersBotServers({
-          count: communityResult.value.activeGuildCount,
-          exact: communityResult.value.activeGuildCountExact,
-          limit: communityResult.value.serverLimit
-        });
-      }
+      if (adminResult) setDcordConfigured(adminResult.dcordConfigured);
     };
     void loadHeaderOperations();
-    const timer = window.setInterval(() => void loadHeaderOperations(), 60_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
     };
   }, []);
 
@@ -83,6 +74,21 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
       toast.error(error instanceof Error ? error.message : "Auto Leave check failed.");
     } finally {
       setCheckingAutoLeave(false);
+    }
+  }
+
+  async function handleHeaderMembersBotCheck() {
+    try {
+      setCheckingMembersBot(true);
+      const config = await getCommunityConfig();
+      if (!config.configured) throw new Error("Members bot is not configured.");
+      if (config.activeGuildCount === null) throw new Error("Members bot server count could not be loaded.");
+      const count = `${config.activeGuildCountExact ? "" : "At least "}${config.activeGuildCount}${config.serverLimit ? ` / ${config.serverLimit}` : ""}`;
+      toast.success(`Members bot is active in ${count} servers.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Members bot check failed.");
+    } finally {
+      setCheckingMembersBot(false);
     }
   }
 
@@ -199,17 +205,10 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 {checkingAutoLeave ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
                 <span>{checkingAutoLeave ? "Checking" : "Auto Leave check"}</span>
               </button>
-              <span className="header-members-count" title="Servers currently connected to the Members bot">
-                <Bot className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>
-                  <small>Members bot</small>
-                  <strong>
-                    {membersBotServers.count === null
-                      ? "— servers"
-                      : `${membersBotServers.exact ? "" : "≥"}${membersBotServers.count}${membersBotServers.limit ? ` / ${membersBotServers.limit}` : ""} servers`}
-                  </strong>
-                </span>
-              </span>
+              <button type="button" className="header-dcord-check" disabled={checkingMembersBot} onClick={() => void handleHeaderMembersBotCheck()}>
+                {checkingMembersBot ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Bot className="h-3.5 w-3.5" aria-hidden="true" />}
+                <span>{checkingMembersBot ? "Checking" : "Members check"}</span>
+              </button>
               <button
                 type="button"
                 className="session-logout"
