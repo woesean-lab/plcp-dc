@@ -9606,8 +9606,8 @@
   border: 0;
   border-radius: 7px;
   padding: 4px 8px;
-  color: #b8adff;
-  background: color-mix(in srgb, #9b8cff 10%, var(--app-control-bg));
+  color: #6fd8d2;
+  background: color-mix(in srgb, #55c7c0 10%, var(--app-control-bg));
   box-shadow: none;
   white-space: nowrap;
 }

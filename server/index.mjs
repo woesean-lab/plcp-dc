@@ -4833,10 +4833,58 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
 }
 
+async function loadCommunityAtServerCapacityUserIds(queryable) {
+  const result = await queryable.query(
+    `WITH member_server_history AS (
+       SELECT
+         member_result->>'discordUserId' AS discord_user_id,
+         payload->>'serverId' AS server_id,
+         MAX(COALESCE(member_result->>'completedAt', payload->>'createdAt', '')) AS joined_at,
+         MAX(
+           CASE
+             WHEN LOWER(COALESCE(member_result->>'membershipStatus', '')) = 'removed'
+               THEN COALESCE(
+                 NULLIF(member_result->>'leftServerAt', ''),
+                 NULLIF(member_result->>'membershipCheckedAt', ''),
+                 NULLIF(member_result->>'autoLeaveCompletedAt', ''),
+                 NULLIF(member_result->>'authorizationCheckedAt', ''),
+                 member_result->>'completedAt',
+                 payload->>'createdAt',
+                 ''
+               )
+             ELSE ''
+           END
+         ) AS removed_at
+       FROM tracked_orders
+       CROSS JOIN LATERAL jsonb_array_elements(
+         CASE
+           WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+           ELSE '[]'::jsonb
+         END
+       ) AS member_result
+       WHERE payload->>'provider' = 'community'
+         AND LOWER(COALESCE(member_result->>'state', '')) = 'joined'
+         AND COALESCE(member_result->>'discordUserId', '') <> ''
+         AND COALESCE(payload->>'serverId', '') <> ''
+       GROUP BY member_result->>'discordUserId', payload->>'serverId'
+     ), active_member_servers AS (
+       SELECT discord_user_id, server_id
+       FROM member_server_history
+       WHERE removed_at < joined_at
+     )
+     SELECT discord_user_id
+     FROM active_member_servers
+     GROUP BY discord_user_id
+     HAVING COUNT(*) >= 100`
+  );
+  return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
+}
+
 async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
   const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
-  const deliveredUserIds = await loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, normalizedCategoryId);
-  const activeAssignments = await queryable.query(
+  const [deliveredUserIds, activeAssignments, atServerCapacityUserIds] = await Promise.all([
+    loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, normalizedCategoryId),
+    queryable.query(
     `SELECT DISTINCT member_result->>'discordUserId' AS discord_user_id
      FROM tracked_orders
      CROSS JOIN LATERAL jsonb_array_elements(
@@ -4856,10 +4904,13 @@ async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = 
        AND UPPER(COALESCE(payload->>'status', '')) IN ('WAITING', 'RECOVERING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
        AND LOWER(COALESCE(member_result->>'state', '')) IN ('queued', 'joining', 'replacing')
        AND COALESCE(member_result->>'discordUserId', '') <> ''`,
-    [guildId, normalizedCategoryId]
-  );
+      [guildId, normalizedCategoryId]
+    ),
+    loadCommunityAtServerCapacityUserIds(queryable)
+  ]);
   return Array.from(new Set([
     ...deliveredUserIds,
+    ...atServerCapacityUserIds,
     ...activeAssignments.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId)
   ]));
 }
@@ -8883,6 +8934,12 @@ async function initializeDatabase() {
           AND COALESCE(item->>'details', '') !~* '(Unknown User|10013|50178|user account must first be verified)'
       )
   `);
+  await pool.query(`
+    UPDATE community_oauth_joins
+    SET status = 'authorized', details = NULL, reserved_order_id = NULL
+    WHERE status = 'failed'
+      AND details = 'Discord reported that this member reached the 100-server limit.'
+  `);
   if (serviceRunsWeb) {
     await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
     await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
@@ -10593,21 +10650,43 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         [config.guildId, activeCategoryId]
       ),
       pool.query(
-        `SELECT member_result->>'discordUserId' AS discord_user_id,
-                COUNT(DISTINCT payload->>'serverId')::int AS joined_server_count
-         FROM tracked_orders
-         CROSS JOIN LATERAL jsonb_array_elements(
-           CASE
-             WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
-             ELSE '[]'::jsonb
-           END
-         ) AS member_result
-         WHERE payload->>'provider' = 'community'
-           AND LOWER(COALESCE(member_result->>'state', '')) = 'joined'
-           AND LOWER(COALESCE(member_result->>'membershipStatus', '')) <> 'removed'
-           AND COALESCE(member_result->>'discordUserId', '') <> ''
-           AND COALESCE(payload->>'serverId', '') <> ''
-         GROUP BY member_result->>'discordUserId'`
+        `WITH member_server_history AS (
+           SELECT
+             member_result->>'discordUserId' AS discord_user_id,
+             payload->>'serverId' AS server_id,
+             MAX(COALESCE(member_result->>'completedAt', payload->>'createdAt', '')) AS joined_at,
+             MAX(
+               CASE
+                 WHEN LOWER(COALESCE(member_result->>'membershipStatus', '')) = 'removed'
+                   THEN COALESCE(
+                     NULLIF(member_result->>'leftServerAt', ''),
+                     NULLIF(member_result->>'membershipCheckedAt', ''),
+                     NULLIF(member_result->>'autoLeaveCompletedAt', ''),
+                     NULLIF(member_result->>'authorizationCheckedAt', ''),
+                     member_result->>'completedAt',
+                     payload->>'createdAt',
+                     ''
+                   )
+                 ELSE ''
+               END
+             ) AS removed_at
+           FROM tracked_orders
+           CROSS JOIN LATERAL jsonb_array_elements(
+             CASE
+               WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+               ELSE '[]'::jsonb
+             END
+           ) AS member_result
+           WHERE payload->>'provider' = 'community'
+             AND LOWER(COALESCE(member_result->>'state', '')) = 'joined'
+             AND COALESCE(member_result->>'discordUserId', '') <> ''
+             AND COALESCE(payload->>'serverId', '') <> ''
+           GROUP BY member_result->>'discordUserId', payload->>'serverId'
+         )
+         SELECT discord_user_id, COUNT(*)::int AS joined_server_count
+         FROM member_server_history
+         WHERE removed_at < joined_at
+         GROUP BY discord_user_id`
       )
     ]);
     const joinedServerCountByUserId = new Map(joinedServerCountResult.rows.map((row) => [
@@ -11846,6 +11925,8 @@ async function activateWaitingCommunityOrder(order) {
       .filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase()))
       .map((item) => String(item?.discordUserId ?? ""))
       .filter(isDiscordGuildId);
+    const atServerCapacityUserIdSet = new Set(await loadCommunityAtServerCapacityUserIds(client));
+    const eligiblePendingUserIds = pendingUserIds.filter((discordUserId) => !atServerCapacityUserIdSet.has(discordUserId));
 
     let members = (await client.query(
       `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
@@ -11855,7 +11936,7 @@ async function activateWaitingCommunityOrder(order) {
            OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, pendingUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
+      [resolved.config.guildId, eligiblePendingUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
