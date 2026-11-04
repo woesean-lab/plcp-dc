@@ -56,6 +56,7 @@ import {
   TriangleAlert,
   Trash2,
   UploadCloud,
+  UserMinus,
   UserPlus,
   Users,
   X,
@@ -4290,7 +4291,7 @@ export default function HomePage() {
                               </div> : null}
                               {autoLeaveJob ? <div className="orders-row-alert">
                                 <span>
-                                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
+                                  <UserMinus className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
                                   <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
                                   <small className="orders-auto-leave-status">
                                     <span>{autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span>
