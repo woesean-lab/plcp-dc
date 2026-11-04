@@ -5557,15 +5557,15 @@ export default function HomePage() {
           }}
         >
           <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="auto-leave-order-title" aria-describedby="auto-leave-order-description">
-            <span className="confirm-modal-icon is-success" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-success)]">Expired support</p>
+            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-accent-bright)]">Expired support</p>
             <h2 id="auto-leave-order-title">Auto leave expired members?</h2>
             <p id="auto-leave-order-description">
               Delivered members in <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} one at a time. The first attempt starts after 5 minutes, then one member is processed every 5 minutes using its saved token and assigned Onliner proxy. Progress and errors will appear in the per-member log.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
-              <Button type="button" variant="secondary" className="orders-auto-leave-action" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
+              <Button type="button" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
                 {autoLeavingOrderId ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
                 {autoLeavingOrderId ? "Scheduling..." : "Schedule auto leave"}
               </Button>
