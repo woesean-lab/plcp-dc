@@ -6462,6 +6462,12 @@ async function scheduleExpiredCommunityAutoLeave(orderId) {
       error.statusCode = 409;
       throw error;
     }
+    if (current.autoLeaveJob) {
+      await client.query("ROLLBACK");
+      const error = new Error("Auto Leave has already finished for this order.");
+      error.statusCode = 409;
+      throw error;
+    }
     if (communityOrderLeaveAllActive.has(orderId)) {
       await client.query("ROLLBACK");
       const error = new Error("A Leave all operation is already running for this order.");

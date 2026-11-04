@@ -132,7 +132,6 @@ import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/serv
 import { getOrderSupportExpiration } from "../lib/order-status";
 import {
   checkAvailableAmount,
-  checkDcordConnection,
   clearDcordApiKey,
   createOrder,
   deleteBoostStockTokens,
@@ -778,7 +777,6 @@ export default function HomePage() {
   const [returningUsedTokenId, setReturningUsedTokenId] = useState<string | null>(null);
   const [showAddTokensModal, setShowAddTokensModal] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [checkingDcordConnection, setCheckingDcordConnection] = useState(false);
   const [loadingCommunityStatus, setLoadingCommunityStatus] = useState(false);
   const [removingCommunityUserId, setRemovingCommunityUserId] = useState<string | null>(null);
   const [loadingCommunityAccessTokenId, setLoadingCommunityAccessTokenId] = useState<string | null>(null);
@@ -1400,19 +1398,6 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Dcord proxy list could not be loaded.");
     } finally {
       setLoadingDcordProxies(false);
-    }
-  }
-
-  async function handleCheckDcordConnection() {
-    try {
-      setCheckingDcordConnection(true);
-      const result = await checkDcordConnection();
-      if (!result.connected) throw new Error(result.message || "Dcord account is disabled.");
-      notifySuccess(result.message || "Dcord connection is healthy.");
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Dcord connection check failed.");
-    } finally {
-      setCheckingDcordConnection(false);
     }
   }
 
@@ -4242,6 +4227,7 @@ export default function HomePage() {
                           && order.autoLeaveJob?.status !== "running"
                           && !order.membersLeftAt;
                         const autoLeaveJob = order.autoLeaveJob;
+                        const autoLeaveFinished = Boolean(autoLeaveJob && autoLeaveJob.status !== "running");
                         const autoLeaveProcessed = Math.max(0, Number(autoLeaveJob?.processed) || 0);
                         const autoLeaveTotal = Math.max(0, Number(autoLeaveJob?.total) || 0);
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
@@ -4280,7 +4266,7 @@ export default function HomePage() {
                               <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
+                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title={autoLeaveFinished ? "Auto Leave finished" : "Auto leave expired members"} aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null || autoLeaveFinished} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
@@ -4334,10 +4320,6 @@ export default function HomePage() {
                 <p className="app-copy page-copy">Manage Boost Stock and Members Stock separately.</p>
               </div>
               {stockCategory === "boosts" ? <div className="stock-heading-actions">
-                <Button type="button" variant="secondary" size="sm" disabled={!dcordConfigured || checkingDcordConnection} onClick={() => void handleCheckDcordConnection()}>
-                  <ShieldCheck className={`h-4 w-4 ${checkingDcordConnection ? "animate-pulse" : ""}`} aria-hidden="true" />
-                  {checkingDcordConnection ? "Checking..." : "Dcord check"}
-                </Button>
                 <Button type="button" size="sm" onClick={() => setShowAddTokensModal(true)}>
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add tokens

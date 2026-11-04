@@ -1,7 +1,7 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Boxes, ListChecks, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
-import { Toaster } from "react-hot-toast";
+import { Bot, Boxes, ListChecks, LoaderCircle, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
+import toast, { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
 import BrandPage from "./pages/BrandPage";
@@ -12,6 +12,8 @@ import HumanizerPage from "./pages/HumanizerPage";
 import ReactionsPage from "./pages/ReactionsPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
+import { getCommunityConfig } from "./lib/community";
+import { checkDcordConnection, getAdminConfig } from "./lib/integration";
 
 function ScrollToRouteTop() {
   const { pathname } = useLocation();
@@ -26,6 +28,44 @@ function ScrollToRouteTop() {
 function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const [dcordConfigured, setDcordConfigured] = useState(false);
+  const [checkingDcord, setCheckingDcord] = useState(false);
+  const [membersBotServers, setMembersBotServers] = useState<{ count: number | null; exact: boolean; limit: number | null }>({ count: null, exact: true, limit: null });
+
+  useEffect(() => {
+    let active = true;
+    const loadHeaderOperations = async () => {
+      const [adminResult, communityResult] = await Promise.allSettled([getAdminConfig(), getCommunityConfig()]);
+      if (!active) return;
+      if (adminResult.status === "fulfilled") setDcordConfigured(adminResult.value.dcordConfigured);
+      if (communityResult.status === "fulfilled") {
+        setMembersBotServers({
+          count: communityResult.value.activeGuildCount,
+          exact: communityResult.value.activeGuildCountExact,
+          limit: communityResult.value.serverLimit
+        });
+      }
+    };
+    void loadHeaderOperations();
+    const timer = window.setInterval(() => void loadHeaderOperations(), 60_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  async function handleHeaderDcordCheck() {
+    try {
+      setCheckingDcord(true);
+      const result = await checkDcordConnection();
+      if (!result.connected) throw new Error(result.message || "Dcord account is disabled.");
+      toast.success(result.message || "Dcord connection is healthy.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Dcord connection check failed.");
+    } finally {
+      setCheckingDcord(false);
+    }
+  }
 
   const search = new URLSearchParams(location.search);
   const tab = normalizeAdminTab(search.get("tab"));
@@ -131,13 +171,21 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
               </nav>
             </div>
 
-            <div className="app-security" aria-label="Security status: local vault protected">
-              <span className="status-indicator" aria-hidden="true">
-                <span />
-              </span>
-              <span className="min-w-0">
-                <span className="brand-eyebrow">Local vault</span>
-                <strong>Protected session</strong>
+            <div className="app-security app-header-operations" aria-label="Service operations">
+              <button type="button" className="header-dcord-check" disabled={!dcordConfigured || checkingDcord} onClick={() => void handleHeaderDcordCheck()}>
+                {checkingDcord ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
+                <span>{checkingDcord ? "Checking" : "Dcord check"}</span>
+              </button>
+              <span className="header-members-count" title="Servers currently connected to the Members bot">
+                <Bot className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>
+                  <small>Members bot</small>
+                  <strong>
+                    {membersBotServers.count === null
+                      ? "— servers"
+                      : `${membersBotServers.exact ? "" : "≥"}${membersBotServers.count}${membersBotServers.limit ? ` / ${membersBotServers.limit}` : ""} servers`}
+                  </strong>
+                </span>
               </span>
               <button
                 type="button"
@@ -151,7 +199,6 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
               >
                 Logout
               </button>
-              <ShieldCheck className="h-[18px] w-[18px] text-[var(--app-success)]" aria-hidden="true" />
             </div>
           </div>
         </header>
