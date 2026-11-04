@@ -15,7 +15,6 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
-const ELDORADO_REACTIONS_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=reaction";
 const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 const MONITOR_SPEED_PROFILES = [
   { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
@@ -900,16 +899,6 @@ export default function PublicOrderPage() {
                 <span>
                   <strong>Eldorado Top Seller</strong>
                   <small>30,000+ sales · 99.7% positive</small>
-                </span>
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-              </a>
-            </Button> : null}
-            {isCommunityOrder ? <Button asChild variant="secondary" size="sm" className="monitor-store-action monitor-reaction-store-action">
-              <a href={ELDORADO_REACTIONS_URL} target="_blank" rel="noreferrer">
-                <i className="monitor-reaction-store-emojis" aria-hidden="true"><span>👍</span><span>❤️</span><span>😂</span></i>
-                <span>
-                  <strong>Need reactions?</strong>
-                  <small>Get instant Discord reactions</small>
                 </span>
                 <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
