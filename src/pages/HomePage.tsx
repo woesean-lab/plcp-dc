@@ -625,6 +625,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
               <Skeleton className="h-11 w-full" />
               <SkeletonField />
               <SkeletonField />
+              <SkeletonField />
             </div>
             <div className="orders-list-meta">
               <Skeleton className="h-2.5 w-28" />
@@ -852,13 +853,13 @@ export default function HomePage() {
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
+  const [orderSupportFilter, setOrderSupportFilter] = useState("all");
   const orderStatusOptions = useMemo(() => {
     const knownStatuses = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
     const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
     const statuses = Array.from(new Set([...knownStatuses, ...actualStatuses]));
     return [
       { value: "all", label: "All statuses" },
-      { value: "__expired", label: "Expired" },
       ...statuses.map((status) => ({
         value: status,
         label: status === "INVITES PAUSED"
@@ -915,16 +916,19 @@ export default function HomePage() {
       ].some((value) => String(value ?? "").toLowerCase().includes(query));
       const matchesStatus =
         orderStatusFilter === "all" ||
-        (orderStatusFilter === "__expired" && supportExpired) ||
         normalizedStatus === orderStatusFilter;
+      const matchesSupport =
+        orderSupportFilter === "all" ||
+        (orderSupportFilter === "expired" && supportExpired) ||
+        (orderSupportFilter === "active" && supportExpiration !== null && !supportExpired);
       const matchesType =
         orderTypeFilter === "all" ||
         (orderTypeFilter === "boosts" && boostOrder) ||
         (orderTypeFilter === "members" && !boostOrder);
 
-      return matchesSearch && matchesStatus && matchesType;
+      return matchesSearch && matchesStatus && matchesType && matchesSupport;
     });
-  }, [orderSearch, orderStatusFilter, orderTypeFilter, orders]);
+  }, [orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter, orders]);
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
@@ -1007,7 +1011,7 @@ export default function HomePage() {
     if (activeTab === "manage") {
       setCurrentOrderPage(1);
     }
-  }, [activeTab, orderSearch, orderStatusFilter, orderTypeFilter]);
+  }, [activeTab, orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter]);
 
   useEffect(() => {
     setCurrentOrderPage((current) => Math.min(Math.max(current, 1), orderPageCount));
@@ -4186,6 +4190,9 @@ export default function HomePage() {
                   <FilterDropdown label="Type" showLabel={false} value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
+                  <FilterDropdown label="Support" showLabel={false} value={orderSupportFilter} onChange={setOrderSupportFilter} options={[
+                    { value: "all", label: "All support" }, { value: "active", label: "Active support" }, { value: "expired", label: "Expired support" }
+                  ]} />
                 </div>
 
                 <div className="orders-list-meta">
@@ -4267,7 +4274,7 @@ export default function HomePage() {
                               <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
+                                {canAutoLeaveExpired ? <Button type="button" variant="secondary" size="icon" className="orders-auto-leave-action" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
@@ -4281,7 +4288,7 @@ export default function HomePage() {
                                 <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
                                 <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
                               </div> : null}
-                              {autoLeaveJob ? <div className="orders-row-alert" data-tone={autoLeaveJob.failed ? "danger" : "auto-leave"}>
+                              {autoLeaveJob ? <div className="orders-row-alert" data-tone="auto-leave" data-has-failures={autoLeaveJob.failed ? "true" : "false"}>
                                 <span>
                                   <LogOut className={`h-4 w-4 ${autoLeaveJob.status === "running" ? "animate-pulse" : ""}`} />
                                   <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
@@ -5550,15 +5557,15 @@ export default function HomePage() {
           }}
         >
           <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="auto-leave-order-title" aria-describedby="auto-leave-order-description">
-            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-danger)]">Expired support</p>
+            <span className="confirm-modal-icon is-success" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+            <p className="app-kicker text-[var(--app-success)]">Expired support</p>
             <h2 id="auto-leave-order-title">Auto leave expired members?</h2>
             <p id="auto-leave-order-description">
               Delivered members in <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} one at a time. The first attempt starts after 5 minutes, then one member is processed every 5 minutes using its saved token and assigned Onliner proxy. Progress and errors will appear in the per-member log.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
-              <Button type="button" variant="destructive" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
+              <Button type="button" variant="secondary" className="orders-auto-leave-action" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
                 {autoLeavingOrderId ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
                 {autoLeavingOrderId ? "Scheduling..." : "Schedule auto leave"}
               </Button>
