@@ -4288,7 +4288,7 @@ export default function HomePage() {
                                 <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
                                 <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
                               </div> : null}
-                              {autoLeaveJob ? <div className="orders-row-alert" data-tone="auto-leave" data-has-failures={autoLeaveJob.failed ? "true" : "false"}>
+                              {autoLeaveJob ? <div className="orders-row-alert">
                                 <span>
                                   <LogOut className={`h-4 w-4 ${autoLeaveJob.status === "running" ? "animate-pulse" : ""}`} />
                                   <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
@@ -4298,7 +4298,7 @@ export default function HomePage() {
                                     {autoLeaveJob.status === "running" ? <span>5 minute interval</span> : null}
                                   </small>
                                 </span>
-                                <Button asChild type="button" size="xs" variant="secondary"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}&provider=community#member-log`}><Eye className="h-3.5 w-3.5" /> View details</Link></Button>
+                                <Button asChild type="button" size="xs"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}&provider=community#member-log`}><Eye className="h-3.5 w-3.5" /> View details</Link></Button>
                               </div> : null}
                             </article>
                           </li>
