@@ -96,6 +96,7 @@ export type CommunityJoinRecord = {
   onlinerConnectionState: "connected" | "connecting" | "reconnecting" | "error" | "disconnected" | null;
   onlinerLastError: string | null;
   onlinerRichPresenceEnabled: boolean | null;
+  joinedServerCount: number;
   hasStoredAccountToken: boolean;
 };
 

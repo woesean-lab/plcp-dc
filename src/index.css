@@ -9597,6 +9597,32 @@
   background: color-mix(in srgb, #9b8cff 10%, var(--app-control-bg));
   box-shadow: none;
 }
+
+.community-server-count-chip {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  border-radius: 7px;
+  padding: 4px 8px;
+  color: #b8adff;
+  background: color-mix(in srgb, #9b8cff 10%, var(--app-control-bg));
+  box-shadow: none;
+  white-space: nowrap;
+}
+
+.community-server-count-chip svg { color: currentColor; }
+.community-server-count-chip span,
+.community-server-count-chip b {
+  color: currentColor;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
 .community-rich-presence-action { color: #b8adff; }
 .community-rich-presence-action:not(:disabled):hover,
 .community-rich-presence-action:not(:disabled):focus-visible {

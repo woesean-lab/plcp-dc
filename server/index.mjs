@@ -10576,7 +10576,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
     const activeCategoryId = stockCategories.some((category) => category.id === requestedCategoryId)
       ? requestedCategoryId
       : stockCategories[0]?.id ?? null;
-    const [bot, guild, summary, recentResult] = await Promise.all([
+    const [bot, guild, summary, recentResult, joinedServerCountResult] = await Promise.all([
       loadCommunityBotSafe(config),
       loadCommunityGuildSafe(config),
       loadCommunityJoinSummary(config),
@@ -10591,8 +10591,29 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
                   sort_position ASC,
                   authorized_at ASC`,
         [config.guildId, activeCategoryId]
+      ),
+      pool.query(
+        `SELECT member_result->>'discordUserId' AS discord_user_id,
+                COUNT(DISTINCT payload->>'serverId')::int AS joined_server_count
+         FROM tracked_orders
+         CROSS JOIN LATERAL jsonb_array_elements(
+           CASE
+             WHEN jsonb_typeof(payload->'communityResults') = 'array' THEN payload->'communityResults'
+             ELSE '[]'::jsonb
+           END
+         ) AS member_result
+         WHERE payload->>'provider' = 'community'
+           AND LOWER(COALESCE(member_result->>'state', '')) = 'joined'
+           AND LOWER(COALESCE(member_result->>'membershipStatus', '')) <> 'removed'
+           AND COALESCE(member_result->>'discordUserId', '') <> ''
+           AND COALESCE(payload->>'serverId', '') <> ''
+         GROUP BY member_result->>'discordUserId'`
       )
     ]);
+    const joinedServerCountByUserId = new Map(joinedServerCountResult.rows.map((row) => [
+      String(row.discord_user_id),
+      Number(row.joined_server_count) || 0
+    ]));
     const onlinerConfig = await getDiscordOnlinerConfig();
     const onlinerAccountByUserId = new Map(
       onlinerConfig.accounts
@@ -10681,6 +10702,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         onlinerConnectionState: onliner?.connectionState ?? null,
         onlinerLastError: onliner?.lastError ?? null,
         onlinerRichPresenceEnabled: onliner ? onliner.richPresenceEnabled : null,
+        joinedServerCount: joinedServerCountByUserId.get(String(row.discord_user_id)) ?? 0,
         hasStoredAccountToken: row.has_stored_account_token === true
       };
       })

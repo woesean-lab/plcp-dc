@@ -44,6 +44,7 @@ import {
   Rocket,
   RotateCcw,
   Search,
+  Server,
   Settings2,
   SlidersHorizontal,
   Shield,
@@ -3433,6 +3434,11 @@ export default function HomePage() {
                       <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
                     </span>
                   ) : null}
+                  <span className="community-server-count-chip" title="Unique servers joined through delivered orders">
+                    <Server className="h-3 w-3" aria-hidden="true" />
+                    <b>{record.joinedServerCount ?? 0}</b>
+                    <span>{record.joinedServerCount === 1 ? "Server" : "Servers"}</span>
+                  </span>
                   <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
                 </span>
                 <span className="community-member-row-actions">
