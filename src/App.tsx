@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
-import { Bot, Boxes, ListChecks, LoaderCircle, LogOut, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
+import { Bot, Boxes, ListChecks, LoaderCircle, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -12,7 +12,7 @@ import HumanizerPage from "./pages/HumanizerPage";
 import ReactionsPage from "./pages/ReactionsPage";
 import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
-import { getCommunityConfig, runCommunityAutoLeaveCheck } from "./lib/community";
+import { getCommunityConfig } from "./lib/community";
 import { checkDcordConnection, getAdminConfig } from "./lib/integration";
 
 function ScrollToRouteTop() {
@@ -30,7 +30,6 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const navigate = useNavigate();
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [checkingDcord, setCheckingDcord] = useState(false);
-  const [checkingAutoLeave, setCheckingAutoLeave] = useState(false);
   const [checkingMembersBot, setCheckingMembersBot] = useState(false);
 
   useEffect(() => {
@@ -56,24 +55,6 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
       toast.error(error instanceof Error ? error.message : "Dcord connection check failed.");
     } finally {
       setCheckingDcord(false);
-    }
-  }
-
-  async function handleHeaderAutoLeaveCheck() {
-    try {
-      setCheckingAutoLeave(true);
-      const result = await runCommunityAutoLeaveCheck();
-      if (result.scheduledOrders > 0) {
-        toast.success(`${result.scheduledMembers} members scheduled across ${result.scheduledOrders} expired orders.`);
-        window.dispatchEvent(new Event("community-auto-leave-scheduled"));
-      } else {
-        toast.success("No expired orders are waiting for Auto Leave.");
-      }
-      if (result.failed.length) toast.error(`${result.failed.length} orders could not be scheduled.`);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Auto Leave check failed.");
-    } finally {
-      setCheckingAutoLeave(false);
     }
   }
 
@@ -200,10 +181,6 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
               <button type="button" className="header-dcord-check" disabled={!dcordConfigured || checkingDcord} onClick={() => void handleHeaderDcordCheck()}>
                 {checkingDcord ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />}
                 <span>{checkingDcord ? "Checking" : "Dcord check"}</span>
-              </button>
-              <button type="button" className="header-dcord-check" disabled={checkingAutoLeave} onClick={() => void handleHeaderAutoLeaveCheck()}>
-                {checkingAutoLeave ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <LogOut className="h-3.5 w-3.5" aria-hidden="true" />}
-                <span>{checkingAutoLeave ? "Checking" : "Auto Leave check"}</span>
               </button>
               <button type="button" className="header-dcord-check" disabled={checkingMembersBot} onClick={() => void handleHeaderMembersBotCheck()}>
                 {checkingMembersBot ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Bot className="h-3.5 w-3.5" aria-hidden="true" />}

@@ -293,20 +293,6 @@ export function getCommunityConfig() {
   return fetch("/api/community/config", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityConfig>);
 }
 
-export function runCommunityAutoLeaveCheck() {
-  return fetch("/api/community/auto-leave/check", {
-    method: "POST",
-    cache: "no-store",
-    credentials: "same-origin"
-  }).then(parseResponse<{
-    checkedOrders: number;
-    eligibleOrders: number;
-    scheduledOrders: number;
-    scheduledMembers: number;
-    failed: Array<{ orderId: string; message: string }>;
-  }>);
-}
-
 export function saveCommunityConfig(input: CommunityConfigInput) {
   return fetch("/api/community/config", {
     method: "PUT",

@@ -12384,48 +12384,6 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
   }
 });
 
-app.post("/api/community/auto-leave/check", requireSession, async (_req, res, next) => {
-  try {
-    const tracked = await pool.query(
-      `SELECT uniqid, payload
-       FROM tracked_orders
-       WHERE payload->>'provider' = 'community'
-         AND payload->'autoLeaveJob' IS NULL
-       ORDER BY created_at ASC`
-    );
-    const eligibleOrderIds = tracked.rows
-      .filter(({ payload }) => Array.isArray(payload?.communityResults) && payload.communityResults.some((item) =>
-        String(item?.state ?? "").toLowerCase() === "joined"
-        && String(item?.membershipStatus ?? "").toLowerCase() !== "removed"
-        && isCommunityResultManagementExpired(payload, item)
-      ))
-      .map((row) => String(row.uniqid));
-
-    let scheduledOrders = 0;
-    let scheduledMembers = 0;
-    const failed = [];
-    for (const orderId of eligibleOrderIds) {
-      try {
-        const result = await scheduleExpiredCommunityAutoLeave(orderId);
-        scheduledOrders += 1;
-        scheduledMembers += Number(result?.summary?.scheduled ?? result?.summary?.total ?? 0);
-      } catch (error) {
-        failed.push({ orderId, message: error instanceof Error ? error.message : "Auto Leave could not be scheduled." });
-      }
-    }
-
-    res.set("Cache-Control", "no-store").json({
-      checkedOrders: tracked.rowCount,
-      eligibleOrders: eligibleOrderIds.length,
-      scheduledOrders,
-      scheduledMembers,
-      failed
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
 app.get("/api/community/orders/:uniqid/check-members/progress", requireSession, (req, res) => {
   const uniqid = String(req.params.uniqid ?? "").trim();
   res.set("Cache-Control", "no-store").json(communityOrderMemberCheckProgress.get(uniqid) ?? {
