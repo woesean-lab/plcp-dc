@@ -394,7 +394,7 @@
 
   .app-security {
     display: flex;
-    min-width: 300px;
+    min-width: 405px;
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;

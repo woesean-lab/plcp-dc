@@ -1048,15 +1048,18 @@ export default function HomePage() {
 
   useEffect(() => {
     let active = true;
-    void loadTrackedOrders()
+    const refreshTrackedOrders = () => void loadTrackedOrders()
       .then((savedOrders) => {
         if (active) setOrders(savedOrders);
       })
       .catch((error) => {
         if (active) notifyError(error instanceof Error ? error.message : "Saved orders could not be loaded.");
       });
+    refreshTrackedOrders();
+    window.addEventListener("community-auto-leave-scheduled", refreshTrackedOrders);
     return () => {
       active = false;
+      window.removeEventListener("community-auto-leave-scheduled", refreshTrackedOrders);
     };
   }, []);
 
