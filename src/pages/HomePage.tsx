@@ -4290,7 +4290,7 @@ export default function HomePage() {
                               </div> : null}
                               {autoLeaveJob ? <div className="orders-row-alert">
                                 <span>
-                                  <LogOut className={`h-4 w-4 ${autoLeaveJob.status === "running" ? "animate-pulse" : ""}`} />
+                                  <LogOut className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden="true" />
                                   <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
                                   <small className="orders-auto-leave-status">
                                     <span>{autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span>

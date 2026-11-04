@@ -59,10 +59,16 @@ type CommunityMemberResult = {
   reactionDetails?: string;
   reactionCompletedAt?: string;
   reactionRequestId?: string;
+  autoLeaveStatus?: string;
+  autoLeaveDetails?: string;
+  autoLeaveScheduledAt?: string;
+  autoLeaveCompletedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
+  if (item.autoLeaveStatus === "failed") return 0;
+  if (["waiting", "processing"].includes(item.autoLeaveStatus ?? "")) return 1;
   if (item.onlinerLive === false) return 0;
   if (item.authorizationStatus === "inactive") return 1;
   if (item.membershipStatus === "removed") return 2;
@@ -112,6 +118,10 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
       reactionCompletedAt: typeof row.reactionCompletedAt === "string" ? row.reactionCompletedAt : undefined,
       reactionRequestId: typeof row.reactionRequestId === "string" ? row.reactionRequestId : undefined,
+      autoLeaveStatus: typeof row.autoLeaveStatus === "string" ? row.autoLeaveStatus : undefined,
+      autoLeaveDetails: typeof row.autoLeaveDetails === "string" ? row.autoLeaveDetails : undefined,
+      autoLeaveScheduledAt: typeof row.autoLeaveScheduledAt === "string" ? row.autoLeaveScheduledAt : undefined,
+      autoLeaveCompletedAt: typeof row.autoLeaveCompletedAt === "string" ? row.autoLeaveCompletedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -502,6 +512,7 @@ export default function PublicOrderPage() {
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
+  const autoLeaveJob = status?.autoLeaveJob;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -1093,6 +1104,7 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
+                        {autoLeaveJob ? <span>Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span> : null}
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>
@@ -1119,14 +1131,32 @@ export default function PublicOrderPage() {
                             <span className="community-order-avatar" aria-hidden="true">
                               {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
                             </span>
-                            <span className="community-order-result-copy"><strong>{item.username}</strong><small>{item.details}</small></span>
+                            <span className="community-order-result-copy">
+                              <strong>{item.username}</strong>
+                              <small>{item.details}</small>
+                              {item.autoLeaveDetails ? <small>{item.autoLeaveDetails}</small> : null}
+                            </span>
                             <span className="community-order-result-state">
                               {item.authorizationStatus === "inactive" ? (
                                 <span className="public-token-result-pill" data-state="inactive">
                                   Inactive
                                 </span>
                               ) : null}
-                              {item.membershipStatus === "removed" ? (
+                              {item.autoLeaveStatus ? (
+                                <span className="public-token-result-pill" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
+                                  {item.autoLeaveStatus === "waiting"
+                                    ? "Leave queued"
+                                    : item.autoLeaveStatus === "processing"
+                                      ? "Leaving..."
+                                      : item.autoLeaveStatus === "left"
+                                        ? "Auto leave"
+                                        : item.autoLeaveStatus === "already_left"
+                                          ? "Already outside"
+                                          : item.autoLeaveStatus === "failed"
+                                            ? "Leave failed"
+                                            : item.autoLeaveStatus}
+                                </span>
+                              ) : item.membershipStatus === "removed" ? (
                                 <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
                                   Left server
                                 </span>
@@ -1138,7 +1168,11 @@ export default function PublicOrderPage() {
                               ) : null}
                               <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                             </span>
-                            <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
+                            <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
+                              ? formatDateTime(item.autoLeaveCompletedAt)
+                              : item.autoLeaveScheduledAt
+                                ? formatDateTime(item.autoLeaveScheduledAt)
+                                : item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
                           </div>
                         ))}
                       </div>
