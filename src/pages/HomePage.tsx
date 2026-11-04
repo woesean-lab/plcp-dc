@@ -4191,7 +4191,7 @@ export default function HomePage() {
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
                   <FilterDropdown label="Support" showLabel={false} value={orderSupportFilter} onChange={setOrderSupportFilter} options={[
-                    { value: "all", label: "All support" }, { value: "active", label: "Active support" }, { value: "expired", label: "Expired support" }
+                    { value: "all", label: "All periods" }, { value: "active", label: "Active" }, { value: "expired", label: "Expired" }
                   ]} />
                 </div>
 
@@ -4274,7 +4274,7 @@ export default function HomePage() {
                               <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {canAutoLeaveExpired ? <Button type="button" variant="secondary" size="icon" className="orders-auto-leave-action" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
+                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
@@ -5565,7 +5565,7 @@ export default function HomePage() {
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
-              <Button type="button" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
+              <Button type="button" variant="destructive" disabled={autoLeavingOrderId !== null} onClick={() => void confirmExpiredOrderAutoLeave()}>
                 {autoLeavingOrderId ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <LogOut className="h-4 w-4" aria-hidden="true" />}
                 {autoLeavingOrderId ? "Scheduling..." : "Schedule auto leave"}
               </Button>
