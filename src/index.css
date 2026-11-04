@@ -4920,15 +4920,19 @@
     display: inline-flex;
     justify-self: center;
     min-width: 72px;
+    min-height: 28px;
+    align-items: center;
     justify-content: center;
-    border: 1px solid rgba(255, 119, 145, .28);
-    border-radius: 999px;
-    padding: .3rem .52rem;
+    border: 0;
+    border-radius: 7px;
+    padding: 4px 8px;
     color: #ff9bad;
     background: rgba(255, 91, 122, .09);
-    font-size: 9px;
+    font-size: 8px;
     font-weight: 800;
     letter-spacing: .06em;
+    line-height: 1;
+    box-shadow: none;
     text-transform: uppercase;
     white-space: nowrap;
   }
@@ -4989,9 +4993,10 @@
     flex: 0 0 auto;
     align-items: center;
     gap: 4px;
-    border: 1px solid var(--app-border);
-    border-radius: 999px;
-    padding: 3px 6px;
+    min-height: 28px;
+    border: 0;
+    border-radius: 7px;
+    padding: 4px 8px;
     color: var(--app-muted);
     background: rgba(255,255,255,.03);
     font-size: 8px;
