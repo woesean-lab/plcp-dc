@@ -12425,9 +12425,6 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
     if (!expiredOnly && order.autoLeaveJob?.status === "running") {
       return res.status(409).json({ message: "Auto Leave is already running for this order." });
     }
-    if (!expiredOnly && String(order.status ?? "").toUpperCase() !== "COMPLETED") {
-      return res.status(409).json({ message: "Leave all is available after the Members order is completed." });
-    }
     const result = expiredOnly
       ? await scheduleExpiredCommunityAutoLeave(uniqid)
       : await leaveAllCommunityOrderMembers(order);

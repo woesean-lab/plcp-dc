@@ -1549,12 +1549,14 @@ export default function OrderPage() {
                   <h3>Per-member delivery log</h3>
                 </div>
                 <span className="public-secure-mark gap-2">
+                  {communityMembersStillInServerCount > 0 ? (
+                    <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || autoLeaveRunning}>
+                      <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
+                      {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
+                    </Button>
+                  ) : null}
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
-                      <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || autoLeaveRunning || communityMembersStillInServerCount === 0}>
-                        <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                        {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
-                      </Button>
                       <span className="member-check-control">
                         <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
                           <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
