@@ -76,6 +76,7 @@ import {
   downloadCommunityMemberTokens,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
+  getCommunityCreateStatus,
   getCommunityMemberAccountToken,
   getCommunityMemberAccessToken,
   getCommunityBotGuilds,
@@ -519,10 +520,14 @@ function getOrderProgress(order: TrackedOrder) {
 }
 
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
-  const [delayElapsed, setDelayElapsed] = useState(false);
+  const [delayElapsed, setDelayElapsed] = useState(delay <= 0);
   const [maxDelayElapsed, setMaxDelayElapsed] = useState(false);
 
   useEffect(() => {
+    if (delay <= 0) {
+      setDelayElapsed(true);
+      return;
+    }
     const timer = window.setTimeout(() => setDelayElapsed(true), delay);
     return () => window.clearTimeout(timer);
   }, [delay]);
@@ -1047,19 +1052,19 @@ export default function HomePage() {
   }
 
   useEffect(() => {
+    if (activeTab !== "manage") return;
     let active = true;
-    const refreshTrackedOrders = () => void loadTrackedOrders()
+    void loadTrackedOrders()
       .then((savedOrders) => {
         if (active) setOrders(savedOrders);
       })
       .catch((error) => {
         if (active) notifyError(error instanceof Error ? error.message : "Saved orders could not be loaded.");
       });
-    refreshTrackedOrders();
     return () => {
       active = false;
     };
-  }, []);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "manage" || !runningAutoLeaveOrderIds.length) return;
@@ -1433,9 +1438,21 @@ export default function HomePage() {
   }, [activeTab, selectedIsBoost]);
 
   useEffect(() => {
-    if (activeTab === "create") void refreshCommunityStatus();
-    // Members Stock is loaded once when Create opens, not on every invite keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (activeTab !== "create") return;
+    const requestId = ++communityStatusRequestRef.current;
+    setLoadingCommunityStatus(true);
+    void getCommunityCreateStatus()
+      .then((nextStatus) => {
+        if (requestId !== communityStatusRequestRef.current) return;
+        setCommunityStatus((current) => ({ ...nextStatus, recent: current?.recent ?? [] }));
+        if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
+      })
+      .catch((error) => {
+        if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members categories could not be loaded.");
+      })
+      .finally(() => {
+        if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
+      });
   }, [activeTab]);
 
   useEffect(() => {
@@ -3514,6 +3531,7 @@ export default function HomePage() {
       <TimedReveal
         key={activeTab}
         fallback={<HomePageSkeleton tab={activeTab} />}
+        delay={activeTab === "onliner" ? PAGE_SKELETON_DELAY : 0}
         hold={waitingForInitialOnlinerData}
         maxDelay={activeTab === "onliner" ? ONLINER_SKELETON_MAX_DELAY : undefined}
       >
@@ -4218,13 +4236,16 @@ export default function HomePage() {
                           .filter((allocation) => allocation.isPeriodic === true && allocation.expiredAt && new Date(allocation.expiredAt).getTime() <= Date.now())
                           .map((allocation) => allocation.categoryId));
                         const directSupportExpired = Number.isFinite(supportExpirationTime) && supportExpirationTime <= Date.now();
-                        const autoLeaveCandidateCount = (order.communityResults ?? []).filter((item) => {
-                          if (String(item.state ?? "").toLowerCase() !== "joined" || String(item.membershipStatus ?? "").toLowerCase() === "removed") return false;
-                          const categoryId = String(item.categoryId ?? order.categoryId ?? "");
-                          return expiredCategoryIds.size ? expiredCategoryIds.has(categoryId) : directSupportExpired;
-                        }).length;
+                        const hasServerCandidateCount = typeof order.autoLeaveCandidateCount === "number";
+                        const autoLeaveCandidateCount = hasServerCandidateCount
+                          ? Number(order.autoLeaveCandidateCount)
+                          : (order.communityResults ?? []).filter((item) => {
+                              if (String(item.state ?? "").toLowerCase() !== "joined" || String(item.membershipStatus ?? "").toLowerCase() === "removed") return false;
+                              const categoryId = String(item.categoryId ?? order.categoryId ?? "");
+                              return expiredCategoryIds.size ? expiredCategoryIds.has(categoryId) : directSupportExpired;
+                            }).length;
                         const canAutoLeaveExpired = order.provider === "community"
-                          && (autoLeaveCandidateCount > 0 || (!order.communityResults?.length && directSupportExpired && Number(order.added ?? 0) > 0))
+                          && (autoLeaveCandidateCount > 0 || (!hasServerCandidateCount && !order.communityResults?.length && directSupportExpired && Number(order.added ?? 0) > 0))
                           && order.autoLeaveJob?.status !== "running"
                           && !order.membersLeftAt;
                         const autoLeaveJob = order.autoLeaveJob;

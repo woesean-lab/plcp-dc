@@ -10654,6 +10654,45 @@ app.get("/api/community/export-oauth-stock", requireSession, async (req, res, ne
   }
 });
 
+app.get("/api/community/create-status", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) {
+      return res.set("Cache-Control", "no-store").json({
+        configured: false,
+        missing: config.missing,
+        joined: 0,
+        authorized: 0,
+        ready: 0,
+        alreadyMember: 0,
+        failed: 0,
+        categories: {},
+        stockCategories: [],
+        activeCategoryId: null,
+        recent: []
+      });
+    }
+    const stockCategories = await loadCommunityStockCategories(config);
+    const summary = stockCategories.reduce((total, category) => ({
+      joined: total.joined + category.summary.joined,
+      authorized: total.authorized + category.summary.authorized,
+      ready: total.ready + category.summary.ready,
+      alreadyMember: total.alreadyMember + category.summary.alreadyMember,
+      failed: total.failed + category.summary.failed,
+      categories: { ...total.categories, [category.id]: category.summary }
+    }), { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0, categories: {} });
+    res.set("Cache-Control", "no-store").json({
+      configured: true,
+      ...summary,
+      stockCategories,
+      activeCategoryId: stockCategories[0]?.id ?? null,
+      recent: []
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/community/status", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
@@ -15080,27 +15119,45 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
       !normalizeDiscordGuildName(order?.serverName) && extractDiscordInviteCode(order?.serverInvite)
     );
     if (missingNameOrder) {
-      const config = await getCommunityOAuthConfig();
-      const enriched = await enrichDiscordResolutionWithBotInvite(missingNameOrder.serverInvite, {
-        guildId: String(missingNameOrder.serverId ?? ""),
-        guildName: undefined,
-        approximateMemberCount: missingNameOrder.serverMemberCount
-      }, config.botToken);
-      const resolvedName = normalizeDiscordGuildName(enriched?.guildName);
-      if (resolvedName) {
-        missingNameOrder.serverName = resolvedName;
+      void (async () => {
+        const config = await getCommunityOAuthConfig();
+        const enriched = await enrichDiscordResolutionWithBotInvite(missingNameOrder.serverInvite, {
+          guildId: String(missingNameOrder.serverId ?? ""),
+          guildName: undefined,
+          approximateMemberCount: missingNameOrder.serverMemberCount
+        }, config.botToken);
+        const resolvedName = normalizeDiscordGuildName(enriched?.guildName);
+        if (!resolvedName) return;
         await pool.query(
           `UPDATE tracked_orders
            SET payload = jsonb_set(payload, '{serverName}', to_jsonb($2::text), TRUE), updated_at = NOW()
            WHERE uniqid = $1`,
           [missingNameOrder.uniqid, resolvedName]
         );
-      }
+      })().catch((error) => {
+        console.error("Background order-name enrichment failed:", error instanceof Error ? error.message : error);
+      });
     }
-    res.json(orders.map((order) => ({
-      ...order,
-      serverName: normalizeDiscordGuildName(order?.serverName)
-    })));
+    res.json(orders.map((order) => {
+      const autoLeaveCandidateCount = order.provider === "community" && Array.isArray(order.communityResults)
+        ? order.communityResults.filter((item) =>
+            String(item?.state ?? "").toLowerCase() === "joined"
+            && String(item?.membershipStatus ?? "").toLowerCase() !== "removed"
+            && isCommunityResultManagementExpired(order, item)
+          ).length
+        : 0;
+      const compact = {
+        ...order,
+        serverName: normalizeDiscordGuildName(order?.serverName),
+        autoLeaveCandidateCount
+      };
+      delete compact.communityResults;
+      delete compact.dcordResults;
+      delete compact.reactionRequests;
+      delete compact.tokens;
+      delete compact.proxies;
+      return compact;
+    }));
   } catch (error) {
     next(error);
   }

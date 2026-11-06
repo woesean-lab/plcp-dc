@@ -904,6 +904,17 @@
     gap: .45rem;
   }
 
+  .community-order-result-state .public-token-result-pill[data-state="inactive"] {
+    color: #ffd27a;
+    background: rgba(244, 190, 78, .2);
+  }
+
+  .community-order-result-state .public-token-result-pill[data-state="failed"],
+  .community-order-result-state .public-token-result-pill[data-state="blocked"] {
+    color: #ffc0ca;
+    background: rgba(244, 63, 94, .28);
+  }
+
   .community-order-avatar {
     display: grid;
     width: 34px;

@@ -196,6 +196,7 @@ export interface TrackedOrder {
   expiredAt?: string | null;
   membersLeftAt?: string | null;
   autoLeaveJob?: CommunityAutoLeaveJob | null;
+  autoLeaveCandidateCount?: number;
   isEldoradoSale?: boolean;
   reactionMessageLink?: string;
   reactionCapacity?: number;

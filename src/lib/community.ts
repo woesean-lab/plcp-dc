@@ -182,6 +182,10 @@ export function getCommunityAdminStatus(categoryId?: string) {
   return fetch(`/api/community/status${params}`, { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
 }
 
+export function getCommunityCreateStatus() {
+  return fetch("/api/community/create-status", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+}
+
 export function syncCommunityAuthorizations(categoryId: string) {
   return fetch(`/api/community/sync?categoryId=${encodeURIComponent(categoryId)}`, {
     method: "POST",
