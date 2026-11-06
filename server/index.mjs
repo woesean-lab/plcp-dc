@@ -4803,7 +4803,13 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
          COALESCE(member_result->>'completedAt', payload->>'createdAt', '') AS delivered_at,
          CASE
            WHEN LOWER(COALESCE(member_result->>'membershipStatus', '')) = 'removed'
-             THEN COALESCE(member_result->>'authorizationCheckedAt', '')
+             THEN COALESCE(
+               NULLIF(member_result->>'leftServerAt', ''),
+               NULLIF(member_result->>'membershipCheckedAt', ''),
+               NULLIF(member_result->>'autoLeaveCompletedAt', ''),
+               NULLIF(member_result->>'authorizationCheckedAt', ''),
+               ''
+             )
            ELSE ''
          END AS removed_at
        FROM tracked_orders
