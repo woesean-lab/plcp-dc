@@ -3552,7 +3552,7 @@ export default function HomePage() {
       <TimedReveal
         key={activeTab}
         fallback={<HomePageSkeleton tab={activeTab} />}
-        delay={activeTab === "onliner" ? PAGE_SKELETON_DELAY : 0}
+        delay={PAGE_SKELETON_DELAY}
         hold={waitingForInitialOnlinerData}
         maxDelay={activeTab === "onliner" ? ONLINER_SKELETON_MAX_DELAY : undefined}
       >
