@@ -156,7 +156,6 @@ export interface OrderStatusResponse {
   nextMemberAt?: string | null;
   autoLeaveJob?: CommunityAutoLeaveJob | null;
   membersLeftAt?: string | null;
-  releasedReservationCount?: number;
   isEldoradoSale?: boolean;
   liveBoostStock?: {
     oneMonth: number;

@@ -283,8 +283,7 @@ export function getPublicCommunityOrderMemberCheckProgress(uniqid: string) {
 export interface CommunityAvailabilityBreakdown {
   stockReady: number;
   previouslyDelivered: number;
-  activeReservations: number;
-  otherReservations: number;
+  activeForServer: number;
   serverLimit: number;
 }
 

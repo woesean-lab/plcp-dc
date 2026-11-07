@@ -2442,8 +2442,7 @@ export default function HomePage() {
             breakdown: data.breakdown ?? {
               stockReady: data.maximum,
               previouslyDelivered: 0,
-              activeReservations: 0,
-              otherReservations: 0,
+              activeForServer: 0,
               serverLimit: 0
             }
           }] as const;
@@ -2454,13 +2453,12 @@ export default function HomePage() {
         const totalBreakdown = availabilityEntries.reduce((total, [, data]) => ({
           stockReady: total.stockReady + data.breakdown.stockReady,
           previouslyDelivered: total.previouslyDelivered + data.breakdown.previouslyDelivered,
-          activeReservations: total.activeReservations + data.breakdown.activeReservations,
-          otherReservations: total.otherReservations + data.breakdown.otherReservations,
+          activeForServer: total.activeForServer + data.breakdown.activeForServer,
           serverLimit: total.serverLimit + data.breakdown.serverLimit
-        }), { stockReady: 0, previouslyDelivered: 0, activeReservations: 0, otherReservations: 0, serverLimit: 0 });
+        }), { stockReady: 0, previouslyDelivered: 0, activeForServer: 0, serverLimit: 0 });
         const unavailableReasons = [
           totalBreakdown.previouslyDelivered ? `${totalBreakdown.previouslyDelivered} already in this server` : "",
-          totalBreakdown.activeReservations + totalBreakdown.otherReservations ? `${totalBreakdown.activeReservations + totalBreakdown.otherReservations} reserved by active orders` : "",
+          totalBreakdown.activeForServer ? `${totalBreakdown.activeForServer} already queued for this server` : "",
           totalBreakdown.serverLimit ? `${totalBreakdown.serverLimit} at the 100-server limit` : ""
         ].filter(Boolean);
         setCommunityAvailability(nextAvailability);
