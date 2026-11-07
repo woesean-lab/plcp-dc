@@ -923,7 +923,8 @@ export default function OrderPage() {
       const data = await cancelCommunityOrder(target);
       setResult(data);
       setShowCancelCommunityModal(false);
-      toast.success("Members delivery cancelled and stock reservations released.");
+      const releasedCount = Number(data.releasedReservationCount ?? 0);
+      toast.success(`Members delivery cancelled. ${releasedCount} undelivered reservation${releasedCount === 1 ? "" : "s"} returned to stock.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Members delivery could not be cancelled.");
     } finally {

@@ -2437,13 +2437,34 @@ export default function HomePage() {
             effectiveCommunityJoinMethod,
             resolvedServer.guildId
           );
-          return [category.id, data.maximum] as const;
+          return [category.id, {
+            ...data,
+            breakdown: data.breakdown ?? {
+              stockReady: data.maximum,
+              previouslyDelivered: 0,
+              activeReservations: 0,
+              otherReservations: 0,
+              serverLimit: 0
+            }
+          }] as const;
         }));
         if (requestId !== availabilityRequestRef.current) return;
-        const nextAvailability = Object.fromEntries(availabilityEntries);
-        const totalMaximum = availabilityEntries.reduce((total, [, maximum]) => total + maximum, 0);
+        const nextAvailability = Object.fromEntries(availabilityEntries.map(([categoryId, data]) => [categoryId, data.maximum]));
+        const totalMaximum = availabilityEntries.reduce((total, [, data]) => total + data.maximum, 0);
+        const totalBreakdown = availabilityEntries.reduce((total, [, data]) => ({
+          stockReady: total.stockReady + data.breakdown.stockReady,
+          previouslyDelivered: total.previouslyDelivered + data.breakdown.previouslyDelivered,
+          activeReservations: total.activeReservations + data.breakdown.activeReservations,
+          otherReservations: total.otherReservations + data.breakdown.otherReservations,
+          serverLimit: total.serverLimit + data.breakdown.serverLimit
+        }), { stockReady: 0, previouslyDelivered: 0, activeReservations: 0, otherReservations: 0, serverLimit: 0 });
+        const unavailableReasons = [
+          totalBreakdown.previouslyDelivered ? `${totalBreakdown.previouslyDelivered} already in this server` : "",
+          totalBreakdown.activeReservations + totalBreakdown.otherReservations ? `${totalBreakdown.activeReservations + totalBreakdown.otherReservations} reserved by active orders` : "",
+          totalBreakdown.serverLimit ? `${totalBreakdown.serverLimit} at the 100-server limit` : ""
+        ].filter(Boolean);
         setCommunityAvailability(nextAvailability);
-        setAvailability(`Available ${totalMaximum} across ${availabilityEntries.length} selected categor${availabilityEntries.length === 1 ? "y" : "ies"}`);
+        setAvailability(`${totalMaximum} order-ready from ${totalBreakdown.stockReady} in stock${unavailableReasons.length ? ` · ${unavailableReasons.join(" · ")}` : ""}`);
         setAvailabilityMaximum(totalMaximum);
         return;
       }
@@ -3712,7 +3733,7 @@ export default function HomePage() {
                                 <span className="service-option-state">{selected ? <><Check className="h-3 w-3" /> Selected</> : "Select"}</span>
                               </span>
                               <span className="service-option-title">{category.name}</span>
-                              <span className="service-option-description">{ready} connected members available</span>
+                              <span className="service-option-description">{ready} members ready in stock</span>
                               <span className="community-service-option-footer">
                                 <span className="service-option-code service-option-code-badge"><span>{ready} MEMBERS</span></span>
                                 <span className="service-option-code">{category.isPeriodic ? "Period based" : "No expiration"}</span>

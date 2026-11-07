@@ -4560,7 +4560,12 @@ async function loadCommunityJoinSummary(config) {
        COUNT(*) FILTER (WHERE status = 'already_member')::int AS already_member,
        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed,
        COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW() AND status <> 'failed')::int AS authorized,
-       COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW() AND status = 'authorized')::int AS ready
+       COUNT(*) FILTER (
+         WHERE encrypted_access_token IS NOT NULL
+           AND access_token_expires_at > NOW()
+           AND status = 'authorized'
+           AND reserved_order_id IS NULL
+       )::int AS ready
      FROM community_oauth_joins
      WHERE guild_id = $1
      GROUP BY stock_type`,
@@ -4808,6 +4813,8 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
                NULLIF(member_result->>'membershipCheckedAt', ''),
                NULLIF(member_result->>'autoLeaveCompletedAt', ''),
                NULLIF(member_result->>'authorizationCheckedAt', ''),
+               NULLIF(member_result->>'completedAt', ''),
+               NULLIF(payload->>'createdAt', ''),
                ''
              )
            ELSE ''
@@ -4921,7 +4928,7 @@ async function loadCommunityAtServerCapacityUserIds() {
     .map(([discordUserId]) => discordUserId);
 }
 
-async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
+async function loadCommunityUnavailableUserIdGroups(queryable, guildId, categoryId = null) {
   const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
   const [deliveredUserIds, activeAssignments, atServerCapacityUserIds] = await Promise.all([
     loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, normalizedCategoryId),
@@ -4949,10 +4956,21 @@ async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = 
     ),
     loadCommunityAtServerCapacityUserIds()
   ]);
+  return {
+    deliveredUserIds: deliveredUserIds.map(String),
+    activeAssignmentUserIds: activeAssignments.rows
+      .map((row) => String(row.discord_user_id ?? "").trim())
+      .filter(isDiscordGuildId),
+    atServerCapacityUserIds: atServerCapacityUserIds.map(String)
+  };
+}
+
+async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
+  const groups = await loadCommunityUnavailableUserIdGroups(queryable, guildId, categoryId);
   return Array.from(new Set([
-    ...deliveredUserIds,
-    ...atServerCapacityUserIds,
-    ...activeAssignments.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId)
+    ...groups.deliveredUserIds,
+    ...groups.atServerCapacityUserIds,
+    ...groups.activeAssignmentUserIds
   ]));
 }
 
@@ -6253,12 +6271,20 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
       }),
       membershipStatus: check.membershipStatus,
       membershipDetails: check.membershipDetails,
+      membershipCheckedAt: checkedAt,
       onlinerLive: check.onlinerLive,
       onlinerConnectionState: check.onlinerConnectionState,
       onlinerDetails: check.onlinerDetails,
       onlinerCheckedAt: check.onlinerCheckedAt
     } : item;
   });
+  for (const [discordUserId, check] of checks) {
+    if (check.membershipStatus === "removed") {
+      updateCommunityMemberServerMembershipCache(discordUserId, targetGuildId, false);
+    } else if (check.membershipStatus === "present") {
+      updateCommunityMemberServerMembershipCache(discordUserId, targetGuildId, true);
+    }
+  }
   const summary = {
     checked: checks.size,
     active: [...checks.values()].filter((check) => check.status === "active").length,
@@ -8994,7 +9020,26 @@ async function initializeDatabase() {
       AND details = 'Discord reported that this member reached the 100-server limit.'
   `);
   if (serviceRunsWeb) {
-    await pool.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id IS NOT NULL");
+    await pool.query(`
+      UPDATE community_oauth_joins AS stock
+      SET reserved_order_id = NULL
+      WHERE stock.reserved_order_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM tracked_orders AS orders
+          CROSS JOIN LATERAL jsonb_array_elements(
+            CASE
+              WHEN jsonb_typeof(orders.payload->'communityResults') = 'array' THEN orders.payload->'communityResults'
+              ELSE '[]'::jsonb
+            END
+          ) AS member_result
+          WHERE orders.uniqid = stock.reserved_order_id
+            AND orders.payload->>'provider' = 'community'
+            AND UPPER(COALESCE(orders.payload->>'status', '')) IN ('WAITING', 'RECOVERING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
+            AND member_result->>'discordUserId' = stock.discord_user_id
+            AND LOWER(COALESCE(member_result->>'state', '')) IN ('queued', 'joining', 'replacing')
+        )
+    `);
     await pool.query("DELETE FROM admin_sessions WHERE expires_at <= NOW()");
     await recoverBlockedDcordJobOrders();
     await recoverPendingDcordOrders();
@@ -11573,20 +11618,35 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     if (!availabilityGuildId) {
       return res.status(400).json({ message: "The Discord invite could not be resolved for this server's availability." });
     }
-    const previouslyDeliveredUserIds = availabilityGuildId
-      ? await loadCommunityUnavailableUserIds(pool, availabilityGuildId, stockType)
-      : [];
+    const unavailableGroups = await loadCommunityUnavailableUserIdGroups(pool, availabilityGuildId, stockType);
     const result = await pool.query(
-      `SELECT COUNT(*)::int AS available
+      `SELECT discord_user_id, reserved_order_id
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
-         AND (($4::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-           OR ($4::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
-         AND NOT (discord_user_id = ANY($3::text[]))`,
-      [config.guildId, stockType, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
+         AND (($3::boolean = TRUE AND encrypted_account_token IS NOT NULL)
+           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))`,
+      [config.guildId, stockType, communityJoinMethodUsesAccountToken(joinMethod)]
     );
-    const available = Number(result.rows[0]?.available ?? 0);
-    res.set("Cache-Control", "no-store").json({ available, maximum: available });
+    const delivered = new Set(unavailableGroups.deliveredUserIds);
+    const activeAssignments = new Set(unavailableGroups.activeAssignmentUserIds);
+    const atServerCapacity = new Set(unavailableGroups.atServerCapacityUserIds);
+    const breakdown = {
+      stockReady: result.rowCount,
+      previouslyDelivered: 0,
+      activeReservations: 0,
+      otherReservations: 0,
+      serverLimit: 0
+    };
+    let available = 0;
+    for (const row of result.rows) {
+      const discordUserId = String(row.discord_user_id ?? "");
+      if (delivered.has(discordUserId)) breakdown.previouslyDelivered += 1;
+      else if (activeAssignments.has(discordUserId)) breakdown.activeReservations += 1;
+      else if (row.reserved_order_id) breakdown.otherReservations += 1;
+      else if (atServerCapacity.has(discordUserId)) breakdown.serverLimit += 1;
+      else available += 1;
+    }
+    res.set("Cache-Control", "no-store").json({ available, maximum: available, breakdown });
   } catch (error) {
     next(error);
   }
@@ -11679,6 +11739,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
+           AND reserved_order_id IS NULL
            AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
              OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
            AND NOT (discord_user_id = ANY($4::text[]))
@@ -11705,6 +11766,19 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       });
     }
     const selectedMembers = interleaveCommunityMembers(selectedGroups);
+    const reserved = await client.query(
+      `UPDATE community_oauth_joins
+       SET reserved_order_id = $3
+       WHERE guild_id = $1
+         AND discord_user_id = ANY($2::text[])
+         AND reserved_order_id IS NULL
+       RETURNING discord_user_id`,
+      [config.guildId, selectedMembers.map((member) => member.discord_user_id), uniqid]
+    );
+    if (reserved.rowCount !== selectedMembers.length) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Members stock changed while the order was being created. Check availability and try again." });
+    }
     const primaryCategory = categoriesById.get(requestedAllocations[0].categoryId);
     const order = {
       uniqid,
@@ -12467,7 +12541,11 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
     }
 
     const currentStatus = String(order.status ?? "").toUpperCase();
-    const delivered = Number(order.added ?? 0);
+    const deliveredResultCount = Array.isArray(order.communityResults)
+      ? order.communityResults.filter((item) => String(item?.state ?? "").toLowerCase() === "joined").length
+      : 0;
+    const storedDelivered = Number(order.added);
+    const delivered = Math.max(Number.isFinite(storedDelivered) ? storedDelivered : 0, deliveredResultCount);
     const ordered = Number(order.amount ?? 0);
     if (!["WAITING", "PROCESS", "PAUSED", "INVITES PAUSED", "ERROR", "PARTIAL"].includes(currentStatus) || (ordered > 0 && delivered >= ordered)) {
       await client.query("ROLLBACK");
@@ -12475,6 +12553,9 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
     }
 
     const cancelledAt = new Date().toISOString();
+    const pendingReservationCount = Array.isArray(order.communityResults)
+      ? order.communityResults.filter((item) => ["queued", "joining", "replacing"].includes(String(item?.state ?? "").toLowerCase())).length
+      : 0;
     const communityResults = Array.isArray(order.communityResults)
       ? order.communityResults.map((item) => {
           if (!item || typeof item !== "object" || Array.isArray(item)) return item;
@@ -12482,16 +12563,30 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
           return { ...item, state: "cancelled", details: "Delivery cancelled before this member completed.", completedAt: cancelledAt };
         })
       : order.communityResults;
+    const releasedReservations = await client.query(
+      "UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1 RETURNING discord_user_id",
+      [uniqid]
+    );
     const cancelledOrder = {
       ...order,
       status: "CANCELLED",
       waitingCode: null,
       details: "Members delivery cancelled by an administrator.",
       cancelledAt,
+      added: delivered,
+      releasedReservationCount: Math.max(releasedReservations.rowCount, pendingReservationCount),
+      ...(Array.isArray(order.categoryAllocations) ? {
+        categoryAllocations: order.categoryAllocations.map((allocation) => ({
+          ...allocation,
+          added: Array.isArray(communityResults) ? communityResults.filter((item) =>
+            getCommunityResultStockType(order, item) === allocation.categoryId
+            && String(item?.state ?? "").toLowerCase() === "joined"
+          ).length : Number(allocation?.added ?? 0)
+        }))
+      } : {}),
       communityResults
     };
 
-    await client.query("UPDATE community_oauth_joins SET reserved_order_id = NULL WHERE reserved_order_id = $1", [uniqid]);
     await client.query("UPDATE community_reaction_jobs SET status = 'cancelled', completed_at = NOW(), last_error = 'Order cancelled.' WHERE order_id = $1 AND status = 'pending'", [uniqid]);
     await client.query(
       "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
