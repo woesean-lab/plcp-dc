@@ -5291,6 +5291,7 @@ async function revealDcordOrderTokens(order) {
         token: assignedTokens[index],
         redactedToken: redactToken(assignedTokens[index]),
         duration: order.duration,
+        boostStockPool: order.boostStockPool === "rotating" ? "rotating" : "regular",
         orderId: order.uniqid,
         serverId: order.serverId,
         serverName: order.serverName,
@@ -5379,6 +5380,7 @@ function normalizeUsedBoostTokenHistory(value) {
         id: String(item.id ?? crypto.randomUUID()),
         token,
         redactedToken: String(item.redactedToken ?? redactToken(token)),
+        boostStockPool: ["regular", "rotating"].includes(item.boostStockPool) ? item.boostStockPool : undefined,
         duration,
         orderId: typeof item.orderId === "string" ? item.orderId : undefined,
         serverId: typeof item.serverId === "string" ? item.serverId : undefined,
@@ -5578,11 +5580,20 @@ async function loadUsedBoostTokenHistory() {
   const raw = await loadEncryptedSetting("dcord_boost_token_usage");
   if (!raw) return [];
 
+  let history;
   try {
-    return normalizeUsedBoostTokenHistory(JSON.parse(raw));
+    history = normalizeUsedBoostTokenHistory(JSON.parse(raw));
   } catch {
     return [];
   }
+  // Resolve older entries from their order so existing rotating deliveries stay separate.
+  const orderIds = [...new Set(history.filter((entry) => !entry.boostStockPool && entry.orderId).map((entry) => entry.orderId))];
+  if (orderIds.length) {
+    const result = await pool.query("SELECT uniqid, payload->>'boostStockPool' AS stock_pool FROM tracked_orders WHERE uniqid = ANY($1::text[])", [orderIds]);
+    const rotatingOrders = new Set(result.rows.filter((row) => row.stock_pool === "rotating").map((row) => row.uniqid));
+    history = history.map((entry) => entry.boostStockPool ? entry : { ...entry, boostStockPool: rotatingOrders.has(entry.orderId) ? "rotating" : "regular" });
+  }
+  return history;
 }
 
 async function saveUsedBoostTokenHistory(history) {
@@ -5605,6 +5616,7 @@ async function mutateUsedBoostTokenHistory(mutator) {
 
 async function recordUsedBoostToken({ token, duration, order, replacementFor }) {
   const entry = {
+    boostStockPool: order?.boostStockPool === "rotating" ? "rotating" : "regular",
     id: crypto.randomUUID(),
     token,
     redactedToken: redactToken(token),
@@ -14560,7 +14572,7 @@ app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, 
       return res.status(404).json({ message: "Used token could not be found." });
     }
 
-    if (await rotatingBoostStock.hasTokens(usedTokens.map((item) => item.token))) {
+    if (usedTokens.some((item) => item.boostStockPool === "rotating") || await rotatingBoostStock.hasTokens(usedTokens.map((item) => item.token))) {
       return res.status(409).json({ message: "Rotating accounts stay in their separate pool. Completed customer periods are released automatically." });
     }
 

@@ -305,6 +305,7 @@ export interface BoostTokenStockSnapshot {
 }
 
 export interface BoostUsedToken {
+  boostStockPool?: "regular" | "rotating";
   id: string;
   token: string;
   redactedToken?: string;
