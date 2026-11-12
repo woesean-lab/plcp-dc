@@ -80,14 +80,14 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
         {(Object.keys(labels) as RotatingBoostAccount["status"][]).map((status) => <button key={status} type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)}>{labels[status]} · {accounts.filter((row) => row.status === status).length}</button>)}
       </div>
       {error ? <p role="alert" className="text-sm text-red-400">{error}</p> : null}
-      {!accounts.length ? <div className="stock-empty-state"><ShieldCheck className="h-5 w-5" /><strong>{loading ? "Loading rotating stock…" : "No rotating accounts yet"}</strong><span>Move accounts from 3 month stock. Their 90-day period starts when moved.</span></div> : <div className="overflow-x-auto">
+      {!accounts.length ? <div className="stock-empty-state"><ShieldCheck className="h-5 w-5" /><strong>{loading ? "Loading rotating stock…" : "No rotating accounts yet"}</strong><span>Move accounts from 3 month stock. Their 90-day period starts with the first order assignment.</span></div> : <div className="overflow-x-auto">
         <table className="rotating-stock-table">
           <thead><tr><th>Account</th><th>Status</th><th>Assignment</th><th>Customer period ends</th><th>Subscription ends</th></tr></thead>
           <tbody>{accounts.filter((row) => filter === "all" || row.status === filter).map((row) => <tr key={row.id}>
-            <td><code>{row.redactedToken}</code><small>{Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000))} days left · {row.history.length} past assignments</small></td>
+            <td><code>{row.redactedToken}</code><small>{row.expiresAt ? `${Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000))} days left` : "90 days · not started"} · {row.history.length} past assignments</small></td>
             <td><span className={`rotating-status rotating-status-${row.status}`}>{labels[row.status]}</span></td>
             <td>{row.serverName || row.serverId || "—"}<small>{row.orderId || "Unassigned"}</small></td>
-            <td>{formatDate(row.customerEndsAt)}</td><td>{formatDate(row.expiresAt)}</td>
+            <td>{formatDate(row.customerEndsAt)}</td><td>{row.expiresAt ? formatDate(row.expiresAt) : "Starts on first assignment"}</td>
           </tr>)}</tbody>
         </table>
       </div>}
@@ -99,7 +99,7 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
         <span className="confirm-modal-icon is-success" aria-hidden="true"><ArrowRightLeft className="h-5 w-5" /></span>
         <p className="app-kicker text-[var(--app-accent)]">Stock</p>
         <h2 id="rotating-dialog-title">Move from 3 month stock</h2>
-        <p id="rotating-dialog-description">Move existing accounts into rotating stock for 30-day deliveries. Each account starts with 90 days remaining.</p>
+        <p id="rotating-dialog-description">Move existing accounts into rotating stock for 30-day deliveries. The 90-day period starts with the first order assignment.</p>
         <form className="mt-5 grid gap-5" onSubmit={(event) => { event.preventDefault(); void move(); }}>
           <div className="onliner-bulk-help rotating-transfer-summary">
             <span><strong>3 month stock</strong><code>{availableThreeMonth} accounts</code></span>

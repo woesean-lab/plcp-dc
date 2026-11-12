@@ -12,7 +12,7 @@ const fail = (message) => { throw Object.assign(new Error(message), { statusCode
 
 function finishAssignment(row, now) {
   row.history = [...(row.history ?? []), {
-    orderId: row.orderId, serverName: row.serverName, startedAt: row.startedAt,
+    orderId: row.orderId, serverName: row.serverName, reservedAt: row.reservedAt, startedAt: row.startedAt,
     customerEndsAt: row.customerEndsAt, releasedAt: new Date(now).toISOString()
   }];
   Object.assign(row, {
@@ -24,12 +24,30 @@ function finishAssignment(row, now) {
 
 export function refreshRotatingRows(rows, now = Date.now()) {
   return rows.map((row) => {
+    // Migrate transfer-based clocks to the first known assignment.
+    if (row.subscriptionStartedAt === undefined) {
+      row = { ...row };
+      const dates = [row.reservedAt, row.startedAt, ...(row.history ?? []).flatMap((item) => [item.reservedAt, item.startedAt])]
+        .map((value) => Date.parse(value)).filter(Number.isFinite);
+      if (dates.length) {
+        const firstAssignment = Math.min(...dates);
+        row.subscriptionStartedAt = new Date(firstAssignment).toISOString();
+        row.expiresAt = new Date(firstAssignment + BOOST_SUBSCRIPTION_MS).toISOString();
+      } else if (!row.orderId && !(row.history ?? []).length) {
+        row.subscriptionStartedAt = null;
+        row.expiresAt = null;
+        if (["available", "expired"].includes(row.status)) row.status = "available";
+      } else {
+        const expiry = Date.parse(row.expiresAt);
+        row.subscriptionStartedAt = Number.isFinite(expiry) ? new Date(expiry - BOOST_SUBSCRIPTION_MS).toISOString() : row.createdAt;
+      }
+    }
     if (["in_use", "review"].includes(row.status) && Date.parse(row.customerEndsAt) <= now) {
       const released = { ...row };
       finishAssignment(released, now);
       return released;
     }
-    if (row.status === "available" && Date.parse(row.expiresAt) < now + BOOST_PERIOD_MS + BOOST_BUFFER_MS) {
+    if (row.status === "available" && row.expiresAt && Date.parse(row.expiresAt) < now + BOOST_PERIOD_MS + BOOST_BUFFER_MS) {
       return { ...row, status: "expired" };
     }
     return row;
@@ -120,7 +138,7 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
       const now = Date.now();
       const moved = new Set(selected.map(([id]) => id));
       for (const [id, token] of selected) {
-        rows.push({ id: crypto.randomUUID(), fingerprint: id, token, expiresAt: new Date(now + BOOST_SUBSCRIPTION_MS).toISOString(), status: "available", history: [], createdAt: new Date(now).toISOString() });
+        rows.push({ id: crypto.randomUUID(), fingerprint: id, token, subscriptionStartedAt: null, expiresAt: null, status: "available", history: [], createdAt: new Date(now).toISOString() });
       }
       stock.threeMonth = stock.threeMonth.filter((token) => !moved.has(fingerprint(token)));
       await client.query(
@@ -136,11 +154,14 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
         fail("These order slots already have reserved accounts.");
       }
       const selected = rows.filter((row) => row.status === "available")
-        .sort((a, b) => Date.parse(a.expiresAt) - Date.parse(b.expiresAt)).slice(0, count);
+        .sort((a, b) => (a.expiresAt ? Date.parse(a.expiresAt) : Infinity) - (b.expiresAt ? Date.parse(b.expiresAt) : Infinity)).slice(0, count);
       if (selected.length !== count) fail(`Only ${selected.length * 2} rotating boosts are available for 30 days.`);
+      const now = Date.now();
       selected.forEach((row, index) => Object.assign(row, {
+        subscriptionStartedAt: row.subscriptionStartedAt ?? new Date(now).toISOString(),
+        expiresAt: row.expiresAt ?? new Date(now + BOOST_SUBSCRIPTION_MS).toISOString(),
         status: "reserved", orderId: order.uniqid, orderIndex: offset + index,
-        serverName: order.serverName, serverId: order.serverId, reservedAt: new Date().toISOString(),
+        serverName: order.serverName, serverId: order.serverId, reservedAt: new Date(now).toISOString(),
         startedAt: null, customerEndsAt: null
       }));
       return selected.map((row) => row.token);

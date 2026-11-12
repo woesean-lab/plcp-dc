@@ -270,7 +270,8 @@ export interface BoostStock {
 export interface RotatingBoostAccount {
   id: string;
   redactedToken: string;
-  expiresAt: string;
+  subscriptionStartedAt?: string | null;
+  expiresAt: string | null;
   status: "available" | "reserved" | "in_use" | "review" | "expired";
   orderId?: string | null;
   serverName?: string | null;

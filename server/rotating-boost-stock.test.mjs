@@ -57,7 +57,7 @@ function fixture() {
   const write = (rows) => settings.set("dcord_rotating_boost_stock", Buffer.from(JSON.stringify(rows)).toString("base64"));
   const seed = async (tokens, expiresAt) => {
     const rows = settings.has("dcord_rotating_boost_stock") ? read() : [];
-    for (const token of tokens) rows.push({ id: crypto.randomUUID(), fingerprint: crypto.createHash("sha256").update(tokenIdentity(token)).digest("hex"), token, expiresAt, status: "available", history: [], createdAt: new Date().toISOString() });
+    for (const token of tokens) rows.push({ id: crypto.randomUUID(), fingerprint: crypto.createHash("sha256").update(tokenIdentity(token)).digest("hex"), token, subscriptionStartedAt: new Date(Date.parse(expiresAt) - BOOST_SUBSCRIPTION_MS).toISOString(), expiresAt, status: "available", history: [], createdAt: new Date().toISOString() });
     write(rows);
     return stock.list();
   };
@@ -66,20 +66,54 @@ function fixture() {
   return { stock, seed, seedRegular, readRegular, orders, read, write, settings, failNextInventoryWrite: () => { failInventoryWrite = true; } };
 }
 
-test("moving deduplicates account identities, starts 90 days and removes source tokens", async () => {
+test("moving deduplicates account identities without starting the clock and removes source tokens", async () => {
   const { stock, seedRegular, readRegular, settings } = fixture();
   seedRegular({ oneMonth: ["one-month"], threeMonth: ["account-token", "mail:pass:account-token:2fa", "keep-token"] });
-  const before = Date.now();
   const { accounts: rows, stock: summary } = await stock.moveFromThreeMonth(1);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].status, "available");
   assert.equal("token" in rows[0], false);
   assert.equal(JSON.stringify(rows).includes("mail:pass"), false);
   assert.equal(settings.get("dcord_rotating_boost_stock").includes("account-token"), false);
-  assert.ok(Date.parse(rows[0].expiresAt) >= before + BOOST_SUBSCRIPTION_MS);
-  assert.ok(Date.parse(rows[0].expiresAt) <= Date.now() + BOOST_SUBSCRIPTION_MS);
+  assert.equal(rows[0].expiresAt, null);
+  assert.equal(rows[0].subscriptionStartedAt, null);
   assert.deepEqual(summary, { oneMonth: 1, threeMonth: 1 });
   assert.deepEqual(readRegular(), { oneMonth: ["one-month"], threeMonth: ["keep-token"] });
+});
+
+test("stock waiting time does not count; first assignment starts 90 days and reuse preserves expiry", async (t) => {
+  let clock = Date.now();
+  t.mock.method(Date, "now", () => clock);
+  const { stock, seedRegular } = fixture();
+  seedRegular({ oneMonth: [], threeMonth: ["token"] });
+  await stock.moveFromThreeMonth(1);
+  clock += 120 * day;
+  const [waiting] = await stock.list();
+  assert.equal(waiting.status, "available");
+  assert.equal(waiting.expiresAt, null);
+  await stock.reserve(1, { uniqid: "first" });
+  const [assigned] = await stock.list();
+  assert.equal(Date.parse(assigned.subscriptionStartedAt), clock);
+  assert.equal(Date.parse(assigned.expiresAt), clock + BOOST_SUBSCRIPTION_MS);
+  await stock.sync({ uniqid: "first", dcordResults: [{ boosted: true, status: "success" }] });
+  clock += BOOST_PERIOD_MS;
+  await stock.reserve(1, { uniqid: "second" });
+  const [reused] = await stock.list();
+  assert.equal(reused.expiresAt, assigned.expiresAt);
+  assert.equal(reused.subscriptionStartedAt, assigned.subscriptionStartedAt);
+});
+
+test("legacy unused clocks are cleared while assigned clocks start from the known assignment", () => {
+  const now = Date.now();
+  const assignedAt = now - day;
+  const rows = refreshRotatingRows([
+    { status: "expired", expiresAt: new Date(now - day).toISOString(), history: [] },
+    { status: "reserved", orderId: "o", reservedAt: new Date(assignedAt).toISOString(), expiresAt: later(60), history: [] }
+  ], now);
+  assert.equal(rows[0].status, "available");
+  assert.equal(rows[0].expiresAt, null);
+  assert.equal(Date.parse(rows[1].expiresAt), assignedAt + BOOST_SUBSCRIPTION_MS);
+  assert.equal(Date.parse(rows[1].subscriptionStartedAt), assignedAt);
 });
 
 test("invalid counts and insufficient source stock leave both inventories unchanged", async () => {
