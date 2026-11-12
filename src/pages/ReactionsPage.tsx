@@ -270,7 +270,7 @@ export default function ReactionsPage() {
                 <strong>Member calculator</strong>
                 <small>Optional planning tool · Does not affect the request</small>
               </span>
-              <span className="reactions-calculator-badge">Optional</span>
+              <span className="reactions-calculator-badge status-badge">Optional</span>
               <ChevronDown className="reactions-calculator-chevron" aria-hidden="true" />
             </summary>
             <div className="reactions-calculator-body" aria-label="Member requirement calculator">

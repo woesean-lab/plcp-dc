@@ -10304,7 +10304,7 @@
 .onliner-proxy-assigned svg { color: var(--app-subtle); }
 .onliner-proxy-assigned strong { color: var(--app-text); font-size: 12px; }
 .onliner-proxy-assigned small { color: var(--app-subtle); font-size: 9px; }
-.onliner-proxy-health-state { display: grid; grid-template-columns: 7px minmax(0, 1fr); column-gap: 7px; }
+.onliner-proxy-health-state { display: grid; grid-template-columns: minmax(0, 1fr); gap: 3px; }
 .onliner-proxy-health-state i { grid-row: 1 / 3; width: 7px; height: 7px; border-radius: 999px; background: var(--app-success); box-shadow: 0 0 0 3px var(--app-success-soft); }
 .onliner-proxy-health-state strong,
 .onliner-proxy-health-copy strong { color: var(--app-text-secondary); font-size: 9px; }
@@ -11953,11 +11953,6 @@
 .boost-workbench .stock-token-list > li.is-selected, .boost-workbench .stock-used-list > li.is-selected, .boost-rotating-row.is-selected { background: var(--app-accent-soft); }
 .boost-workbench .stock-token-list code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .boost-token-tools { display: flex; align-items: center; gap: 16px; }
-.boost-stock-status { display: inline-flex; align-items: center; gap: 7px; width: fit-content; max-width: 100%; border-radius: 6px; padding: 5px 8px; background: var(--app-control-bg); color: var(--app-muted); font-size: 11px; font-weight: 500; line-height: 1.4; text-transform: none; }
-.boost-stock-status > span { flex-shrink: 0; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.boost-stock-status.is-success { color: var(--app-success); background: var(--app-success-soft); }
-.boost-stock-status.is-accent { color: var(--app-accent-bright); background: var(--app-accent-soft); }
-.boost-stock-status.is-danger { color: var(--app-danger); background: var(--app-danger-soft); }
 .boost-workbench .stock-empty-state { min-height: 240px; padding: 28px; gap: 12px; }
 .boost-workbench .stock-empty-state strong { font-size: 14px; }
 .boost-workbench .stock-empty-state span { font-size: 12px; }
@@ -11988,6 +11983,14 @@
 .boost-time-left strong { font-weight: 500; }
 .boost-row-actions { justify-content: flex-end; }
 .stock-row-action { color: var(--app-subtle); }
+.stock-row-action:not(:disabled):hover,
+.stock-row-action:not(:disabled):focus-visible {
+  border-color: color-mix(in srgb, var(--app-accent) 34%, var(--app-border));
+  color: var(--app-accent-bright);
+  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-control-bg));
+  box-shadow: none;
+}
+.stock-row-action:not(:disabled):active { background: var(--app-accent-soft); }
 .boost-account-drawer { padding: 20px 20px 20px 47px; border-top: 1px solid var(--app-divider); background: var(--app-input-bg); }
 .boost-rotating-details { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
 .boost-rotating-details > div { display: grid; gap: 7px; min-width: 0; align-content: start; }
@@ -12016,7 +12019,7 @@
   .boost-rotating-columns { display: none; }
   .boost-rotating-line { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 16px; }
   .boost-rotating-account { grid-column: 1 / 3; }
-  .boost-rotating-line > .boost-stock-status { grid-column: 3; grid-row: 1; }
+  .boost-rotating-line > .ui-badge { grid-column: 3; grid-row: 1; }
   .boost-current-order { grid-column: 1; padding-left: 27px; }
   .boost-time-left { grid-column: 2; }
   .boost-row-actions { grid-column: 3; }
@@ -12026,7 +12029,7 @@
   .boost-workbench .stock-used-list .stock-used-token-main { grid-area: token; }
   .boost-workbench .stock-used-list .boost-duration-label { grid-area: duration; }
   .boost-workbench .stock-used-list .stock-used-date { grid-area: date; }
-  .boost-workbench .stock-used-list .boost-stock-status { grid-area: status; }
+  .boost-workbench .stock-used-list .ui-badge { grid-area: status; }
   .boost-workbench .stock-used-list > li > .ui-button { grid-area: return; justify-self: end; }
 }
 @media (max-width: 640px) {
@@ -12044,12 +12047,11 @@
   .boost-workbench .stock-token-list > li { grid-template-columns: 16px minmax(0, 1fr) auto; gap: 10px; }
   .boost-workbench .stock-token-index { display: none; }
   .boost-token-tools { gap: 6px; }
-  .boost-stock-status { font-size: 10px; padding: 4px 6px; }
   .boost-rotating-controls { padding: 0 16px 16px; }
   .boost-pool-actions { gap: 8px; }
   .boost-rotating-line { grid-template-columns: minmax(0, 1fr) auto; gap: 14px 10px; }
   .boost-rotating-account { grid-column: 1 / -1; grid-row: 1; }
-  .boost-rotating-line > .boost-stock-status { grid-column: 1; grid-row: 2; margin-left: 27px; }
+  .boost-rotating-line > .ui-badge { grid-column: 1; grid-row: 2; margin-left: 27px; }
   .boost-time-left { grid-column: 2; grid-row: 2; text-align: right; }
   .boost-current-order { grid-column: 1; grid-row: 3; }
   .boost-row-actions { grid-column: 2; grid-row: 3; }

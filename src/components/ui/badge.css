@@ -1,0 +1,45 @@
+/* One geometry and type contract for every status badge.
+   Page-specific rules may supply colors and responsive visibility only. */
+.status-badge {
+  box-sizing: border-box;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: fit-content !important;
+  min-width: 0 !important;
+  max-width: 100%;
+  height: 26px !important;
+  min-height: 26px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  padding: 4px 8px !important;
+  box-shadow: none !important;
+  font-family: inherit !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  font-style: normal !important;
+  line-height: 18px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  text-align: center;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.status-badge :is(span, strong, b, small) {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  font-style: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  text-transform: inherit !important;
+}
+
+.status-badge svg {
+  width: 12px !important;
+  height: 12px !important;
+  flex-shrink: 0;
+}
+
+.status-badge.lookup-status { display: inline-flex; }

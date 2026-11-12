@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
+import { Badge } from "./ui/badge";
 
 export function BoostStockStatus({ tone = "neutral", children }: { tone?: "neutral" | "success" | "accent" | "danger"; children: ReactNode }) {
-  return <span className={`boost-stock-status is-${tone}`}><span aria-hidden="true" />{children}</span>;
+  return <Badge variant={tone === "success" ? "success" : tone === "danger" ? "destructive" : tone === "accent" ? "default" : "outline"}>{children}</Badge>;
 }
 
 export const boostStockOrderLink = (orderId: string) => `/orders?uniqid=${encodeURIComponent(orderId)}&provider=dcord`;

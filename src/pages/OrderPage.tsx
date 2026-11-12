@@ -1195,8 +1195,7 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
-                  <span className="lookup-status" data-status={normalizedStatus.toLowerCase()}>
-                    <small>Order status</small>
+                  <span className="lookup-status status-badge" data-status={normalizedStatus.toLowerCase()}>
                     <strong>{result.status ?? "UNKNOWN"}</strong>
                   </span>
                   <span className="lookup-service-name">
@@ -1462,7 +1461,7 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   {dcordRejoinJob && !dcordRejoinRunning ? (
-                    <span className="public-token-result-pill" data-state={dcordRejoinJob.failed > 0 ? "failed" : "active"} title={dcordRejoinJob.failed > 0 ? `${dcordRejoinJob.failed} token(s) failed to re-join.` : "All assigned tokens re-joined successfully."}>
+                    <span className="public-token-result-pill status-badge" data-state={dcordRejoinJob.failed > 0 ? "failed" : "active"} title={dcordRejoinJob.failed > 0 ? `${dcordRejoinJob.failed} token(s) failed to re-join.` : "All assigned tokens re-joined successfully."}>
                       Re-joined {dcordRejoinJob.succeeded}/{dcordRejoinJob.total}{dcordRejoinJob.failed > 0 ? ` · ${dcordRejoinJob.failed} failed` : ""}
                     </span>
                   ) : null}
@@ -1504,13 +1503,13 @@ export default function OrderPage() {
                         <span className="public-token-result-title">
                           <strong>{item.token}</strong>
                           {humanizerState ? (
-                            <span className="public-token-humanizer-badge" data-state={humanizerState}>
+                            <span className="public-token-humanizer-badge status-badge" data-state={humanizerState}>
                               <Sparkles className={humanizerState === "running" ? "animate-pulse" : ""} aria-hidden="true" />
                               {humanizerState === "success" ? "Humanized" : humanizerState === "partial" ? "Partial" : humanizerState === "running" ? "Humanizing" : humanizerState === "failed" ? "Failed" : "Waiting"}
                             </span>
                           ) : null}
                           {rejoinResult ? (
-                            <span className="public-token-humanizer-badge" data-state={rejoinResult.state} title={rejoinResult.message}>
+                            <span className="public-token-humanizer-badge status-badge" data-state={rejoinResult.state} title={rejoinResult.message}>
                               <LogIn className={rejoinResult.state === "running" ? "animate-pulse" : ""} aria-hidden="true" />
                               {rejoinResult.state === "success" ? "Re-joined" : rejoinResult.state === "failed" ? "Re-join failed" : rejoinResult.state === "running" ? "Re-joining" : "Re-join waiting"}
                             </span>
@@ -1527,8 +1526,8 @@ export default function OrderPage() {
                             </Button>
                           ) : null}
                         </span>
-                        <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                        <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                        <span className="public-token-result-pill status-badge" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                        <span className="public-token-result-pill status-badge" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
                         <span className="public-token-result-slots">{item.slots}</span>
                       </span>
                     </div>
@@ -1627,12 +1626,12 @@ export default function OrderPage() {
                       </span>
                       <span className="community-order-result-state">
                         {item.authorizationStatus ? (
-                          <span className="public-token-result-pill" data-state={item.authorizationStatus} title={item.authorizationDetails}>
+                          <span className="public-token-result-pill status-badge" data-state={item.authorizationStatus} title={item.authorizationDetails}>
                             OAuth {item.authorizationStatus}
                           </span>
                         ) : null}
                         {item.autoLeaveStatus ? (
-                          <span className="public-token-result-pill" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
+                          <span className="public-token-result-pill status-badge" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
                             {item.autoLeaveStatus === "waiting"
                               ? `Leave queued${item.autoLeaveScheduledAt ? ` · ${formatTime(item.autoLeaveScheduledAt)}` : ""}`
                               : item.autoLeaveStatus === "processing"
@@ -1646,16 +1645,16 @@ export default function OrderPage() {
                                       : item.autoLeaveStatus}
                           </span>
                         ) : item.membershipStatus === "removed" ? (
-                          <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
+                          <span className="public-token-result-pill status-badge" data-state="removed" title={item.membershipDetails}>
                             Left server
                           </span>
                         ) : null}
                         {typeof item.onlinerLive === "boolean" ? (
-                          <span className="public-token-result-pill" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
+                          <span className="public-token-result-pill status-badge" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
                             {item.onlinerLive ? "Online" : "Offline"}
                           </span>
                         ) : null}
-                        <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
+                        <span className="public-token-result-pill status-badge" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                       </span>
                       <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
                         ? formatTime(item.autoLeaveCompletedAt)

@@ -912,8 +912,7 @@ export default function PublicOrderPage() {
             <div className="monitor-server-copy">
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
               <div className="monitor-order-labels">
-                <span className="lookup-status" data-status={normalizedStatus.toLowerCase() || "pending"}>
-                  <small>Order status</small>
+                <span className="lookup-status status-badge" data-status={normalizedStatus.toLowerCase() || "pending"}>
                   {isInitialLoading ? <Skeleton className="h-3 w-16" /> : <strong>{statusLabel}</strong>}
                 </span>
                 <span className="lookup-service-name">
@@ -1127,12 +1126,12 @@ export default function PublicOrderPage() {
                             </span>
                             <span className="community-order-result-state">
                               {item.authorizationStatus === "inactive" ? (
-                                <span className="public-token-result-pill" data-state="inactive">
+                                <span className="public-token-result-pill status-badge" data-state="inactive">
                                   Inactive
                                 </span>
                               ) : null}
                               {item.autoLeaveStatus ? (
-                                <span className="public-token-result-pill" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
+                                <span className="public-token-result-pill status-badge" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
                                   {item.autoLeaveStatus === "waiting"
                                     ? "Leave queued"
                                     : item.autoLeaveStatus === "processing"
@@ -1146,16 +1145,16 @@ export default function PublicOrderPage() {
                                             : item.autoLeaveStatus}
                                 </span>
                               ) : item.membershipStatus === "removed" ? (
-                                <span className="public-token-result-pill" data-state="removed" title={item.membershipDetails}>
+                                <span className="public-token-result-pill status-badge" data-state="removed" title={item.membershipDetails}>
                                   Left server
                                 </span>
                               ) : null}
                               {typeof item.onlinerLive === "boolean" ? (
-                                <span className="public-token-result-pill" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
+                                <span className="public-token-result-pill status-badge" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
                                   {item.onlinerLive ? "Online" : "Offline"}
                                 </span>
                               ) : null}
-                              <span className="public-token-result-pill" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
+                              <span className="public-token-result-pill status-badge" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                             </span>
                             <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
                               ? formatDateTime(item.autoLeaveCompletedAt)
@@ -1214,8 +1213,8 @@ export default function PublicOrderPage() {
                                   </Button>
                                 ) : null}
                               </span>
-                              <span className="public-token-result-pill" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                              <span className="public-token-result-pill" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                              <span className="public-token-result-pill status-badge" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
+                              <span className="public-token-result-pill status-badge" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
                               <span className="public-token-result-slots">{item.slots}</span>
                             </span>
                           </div>
