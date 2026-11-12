@@ -9,7 +9,7 @@ import toast from "react-hot-toast";
 import { Input } from "./ui/input";
 
 const labels: Record<RotatingBoostAccount["status"], string> = {
-  available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Insufficient time / expired"
+  available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Expired / low time"
 };
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : "—";
 
@@ -84,14 +84,13 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
     const link = document.createElement("a"); link.href = url; link.download = "boost-rotating-tokens.txt"; link.click(); URL.revokeObjectURL(url);
   }
   return <section className="rotating-stock-panel" aria-label="Rotating inventory">
-    <header className="stock-duration-header flex flex-wrap items-center">
-      <div className="stock-duration-identity flex items-center"><span><RefreshCw className="h-4 w-4" /></span><div><p className="app-kicker">Rotating inventory</p><h2>{accounts.length} accounts <em>{accounts.filter((row) => row.status === "available").length * 2} boosts ready</em></h2></div></div>
+    <div className="boost-rotating-controls">
+      <details className="boost-rotation-help"><summary><ShieldCheck className="h-3.5 w-3.5" />Pool rules</summary><p>Each account supplies 2 boosts for a 30-day delivery, with a 3-day buffer. The 90-day subscription starts on first assignment. Accounts return automatically when eligible.</p></details>
       <div className="dcord-proxy-actions">
-        <Button size="xs" variant="secondary" onClick={onRefresh} disabled={loading}><RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />Refresh</Button>
-        <Button size="xs" disabled={!availableThreeMonth || loading} onClick={() => { setAdding(true); setCount(1); setActionError(""); }}><ArrowRightLeft className="h-3.5 w-3.5" />Move from 3 month</Button>
+        <Button size="xs" variant="ghost" onClick={onRefresh} disabled={loading}><RefreshCw className={loading ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />Refresh</Button>
+        <Button size="xs" variant="secondary" disabled={!availableThreeMonth || loading} onClick={() => { setAdding(true); setCount(1); setActionError(""); }}><ArrowRightLeft className="h-3.5 w-3.5" />Transfer from 3 month</Button>
       </div>
-    </header>
-    <div className="boost-rotation-note"><ShieldCheck className="h-4 w-4" /><p>2 boosts per account · 30-day deliveries · 3-day buffer. The 90-day subscription starts on first assignment. Eligible accounts return automatically after each delivery period.</p></div>
+    </div>
     <div className="boost-rotating-filters stock-duration-filter" role="group" aria-label="Rotating account status">
       <button type="button" aria-pressed={filter === "all"} className={filter === "all" ? "is-active" : ""} onClick={() => setFilter("all")}>All<span>{accounts.length}</span></button>
       {(Object.keys(labels) as RotatingBoostAccount["status"][]).map((status) => <button key={status} type="button" aria-pressed={filter === status} className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)}>{labels[status]}<span>{accounts.filter((row) => row.status === status).length}</span></button>)}
@@ -105,20 +104,26 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
       </div>
     </div>
     {error ? <p role="alert" className="rotating-transfer-error m-4">{error}</p> : null}
+    <div className="boost-rotating-columns" aria-hidden="true"><span>ACCOUNT / TOKEN</span><span>STATUS</span><span>TIME LEFT</span><span>TOOLS</span></div>
     <div className="boost-rotating-list" aria-busy={loading}>
-      {!visible.length ? <div className="stock-empty-state"><ShieldCheck className="h-5 w-5" /><strong>{loading ? "Loading rotating stock…" : accounts.length ? "No matching accounts" : "Build your rotating pool"}</strong><span>{accounts.length ? "Try another status or search." : "Move 3 month accounts here to deliver reusable 30-day boosts."}</span></div> : visible.map((row) => <article key={row.id} className={`boost-rotating-row ${selected.includes(row.id) ? "is-selected" : ""}`}>
-        <div className="boost-rotating-account">
-          <input type="checkbox" aria-label={"Select account " + row.redactedToken} checked={selected.includes(row.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, row.id] : selected.filter((id) => id !== row.id))} />
-          <div><code>{row.token || row.redactedToken}</code><span className="boost-token-tools"><Badge variant={badgeVariant(row.status)}>{labels[row.status]}</Badge><Badge variant="outline">2 boosts</Badge><Badge variant="secondary">Rotating · 30 days</Badge></span></div>
-          <Button size="icon-sm" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button>
+      {!visible.length ? <div className="stock-empty-state"><ShieldCheck className="h-5 w-5" /><strong>{loading ? "Loading rotating stock…" : accounts.length ? "No matching accounts" : "Your rotating pool is empty"}</strong><span>{accounts.length ? "Try another status or search." : "Transfer 3 month accounts to start delivering 30-day boosts."}</span></div> : visible.map((row) => <article key={row.id} className={`boost-rotating-row ${selected.includes(row.id) ? "is-selected" : ""}`}>
+        <div className="boost-rotating-line">
+          <label className="boost-rotating-account">
+            <input type="checkbox" aria-label={"Select account " + row.redactedToken} checked={selected.includes(row.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, row.id] : selected.filter((id) => id !== row.id))} />
+            <span><code>{row.token || row.redactedToken}</code><small>{row.serverName || row.serverId || (row.status === "available" ? "Unassigned · ready for delivery" : "No active server")}{row.orderId ? " · " + row.orderId : ""}</small></span>
+          </label>
+          <Badge variant={badgeVariant(row.status)}>{labels[row.status]}</Badge>
+          <span className="boost-time-left" title={row.expiresAt ? formatDate(row.expiresAt) : "Subscription starts on first assignment"}>{row.expiresAt ? Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000)) + " days" : "Not started"}</span>
+          <div className="boost-row-actions"><Button size="icon-sm" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button><Button size="icon-sm" variant={expanded === row.id ? "secondary" : "ghost"} aria-label={"Account details and history for " + row.redactedToken} title="Details & history" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><History className="h-3.5 w-3.5" /></Button></div>
         </div>
-        <div className="boost-rotating-details">
-          <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong><span>{row.orderId || (row.status === "available" ? "Ready for a new order" : "Unavailable for new orders")}</span></div>
-          <div><small>Customer period ends</small><strong>{formatDate(row.customerEndsAt)}</strong><span>{row.startedAt ? "Started " + formatDate(row.startedAt) : "Waiting for delivery"}</span></div>
-          <div><small>Subscription</small><strong>{row.expiresAt ? Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000)) + " days left" : "90 days · not started"}</strong><span>{row.expiresAt ? formatDate(row.expiresAt) : "Starts on first assignment"}</span></div>
-          <Button size="xs" variant="ghost" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><History className="h-3.5 w-3.5" />{row.history.length} past assignments</Button>
-        </div>
-        {expanded === row.id ? <div className="boost-assignment-history">{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || entry.orderId || "Previous assignment"}</strong><span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments. Delivery history will appear here.</p>}</div> : null}
+        {expanded === row.id ? <div className="boost-account-drawer">
+          <div className="boost-rotating-details">
+            <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong><span>{row.orderId || "No order assigned"}</span></div>
+            <div><small>Customer period ends</small><strong>{formatDate(row.customerEndsAt)}</strong><span>{row.startedAt ? "Started " + formatDate(row.startedAt) : "Delivery has not started"}</span></div>
+            <div><small>Subscription ends</small><strong>{row.expiresAt ? formatDate(row.expiresAt) : "90 days from first assignment"}</strong><span>2 boosts per delivery</span></div>
+          </div>
+          <div className="boost-assignment-history"><strong>{row.history.length} previous assignments</strong>{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || entry.orderId || "Previous assignment"}</strong><span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments yet.</p>}</div>
+        </div> : null}
       </article>)}
     </div>
     {adding ? createPortal(<div className="confirm-modal-backdrop" onMouseDown={(event) => {

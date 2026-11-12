@@ -4419,36 +4419,24 @@ export default function HomePage() {
             </div>
 
             {stockCategory === "boosts" ? <>
-            <section className={`${shell} stock-overview`}>
-              <div className="stock-overview-lead">
-                <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>
-                <div><small>Total capacity</small><strong>{(boostStock.oneMonth + boostStock.threeMonth) * 2 + rotatingCapacity}</strong><span>boosts ready</span></div>
+            <section className={`${shell} stock-workbench boost-workbench`}>
+              <div className="boost-inventory-heading">
+                <div><span className="boost-heading-icon"><Zap className="h-4 w-4" /></span><h2>Boost inventory</h2><span className="boost-live-indicator">{(boostStock.oneMonth + boostStock.threeMonth) * 2 + rotatingCapacity} boosts ready</span></div>
+                <span className="boost-account-total">{boostStock.oneMonth + boostStock.threeMonth + rotatingAccounts.length} accounts</span>
               </div>
-              <div className="stock-overview-metric"><small>Inventory accounts</small><strong>{boostStock.oneMonth + boostStock.threeMonth + rotatingAccounts.length}</strong><span>encrypted inventory</span></div>
-              <div className="stock-overview-metric"><small>1 month</small><strong>{boostStock.oneMonth}</strong><span>{boostStock.oneMonth * 2} boosts</span></div>
-              <div className="stock-overview-metric"><small>3 month</small><strong>{boostStock.threeMonth}</strong><span>{boostStock.threeMonth * 2} boosts</span></div>
-              <div className="stock-overview-metric"><small>Rotating ready</small><strong>{rotatingCapacity / 2}</strong><span>{rotatingCapacity} boosts · 30 days</span></div>
-            </section>
-
-            <section className={`${shell} stock-workbench`}>
-              <div className="stock-workbench-header">
-                <div><p className="app-kicker">Boost inventory</p><h2 className="boost-workspace-title">Your stock, one workspace</h2></div>
-                <span className="stock-storage-mark"><ShieldCheck className="h-4 w-4" /> Encrypted server storage</span>
-              </div>
-
               <div className="boost-pool-grid" role="tablist" aria-label="Boost inventory pools">
                 {[
                   { id: "one", title: "1 month", count: boostStock.oneMonth, ready: boostStock.oneMonth * 2, icon: Zap, description: "Single delivery · 30 days", active: stockView === "active" && boostPool === 1, select: () => { setStockView("active"); setBoostPool(1); } },
                   { id: "three", title: "3 month", count: boostStock.threeMonth, ready: boostStock.threeMonth * 2, icon: Gem, description: "Single delivery · 90 days", active: stockView === "active" && boostPool === 3, select: () => { setStockView("active"); setBoostPool(3); } },
                   { id: "rotating", title: "Rotating", count: rotatingAccounts.length, ready: rotatingCapacity, icon: RefreshCw, description: "Reusable accounts · 30-day deliveries", active: stockView === "rotating", select: () => setStockView("rotating") }
-                ].map((pool) => <button key={pool.id} type="button" role="tab" aria-selected={pool.active} className={`boost-pool-card ${pool.active ? "is-active" : ""}`} onClick={pool.select}>
-                  <span className="boost-pool-top"><span className="community-category-icon"><pool.icon className="h-4 w-4" /></span><Badge variant={pool.ready ? "success" : "secondary"}>{pool.ready} boosts ready</Badge></span>
-                  <strong>{pool.title}</strong><small>{pool.description}</small><span className="boost-pool-count">{pool.count}<small>accounts</small></span>
+                ].map((pool) => <button key={pool.id} type="button" role="tab" aria-selected={pool.active} className={`boost-pool-card ${pool.active ? "is-active" : ""}`} onClick={pool.select} title={`${pool.description} · ${pool.ready} boosts ready`}>
+                  <pool.icon className="h-3.5 w-3.5" /><span>{pool.title}</span><span className="boost-pool-count">{pool.count}</span>
                 </button>)}
+                <button type="button" role="tab" aria-selected={stockView === "used"} className={`boost-pool-card boost-history-tab ${stockView === "used" ? "is-active" : ""}`} onClick={() => setStockView("used")}><History className="h-3.5 w-3.5" /><span>Used</span><span className="boost-pool-count">{usedBoostTokens.length}</span></button>
               </div>
               <div className="boost-workspace-toolbar">
                 <label className="boost-stock-search"><Search className="h-4 w-4" /><Input aria-label="Search boost inventory" placeholder="Search tokens, servers or orders…" value={boostSearch} onChange={(event) => setBoostSearch(event.target.value)} /></label>
-                <Button type="button" variant={stockView === "used" ? "default" : "secondary"} size="sm" onClick={() => setStockView(stockView === "used" ? "active" : "used")}><History className="h-4 w-4" />Used history<Badge variant="outline">{usedBoostTokens.length}</Badge></Button>
+                <span className="boost-toolbar-context">{stockView === "rotating" ? "30-day delivery · automatic reuse" : stockView === "used" ? "Delivery & token history" : `${boostPool * 30}-day delivery · 2 boosts per token`}</span>
               </div>
               {stockView === "rotating" ? <RotatingBoostStockPanel search={boostSearch} accounts={rotatingAccounts} availableThreeMonth={boostStock.threeMonth} loading={rotatingLoading} error={rotatingError} onRefresh={() => { void refreshRotatingStock(); void refreshBoostStockTokens(); }} onChange={(accounts, stock) => { setRotatingAccounts(accounts); setBoostStock(stock); void refreshRotatingStock(); void refreshBoostStockTokens(); }} /> : null}
               {stockView === "active" ? (
@@ -4461,23 +4449,13 @@ export default function HomePage() {
                       const selectedCount = getSelectedTokens(group.duration).length;
                       return (
                         <section key={group.duration} className="stock-duration-section">
-                          <header className="stock-duration-header">
-                            <div className="stock-duration-identity">
-                              <span>0{group.duration}</span>
-                              <div><p className={labelClass}>{group.label} inventory</p><h2>{group.tokens.length} tokens <em>{group.tokens.length * 2} boosts</em></h2></div>
-                            </div>
-                            <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration)} disabled={!group.tokens.length}>
-                              <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download all
-                            </Button>
-                          </header>
-
                           <div className={`stock-selection-bar ${selectedCount ? "has-selection" : ""}`}>
                             <label className="stock-select-all">
                               <input type="checkbox" checked={Boolean(visibleTokens.length && selectedCount === visibleTokens.length)} onChange={(event) => setAllBoostTokens(group.duration, event.target.checked)} disabled={!visibleTokens.length} />
                               <span>{selectedCount ? `${selectedCount} selected` : "Select all"}</span>
                             </label>
                             <div className="stock-selection-actions">
-                              {selectedCount ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllBoostTokens(group.duration, false)}>Clear</Button> : null}
+                              {selectedCount ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllBoostTokens(group.duration, false)}>Clear</Button> : <Button type="button" size="xs" variant="ghost" onClick={() => downloadBoostTokens(group.duration)} disabled={!group.tokens.length}><Download className="h-3.5 w-3.5" />Export all</Button>}
                               <Button type="button" size="xs" variant="secondary" onClick={() => downloadBoostTokens(group.duration, true)} disabled={!selectedCount}>
                                 <Download className="h-3.5 w-3.5" aria-hidden="true" /> Download
                               </Button>
@@ -4502,7 +4480,7 @@ export default function HomePage() {
                                     <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
                                     <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
                                     <code title={token}>{token}</code>
-                                    <span className="boost-token-tools"><Badge variant="success">Ready</Badge><Badge variant="outline">2 boosts</Badge><Button type="button" variant="ghost" size="icon-sm" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
+                                    <span className="boost-token-tools"><Badge variant="success">Ready</Badge><Button type="button" variant="ghost" size="icon-sm" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
                                   </li>
                                 ))}
                               </ol>
