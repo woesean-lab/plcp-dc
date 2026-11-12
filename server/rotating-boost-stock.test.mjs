@@ -68,6 +68,32 @@ function fixture() {
   return { stock, seed, seedRegular, readRegular, orders, assignments, reopen, read, write, settings, failNextInventoryWrite: () => { failInventoryWrite = true; } };
 }
 
+test("removal preserves the fixed proxy in the pool and leaves other stock untouched", async () => {
+  const f = fixture();
+  const [first, second] = await f.seed(["one", "two"], later(90));
+  const rows = f.read(); rows[0].proxy = "http://assigned:8080"; f.write(rows);
+  let callbackToken;
+  await f.stock.remove(first.id, async (row) => { callbackToken = row.token; });
+  assert.equal(callbackToken, "one");
+  assert.deepEqual((await f.stock.list()).map((row) => row.id), [second.id]);
+  const proxies = await f.stock.proxies();
+  assert.equal(proxies.available, 1);
+  assert.equal(proxies.proxies[0].proxy, "http://assigned:8080");
+});
+
+test("active deliveries cannot be removed; failed cleanup rolls back removal", async () => {
+  const f = fixture();
+  const [first] = await f.seed(["one"], later(90));
+  for (const status of ["reserved", "in_use"]) {
+    const rows = f.read(); rows[0].status = status; rows[0].customerEndsAt = later(20); f.write(rows);
+    await assert.rejects(f.stock.remove(first.id), { statusCode: 409 });
+    assert.equal(f.read().length, 1);
+  }
+  const rows = f.read(); rows[0].status = "available"; f.write(rows);
+  await assert.rejects(f.stock.remove(first.id, async () => { throw new Error("cleanup failed"); }), /cleanup failed/);
+  assert.equal(f.read().length, 1);
+});
+
 test("moving deduplicates account identities without starting the clock and removes source tokens", async () => {
   const { stock, seedRegular, readRegular, settings } = fixture();
   seedRegular({ oneMonth: ["one-month"], threeMonth: ["account-token", "mail:pass:account-token:2fa", "keep-token"] });

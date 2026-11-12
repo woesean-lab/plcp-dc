@@ -12,6 +12,7 @@ import pg from "pg";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
+import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -5423,6 +5424,35 @@ const rotatingBoostStock = createRotatingBoostStock({
     return { tokens: values[0], proxies: values[1] };
   },
 });
+
+const rotatingBoostOnliner = createRotatingBoostOnliner({
+  stock: rotatingBoostStock,
+  accountLimit: discordOnlinerAccountLimit,
+  readConfig: async (client) => {
+    const result = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 FOR UPDATE", [discordOnlinerSettingKey]);
+    return normalizeDiscordOnlinerConfig(result.rows[0] ? JSON.parse(decryptCredential(result.rows[0].encrypted_value)) : { enabled: false });
+  },
+  writeConfig: (client, config) => client.query(
+    `INSERT INTO app_settings (setting_key, encrypted_value, updated_at) VALUES ($1, $2, NOW())
+     ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+    [discordOnlinerSettingKey, encryptCredential(JSON.stringify(normalizeDiscordOnlinerConfig(config)))]
+  )
+});
+
+function applyRotatingOnlinerChange({ config, account, removedIds }) {
+  for (const id of removedIds) {
+    const runtime = discordOnlinerRuntimes.get(id);
+    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+    discordOnlinerRuntimes.delete(id);
+    discordOnlinerPendingRuntimeWrites.delete(id);
+  }
+  if (account && serviceRunsOnliner) {
+    const runtime = discordOnlinerRuntimes.get(account.id);
+    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+    startDiscordOnlinerAccounts(config, [account]);
+  }
+  if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = config;
+}
 
 async function saveBoostTokenStock(stock) {
   const normalized = normalizeBoostTokenStock(stock);
@@ -14415,8 +14445,37 @@ app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
 });
 
 app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => {
-  try { res.set("Cache-Control", "no-store").json({ accounts: await rotatingBoostStock.list({ includeTokens: true }) }); }
+  try {
+    const accounts = await rotatingBoostStock.list({ includeTokens: true });
+    const config = await getDiscordOnlinerConfig();
+    const snapshot = await getDiscordOnlinerSnapshotForApi(config);
+    res.set("Cache-Control", "no-store").json({ accounts: attachRotatingOnliner(accounts, config, snapshot) });
+  }
   catch (error) { next(error); }
+});
+
+app.post("/api/dcord/rotating-stock/:id/onliner", requireSession, async (req, res, next) => {
+  try {
+    const result = await rotatingBoostOnliner.connect(req.params.id);
+    applyRotatingOnlinerChange(result);
+    res.json({ queued: true });
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/dcord/rotating-stock/:id/onliner", requireSession, async (req, res, next) => {
+  try {
+    const result = await rotatingBoostOnliner.disconnect(req.params.id);
+    applyRotatingOnlinerChange(result);
+    res.json({ removed: true });
+  } catch (error) { next(error); }
+});
+
+app.delete("/api/dcord/rotating-stock/:id", requireSession, async (req, res, next) => {
+  try {
+    const result = await rotatingBoostOnliner.remove(req.params.id);
+    applyRotatingOnlinerChange(result);
+    res.json({ removed: true });
+  } catch (error) { next(error); }
 });
 
 app.get("/api/dcord/rotating-stock/proxies", requireSession, async (_req, res, next) => {

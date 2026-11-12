@@ -162,6 +162,31 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt, loadOrderAssi
   }
   const publicRows = (rows, includeTokens = false) => rows.map(({ token, proxy, fingerprint: _fingerprint, ...row }) => ({ ...row, hasFixedProxy: Boolean(proxy), proxyLabel: proxy ? proxyLabel(proxy) : null, ...(includeTokens ? { token } : {}), redactedToken: `${tokenIdentity(token).slice(0, 6)}…${tokenIdentity(token).slice(-4)}` }));
   return {
+    withAccount: (id, operation) => mutate(async (rows, client) => {
+      await restoreProxies(rows, client);
+      const row = rows.find((item) => item.id === id);
+      if (!row) throw Object.assign(new Error("Rotating account could not be found."), { statusCode: 404 });
+      return operation(row, client);
+    }),
+    remove: (id, beforeRemove = async () => {}) => mutate(async (rows, client) => {
+      await restoreProxies(rows, client);
+      const index = rows.findIndex((item) => item.id === id);
+      if (index < 0) throw Object.assign(new Error("Rotating account could not be found."), { statusCode: 404 });
+      const row = rows[index];
+      if (["reserved", "in_use"].includes(row.status)) fail("This account is assigned to an active delivery and cannot be removed yet.");
+      const result = await beforeRemove(row, client);
+      // Historical proxy bindings may not yet exist in the saved pool.
+      if (row.proxy) {
+        const proxies = [...new Set([...(await loadProxyPool(client)), row.proxy])];
+        await client.query(
+          `INSERT INTO app_settings (setting_key, encrypted_value, updated_at) VALUES ($1, $2, NOW())
+           ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+          [proxyKey, encrypt(JSON.stringify(proxies))]
+        );
+      }
+      rows.splice(index, 1);
+      return result;
+    }),
     proxies: () => mutate(async (rows, client) => {
       await restoreProxies(rows, client);
       return proxySummary(rows, await loadProxyPool(client));

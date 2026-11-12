@@ -439,6 +439,18 @@ export function getRotatingBoostStock() {
   return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock");
 }
 
+export function connectRotatingBoostOnliner(id: string) {
+  return requestJson<{ queued: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/onliner`, { method: "POST" });
+}
+
+export function disconnectRotatingBoostOnliner(id: string) {
+  return requestJson<{ removed: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/onliner`, { method: "DELETE" });
+}
+
+export function removeRotatingBoostAccount(id: string) {
+  return requestJson<{ removed: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export function getRotatingBoostProxies() {
   return requestJson<RotatingProxyPool>("/api/dcord/rotating-stock/proxies");
 }
