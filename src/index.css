@@ -12015,7 +12015,7 @@
 .boost-routing-details[open] summary > svg { transform: rotate(180deg); }
 .boost-fixed-proxies { margin: 0; }
 .boost-proxy-section { padding: 0; }
-.boost-routing-details .proxy-routing-editor { margin: 16px; border: 1px solid var(--app-border); border-radius: 12px; background: rgba(4, 5, 11, .24); }
+.boost-routing-details .proxy-routing-editor { margin: 0; border: 0; border-radius: 0; }
 .boost-fixed-proxies > p { border-top: 1px solid var(--app-divider); padding: 10px 16px 12px; }
 .boost-proxy-preloader { display: grid; gap: 20px; padding: 20px 16px; }
 .boost-proxy-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--app-divider); color: var(--app-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
