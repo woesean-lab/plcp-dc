@@ -2,8 +2,8 @@
 @import "tw-animate-css";
 
 @theme {
-  --font-sans: "Manrope Variable", "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono Variable", Consolas, monospace;
+  --font-sans: "Geist Variable", "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", Consolas, monospace;
 }
 
 @layer base {
