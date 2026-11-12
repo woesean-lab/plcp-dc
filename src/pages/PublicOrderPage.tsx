@@ -10,6 +10,7 @@ import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
 import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
+import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -912,9 +913,7 @@ export default function PublicOrderPage() {
             <div className="monitor-server-copy">
               <h1>{isInitialLoading ? <Skeleton className="h-9 w-64 max-w-[70vw]" /> : serverName}</h1>
               <div className="monitor-order-labels">
-                <span className="lookup-status status-badge" data-status={normalizedStatus.toLowerCase() || "pending"}>
-                  {isInitialLoading ? <Skeleton className="h-3 w-16" /> : <strong>{statusLabel}</strong>}
-                </span>
+                <OrderStatusIndicator status={statusLabel} loading={isInitialLoading} />
                 <span className="lookup-service-name">
                   <small>Service</small>
                   {isInitialLoading ? <Skeleton className="h-3 w-14" /> : <strong>{serviceName}</strong>}

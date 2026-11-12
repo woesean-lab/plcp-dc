@@ -9,6 +9,7 @@ import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "../lib/bot-invite";
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
+import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -1195,9 +1196,7 @@ export default function OrderPage() {
               <div className="min-w-0">
                 <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
-                  <span className="lookup-status status-badge" data-status={normalizedStatus.toLowerCase()}>
-                    <strong>{result.status ?? "UNKNOWN"}</strong>
-                  </span>
+                  <OrderStatusIndicator status={result.status ?? "UNKNOWN"} />
                   <span className="lookup-service-name">
                     <small>Service</small>
                     <strong>{serviceName}</strong>

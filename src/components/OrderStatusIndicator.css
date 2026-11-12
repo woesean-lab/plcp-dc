@@ -1,0 +1,29 @@
+.order-status-indicator {
+  --order-status-color: var(--app-accent-bright);
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  min-height: 26px;
+  max-width: 100%;
+  color: var(--order-status-color);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.order-status-indicator-dot {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 6px;
+  border-radius: 50%;
+  background: var(--order-status-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--order-status-color) 10%, transparent);
+}
+
+.order-status-indicator[data-tone="success"] { --order-status-color: var(--app-success); }
+.order-status-indicator[data-tone="danger"] { --order-status-color: var(--app-danger); }
+.order-status-indicator[data-tone="paused"] { --order-status-color: #9bd3df; }
+.order-status-indicator[data-tone="waiting"] { --order-status-color: #f5cf76; }

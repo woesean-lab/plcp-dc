@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
@@ -435,11 +436,6 @@ function formatOnlinerProxyCooldown(value: string | null, now: number) {
   return `Retry in ${Math.ceil(remainingSeconds / 60)}m`;
 }
 
-function formatOrderStatus(status?: string) {
-  const label = String(status ?? "New").trim().replace(/[_-]+/g, " ").toLowerCase();
-  return label ? `${label.charAt(0).toUpperCase()}${label.slice(1)}` : "New";
-}
-
 function getTrackedTimestamp(value?: string) {
   if (!value) return Number.NEGATIVE_INFINITY;
   const timestamp = new Date(value).getTime();
@@ -469,15 +465,6 @@ function parseDelay(value?: string | number) {
   }
 
   return undefined;
-}
-
-function getOrderStatusVariant(status?: string): "success" | "destructive" | "secondary" {
-  const normalized = String(status ?? "").toLowerCase();
-  if (normalized.includes("completed")) return "success";
-  if (["error", "invalid", "terminated", "canceled", "cancelled", "invites paused"].some((value) => normalized.includes(value))) {
-    return "destructive";
-  }
-  return "secondary";
 }
 
 function getOrderStatusTone(status?: string): "active" | "success" | "danger" | "paused" {
@@ -4277,7 +4264,7 @@ export default function HomePage() {
                                 ) : "—"}
                               </div>
                               <div className="orders-row-status">
-                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusVariant(order.status)}>{formatOrderStatus(order.status)}</Badge>
+                                <OrderStatusIndicator status={order.status} />
                               </div>
                               <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
