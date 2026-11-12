@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRightLeft, ArrowUpRight, ChevronDown, Copy, Download, History, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Copy, Download, History, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { moveThreeMonthToRotatingStock } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
@@ -92,10 +92,11 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
         <Button size="xs" variant="secondary" disabled={!availableThreeMonth || loading} onClick={() => { setAdding(true); setCount(1); setActionError(""); }}><ArrowRightLeft className="h-3.5 w-3.5" />Transfer from 3 month</Button>
       </div>
     </div>
-    <div className="boost-rotating-filters" role="group" aria-label="Rotating account status">
+    <div className="stock-used-filterbar"><div className="stock-used-filter-group"><span>Status</span>
+    <div className="stock-duration-filter boost-rotating-status-tabs" role="group" aria-label="Rotating account status">
       <button type="button" aria-pressed={filter === "all"} className={filter === "all" ? "is-active" : ""} onClick={() => setFilter("all")}>All<span>{accounts.length}</span></button>
       {(Object.keys(labels) as RotatingBoostAccount["status"][]).map((status) => <button key={status} type="button" aria-pressed={filter === status} className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)}>{labels[status]}<span>{accounts.filter((row) => row.status === status).length}</span></button>)}
-    </div>
+    </div></div></div>
     <div className={`stock-selection-bar flex flex-wrap items-center ${selectedRows.length ? "has-selection" : ""}`}>
       <label className="stock-select-all flex items-center"><input type="checkbox" checked={allSelected} disabled={!visible.length} onChange={(event) => setSelected(event.target.checked ? [...new Set([...selected, ...visible.map((row) => row.id)])] : selected.filter((id) => !visible.some((row) => row.id === id)))} /><span>{selectedRows.length ? selectedRows.length + " selected" : "Select visible"}</span></label>
       <div className="stock-selection-actions flex items-center">
@@ -113,18 +114,18 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
             <input type="checkbox" aria-label={"Select account " + row.redactedToken} checked={selected.includes(row.id)} onChange={(event) => setSelected(event.target.checked ? [...selected, row.id] : selected.filter((id) => id !== row.id))} />
             <span><code title={row.token || row.redactedToken}>{row.token || row.redactedToken}</code><small>2 boosts · {row.history.length} previous deliveries</small></span>
           </label>
-          <div className="boost-current-order">{row.orderId ? <><Link to={boostStockOrderLink(row.orderId)} title={row.orderId}>{row.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link><small>{row.serverName || row.serverId || "Server pending"}</small></> : <><span>Unassigned</span><small>{row.status === "available" ? "Ready for a new order" : "No current order"}</small></>}</div>
+          <div className="boost-current-order">{row.orderId ? <><Link target="_blank" rel="noopener noreferrer" to={boostStockOrderLink(row.orderId)} title={row.orderId}>{row.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link><small>{row.serverName || row.serverId || "Server pending"}</small></> : <><span>Unassigned</span><small>{row.status === "available" ? "Ready for a new order" : "No current order"}</small></>}</div>
           <BoostStockStatus tone={statusTone(row.status)}>{labels[row.status]}</BoostStockStatus>
           <div className="boost-time-left" title={row.expiresAt ? formatDate(row.expiresAt) : "Subscription starts on first assignment"}><strong>{row.expiresAt ? Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000)) + " days left" : "Not started"}</strong><small>{row.customerEndsAt ? "Delivery ends " + new Date(row.customerEndsAt).toLocaleDateString() : row.expiresAt ? "90-day subscription" : "Starts on first delivery"}</small></div>
-          <div className="boost-row-actions"><Button size="icon-sm" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button><Button size="xs" variant={expanded === row.id ? "secondary" : "ghost"} aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="Details & history" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><History className="h-3.5 w-3.5" />Details<ChevronDown className="boost-details-chevron h-3 w-3" /></Button></div>
+          <div className="boost-row-actions community-member-row-actions"><Button size="icon-sm" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button><Button size="icon-sm" className="community-rich-presence-action" variant={expanded === row.id ? "secondary" : "ghost"} aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="Details & history" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><History className="h-3.5 w-3.5" /></Button></div>
         </div>
         {expanded === row.id ? <div id={`boost-details-${row.id}`} className="boost-account-drawer">
           <div className="boost-rotating-details">
-            <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong>{row.orderId ? <Link className="boost-order-link" to={boostStockOrderLink(row.orderId)}>Open order <ArrowUpRight className="h-3.5 w-3.5" /></Link> : <span>No order assigned</span>}</div>
+            <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong>{row.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(row.orderId)}>Open order <ArrowUpRight className="h-3.5 w-3.5" /></Link> : <span>No order assigned</span>}</div>
             <div><small>Customer period ends</small><strong>{formatDate(row.customerEndsAt)}</strong><span>{row.startedAt ? "Started " + formatDate(row.startedAt) : "Delivery has not started"}</span></div>
             <div><small>Subscription ends</small><strong>{row.expiresAt ? formatDate(row.expiresAt) : "90 days from first assignment"}</strong><span>2 boosts per delivery</span></div>
           </div>
-          <div className="boost-assignment-history"><strong>{row.history.length} previous assignments</strong>{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || "Previous assignment"}</strong>{entry.orderId ? <Link className="boost-order-link" to={boostStockOrderLink(entry.orderId)}>{entry.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link> : null}<span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments yet.</p>}</div>
+          <div className="boost-assignment-history"><strong>{row.history.length} previous assignments</strong>{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || "Previous assignment"}</strong>{entry.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(entry.orderId)}>{entry.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link> : null}<span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments yet.</p>}</div>
         </div> : null}
       </article>)}
     </div>

@@ -11926,16 +11926,14 @@
 .boost-live-indicator { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; font-size: 12px; color: var(--app-success); }
 .boost-live-indicator::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .boost-account-total { color: var(--app-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.boost-pool-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 24px 24px; border-bottom: 1px solid var(--app-divider); }
-.boost-pool-card { display: flex; flex-direction: column; align-items: stretch; text-align: left; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--app-border); border-radius: 12px; background: var(--app-input-bg); color: var(--app-muted); transition: background .15s, border-color .15s; }
-.boost-pool-card:hover { border-color: var(--app-border-strong); background: var(--app-hover); }
-.boost-pool-card.is-active { border-color: var(--app-accent-border); background: var(--app-accent-soft); color: var(--app-accent-bright); box-shadow: inset 0 2px 0 var(--app-accent); }
-.boost-pool-card-top { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; }
-.boost-pool-count { margin-left: auto; border-radius: 5px; background: var(--app-control-bg); padding: 2px 6px; color: var(--app-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.boost-pool-grid { display: flex; align-items: center; gap: 3px; padding: 0 20px; border-bottom: 1px solid var(--app-divider); }
+.boost-pool-card { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 13px; border: 0; background: transparent; color: var(--app-muted); font-size: 11px; font-weight: 550; white-space: nowrap; transition: color .15s, background .15s; }
+.boost-pool-card:hover { color: var(--app-text); background: var(--app-hover); border-radius: 6px 6px 0 0; }
+.boost-pool-card.is-active { color: var(--app-accent-bright); }
+.boost-pool-card.is-active::after { content: ""; position: absolute; bottom: -1px; left: 12px; right: 12px; height: 2px; background: var(--app-accent); border-radius: 2px 2px 0 0; }
+.boost-history-tab { margin-left: auto; }
+.boost-pool-count { border-radius: 5px; background: var(--app-control-bg); padding: 2px 6px; color: var(--app-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
 .boost-pool-card.is-active .boost-pool-count { background: var(--app-accent-soft); color: var(--app-accent-bright); }
-.boost-pool-card > strong { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; color: var(--app-text); font-size: 26px; line-height: 1; font-weight: 600; font-variant-numeric: tabular-nums; }
-.boost-pool-card > strong small { color: var(--app-muted); font-size: 11px; font-weight: 400; }
-.boost-pool-description { font-size: 10px; line-height: 1.5; color: var(--app-muted); }
 .boost-workspace-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; }
 .boost-stock-search { display: flex; align-items: center; position: relative; width: min(100%, 400px); }
 .boost-stock-search > svg { position: absolute; left: 12px; color: var(--app-subtle); pointer-events: none; }
@@ -11969,12 +11967,7 @@
 .boost-rotation-help { color: var(--app-muted); font-size: 11px; max-width: 380px; }
 .boost-rotation-help summary { display: flex; align-items: center; gap: 6px; cursor: pointer; list-style: none; }
 .boost-rotation-help p { margin: 10px 0 0; padding: 12px; border: 1px solid var(--app-border); border-radius: 8px; background: var(--app-input-bg); line-height: 1.7; }
-.boost-rotating-filters { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 20px 16px; }
-.boost-rotating-filters button { display: inline-flex; align-items: center; gap: 8px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--app-border); border-radius: 8px; color: var(--app-muted); background: transparent; font-size: 11px; }
-.boost-rotating-filters button:hover { color: var(--app-text); background: var(--app-hover); }
-.boost-rotating-filters button.is-active { border-color: var(--app-accent-border); background: var(--app-accent-soft); color: var(--app-accent-bright); }
-.boost-rotating-filters button span { min-width: 20px; padding: 1px 5px; border-radius: 4px; background: var(--app-control-bg); text-align: center; font-size: 10px; font-variant-numeric: tabular-nums; }
-.boost-rotating-columns, .boost-rotating-line { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(130px, .7fr) 140px 145px 124px; align-items: center; gap: 18px; padding: var(--boost-row-padding); }
+.boost-rotating-columns, .boost-rotating-line { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(130px, .7fr) 140px 145px 68px; align-items: center; gap: 18px; padding: var(--boost-row-padding); }
 .boost-rotating-columns { padding-top: 10px; padding-bottom: 10px; color: var(--app-subtle); font-size: 10px; font-weight: 500; background: var(--app-input-bg); border-bottom: 1px solid var(--app-divider); }
 .boost-rotating-columns > :last-child { text-align: right; }
 .boost-rotating-list { max-height: 580px; overflow: auto; }
@@ -11993,9 +11986,7 @@
 .boost-order-link:hover, .boost-current-order a:hover { text-decoration: underline; }
 .boost-time-left { color: var(--app-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .boost-time-left strong { font-weight: 500; }
-.boost-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
-.boost-row-actions .ui-button { height: 32px; font-size: 11px; }
-.boost-row-actions [aria-expanded="true"] .boost-details-chevron { transform: rotate(180deg); }
+.boost-row-actions { justify-content: flex-end; }
 .boost-account-drawer { padding: 20px 20px 20px 47px; border-top: 1px solid var(--app-divider); background: var(--app-input-bg); }
 .boost-rotating-details { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
 .boost-rotating-details > div { display: grid; gap: 7px; min-width: 0; align-content: start; }
@@ -12016,11 +12007,9 @@
 .boost-routing-details summary > span { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .boost-routing-details[open] summary { border-bottom: 1px solid var(--app-divider); }
 .boost-routing-details[open] summary > svg { transform: rotate(180deg); }
-.boost-pool-card:focus-visible, .boost-rotating-filters button:focus-visible, .boost-order-link:focus-visible, .boost-current-order a:focus-visible, .boost-routing-details summary:focus-visible, .boost-rotation-help summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.boost-pool-card:focus-visible, .boost-order-link:focus-visible, .boost-current-order a:focus-visible, .boost-routing-details summary:focus-visible, .boost-rotation-help summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
 @media (max-width: 1100px) {
-  .boost-rotating-columns, .boost-rotating-line { grid-template-columns: minmax(110px, 1fr) minmax(100px, .8fr) 125px 120px 120px; gap: 12px; }
-  .boost-pool-card { padding: 14px; }
-  .boost-pool-description { min-height: 30px; }
+  .boost-rotating-columns, .boost-rotating-line { grid-template-columns: minmax(110px, 1fr) minmax(100px, .8fr) 125px 120px 68px; gap: 12px; }
 }
 @media (max-width: 900px) {
   .boost-rotating-columns { display: none; }
@@ -12043,9 +12032,10 @@
   .boost-workbench { --boost-row-padding: 16px; }
   .boost-inventory-heading { padding: 20px 16px; align-items: flex-start; flex-wrap: wrap; }
   .boost-inventory-heading .boost-inventory-totals { display: flex; flex-wrap: wrap; padding-left: 54px; text-align: left; }
-  .boost-pool-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 0 16px 20px; gap: 8px; }
-  .boost-pool-card > strong { font-size: 24px; }
-  .boost-pool-description { min-height: 30px; }
+  .boost-pool-grid { padding: 0 8px; gap: 0; }
+  .boost-pool-card { gap: 5px; padding: 0 7px; font-size: 10px; }
+  .boost-pool-card > svg { display: none; }
+  .boost-rotating-status-tabs button { flex: 0 0 auto; white-space: nowrap; }
   .boost-workspace-toolbar { padding: 16px; flex-wrap: wrap; gap: 8px; }
   .boost-stock-search { width: 100%; }
   .boost-workbench .stock-selection-bar { padding: 10px 16px; }
@@ -12056,8 +12046,6 @@
   .boost-stock-status { font-size: 10px; padding: 4px 6px; }
   .boost-rotating-controls { padding: 0 16px 16px; }
   .boost-pool-actions { gap: 8px; }
-  .boost-rotating-filters { padding: 0 16px 16px; gap: 5px; }
-  .boost-rotating-filters button { font-size: 10px; padding: 6px 8px; }
   .boost-rotating-line { grid-template-columns: minmax(0, 1fr) auto; gap: 14px 10px; }
   .boost-rotating-account { grid-column: 1 / -1; grid-row: 1; }
   .boost-rotating-line > .boost-stock-status { grid-column: 1; grid-row: 2; margin-left: 27px; }
