@@ -154,6 +154,7 @@ import {
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder, RotatingBoostAccount } from "../types";
 import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
+import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
 
 const EMPTY_FORM = {
@@ -4609,13 +4610,9 @@ export default function HomePage() {
             {stockView === "rotating" ? <div className={`${shell} boost-proxy-section`}><RotatingProxyPoolPanel accounts={rotatingAccounts} onChange={() => { void refreshRotatingStock(); }} /></div> : null}
             {stockView !== "rotating" ? <details className={`${shell} dcord-proxy-panel boost-routing-details`}>
               <summary><span><Globe2 className="h-4 w-4" /> Delivery routing <Badge variant="secondary">{dcordProxyCount} proxies</Badge></span><ChevronDown className="h-4 w-4" /></summary>
-              <header className="dcord-proxy-header">
-                <div>
-                  <p className={labelClass}>Dcord routing</p>
-                  <h2>One-time proxies</h2>
-                </div>
-                <div className="dcord-proxy-actions">
-                  <span>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</span>
+              <ProxyRoutingEditor kicker="Dcord routing" title="One-time proxies"
+                stats={<>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</>}
+                actions={<>
                   <Button type="button" variant="secondary" size="xs" disabled={loadingDcordProxies || savingDcordProxies} onClick={() => void refreshDcordProxies()}>
                     <RefreshCw className={`h-3.5 w-3.5 ${loadingDcordProxies ? "animate-spin" : ""}`} aria-hidden="true" />
                     Refresh
@@ -4628,15 +4625,16 @@ export default function HomePage() {
                     <Check className="h-3.5 w-3.5" aria-hidden="true" />
                     {savingDcordProxies ? "Saving..." : "Save"}
                   </Button>
-                </div>
-              </header>
+                </>}>
               <textarea
                 className="dcord-proxy-textarea"
                 spellCheck={false}
                 value={dcordProxyDraft}
                 onChange={(event) => setDcordProxyDraft(normalizeProxyDraft(event.target.value))}
                 placeholder={"user:pass@host:port\nhost:port:user:pass"}
+                aria-label="One-time proxies"
               />
+              </ProxyRoutingEditor>
             </details> : null}
 
             </> : communityStockPanel}
