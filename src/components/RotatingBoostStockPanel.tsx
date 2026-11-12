@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { ArrowRightLeft, RefreshCw, ShieldCheck } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { ArrowRightLeft, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { moveThreeMonthToRotatingStock } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
 import { Button } from "./ui/button";
@@ -22,8 +23,39 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [filter, setFilter] = useState("all");
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const moveLimit = Math.min(availableThreeMonth, 1000);
+  const validCount = Number.isInteger(count) && count >= 1 && count <= moveLimit;
+
+  useEffect(() => {
+    if (!adding) return;
+    const previousOverflow = document.body.style.overflow;
+    const previousFocus = document.activeElement;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement) previousFocus.focus();
+    };
+  }, [adding]);
+
+  useEffect(() => {
+    if (!adding) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !busy) setAdding(false);
+      if (event.key !== "Tab") return;
+      const fields = dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), [tabindex="0"]');
+      if (!fields?.length) { event.preventDefault(); return; }
+      const first = fields[0];
+      const last = fields[fields.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [adding, busy]);
 
   async function move() {
+    if (busy || !validCount) return;
     setBusy(true); setActionError("");
     try {
       const result = await moveThreeMonthToRotatingStock(count);
@@ -32,16 +64,16 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
     finally { setBusy(false); }
   }
 
-  return <section className="stock-duration-section rotating-stock-panel">
-    <header className="stock-duration-header">
-      <div className="stock-duration-identity"><span><RefreshCw className="h-4 w-4" /></span><div><h3>Rotating stock</h3><p>Separate accounts for repeat 30-day deliveries.</p></div></div>
-      <div className="flex flex-wrap gap-2">
+  return <section className="app-panel stock-workbench rotating-stock-panel">
+    <header className="dcord-proxy-header">
+      <div><p className="app-kicker">Boost inventory</p><h2>Rotating stock</h2></div>
+      <div className="dcord-proxy-actions">
         <Button size="xs" variant="secondary" onClick={onRefresh} disabled={loading}><RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />Refresh</Button>
         <Button size="xs" disabled={!availableThreeMonth} onClick={() => { setAdding(true); setCount(1); setActionError(""); }}><ArrowRightLeft className="h-3.5 w-3.5" />Move from 3 month stock</Button>
       </div>
     </header>
     <div className="p-4 grid gap-4">
-      <p className="text-sm text-[var(--app-muted)]">Each account supplies 2 boosts for one order at a time. New orders require 33 days remaining, including a 3-day buffer. When a 30-day period ends, the account automatically becomes available again if enough subscription time remains.</p>
+      <p className="app-copy text-xs leading-6">Each account supplies 2 boosts for one order at a time. New orders require 33 days remaining, including a 3-day buffer. When a 30-day period ends, the account automatically becomes available again if enough subscription time remains.</p>
       <div className="stock-duration-filter flex flex-wrap gap-2" role="group" aria-label="Rotating account status">
         <button type="button" className={filter === "all" ? "is-active" : ""} onClick={() => setFilter("all")}>All · {accounts.length}</button>
         {(Object.keys(labels) as RotatingBoostAccount["status"][]).map((status) => <button key={status} type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)}>{labels[status]} · {accounts.filter((row) => row.status === status).length}</button>)}
@@ -59,22 +91,35 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
         </table>
       </div>}
     </div>
-    {adding ? <div className="confirm-modal-backdrop">
-      <div className="confirm-modal w-[min(640px,calc(100vw-2rem))] max-w-none" role="dialog" aria-modal="true" aria-labelledby="rotating-dialog-title">
+    {adding ? createPortal(<div className="confirm-modal-backdrop" onMouseDown={(event) => {
+      if (event.target === event.currentTarget && !busy) setAdding(false);
+    }}>
+      <div ref={dialogRef} className="confirm-modal add-tokens-modal rotating-stock-modal" role="dialog" aria-modal="true" aria-labelledby="rotating-dialog-title" aria-describedby="rotating-dialog-description" aria-busy={busy}>
+        <span className="confirm-modal-icon is-success" aria-hidden="true"><ArrowRightLeft className="h-5 w-5" /></span>
+        <p className="app-kicker text-[var(--app-accent)]">Stock</p>
         <h2 id="rotating-dialog-title">Move from 3 month stock</h2>
-        <form className="mt-4 grid gap-4" onSubmit={(event) => { event.preventDefault(); void move(); }}>
-          <>
-            <p className="text-sm text-[var(--app-muted)]">{availableThreeMonth} accounts available in 3 month stock. Moved accounts leave that inventory and enter rotating stock with 90 days remaining.</p>
-            <label className="grid gap-2 text-sm">Accounts to move<input autoFocus required disabled={busy} type="number" min={1} max={Math.min(availableThreeMonth, 1000)} step={1} className="ui-input" value={count} onChange={(event) => setCount(Number(event.target.value))} /></label>
-            <p className="text-sm text-[var(--app-muted)]">{count > 0 ? count * 2 : 0} boosts · 30-day customer periods</p>
-          </>
-          {actionError ? <p role="alert" className="text-sm text-red-400">{actionError}</p> : null}
+        <p id="rotating-dialog-description">Move existing accounts into rotating stock for 30-day deliveries. Each account starts with 90 days remaining.</p>
+        <form className="mt-5 grid gap-5" onSubmit={(event) => { event.preventDefault(); void move(); }}>
+          <div className="onliner-bulk-help rotating-transfer-summary">
+            <span><strong>3 month stock</strong><code>{availableThreeMonth} accounts</code></span>
+            <span><strong>Moving</strong><code>{validCount ? count : 0} accounts · {validCount ? count * 2 : 0} boosts</code></span>
+            <span><strong>Stock after move</strong><code>{validCount ? availableThreeMonth - count : availableThreeMonth} accounts</code></span>
+          </div>
+          <label className="grid gap-2">
+            <span className="field-label">Accounts to move</span>
+            <input autoFocus required disabled={busy} type="number" min={1} max={moveLimit} step={1} className="ui-input" aria-describedby="rotating-count-help" value={count || ""} onChange={(event) => setCount(Number(event.target.value))} />
+            <span id="rotating-count-help" className="text-xs text-[var(--app-muted)]">Choose 1–{moveLimit} accounts from your available 3 month inventory.</span>
+          </label>
+          {actionError ? <p role="alert" className="rotating-transfer-error">{actionError}</p> : null}
           <div className="confirm-modal-actions">
             <Button type="button" variant="secondary" disabled={busy} onClick={() => setAdding(false)}>Cancel</Button>
-            <Button type="submit" disabled={busy || !Number.isInteger(count) || count < 1 || count > Math.min(availableThreeMonth, 1000)}>{busy ? "Moving…" : "Move accounts"}</Button>
+            <Button type="submit" disabled={busy || !validCount}>
+              {busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />}
+              {busy ? "Moving…" : "Move to rotating stock"}
+            </Button>
           </div>
         </form>
       </div>
-    </div> : null}
+    </div>, document.body) : null}
   </section>;
 }

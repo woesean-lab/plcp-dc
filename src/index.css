@@ -11907,7 +11907,7 @@
   .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
 /* Separate rotating boost inventory. */
-.rotating-stock-panel { border: 1px solid var(--app-border); border-radius: 18px; background: var(--app-surface); overflow: hidden; }
+.rotating-stock-panel { overflow: hidden; }
 .rotating-stock-table { width: 100%; min-width: 760px; text-align: left; font-size: 12px; border-collapse: collapse; }
 .rotating-stock-table th { color: var(--app-muted); font-weight: 500; padding: 12px 10px; white-space: nowrap; }
 .rotating-stock-table td { padding: 14px 10px; border-top: 1px solid var(--app-border); vertical-align: top; }
@@ -11916,3 +11916,9 @@
 .rotating-status-available { color: #34d399; background: #34d39918; }
 .rotating-status-review { color: #fbbf24; background: #fbbf2418; }
 .rotating-status-in_use, .rotating-status-reserved { color: #a5b4fc; background: #a5b4fc18; }
+.rotating-stock-modal { width: min(100%, 640px); }
+.rotating-transfer-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.rotating-transfer-error { border: 1px solid var(--app-danger-button-border); border-radius: 12px; padding: .75rem .85rem; color: var(--app-danger); background: var(--app-danger-soft); font-size: .8rem; line-height: 1.5; }
+@media (max-width: 640px) {
+  .rotating-transfer-summary { grid-template-columns: 1fr; }
+}
