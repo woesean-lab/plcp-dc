@@ -12013,7 +12013,10 @@
 .boost-routing-details summary > span { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .boost-routing-details[open] summary { border-bottom: 1px solid var(--app-divider); }
 .boost-routing-details[open] summary > svg { transform: rotate(180deg); }
-.boost-fixed-proxies { margin: 0 20px 16px; }
+.boost-fixed-proxies { margin: 0; }
+.boost-proxy-section { padding: 16px; }
+.boost-proxy-preloader { display: grid; gap: 20px; padding: 20px 16px; }
+.boost-proxy-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--app-divider); color: var(--app-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .boost-fixed-proxies .onliner-proxy-usage-heading,
 .boost-fixed-proxies .onliner-proxy-usage-row { grid-template-columns: minmax(0, 1fr) 100px 110px 32px; }
 .boost-fixed-proxies .onliner-proxy-address { align-items: flex-start; }
@@ -12047,7 +12050,6 @@
   .boost-pool-grid { padding: 0 8px; gap: 0; }
   .boost-pool-card { gap: 5px; padding: 0 7px; font-size: 10px; }
   .boost-pool-card > svg { display: none; }
-  .boost-fixed-proxies { margin-inline: 16px; }
   .boost-fixed-proxies .onliner-proxy-usage-heading { display: none; }
   .boost-fixed-proxies .onliner-proxy-usage-row { grid-template-columns: minmax(0, 1fr) auto 32px; gap: 12px 8px; }
   .boost-fixed-proxies .onliner-proxy-address { grid-column: 1 / -1; }

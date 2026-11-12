@@ -103,10 +103,12 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt, loadOrderAssi
     return result.rows[0] ? JSON.parse(decrypt(result.rows[0].encrypted_value)) : [];
   }
   const proxySummary = (rows, proxies) => {
-    const assigned = new Set(rows.map((row) => row.proxy).filter(Boolean));
+    const counts = new Map();
+    for (const row of rows) if (row.proxy) counts.set(row.proxy, (counts.get(row.proxy) ?? 0) + 1);
+    const assigned = new Set(counts.keys());
     const all = [...new Set([...proxies, ...assigned])];
     return { total: all.length, assigned: assigned.size, available: all.filter((proxy) => !assigned.has(proxy)).length,
-      proxies: all.map((proxy) => ({ proxy, label: proxyLabel(proxy), assigned: assigned.has(proxy), accounts: rows.filter((row) => row.proxy === proxy).length })) };
+      proxies: all.map((proxy) => ({ proxy, label: proxyLabel(proxy), assigned: assigned.has(proxy), accounts: counts.get(proxy) ?? 0 })) };
   };
   async function reserveRows(rows, client, count, order, offset, fixedProxies) {
     if (!Number.isSafeInteger(count) || count < 1) fail("Choose a valid account count.");

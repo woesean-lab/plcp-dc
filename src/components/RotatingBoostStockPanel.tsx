@@ -8,7 +8,6 @@ import { Button } from "./ui/button";
 import { BoostStockStatus, boostStockOrderLink } from "./BoostStockStatus";
 import toast from "react-hot-toast";
 import { Input } from "./ui/input";
-import { RotatingProxyPoolPanel } from "./RotatingProxyPoolPanel";
 
 const labels: Record<RotatingBoostAccount["status"], string> = {
   available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Expired / low time"
@@ -86,7 +85,6 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
     const link = document.createElement("a"); link.href = url; link.download = "boost-rotating-tokens.txt"; link.click(); URL.revokeObjectURL(url);
   }
   return <section className="rotating-stock-panel" aria-label="Rotating inventory">
-    <RotatingProxyPoolPanel accounts={accounts} onChange={onRefresh} />
     <div className="boost-rotating-controls">
       <details className="boost-rotation-help"><summary><ShieldCheck className="h-3.5 w-3.5" />Pool rules</summary><p>Each account supplies 2 boosts for a 30-day delivery, with a 3-day buffer. The 90-day subscription starts on first assignment. Accounts return automatically when eligible.</p></details>
       <div className="boost-pool-actions">
