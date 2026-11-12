@@ -97,9 +97,10 @@ replacement deliveries use that account's same proxy; it is never consumed or
 returned to the one-time pool. Existing account bindings are recovered from
 the current or most recent saved order's token/proxy assignment when available.
 New accounts require an unassigned fixed proxy; an insufficient pool leaves both
-account reservations and subscription clocks unchanged. Adding proxies appends
-and deduplicates without removing existing bindings. The admin UI displays only
-proxy endpoints, never proxy passwords.
+account reservations and subscription clocks unchanged. Saving proxies appends
+and deduplicates without removing existing bindings. The session-protected admin
+proxy panel displays complete saved proxy URLs, including authentication, for
+review and copying. Account inventory responses retain endpoint-only labels.
 
 ## Members OAuth
 

@@ -340,11 +340,12 @@ test("fixed proxies survive completed periods, application restarts and later or
   assert.equal(summary.available, 0);
   assert.equal(summary.assigned, 1);
   assert.equal(summary.proxies[0].label, "fixed.example:8080");
-  assert.equal(JSON.stringify(summary).includes("secret"), false);
+  assert.equal(summary.proxies[0].proxy, proxy);
   const [account] = await restarted.list({ includeTokens: true });
   assert.equal(account.hasFixedProxy, true);
   assert.equal(account.proxyLabel, "fixed.example:8080");
   assert.equal("proxy" in account, false);
+  assert.equal(JSON.stringify(account).includes("secret"), false);
   assert.equal(settings.get("dcord_sticky_proxies"), regularProxies);
 });
 

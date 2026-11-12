@@ -288,7 +288,7 @@ export interface RotatingProxyPool {
   total: number;
   assigned: number;
   available: number;
-  proxies: { label: string; assigned: boolean }[];
+  proxies: { proxy: string; label: string; assigned: boolean; accounts: number }[];
 }
 
 export interface BoostTokenStockInput {
