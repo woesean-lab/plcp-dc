@@ -14,12 +14,12 @@
   border-radius: 6px !important;
   padding: 4px 8px !important;
   box-shadow: none !important;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace !important;
+  font-family: "Segoe UI", Inter, Arial, sans-serif !important;
   font-size: 11px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
   font-style: normal !important;
   line-height: 18px !important;
-  letter-spacing: 0 !important;
+  letter-spacing: .02em !important;
   text-transform: none !important;
   text-align: center;
   white-space: nowrap;
