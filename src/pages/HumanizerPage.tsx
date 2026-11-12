@@ -612,7 +612,7 @@ export default function HumanizerPage() {
                   </span>
                   <span className="min-w-0 flex-1">
                     <strong className="block truncate text-sm">{accountLabel(account)}</strong>
-                    <span className="mt-1 block truncate text-[11px] text-[var(--app-muted)]">@{account.username} · {account.categoryName}</span>
+                    <span className="mt-1 block truncate text-[12px] text-[var(--app-muted)]">@{account.username} · {account.categoryName}</span>
                   </span>
                   <span className="flex shrink-0 flex-wrap justify-end gap-1.5">
                     {!account.hasToken ? <Badge variant="destructive">No token</Badge> : null}
@@ -841,7 +841,7 @@ export default function HumanizerPage() {
                 </span>
                 <span className="min-w-0 flex-1">
                   <strong className="block truncate text-sm">{result.displayName || result.username}</strong>
-                  <small className="mt-1 block text-[11px] leading-4 text-[var(--app-muted)]">
+                  <small className="mt-1 block text-[12px] leading-4 text-[var(--app-muted)]">
                     {result.error || (result.changed.length
                       ? `${result.changed.join(" · ")}${result.gatewayFallback ? " · Onliner Gateway session used" : ""}`
                       : result.state === "pending" ? "Waiting" : "No changes reported")}

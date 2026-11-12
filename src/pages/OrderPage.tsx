@@ -1690,7 +1690,7 @@ export default function OrderPage() {
               <small>JSON</small>
             </summary>
             <div className="payload-panel overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
+              <pre className="m-0 whitespace-pre-wrap break-words text-[13px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
             </div>
           </details>
         </article>
