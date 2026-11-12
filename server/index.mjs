@@ -14394,7 +14394,7 @@ app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
 });
 
 app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => {
-  try { res.set("Cache-Control", "no-store").json({ accounts: await rotatingBoostStock.list() }); }
+  try { res.set("Cache-Control", "no-store").json({ accounts: await rotatingBoostStock.list({ includeTokens: true }) }); }
   catch (error) { next(error); }
 });
 

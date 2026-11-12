@@ -268,6 +268,7 @@ export interface BoostStock {
 }
 
 export interface RotatingBoostAccount {
+  token?: string;
   id: string;
   redactedToken: string;
   subscriptionStartedAt?: string | null;

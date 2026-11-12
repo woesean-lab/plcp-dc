@@ -302,3 +302,18 @@ test("concurrent replacement requests cannot reserve two accounts for one slot",
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal((await stock.list()).filter((row) => row.status === "available").length, 1);
 });
+
+
+test("admin inventory can read complete tokens without exposing fingerprints or changing default redaction", async () => {
+  const { stock, seedRegular } = fixture();
+  const token = "mail:pass:complete-account-token:2fa";
+  seedRegular({ oneMonth: [], threeMonth: [token] });
+  await stock.moveFromThreeMonth(1);
+  const [admin] = await stock.list({ includeTokens: true });
+  assert.equal(admin.token, token);
+  assert.equal("fingerprint" in admin, false);
+  const [redacted] = await stock.list();
+  assert.equal("token" in redacted, false);
+  assert.equal("fingerprint" in redacted, false);
+  assert.equal(redacted.redactedToken, admin.redactedToken);
+});

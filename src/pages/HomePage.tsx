@@ -731,7 +731,9 @@ export default function HomePage() {
   const [selectedBoostTokens, setSelectedBoostTokens] = useState<Record<string, boolean>>({});
   const [selectedUsedBoostTokens, setSelectedUsedBoostTokens] = useState<Record<string, boolean>>({});
   const [stockCategory, setStockCategory] = useState<"boosts" | "offline">("boosts");
-  const [stockView, setStockView] = useState<"active" | "used">("active");
+  const [stockView, setStockView] = useState<"active" | "used" | "rotating">("active");
+  const [boostPool, setBoostPool] = useState<1 | 3>(1);
+  const [boostSearch, setBoostSearch] = useState("");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
   const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
@@ -1001,12 +1003,12 @@ export default function HomePage() {
           ? durationFiltered.filter(isBoostUsedTokenIssue)
           : durationFiltered;
 
-      return [...filtered].sort((left, right) => {
+      return filtered.filter((item) => [item.token, item.orderId, item.serverName, item.serverId].some((value) => value?.toLowerCase().includes(boostSearch.toLowerCase().trim()))).sort((left, right) => {
         const dateDifference = getTrackedTimestamp(right.resultAt ?? right.usedAt) - getTrackedTimestamp(left.resultAt ?? left.usedAt);
         return dateDifference || right.id.localeCompare(left.id);
       });
     },
-    [usedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter]
+    [usedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter, boostSearch]
   );
   const visibleUsedBoostTokens = filteredUsedBoostTokens.slice(0, visibleUsedBoostTokenCount);
   const hasMoreUsedBoostTokens = visibleUsedBoostTokenCount < filteredUsedBoostTokens.length;
@@ -1345,7 +1347,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setVisibleUsedBoostTokenCount(STOCK_LIST_PAGE_SIZE);
-  }, [stockView, usedTokenDurationFilter, usedTokenStatusFilter]);
+  }, [stockView, usedTokenDurationFilter, usedTokenStatusFilter, boostSearch]);
 
   useEffect(() => {
     setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
@@ -2631,7 +2633,7 @@ export default function HomePage() {
 
   function getSelectedTokens(duration: 1 | 3) {
     const source = duration === 3 ? boostTokenLists.threeMonthTokens : boostTokenLists.oneMonthTokens;
-    return source.filter((token) => selectedBoostTokens[`${duration}:${token}`]);
+    return source.filter((token) => selectedBoostTokens[`${duration}:${token}`] && token.toLowerCase().includes(boostSearch.toLowerCase().trim()));
   }
 
   function toggleBoostToken(duration: 1 | 3, token: string, checked: boolean) {
@@ -2645,7 +2647,7 @@ export default function HomePage() {
     const source = duration === 3 ? boostTokenLists.threeMonthTokens : boostTokenLists.oneMonthTokens;
     setSelectedBoostTokens((current) => {
       const next = { ...current };
-      source.forEach((token) => {
+      source.filter((token) => token.toLowerCase().includes(boostSearch.toLowerCase().trim())).forEach((token) => {
         next[`${duration}:${token}`] = checked;
       });
       return next;
@@ -4398,7 +4400,7 @@ export default function HomePage() {
                   <Plus className="h-4 w-4" aria-hidden="true" />
                   Add tokens
                 </Button>
-                <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock} onClick={() => void refreshBoostStockTokens()}>
+                <Button type="button" variant="secondary" size="sm" disabled={loadingBoostStock || rotatingLoading} onClick={() => { void refreshBoostStockTokens(); void refreshRotatingStock(); }}>
                   <RefreshCw className={`h-4 w-4 ${loadingBoostStock ? "animate-spin" : ""}`} aria-hidden="true" />
                   Refresh
                 </Button>
@@ -4420,68 +4422,42 @@ export default function HomePage() {
             <section className={`${shell} stock-overview`}>
               <div className="stock-overview-lead">
                 <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>
-                <div><small>Total capacity</small><strong>{(boostStock.oneMonth + boostStock.threeMonth) * 2}</strong><span>boosts ready</span></div>
+                <div><small>Total capacity</small><strong>{(boostStock.oneMonth + boostStock.threeMonth) * 2 + rotatingCapacity}</strong><span>boosts ready</span></div>
               </div>
-              <div className="stock-overview-metric"><small>Active tokens</small><strong>{boostStock.oneMonth + boostStock.threeMonth}</strong><span>encrypted inventory</span></div>
+              <div className="stock-overview-metric"><small>Inventory accounts</small><strong>{boostStock.oneMonth + boostStock.threeMonth + rotatingAccounts.length}</strong><span>encrypted inventory</span></div>
               <div className="stock-overview-metric"><small>1 month</small><strong>{boostStock.oneMonth}</strong><span>{boostStock.oneMonth * 2} boosts</span></div>
               <div className="stock-overview-metric"><small>3 month</small><strong>{boostStock.threeMonth}</strong><span>{boostStock.threeMonth * 2} boosts</span></div>
-              <div className="stock-overview-metric"><small>Used history</small><strong>{usedBoostTokens.length}</strong><span>recorded tokens</span></div>
-            </section>
-
-            <section className={`${shell} dcord-proxy-panel`}>
-              <header className="dcord-proxy-header">
-                <div>
-                  <p className={labelClass}>Dcord routing</p>
-                  <h2>One-time proxies</h2>
-                </div>
-                <div className="dcord-proxy-actions">
-                  <span>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</span>
-                  <Button type="button" variant="secondary" size="xs" disabled={loadingDcordProxies || savingDcordProxies} onClick={() => void refreshDcordProxies()}>
-                    <RefreshCw className={`h-3.5 w-3.5 ${loadingDcordProxies ? "animate-spin" : ""}`} aria-hidden="true" />
-                    Refresh
-                  </Button>
-                  <Button type="button" variant="dangerGhost" size="xs" disabled={savingDcordProxies || (!dcordProxyCount && !dcordProxyDraft.trim())} onClick={() => void handleClearDcordProxies()}>
-                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                    Clear
-                  </Button>
-                  <Button type="button" size="xs" disabled={savingDcordProxies} onClick={() => void handleSaveDcordProxies()}>
-                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
-                    {savingDcordProxies ? "Saving..." : "Save"}
-                  </Button>
-                </div>
-              </header>
-              <textarea
-                className="dcord-proxy-textarea"
-                spellCheck={false}
-                value={dcordProxyDraft}
-                onChange={(event) => setDcordProxyDraft(normalizeProxyDraft(event.target.value))}
-                placeholder={"user:pass@host:port\nhost:port:user:pass"}
-              />
+              <div className="stock-overview-metric"><small>Rotating ready</small><strong>{rotatingCapacity / 2}</strong><span>{rotatingCapacity} boosts · 30 days</span></div>
             </section>
 
             <section className={`${shell} stock-workbench`}>
               <div className="stock-workbench-header">
-                <div className="stock-view-tabs" role="tablist" aria-label="Token stock views">
-                  <button type="button" role="tab" aria-selected={stockView === "active"} className={stockView === "active" ? "is-active" : ""} onClick={() => setStockView("active")}>
-                    <ListChecks className="h-4 w-4" aria-hidden="true" />
-                    Active inventory
-                    <span>{boostStock.oneMonth + boostStock.threeMonth}</span>
-                  </button>
-                  <button type="button" role="tab" aria-selected={stockView === "used"} className={stockView === "used" ? "is-active" : ""} onClick={() => setStockView("used")}>
-                    <History className="h-4 w-4" aria-hidden="true" />
-                    Used history
-                    <span>{usedBoostTokens.length}</span>
-                  </button>
-                </div>
+                <div><p className="app-kicker">Boost inventory</p><h2 className="boost-workspace-title">Your stock, one workspace</h2></div>
                 <span className="stock-storage-mark"><ShieldCheck className="h-4 w-4" /> Encrypted server storage</span>
               </div>
 
+              <div className="boost-pool-grid" role="tablist" aria-label="Boost inventory pools">
+                {[
+                  { id: "one", title: "1 month", count: boostStock.oneMonth, ready: boostStock.oneMonth * 2, icon: Zap, description: "Single delivery · 30 days", active: stockView === "active" && boostPool === 1, select: () => { setStockView("active"); setBoostPool(1); } },
+                  { id: "three", title: "3 month", count: boostStock.threeMonth, ready: boostStock.threeMonth * 2, icon: Gem, description: "Single delivery · 90 days", active: stockView === "active" && boostPool === 3, select: () => { setStockView("active"); setBoostPool(3); } },
+                  { id: "rotating", title: "Rotating", count: rotatingAccounts.length, ready: rotatingCapacity, icon: RefreshCw, description: "Reusable accounts · 30-day deliveries", active: stockView === "rotating", select: () => setStockView("rotating") }
+                ].map((pool) => <button key={pool.id} type="button" role="tab" aria-selected={pool.active} className={`boost-pool-card ${pool.active ? "is-active" : ""}`} onClick={pool.select}>
+                  <span className="boost-pool-top"><span className="community-category-icon"><pool.icon className="h-4 w-4" /></span><Badge variant={pool.ready ? "success" : "secondary"}>{pool.ready} boosts ready</Badge></span>
+                  <strong>{pool.title}</strong><small>{pool.description}</small><span className="boost-pool-count">{pool.count}<small>accounts</small></span>
+                </button>)}
+              </div>
+              <div className="boost-workspace-toolbar">
+                <label className="boost-stock-search"><Search className="h-4 w-4" /><Input aria-label="Search boost inventory" placeholder="Search tokens, servers or orders…" value={boostSearch} onChange={(event) => setBoostSearch(event.target.value)} /></label>
+                <Button type="button" variant={stockView === "used" ? "default" : "secondary"} size="sm" onClick={() => setStockView(stockView === "used" ? "active" : "used")}><History className="h-4 w-4" />Used history<Badge variant="outline">{usedBoostTokens.length}</Badge></Button>
+              </div>
+              {stockView === "rotating" ? <RotatingBoostStockPanel search={boostSearch} accounts={rotatingAccounts} availableThreeMonth={boostStock.threeMonth} loading={rotatingLoading} error={rotatingError} onRefresh={() => { void refreshRotatingStock(); void refreshBoostStockTokens(); }} onChange={(accounts, stock) => { setRotatingAccounts(accounts); setBoostStock(stock); void refreshRotatingStock(); void refreshBoostStockTokens(); }} /> : null}
               {stockView === "active" ? (
                 <div className="stock-inventory-groups" role="tabpanel">
                     {[
                       { duration: 1 as const, label: "1 month", tokens: boostTokenLists.oneMonthTokens },
                       { duration: 3 as const, label: "3 month", tokens: boostTokenLists.threeMonthTokens }
-                    ].map((group) => {
+                    ].filter((group) => group.duration === boostPool).map((group) => {
+                      const visibleTokens = group.tokens.filter((token) => token.toLowerCase().includes(boostSearch.toLowerCase().trim()));
                       const selectedCount = getSelectedTokens(group.duration).length;
                       return (
                         <section key={group.duration} className="stock-duration-section">
@@ -4497,7 +4473,7 @@ export default function HomePage() {
 
                           <div className={`stock-selection-bar ${selectedCount ? "has-selection" : ""}`}>
                             <label className="stock-select-all">
-                              <input type="checkbox" checked={Boolean(group.tokens.length && selectedCount === group.tokens.length)} onChange={(event) => setAllBoostTokens(group.duration, event.target.checked)} disabled={!group.tokens.length} />
+                              <input type="checkbox" checked={Boolean(visibleTokens.length && selectedCount === visibleTokens.length)} onChange={(event) => setAllBoostTokens(group.duration, event.target.checked)} disabled={!visibleTokens.length} />
                               <span>{selectedCount ? `${selectedCount} selected` : "Select all"}</span>
                             </label>
                             <div className="stock-selection-actions">
@@ -4519,26 +4495,26 @@ export default function HomePage() {
                           </div>
 
                           <div className="stock-token-scroll">
-                            {group.tokens.length ? (
+                            {visibleTokens.length ? (
                               <ol className="stock-token-list">
-                                {group.tokens.map((token, index) => (
+                                {visibleTokens.map((token, index) => (
                                   <li key={`${group.duration}-${token}`} className={selectedBoostTokens[`${group.duration}:${token}`] ? "is-selected" : ""}>
                                     <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
                                     <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
                                     <code title={token}>{token}</code>
-                                    <Badge variant="secondary">{group.duration} Month</Badge>
+                                    <span className="boost-token-tools"><Badge variant="success">Ready</Badge><Badge variant="outline">2 boosts</Badge><Button type="button" variant="ghost" size="icon-sm" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
                                   </li>
                                 ))}
                               </ol>
                             ) : (
-                              <div className="stock-empty-state"><ListChecks className="h-5 w-5" /><strong>No tokens in this inventory</strong><span>Add {group.label} tokens to make them available for orders.</span></div>
+                              <div className="stock-empty-state"><ListChecks className="h-5 w-5" /><strong>{boostSearch ? "No matching tokens" : "No tokens in this inventory"}</strong><span>{boostSearch ? "Try a different search." : `Add ${group.label} tokens to make them available for orders.`}</span></div>
                             )}
                           </div>
                         </section>
                       );
                     })}
                 </div>
-              ) : (
+              ) : stockView === "used" ? (
                 <div className="stock-used-view" role="tabpanel">
                   <div className="stock-used-filterbar">
                     <div className="stock-used-filter-group">
@@ -4648,9 +4624,40 @@ export default function HomePage() {
                     )}
                   </div>
                 </div>
-              )}
+              ) : null}
             </section>
-            <RotatingBoostStockPanel accounts={rotatingAccounts} availableThreeMonth={boostStock.threeMonth} loading={rotatingLoading} error={rotatingError} onRefresh={() => { void refreshRotatingStock(); void refreshBoostStockTokens(); }} onChange={(accounts, stock) => { setRotatingAccounts(accounts); setBoostStock(stock); void refreshBoostStockTokens(); }} />
+            <details className={`${shell} dcord-proxy-panel boost-routing-details`}>
+              <summary><span><Globe2 className="h-4 w-4" /> Delivery routing <Badge variant="secondary">{dcordProxyCount} proxies</Badge></span><ChevronDown className="h-4 w-4" /></summary>
+              <header className="dcord-proxy-header">
+                <div>
+                  <p className={labelClass}>Dcord routing</p>
+                  <h2>One-time proxies</h2>
+                </div>
+                <div className="dcord-proxy-actions">
+                  <span>{dcordProxyDraftCount} typed / {dcordProxyCount} saved</span>
+                  <Button type="button" variant="secondary" size="xs" disabled={loadingDcordProxies || savingDcordProxies} onClick={() => void refreshDcordProxies()}>
+                    <RefreshCw className={`h-3.5 w-3.5 ${loadingDcordProxies ? "animate-spin" : ""}`} aria-hidden="true" />
+                    Refresh
+                  </Button>
+                  <Button type="button" variant="dangerGhost" size="xs" disabled={savingDcordProxies || (!dcordProxyCount && !dcordProxyDraft.trim())} onClick={() => void handleClearDcordProxies()}>
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    Clear
+                  </Button>
+                  <Button type="button" size="xs" disabled={savingDcordProxies} onClick={() => void handleSaveDcordProxies()}>
+                    <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                    {savingDcordProxies ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </header>
+              <textarea
+                className="dcord-proxy-textarea"
+                spellCheck={false}
+                value={dcordProxyDraft}
+                onChange={(event) => setDcordProxyDraft(normalizeProxyDraft(event.target.value))}
+                placeholder={"user:pass@host:port\nhost:port:user:pass"}
+              />
+            </details>
+
             </> : communityStockPanel}
           </>
         ) : null}

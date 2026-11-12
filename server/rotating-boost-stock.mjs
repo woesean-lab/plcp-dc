@@ -97,9 +97,9 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
       throw error;
     } finally { client.release(); }
   }
-  const publicRows = (rows) => rows.map(({ token, ...row }) => ({ ...row, redactedToken: `${tokenIdentity(token).slice(0, 6)}…${tokenIdentity(token).slice(-4)}` }));
+  const publicRows = (rows, includeTokens = false) => rows.map(({ token, fingerprint: _fingerprint, ...row }) => ({ ...row, ...(includeTokens ? { token } : {}), redactedToken: `${tokenIdentity(token).slice(0, 6)}…${tokenIdentity(token).slice(-4)}` }));
   return {
-    list: () => mutate(async (rows, client) => {
+    list: ({ includeTokens = false } = {}) => mutate(async (rows, client) => {
       const ids = [...new Set(rows.filter((row) => row.status === "reserved" || row.status === "in_use").map((row) => row.orderId))];
       if (ids.length) {
         const orders = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = ANY($1::text[])", [ids]);
@@ -109,7 +109,7 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
           if (row.status === "reserved" && !found.has(row.orderId) && Date.parse(row.reservedAt) < Date.now() - 10 * 60_000) row.status = "review";
         }
       }
-      return publicRows(rows);
+      return publicRows(rows, includeTokens);
     }),
     saveLegacyStock: (stock) => mutate(async (rows, client) => {
       const ids = new Set([...stock.oneMonth, ...stock.threeMonth].map(fingerprint));

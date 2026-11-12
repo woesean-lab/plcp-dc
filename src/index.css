@@ -11906,19 +11906,64 @@
   .monitor-reaction-history-row { grid-template-columns: auto minmax(0, 1fr) 32px 30px; }
   .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
-/* Separate rotating boost inventory. */
+/* Rotating stock transfer dialog. */
 .rotating-stock-panel { overflow: hidden; }
-.rotating-stock-table { width: 100%; min-width: 760px; text-align: left; font-size: 12px; border-collapse: collapse; }
-.rotating-stock-table th { color: var(--app-muted); font-weight: 500; padding: 12px 10px; white-space: nowrap; }
-.rotating-stock-table td { padding: 14px 10px; border-top: 1px solid var(--app-border); vertical-align: top; }
-.rotating-stock-table td small { display: block; margin-top: 5px; color: var(--app-muted); max-width: 230px; overflow-wrap: anywhere; }
-.rotating-status { display: inline-block; border-radius: 8px; padding: 5px 8px; background: color-mix(in srgb, var(--app-muted) 12%, transparent); white-space: nowrap; }
-.rotating-status-available { color: #34d399; background: #34d39918; }
-.rotating-status-review { color: #fbbf24; background: #fbbf2418; }
-.rotating-status-in_use, .rotating-status-reserved { color: #a5b4fc; background: #a5b4fc18; }
 .rotating-stock-modal { width: min(100%, 640px); }
 .rotating-transfer-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .rotating-transfer-error { border: 1px solid var(--app-danger-button-border); border-radius: 12px; padding: .75rem .85rem; color: var(--app-danger); background: var(--app-danger-soft); font-size: .8rem; line-height: 1.5; }
 @media (max-width: 640px) {
   .rotating-transfer-summary { grid-template-columns: 1fr; }
+}
+
+/* Boost inventory uses the same surfaces, badges and controls as Members Stock. */
+.boost-workspace-title { margin-top: 5px; color: var(--app-text); font-size: 17px; font-weight: 650; }
+.boost-pool-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 0 18px 18px; }
+.boost-pool-card { display: flex; flex-direction: column; align-items: stretch; gap: 8px; padding: 16px; min-width: 0; border: 1px solid var(--app-border-strong); border-radius: 14px; background: var(--app-surface); text-align: left; transition: border-color .18s, background .18s; }
+.boost-pool-card:hover { background: rgba(155,140,255,.04); border-color: var(--app-accent-border); }
+.boost-pool-card.is-active { border-color: var(--app-accent); background: rgba(155,140,255,.065); box-shadow: inset 0 0 0 1px var(--app-accent-border); }
+.boost-pool-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; flex-wrap: wrap; }
+.boost-pool-card > strong { color: var(--app-text); font-size: 15px; }
+.boost-pool-card > small { color: var(--app-muted); font-size: 11px; line-height: 1.5; }
+.boost-pool-count { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; color: var(--app-text); font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.boost-pool-count small { color: var(--app-muted); font-size: 11px; font-weight: 400; }
+.boost-workspace-toolbar { display: flex; align-items: center; gap: 12px; justify-content: space-between; padding: 14px 18px; border-top: 1px solid var(--app-divider); }
+.boost-stock-search { position: relative; display: flex; align-items: center; width: min(100%, 460px); }
+.boost-stock-search > svg { position: absolute; left: 12px; color: var(--app-muted); pointer-events: none; }
+.boost-stock-search input { padding-left: 36px; }
+.boost-token-tools { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.boost-rotation-note { display: flex; gap: 10px; align-items: flex-start; margin: 0 18px 16px; padding: 12px 14px; border: 1px solid var(--app-border); border-radius: 10px; background: rgba(155,140,255,.035); color: var(--app-muted); font-size: 11px; line-height: 1.8; }
+.boost-rotation-note > svg { flex-shrink: 0; margin-top: 3px; color: var(--app-accent); }
+.boost-rotating-filters { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 18px 16px; }
+.boost-rotating-list { max-height: 650px; overflow: auto; padding: 12px; display: grid; gap: 10px; }
+.boost-rotating-row { min-width: 0; border: 1px solid var(--app-border); border-radius: 12px; background: rgba(5,6,13,.22); }
+.boost-rotating-row.is-selected { border-color: var(--app-accent-border); background: rgba(155,140,255,.05); }
+.boost-rotating-account { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: start; gap: 12px; padding: 15px; }
+.boost-rotating-account input { margin-top: 3px; accent-color: var(--app-accent); }
+.boost-rotating-account code { display: block; color: var(--app-text-secondary); font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; white-space: normal; user-select: text; }
+.boost-rotating-account .boost-token-tools { margin-top: 10px; }
+.boost-rotating-details { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 18px; align-items: center; padding: 12px 15px; border-top: 1px solid var(--app-divider); }
+.boost-rotating-details > div { display: grid; gap: 5px; min-width: 0; }
+.boost-rotating-details small { color: var(--app-muted); font-size: 10px; }
+.boost-rotating-details strong { color: var(--app-text-secondary); font-size: 11px; font-weight: 550; overflow-wrap: anywhere; }
+.boost-rotating-details span { color: var(--app-subtle); font-size: 10px; overflow-wrap: anywhere; }
+.boost-assignment-history { display: grid; gap: 10px; padding: 15px; border-top: 1px solid var(--app-divider); color: var(--app-muted); font-size: 11px; }
+.boost-assignment-history > div { display: flex; gap: 14px; flex-wrap: wrap; }
+.boost-routing-details summary { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; cursor: pointer; color: var(--app-text-secondary); font-size: 12px; list-style: none; }
+.boost-routing-details summary > span { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.boost-routing-details[open] summary { border-bottom: 1px solid var(--app-divider); }
+.boost-routing-details[open] summary > svg { transform: rotate(180deg); }
+.boost-pool-card:focus-visible, .boost-routing-details summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; }
+@media (max-width: 900px) { .boost-rotating-details { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 640px) {
+  .boost-pool-grid { grid-template-columns: 1fr; padding: 0 12px 12px; gap: 8px; }
+  .boost-pool-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 12px; gap: 5px 12px; }
+  .boost-pool-top { grid-column: 1 / -1; margin: 0 0 5px; }
+  .boost-pool-card > small { grid-column: 1; }
+  .boost-pool-count { grid-column: 2; grid-row: 2 / 4; font-size: 22px; flex-direction: column; gap: 0; }
+  .boost-workspace-toolbar { align-items: stretch; flex-direction: column; padding: 12px; }
+  .boost-stock-search { width: 100%; }
+  .boost-rotating-details { gap: 16px 12px; }
+  .boost-rotating-details > button { justify-self: start; }
+  .stock-token-list > li > .boost-token-tools { grid-column: 3 / -1; }
+  .boost-rotation-note { margin: 0 12px 12px; }
 }
