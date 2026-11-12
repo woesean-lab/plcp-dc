@@ -11906,3 +11906,13 @@
   .monitor-reaction-history-row { grid-template-columns: auto minmax(0, 1fr) 32px 30px; }
   .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
+/* Separate rotating boost inventory. */
+.rotating-stock-panel { border: 1px solid var(--app-border); border-radius: 18px; background: var(--app-surface); overflow: hidden; }
+.rotating-stock-table { width: 100%; min-width: 760px; text-align: left; font-size: 12px; border-collapse: collapse; }
+.rotating-stock-table th { color: var(--app-muted); font-weight: 500; padding: 12px 10px; white-space: nowrap; }
+.rotating-stock-table td { padding: 14px 10px; border-top: 1px solid var(--app-border); vertical-align: top; }
+.rotating-stock-table td small { display: block; margin-top: 5px; color: var(--app-muted); max-width: 230px; overflow-wrap: anywhere; }
+.rotating-status { display: inline-block; border-radius: 8px; padding: 5px 8px; background: color-mix(in srgb, var(--app-muted) 12%, transparent); white-space: nowrap; }
+.rotating-status-available { color: #34d399; background: #34d39918; }
+.rotating-status-review { color: #fbbf24; background: #fbbf2418; }
+.rotating-status-in_use, .rotating-status-reserved { color: #a5b4fc; background: #a5b4fc18; }

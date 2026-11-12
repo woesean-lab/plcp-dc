@@ -539,7 +539,7 @@ export default function PublicOrderPage() {
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const canManageDcordTokens = status?.canManageDcordTokens === true;
   const canManageCommunityMembers = status?.canManageCommunityMembers === true && !supportExpired;
-  const boostDuration = status?.duration === 1 || status?.duration === 3
+  const boostDuration = status?.boostStockPool === "rotating" ? "30 Days" : status?.duration === 1 || status?.duration === 3
     ? `${status.duration} ${status.duration === 1 ? "Month" : "Months"}`
     : "-";
   useEffect(() => {

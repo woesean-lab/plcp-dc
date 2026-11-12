@@ -11,6 +11,7 @@ import { HttpsProxyAgent } from "https-proxy-agent";
 import pg from "pg";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "ws";
+import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -5406,10 +5407,23 @@ async function loadBoostTokenStock() {
   }
 }
 
+const rotatingBoostStock = createRotatingBoostStock({
+  pool,
+  encrypt: encryptCredential,
+  decrypt: decryptCredential,
+  legacyTokens: async (client) => {
+    const result = await client.query("SELECT setting_key, encrypted_value FROM app_settings WHERE setting_key = ANY($1::text[]) OR setting_key LIKE 'dcord_order_tokens_%'", [["dcord_boost_token_stock", "dcord_boost_token_usage"]]);
+    const settings = Object.fromEntries(result.rows.map((row) => [row.setting_key, JSON.parse(decryptCredential(row.encrypted_value))]));
+    const stock = normalizeBoostTokenStock(settings.dcord_boost_token_stock);
+    const history = normalizeUsedBoostTokenHistory(settings.dcord_boost_token_usage);
+    const assigned = Object.entries(settings).flatMap(([key, value]) => key.startsWith("dcord_order_tokens_") ? normalizeBoostTokenList(value) : []);
+    return [...stock.oneMonth, ...stock.threeMonth, ...history.map((item) => item.token), ...assigned];
+  }
+});
+
 async function saveBoostTokenStock(stock) {
   const normalized = normalizeBoostTokenStock(stock);
-  await saveEncryptedSetting("dcord_boost_token_stock", JSON.stringify(normalized));
-  return normalized;
+  return rotatingBoostStock.saveLegacyStock(normalized);
 }
 
 function normalizeDcordStickyProxies(value) {
@@ -5832,6 +5846,7 @@ async function saveTrackedOrderPayload(payload) {
      ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
     [payload.uniqid, JSON.stringify(payload)]
   );
+  if (payload.boostStockPool === "rotating") await rotatingBoostStock.sync(payload);
 }
 
 function parseCommunityAccessTokenExpiry(record) {
@@ -8139,6 +8154,7 @@ function canReturnDcordTokenResult(result, includeUncertain = false) {
 }
 
 async function returnDcordTokenToStock(order, token) {
+  if (order?.boostStockPool === "rotating") return Boolean(await rotatingBoostStock.release(order.uniqid, [token]));
   const duration = Number.parseInt(order?.duration, 10);
   const normalizedToken = String(token ?? "").trim();
   if (![1, 3].includes(duration) || !normalizedToken) return false;
@@ -8156,6 +8172,7 @@ async function returnDcordTokensToStock(order, tokens, results, includeUncertain
   const returnedIndexes = results.flatMap((result, index) => canReturnDcordTokenResult(result, includeUncertain) ? [index] : []);
   const returnableTokens = returnedIndexes.map((index) => tokens[index]).filter(Boolean);
   if (!returnableTokens.length) return 0;
+  if (order.boostStockPool === "rotating") return rotatingBoostStock.release(order.uniqid, returnableTokens);
 
   const stock = await loadBoostTokenStock();
   const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
@@ -8452,6 +8469,12 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const token = tokens[index];
     const tokenStartedAt = Date.now();
     const existingTaskId = results[index]?.dcordTaskId;
+    if (order.boostStockPool === "rotating" && !existingTaskId && !(await rotatingBoostStock.canSubmit(orderId, token))) {
+      results[index] = { ...results[index], status: "insufficient_duration", joinStatus: "not started", boostStatus: "not started", boostMessage: "This rotating account is no longer available for a full 30-day delivery. Review it in Rotating stock." };
+      await saveCurrentProgress();
+      await runNextToken();
+      return;
+    }
     const proxy = existingTaskId ? "" : assignedProxies[index];
     let proxyCheckMs = Number.isFinite(results[index]?.proxyCheckMs) ? results[index].proxyCheckMs : undefined;
     if (proxy) {
@@ -8523,6 +8546,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     });
     const normalized = {
       ...normalizedResult,
+      ...(order.boostStockPool === "rotating" && getDcordResultBoostCount(normalizedResult) > 0 ? { deliveredAt: results[index]?.deliveredAt || new Date().toISOString() } : {}),
       ...(proxyCheckMs !== undefined ? { proxyCheckMs } : {}),
       ...(dcordAcceptedMs !== undefined ? { dcordAcceptedMs } : {}),
       dcordElapsedMs: Date.now() - dcordStartedAt,
@@ -14377,12 +14401,27 @@ app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
   }
 });
 
+app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => {
+  try { res.set("Cache-Control", "no-store").json({ accounts: await rotatingBoostStock.list() }); }
+  catch (error) { next(error); }
+});
+
+app.post("/api/dcord/rotating-stock", requireSession, async (req, res, next) => {
+  try {
+    const tokens = normalizeBoostTokenList(req.body?.tokens);
+    if (!tokens.length || tokens.length > 1000) return res.status(400).json({ message: "Add between 1 and 1000 tokens." });
+    res.json({ accounts: await rotatingBoostStock.add(tokens, req.body?.expiresAt) });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/dcord/boost-stock", requireSession, async (req, res, next) => {
   try {
     const duration = Number.parseInt(req.query.duration, 10);
     const stock = await loadBoostTokenStock();
     const summary = summarizeBoostTokenStock(stock);
-    const availableTokens = duration === 3 ? summary.threeMonth : summary.oneMonth;
+    const availableTokens = req.query.pool === "rotating"
+      ? (await rotatingBoostStock.list()).filter((row) => row.status === "available").length
+      : duration === 3 ? summary.threeMonth : summary.oneMonth;
     if (String(req.query.includeTokens ?? "") === "true") {
       return res.json({
         stock: summary,
@@ -14502,6 +14541,10 @@ app.post("/api/dcord/boost-stock/return-used", requireSession, async (req, res, 
     const usedTokens = history.filter((item) => usageIdSet.has(item.id));
     if (!usedTokens.length) {
       return res.status(404).json({ message: "Used token could not be found." });
+    }
+
+    if (await rotatingBoostStock.hasTokens(usedTokens.map((item) => item.token))) {
+      return res.status(409).json({ message: "Rotating accounts stay in their separate pool. Completed customer periods are released automatically." });
     }
 
     const stock = await loadBoostTokenStock();
@@ -14632,6 +14675,10 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const invite = extractDiscordInviteCode(req.body?.id);
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
+    const boostStockPool = req.body?.boostStockPool === "rotating" ? "rotating" : "regular";
+    if (boostStockPool === "rotating" && duration !== 1) {
+      return res.status(400).json({ message: "Rotating stock is only available for 30-day orders." });
+    }
     const useProxy = true;
     const requestedConcurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
     const allowMembershipScreening = req.body?.allowMembershipScreening === true;
@@ -14658,7 +14705,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const requiredTokens = amount / 2;
     const recommendedConcurrency = Math.min(4, Math.max(1, Math.ceil(requiredTokens / 2)));
     const concurrency = Math.min(requestedConcurrency, recommendedConcurrency);
-    if (stock[stockKey].length < requiredTokens) {
+    if (boostStockPool === "regular" && stock[stockKey].length < requiredTokens) {
       return res.status(409).json({ message: `Only ${stock[stockKey].length * 2} ${duration} month boosts are in stock.` });
     }
 
@@ -14672,14 +14719,21 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       if (!humanizerPackage) return res.status(400).json({ message: "The selected Humanizer package could not be found." });
     }
 
-    const assignedProxies = useProxy ? await reserveDcordProxies(requiredTokens) : [];
-
-    const selectedTokens = stock[stockKey].slice(0, requiredTokens);
-    const nextStock = await saveBoostTokenStock({
+    const uniqid = createDcordOrderId();
+    const selectedTokens = boostStockPool === "rotating"
+      ? await rotatingBoostStock.reserve(requiredTokens, { uniqid, serverName: serverInfo.guildName, serverId: serverInfo.guildId })
+      : stock[stockKey].slice(0, requiredTokens);
+    let assignedProxies;
+    try {
+      assignedProxies = useProxy ? await reserveDcordProxies(requiredTokens) : [];
+    } catch (error) {
+      if (boostStockPool === "rotating") await rotatingBoostStock.abortUnsubmitted(uniqid);
+      throw error;
+    }
+    const nextStock = boostStockPool === "rotating" ? stock : await saveBoostTokenStock({
       ...stock,
       [stockKey]: stock[stockKey].slice(requiredTokens)
     });
-    const uniqid = createDcordOrderId();
     const order = {
       uniqid,
       provider: "dcord",
@@ -14691,6 +14745,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       amount,
       added: 0,
       duration,
+      boostStockPool,
       useProxy,
       concurrency,
       isEldoradoSale: req.body?.isEldoradoSale !== false,
@@ -15106,17 +15161,28 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
 
     const stock = await loadBoostTokenStock();
     const stockKey = duration === 3 ? "threeMonth" : "oneMonth";
-    const replacementToken = stock[stockKey][0];
+    const rotating = order.boostStockPool === "rotating";
+    if (rotating && (isRunnableDcordResult(currentResult) || isUncertainDcordTransportResult(currentResult))) {
+      return res.status(409).json({ message: "Wait until the existing task result is confirmed before replacing this account." });
+    }
+    const replacementToken = rotating
+      ? (await rotatingBoostStock.reserve(1, order, resultIndex))[0]
+      : stock[stockKey][0];
     if (!replacementToken) {
       return res.status(409).json({ message: `No ${duration} month replacement tokens are in stock.` });
     }
 
-    const replacementProxy = order.useProxy === true ? (await reserveDcordProxies(1))[0] : "";
+    let replacementProxy;
+    try {
+      replacementProxy = order.useProxy === true ? (await reserveDcordProxies(1))[0] : "";
+    } catch (error) {
+      if (rotating) await rotatingBoostStock.abortUnsubmitted(uniqid, [replacementToken]);
+      throw error;
+    }
 
-    await saveBoostTokenStock({
-      ...stock,
-      [stockKey]: stock[stockKey].slice(1)
-    });
+    if (!rotating) {
+      await saveBoostTokenStock({ ...stock, [stockKey]: stock[stockKey].slice(1) });
+    }
 
     const replacementResult = {
       ...createQueuedDcordResult(replacementToken),

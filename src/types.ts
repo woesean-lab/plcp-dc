@@ -3,6 +3,7 @@ export type BoostServiceType = "DCORD-BOOSTS";
 export type ServiceType = CommunityServiceType | BoostServiceType;
 export type OrderProvider = "community" | "dcord";
 export type BoostDuration = 1 | 3;
+export type BoostStockPool = "regular" | "rotating";
 export type CommunityJoinMethod = "create_invite" | "experimental_join" | "directly";
 
 export interface CommunityCategoryAllocation {
@@ -47,6 +48,7 @@ export interface CreateOrderPayload {
   amount: number;
   delay?: number;
   duration?: BoostDuration;
+  boostStockPool?: "regular" | "rotating";
   useProxy?: boolean;
   concurrency?: number;
   allowMembershipScreening?: boolean;
@@ -85,6 +87,7 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  boostStockPool?: BoostStockPool;
   uniqid: string;
   status?: OrderStatus;
   details?: string;
@@ -165,6 +168,7 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  boostStockPool?: BoostStockPool;
   uniqid: string;
   provider?: OrderProvider;
   service?: ServiceType;
@@ -261,6 +265,19 @@ export interface ReactionMemberCheckProgress {
 export interface BoostStock {
   oneMonth: number;
   threeMonth: number;
+}
+
+export interface RotatingBoostAccount {
+  id: string;
+  redactedToken: string;
+  expiresAt: string;
+  status: "available" | "reserved" | "in_use" | "review" | "expired";
+  orderId?: string | null;
+  serverName?: string | null;
+  serverId?: string | null;
+  startedAt?: string | null;
+  customerEndsAt?: string | null;
+  history: { orderId?: string; serverName?: string; startedAt?: string; customerEndsAt?: string; releasedAt: string }[];
 }
 
 export interface BoostTokenStockInput {

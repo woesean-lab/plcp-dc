@@ -539,7 +539,7 @@ export default function OrderPage() {
     .map((item) => item.index);
   const summary = isDcordProvider
     ? [
-        { label: "Duration", value: result?.duration === 1 || result?.duration === 3 ? `${result.duration} Month` : "-" },
+        { label: "Duration", value: result?.boostStockPool === "rotating" ? "30 Days · Rotating stock" : result?.duration === 1 || result?.duration === 3 ? `${result.duration} Month` : "-" },
         { label: "Token progress", value: `${dcordCompletedTokenCount}/${result?.tokenCount ?? "-"}` }
       ]
     : [

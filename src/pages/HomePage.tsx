@@ -149,8 +149,10 @@ import {
   saveBoostStock,
   saveDcordApiKey,
   saveDcordProxies,
+  getRotatingBoostStock,
 } from "../lib/integration";
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder, RotatingBoostAccount } from "../types";
+import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 
 const EMPTY_FORM = {
   service: "COMMUNITY-OFFLINE" as ServiceType,
@@ -158,6 +160,7 @@ const EMPTY_FORM = {
   amount: 100,
   delay: 1,
   duration: 1 as 1 | 3,
+  boostStockPool: "regular" as "regular" | "rotating",
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",
@@ -713,6 +716,9 @@ export default function HomePage() {
   const [showUserGuildLeaveConfirm, setShowUserGuildLeaveConfirm] = useState(false);
   const [leavingUserGuild, setLeavingUserGuild] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
+  const [rotatingAccounts, setRotatingAccounts] = useState<RotatingBoostAccount[]>([]);
+  const [rotatingLoading, setRotatingLoading] = useState(false);
+  const [rotatingError, setRotatingError] = useState("");
   const [boostTokenDrafts, setBoostTokenDrafts] = useState<BoostTokenStockInput>(EMPTY_BOOST_TOKEN_DRAFTS);
   const [removeBoostTokenTwoFactor, setRemoveBoostTokenTwoFactor] = useState(false);
   const [boostTokenLists, setBoostTokenLists] = useState<{ oneMonthTokens: string[]; threeMonthTokens: string[] }>({
@@ -971,7 +977,8 @@ export default function HomePage() {
     if (!selectedIsCommunity || !selectedCommunityJoinMethods.length || selectedCommunityJoinMethods.includes(form.communityJoinMethod)) return;
     setForm((current) => ({ ...current, communityJoinMethod: selectedCommunityJoinMethods[0] }));
   }, [form.communityJoinMethod, selectedCommunityJoinMethods.join("|"), selectedIsCommunity]);
-  const selectedBoostCapacity = form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+  const rotatingCapacity = rotatingAccounts.filter((row) => row.status === "available").length * 2;
+  const selectedBoostCapacity = form.boostStockPool === "rotating" ? rotatingCapacity : form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
   useEffect(() => {
     if (!selectedIsBoost || !form.humanizerEnabled || orderHumanizerPackages.length || loadingOrderHumanizerPackages) return;
     setLoadingOrderHumanizerPackages(true);
@@ -1064,6 +1071,14 @@ export default function HomePage() {
     return () => {
       active = false;
     };
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "stock" && activeTab !== "create") return;
+    void refreshRotatingStock();
+    const timer = window.setInterval(() => void refreshRotatingStock(), 30_000);
+    return () => window.clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   useEffect(() => {
@@ -1394,6 +1409,16 @@ export default function HomePage() {
     }
   }
 
+  async function refreshRotatingStock() {
+    setRotatingLoading(true);
+    try {
+      setRotatingAccounts((await getRotatingBoostStock()).accounts);
+      setRotatingError("");
+    } catch (error) {
+      setRotatingError(error instanceof Error ? error.message : "Rotating stock could not be loaded.");
+    } finally { setRotatingLoading(false); }
+  }
+
   async function refreshDcordProxies() {
     try {
       setLoadingDcordProxies(true);
@@ -1429,7 +1454,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.boostStockPool, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -2471,7 +2496,9 @@ export default function HomePage() {
         serverId,
         form.duration,
         undefined,
-        undefined
+        undefined,
+        undefined,
+        form.boostStockPool
       );
       if (requestId !== availabilityRequestRef.current) return;
       setAvailability(`Available ${data.available} / max ${data.maximum}`);
@@ -2805,6 +2832,7 @@ export default function HomePage() {
       added: typeof resolvedAdded === "number" ? resolvedAdded : order.added,
       serverName: typeof status.serverName === "string" ? status.serverName : order.serverName,
       duration: status.duration === 1 || status.duration === 3 ? status.duration : order.duration,
+      boostStockPool: status.boostStockPool ?? order.boostStockPool,
       expiredAt: typeof (status.expiredAt ?? status.expired_at) === "string" ? String(status.expiredAt ?? status.expired_at) : order.expiredAt,
       membersLeftAt: typeof status.membersLeftAt === "string" ? status.membersLeftAt : order.membersLeftAt,
       autoLeaveJob: status.autoLeaveJob && typeof status.autoLeaveJob === "object" && !Array.isArray(status.autoLeaveJob)
@@ -2835,6 +2863,7 @@ export default function HomePage() {
       a.service === b.service &&
       a.provider === b.provider &&
       a.duration === b.duration &&
+      a.boostStockPool === b.boostStockPool &&
       a.expiredAt === b.expiredAt &&
       JSON.stringify(a.autoLeaveJob ?? null) === JSON.stringify(b.autoLeaveJob ?? null)
     );
@@ -2962,6 +2991,7 @@ export default function HomePage() {
     if (createdStock) {
       setBoostStock(createdStock);
     }
+    if (payload.boostStockPool === "rotating") void refreshRotatingStock();
 
     const nextOrder: TrackedOrder = {
       uniqid: created.uniqid,
@@ -2976,6 +3006,7 @@ export default function HomePage() {
       joinMethod: payloadIsCommunity ? payload.joinMethod : undefined,
       isEldoradoSale: payload.isEldoradoSale,
       duration: payloadIsBoost ? payload.duration : undefined,
+      boostStockPool: payloadIsBoost ? payload.boostStockPool : undefined,
       useProxy: payloadIsBoost ? true : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
@@ -3022,6 +3053,7 @@ export default function HomePage() {
       amount: form.amount,
       delay: selectedIsBoost ? undefined : form.delay,
       duration: selectedIsBoost ? form.duration : undefined,
+      boostStockPool: selectedIsBoost ? form.boostStockPool : undefined,
       useProxy: selectedIsBoost ? true : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
@@ -3768,40 +3800,41 @@ export default function HomePage() {
 
                   {selectedIsBoost ? (
                     <fieldset className="service-selector md:col-span-2">
-                      <legend className="sr-only">Boost duration</legend>
+                      <legend className="sr-only">Boost stock source</legend>
                       <div className="service-selector-heading">
                         <div>
-                          <span className={fieldLabelClass}>Boost duration</span>
+                          <span className={fieldLabelClass}>Boost stock source</span>
                           <p className="service-selector-copy">Choose the stock bucket used for this boost order.</p>
                         </div>
-                        <span className="service-selector-count">2 durations</span>
+                        <span className="service-selector-count">3 stock options</span>
                       </div>
                       <div className="service-grid boost-duration-grid">
-                        {[1, 3].map((duration, index) => {
-                          const selected = form.duration === duration;
-                          const tokenStock = duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
+                        {([{ duration: 1, pool: "regular" }, { duration: 3, pool: "regular" }, { duration: 1, pool: "rotating" }] as const).map(({ duration, pool }, index) => {
+                          const selected = form.duration === duration && form.boostStockPool === pool;
+                          const tokenStock = pool === "rotating" ? rotatingCapacity / 2 : duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
                           const boostCapacity = tokenStock * 2;
                           const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
 
                           return (
                             <label
-                              key={duration}
+                              key={`${pool}-${duration}`}
                               className={`service-option ${selected ? "is-selected" : ""}`}
-                              data-service={duration === 3 ? "boost-duration-3" : "boost-duration-1"}
+                              data-service={pool === "rotating" ? "boost-rotating" : duration === 3 ? "boost-duration-3" : "boost-duration-1"}
                             >
                               <input
                                 className="sr-only"
                                 type="radio"
                                 name="boostDuration"
-                                value={duration}
+                                value={`${pool}-${duration}`}
                                 checked={selected}
                                 onChange={() =>
                                   setForm((current) => {
-                                    const nextCapacity = duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+                                    const nextCapacity = boostCapacity;
                                     const nextAmount = nextCapacity > 0 ? Math.min(current.amount, nextCapacity) : current.amount;
                                     return {
                                       ...current,
                                       duration: duration as 1 | 3,
+                                      boostStockPool: pool,
                                       amount: nextAmount,
                                       concurrency: getBoostConcurrency(nextAmount)
                                     };
@@ -3810,7 +3843,7 @@ export default function HomePage() {
                               />
                               <span className="service-option-head" aria-hidden="true">
                                 <span className="service-option-icon">
-                                  <span className="text-sm font-semibold">{duration}M</span>
+                                  <span className="text-sm font-semibold">{pool === "rotating" ? "30D" : `${duration}M`}</span>
                                 </span>
                                 <span className="service-option-state">
                                   {selected ? (
@@ -3823,7 +3856,7 @@ export default function HomePage() {
                                   )}
                                 </span>
                               </span>
-                              <span className="service-option-title">{duration} Month</span>
+                              <span className="service-option-title">{pool === "rotating" ? "Rotating · 30 Days" : `${duration} Month`}</span>
                               <span className="service-option-description">
                                 {tokenStock} tokens available · {requiredTokens} needed
                               </span>
@@ -4285,7 +4318,7 @@ export default function HomePage() {
                               </div>
                               <div className="orders-row-service">
                                 <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
-                                <span>{boostOrder && order.duration ? `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
+                                <span>{boostOrder && order.duration ? order.boostStockPool === "rotating" ? "Rotating · 30 days" : `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
                               </div>
                               <div className={`orders-row-join-method ${joinMethod ? "" : "is-empty"}`}>
                                 {joinMethod ? (
@@ -4384,6 +4417,7 @@ export default function HomePage() {
             </div>
 
             {stockCategory === "boosts" ? <>
+            <RotatingBoostStockPanel accounts={rotatingAccounts} loading={rotatingLoading} error={rotatingError} onRefresh={() => void refreshRotatingStock()} onChange={setRotatingAccounts} />
             <section className={`${shell} stock-overview`}>
               <div className="stock-overview-lead">
                 <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>
@@ -5636,7 +5670,7 @@ export default function HomePage() {
               </div>
               {(orderConfirmationPayload.duration || orderConfirmationPayload.concurrency || orderConfirmationPayload.delay) ? (
                 <div className="order-confirm-meta">
-                  {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.duration} month</span> : null}
+                  {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.boostStockPool === "rotating" ? "Rotating stock · 30 days" : `${orderConfirmationPayload.duration} month`}</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}

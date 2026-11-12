@@ -1,4 +1,4 @@
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary, RotatingBoostAccount } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -293,7 +293,7 @@ export interface AvailabilityResponse {
   breakdown?: CommunityAvailabilityBreakdown;
 }
 
-export async function checkAvailableAmount(service: string, id: string, duration = 1, categoryId?: string, joinMethod?: "create_invite" | "experimental_join" | "directly", resolvedGuildId?: string): Promise<AvailabilityResponse> {
+export async function checkAvailableAmount(service: string, id: string, duration = 1, categoryId?: string, joinMethod?: "create_invite" | "experimental_join" | "directly", resolvedGuildId?: string, boostStockPool = "regular"): Promise<AvailabilityResponse> {
   if (isCommunityService(service)) {
     return requestJson<AvailabilityResponse>(
       `/api/community/availability?invite=${encodeURIComponent(id)}&service=${encodeURIComponent(service)}${categoryId ? `&categoryId=${encodeURIComponent(categoryId)}` : ""}${joinMethod ? `&joinMethod=${encodeURIComponent(joinMethod)}` : ""}${resolvedGuildId ? `&guildId=${encodeURIComponent(resolvedGuildId)}` : ""}`
@@ -301,7 +301,7 @@ export async function checkAvailableAmount(service: string, id: string, duration
   }
   if (isBoostService(service)) {
     return requestJson<AvailabilityResponse>(
-      `/api/dcord/boost-stock?duration=${encodeURIComponent(duration)}`
+      `/api/dcord/boost-stock?duration=${encodeURIComponent(duration)}&pool=${encodeURIComponent(boostStockPool)}`
     );
   }
 
@@ -433,6 +433,16 @@ export function saveBoostStock(stock: BoostTokenStockInput) {
 
 export function getBoostStockTokens() {
   return requestJson<BoostTokenStockSnapshot>("/api/dcord/boost-stock?includeTokens=true");
+}
+
+export function getRotatingBoostStock() {
+  return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock");
+}
+
+export function addRotatingBoostStock(tokens: string, expiresAt: string) {
+  return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tokens, expiresAt })
+  });
 }
 
 export function deleteBoostStockTokens(payload: { duration: 1 | 3; tokens: string[] }) {
