@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRightLeft, ArrowUpRight, Copy, Download, History, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Copy, Download, Eye, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { moveThreeMonthToRotatingStock } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
@@ -117,7 +117,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
           <div className="boost-current-order">{row.orderId ? <><Link target="_blank" rel="noopener noreferrer" to={boostStockOrderLink(row.orderId)} title={row.orderId}>{row.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link><small>{row.serverName || row.serverId || "Server pending"}</small></> : <><span>Unassigned</span><small>{row.status === "available" ? "Ready for a new order" : "No current order"}</small></>}</div>
           <BoostStockStatus tone={statusTone(row.status)}>{labels[row.status]}</BoostStockStatus>
           <div className="boost-time-left" title={row.expiresAt ? formatDate(row.expiresAt) : "Subscription starts on first assignment"}><strong>{row.expiresAt ? Math.max(0, Math.floor((Date.parse(row.expiresAt) - Date.now()) / 86400_000)) + " days left" : "Not started"}</strong><small>{row.customerEndsAt ? "Delivery ends " + new Date(row.customerEndsAt).toLocaleDateString() : row.expiresAt ? "90-day subscription" : "Starts on first delivery"}</small></div>
-          <div className="boost-row-actions community-member-row-actions"><Button size="icon-sm" variant="secondary" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button><Button size="icon-sm" className="community-rich-presence-action" variant="secondary" aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="Details & history" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><History className="h-3.5 w-3.5" /></Button></div>
+          <div className="boost-row-actions community-member-row-actions"><Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button><Button size="icon-sm" className="stock-row-action" variant="ghost" aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="View account details" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><Eye className="h-3.5 w-3.5" /></Button></div>
         </div>
         {expanded === row.id ? <div id={`boost-details-${row.id}`} className="boost-account-drawer">
           <div className="boost-rotating-details">

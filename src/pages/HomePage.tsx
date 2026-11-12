@@ -4431,7 +4431,7 @@ export default function HomePage() {
                   { id: "three", title: "3 month", count: boostStock.threeMonth, ready: boostStock.threeMonth * 2, icon: Gem, description: "Single delivery · 90 days", active: stockView === "active" && boostPool === 3, select: () => { setStockView("active"); setBoostPool(3); } },
                   { id: "rotating", title: "Rotating", count: rotatingAccounts.length, ready: rotatingCapacity, icon: RefreshCw, description: "Reusable accounts · 30-day deliveries", active: stockView === "rotating", select: () => setStockView("rotating") }
                 ].map((pool) => <button key={pool.id} type="button" role="tab" aria-selected={pool.active} className={`boost-pool-card ${pool.active ? "is-active" : ""}`} onClick={pool.select} title={`${pool.description} · ${pool.ready} boosts ready`}>
-                  <pool.icon className="h-3.5 w-3.5" /><span>{pool.title}</span><span className="boost-pool-count">{pool.count}</span>
+                  <pool.icon className="h-3.5 w-3.5" /><span>{pool.title}</span><span className="boost-pool-count">{pool.count} {pool.id === "rotating" ? "accounts" : "tokens"} · {pool.ready} boosts</span>
                 </button>)}
                 <button type="button" role="tab" aria-selected={stockView === "used"} className={`boost-pool-card boost-history-tab ${stockView === "used" ? "is-active" : ""}`} onClick={() => setStockView("used")}><History className="h-3.5 w-3.5" /><span>Used</span><span className="boost-pool-count">{usedBoostTokens.length}</span></button>
               </div>
@@ -4481,7 +4481,7 @@ export default function HomePage() {
                                     <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
                                     <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
                                     <code title={token}>{token}</code>
-                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="secondary" size="icon-sm" title="Copy token" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
+                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="ghost" className="stock-row-action" size="icon-sm" title="Copy token" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
                                   </li>
                                 ))}
                               </ol>
@@ -4591,7 +4591,7 @@ export default function HomePage() {
                             <span className="boost-duration-label">{item.duration} month</span>
                             <span className="stock-used-date">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
                             <BoostStockStatus tone={item.boosted ? "success" : isBoostUsedTokenIssue(item) ? "danger" : "neutral"}>{item.boosted ? "Boosted" : (item.status || "Pending").replace(/_/g, " ")}</BoostStockStatus>
-                            <Button type="button" size="icon-sm" variant="secondary" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
+                            <Button type="button" size="icon-sm" variant="ghost" className="stock-row-action" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
                               {returningUsedTokenId === item.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                             </Button>
                           </li>

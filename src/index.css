@@ -11926,7 +11926,7 @@
 .boost-live-indicator { display: inline-flex; align-items: center; justify-content: flex-end; gap: 7px; font-size: 12px; color: var(--app-success); }
 .boost-live-indicator::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .boost-account-total { color: var(--app-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
-.boost-pool-grid { display: flex; align-items: center; gap: 3px; padding: 0 20px; border-bottom: 1px solid var(--app-divider); }
+.boost-pool-grid { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 0 20px; border-bottom: 1px solid var(--app-divider); }
 .boost-pool-card { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 13px; border: 0; background: transparent; color: var(--app-muted); font-size: 11px; font-weight: 550; white-space: nowrap; transition: color .15s, background .15s; }
 .boost-pool-card:hover { color: var(--app-text); background: var(--app-hover); border-radius: 6px 6px 0 0; }
 .boost-pool-card.is-active { color: var(--app-accent-bright); }
@@ -11987,6 +11987,7 @@
 .boost-time-left { color: var(--app-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .boost-time-left strong { font-weight: 500; }
 .boost-row-actions { justify-content: flex-end; }
+.stock-row-action { color: var(--app-subtle); }
 .boost-account-drawer { padding: 20px 20px 20px 47px; border-top: 1px solid var(--app-divider); background: var(--app-input-bg); }
 .boost-rotating-details { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
 .boost-rotating-details > div { display: grid; gap: 7px; min-width: 0; align-content: start; }
