@@ -6,7 +6,6 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
-import { getHumanizerPackages, type HumanizerPackage } from "../lib/humanizer";
 import {
   Bot,
   Check,
@@ -173,8 +172,6 @@ const EMPTY_FORM = {
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
-  humanizerEnabled: false,
-  humanizerPackageId: "",
   isEldoradoSale: true
 };
 
@@ -862,8 +859,6 @@ export default function HomePage() {
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [orderHumanizerPackages, setOrderHumanizerPackages] = useState<HumanizerPackage[]>([]);
-  const [loadingOrderHumanizerPackages, setLoadingOrderHumanizerPackages] = useState(false);
   const [currentOrderPage, setCurrentOrderPage] = useState(1);
   const [orderSearch, setOrderSearch] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
@@ -984,17 +979,7 @@ export default function HomePage() {
   }, [form.communityJoinMethod, selectedCommunityJoinMethods.join("|"), selectedIsCommunity]);
   const rotatingCapacity = rotatingAccounts.filter((row) => row.status === "available").length * 2;
   const selectedBoostCapacity = form.boostStockPool === "rotating" ? rotatingCapacity : form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
-  useEffect(() => {
-    if (!selectedIsBoost || !form.humanizerEnabled || orderHumanizerPackages.length || loadingOrderHumanizerPackages) return;
-    setLoadingOrderHumanizerPackages(true);
-    void getHumanizerPackages()
-      .then((packages) => {
-        setOrderHumanizerPackages(packages);
-        setForm((current) => ({ ...current, humanizerPackageId: current.humanizerPackageId || packages[0]?.id || "" }));
-      })
-      .catch((error) => notifyError(error instanceof Error ? error.message : "Humanizer packages could not be loaded."))
-      .finally(() => setLoadingOrderHumanizerPackages(false));
-  }, [form.humanizerEnabled, loadingOrderHumanizerPackages, orderHumanizerPackages.length, selectedIsBoost]);
+
   const regularUsedBoostTokens = useMemo(() => usedBoostTokens.filter((item) => item.boostStockPool !== "rotating"), [usedBoostTokens]);
   const rotatingUsedBoostTokens = useMemo(() => usedBoostTokens.filter((item) => item.boostStockPool === "rotating"), [usedBoostTokens]);
   const scopedUsedBoostTokens = stockView === "rotating_used" ? rotatingUsedBoostTokens : regularUsedBoostTokens;
@@ -3070,16 +3055,11 @@ export default function HomePage() {
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? effectiveCommunityJoinMethod : undefined,
-      humanizerPackageId: selectedIsBoost && form.humanizerEnabled ? form.humanizerPackageId : undefined,
       isEldoradoSale: form.isEldoradoSale
     };
 
     if (selectedIsBoost && form.amount % 2 !== 0) {
       notifyError("Boost amount must be an even number.");
-      return;
-    }
-    if (selectedIsBoost && form.humanizerEnabled && !form.humanizerPackageId) {
-      notifyError("Choose a Humanizer package.");
       return;
     }
     setOrderConfirmationPayload(payload);
@@ -3961,47 +3941,6 @@ export default function HomePage() {
                             <strong>One-time proxy required</strong>
                             <small>{dcordProxyCount ? `${dcordProxyCount} available; one is consumed per token` : "No proxies saved"}</small>
                           </label>
-
-                          <label className={`boost-proxy-toggle boost-humanizer-toggle ${form.humanizerEnabled ? "is-enabled" : ""}`}>
-                            <input
-                              type="checkbox"
-                              checked={form.humanizerEnabled}
-                              onChange={(event) => setForm((current) => ({ ...current, humanizerEnabled: event.target.checked }))}
-                            />
-                            <span><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
-                            <strong>Humanizer</strong>
-                            <small>Humanize assigned tokens with their order proxies.</small>
-                          </label>
-
-                          {form.humanizerEnabled ? (
-                            <div className="boost-humanizer-package-field">
-                              <span className="boost-order-label">Humanizer package</span>
-                              {loadingOrderHumanizerPackages ? (
-                                <div className="boost-humanizer-package-empty"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading packages...</div>
-                              ) : orderHumanizerPackages.length ? (
-                                <div className="boost-humanizer-package-grid">
-                                  {orderHumanizerPackages.map((humanizerPackage) => {
-                                    const selected = form.humanizerPackageId === humanizerPackage.id;
-                                    return (
-                                      <button
-                                        key={humanizerPackage.id}
-                                        type="button"
-                                        className={selected ? "is-selected" : ""}
-                                        aria-pressed={selected}
-                                        onClick={() => setForm((current) => ({ ...current, humanizerPackageId: humanizerPackage.id }))}
-                                      >
-                                        <span><Sparkles className="h-4 w-4" /><strong>{humanizerPackage.name}</strong></span>
-                                        <small>{humanizerPackage.enabledFields.length} profile field{humanizerPackage.enabledFields.length === 1 ? "" : "s"} · {humanizerPackage.concurrency} workers</small>
-                                        {selected ? <Check className="h-4 w-4" aria-hidden="true" /> : null}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                <div className="boost-humanizer-package-empty">No saved Humanizer packages found.</div>
-                              )}
-                            </div>
-                          ) : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />

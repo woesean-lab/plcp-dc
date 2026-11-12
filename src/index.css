@@ -1,6 +1,11 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+@theme {
+  --font-sans: "Manrope Variable", "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono Variable", Consolas, monospace;
+}
+
 @layer base {
   :root {
     color-scheme: only dark;
@@ -81,6 +86,7 @@
   }
 
   html {
+    font-family: var(--font-sans);
     background: var(--app-bg-deep);
     scroll-behavior: smooth;
   }
@@ -88,7 +94,7 @@
   body {
     margin: 0;
     overflow-x: clip;
-    font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-synthesis: none;
     color: var(--app-text);
     background:
@@ -120,6 +126,13 @@
   select,
   textarea {
     font: inherit;
+  }
+
+  code,
+  kbd,
+  samp,
+  pre {
+    font-family: var(--font-mono);
   }
 
   button {
@@ -690,7 +703,7 @@
     border-left: 1px solid var(--app-divider);
     padding-left: .55rem;
     color: var(--app-muted);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 7px;
   }
 
@@ -925,7 +938,7 @@
     border-radius: 8px;
     color: var(--app-muted);
     background: rgba(255, 255, 255, .035);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
   }
 
@@ -1364,7 +1377,7 @@
   .lookup-technical-grid > div:last-child { border-right: 0; }
   .lookup-technical-grid span { display: block; color: var(--app-muted); font-size: 8px; font-weight: 800; text-transform: uppercase; }
   .lookup-technical-grid strong { display: block; overflow: hidden; margin-top: .3rem; color: var(--app-text-secondary); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-  .lookup-technical-grid strong.is-mono { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+  .lookup-technical-grid strong.is-mono { font-family: var(--font-mono); }
   .lookup-reaction-details-content { min-width: 0; padding: 12px; background: rgba(255,255,255,.012); }
   .lookup-raw-payload .payload-panel { max-height: 360px; margin: 1rem; border-radius: 7px; }
 
@@ -1459,15 +1472,15 @@
   .app-kicker {
     margin: 0;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
+    font-weight: 650;
+    letter-spacing: 0.1em;
     line-height: 1.4;
     text-transform: uppercase;
     color: var(--app-accent);
   }
 
   .app-title {
-    letter-spacing: -0.035em;
+    letter-spacing: -0.025em;
     color: var(--app-text);
   }
 
@@ -1486,9 +1499,9 @@
   .page-title {
     margin: 0.35rem 0 0;
     font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-    font-weight: 720;
-    letter-spacing: -0.045em;
-    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.15;
     color: var(--app-text);
   }
 
@@ -1703,7 +1716,7 @@
 
   .service-selector-count {
     flex: 0 0 auto;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.1em;
@@ -1866,7 +1879,7 @@
     border: 1px solid transparent;
     border-radius: 999px;
     padding: 0.2rem 0.35rem;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -1903,7 +1916,7 @@
     overflow: hidden;
     margin-top: auto;
     padding-top: 0.9rem;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 650;
     letter-spacing: 0.05em;
@@ -2116,7 +2129,7 @@
 
   .category-progress-item small {
     color: var(--app-muted);
-    font-family: "SFMono-Regular", Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
   }
 
@@ -2375,7 +2388,7 @@
 
   .community-speed-profile-options em {
     color: var(--app-subtle);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-style: normal;
     font-weight: 750;
@@ -3393,7 +3406,7 @@
     display: block;
     overflow-wrap: anywhere;
     margin: 0.7rem 0 0;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 13px;
     font-weight: 750;
     letter-spacing: -0.01em;
@@ -3468,7 +3481,7 @@
     display: block;
     overflow: hidden;
     margin-top: 0.2rem;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 8.5px;
     font-weight: 650;
     letter-spacing: 0.04em;
@@ -3734,7 +3747,7 @@
     overflow: hidden;
     margin-top: .22rem;
     color: var(--app-muted);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 8.5px;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -4173,7 +4186,7 @@
     overflow: hidden;
     margin-top: .12rem;
     color: var(--app-text-secondary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: .74rem;
     font-weight: 600;
     text-overflow: ellipsis;
@@ -4894,7 +4907,7 @@
     border-radius: 10px;
     color: var(--app-muted);
     background: rgba(255, 255, 255, .035);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 750;
   }
@@ -4906,7 +4919,7 @@
   .public-token-result-main strong {
     display: block;
     overflow: hidden;
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     color: var(--app-text);
     text-overflow: ellipsis;
@@ -4926,7 +4939,7 @@
   .public-token-result-main small.public-token-result-timing {
     margin-top: .3rem;
     color: var(--app-accent);
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     font-weight: 700;
     letter-spacing: .015em;
@@ -5404,7 +5417,7 @@
 
   pre,
   code {
-    font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    font-family: var(--font-mono);
   }
 }
 
@@ -5876,7 +5889,7 @@
   padding: 12px 14px;
   color: var(--app-text);
   background: var(--app-control-bg);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.65;
   outline: none;
@@ -6006,7 +6019,7 @@
   overflow: auto;
   padding: 8px 0;
   background: color-mix(in srgb, var(--app-bg-deep) 86%, #020409);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.55;
 }
@@ -6937,7 +6950,7 @@
 .monitor-speed-profile-options small { color: var(--app-subtle); font-size: 8px; }
 .monitor-speed-profile-options em {
   color: var(--app-subtle);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-style: normal;
   font-weight: 750;
@@ -8084,7 +8097,7 @@
 .monitor-reaction-custom-emoji button:disabled { cursor: default; opacity: .38; }
 .monitor-reaction-custom-emoji button svg { width: 12px; height: 12px; color: var(--app-accent-bright); }
 .monitor-reaction-popular-emojis { padding: 5px 9px 8px; }
-.monitor-reaction-popular-emojis > span { display: block; height: 20px; padding: 6px 7px 0; color: var(--app-muted); font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
+.monitor-reaction-popular-emojis > span { display: block; height: 20px; padding: 6px 7px 0; color: var(--app-muted); font-family: var(--font-sans); font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
 .monitor-reaction-popular-emojis > div { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 2px; }
 .monitor-reaction-popular-emojis button { display: grid; width: 100%; aspect-ratio: 1; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; font-size: 20px; line-height: 1; transition: border-color .16s ease, background-color .16s ease; }
 .monitor-reaction-popular-emojis button:hover { border-color: rgba(152,135,255,.18); background: rgba(139,112,255,.07); }
@@ -8104,11 +8117,11 @@
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: var(--app-accent) !important; background: var(--app-input-focus-bg) !important; box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0,0,0,.08) !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-icn-search, .monitor-reaction-emoji-popover .EmojiPickerReact .epr-btn-clear-search { display: none !important; }
 .monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 58px 0 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0 9px 13px; background: rgb(10,11,22); }
-.monitor-reaction-emoji-direct-result > small { display: block; width: 100%; height: 24px; padding: 8px 7px 0; color: var(--app-muted); font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
+.monitor-reaction-emoji-direct-result > small { display: block; width: 100%; height: 24px; padding: 8px 7px 0; color: var(--app-muted); font-family: var(--font-sans); font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
 .monitor-reaction-emoji-direct-result button { display: grid; width: 42px; height: 42px; place-items: center; border: 0; border-radius: 9px; outline: 0; padding: 0; color: var(--app-text); background: transparent; cursor: pointer; font-family: inherit; }
 .monitor-reaction-emoji-direct-result button:hover { background: rgba(139,112,255,.07); }
 .monitor-reaction-emoji-direct-result button > span { font-size: 25px; line-height: 1; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-emoji-category-label { color: var(--app-muted) !important; font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important; font-size: 9px !important; font-weight: 750 !important; letter-spacing: .045em !important; line-height: 1 !important; text-transform: uppercase; }
+.monitor-reaction-emoji-popover .EmojiPickerReact .epr-emoji-category-label { color: var(--app-muted) !important; font-family: var(--font-sans) !important; font-size: 9px !important; font-weight: 750 !important; letter-spacing: .045em !important; line-height: 1 !important; text-transform: uppercase; }
 .monitor-reaction-form .monitor-reaction-submit {
   grid-column: 5;
   grid-row: 1;
@@ -8139,7 +8152,7 @@
 .monitor-reaction-history-row { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(90px, 150px) 32px 32px 30px; align-items: center; gap: 8px; padding: 9px; border-radius: 9px; color: var(--app-text); transition: background .16s ease; }
 .monitor-reaction-history-row:first-child { margin-top: 7px; }
 .monitor-reaction-history-row:hover { background: var(--app-accent-soft); }
-.monitor-reaction-history-index { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--app-border); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--app-muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
+.monitor-reaction-history-index { display: grid; width: 28px; height: 28px; place-items: center; border: 1px solid var(--app-border); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--app-muted); font-family: var(--font-mono); font-size: 8px; }
 .monitor-reaction-history-copy { min-width: 0; }
 .monitor-reaction-history-copy strong,
 .monitor-reaction-history-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -8175,8 +8188,8 @@
 .reaction-failure-dialog-close svg { width: 14px; height: 14px; }
 .reaction-failure-dialog-list { display: grid; max-height: min(330px, 43vh); overflow-y: auto; gap: 6px; padding: 12px 14px; }
 .reaction-failure-dialog-list > div { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 9px; min-height: 38px; padding: 7px 9px; border: 1px solid rgba(255,255,255,.065); border-radius: 10px; background: rgba(255,255,255,.018); }
-.reaction-failure-dialog-list > div > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #ff7896; background: rgba(244,86,120,.08); font-family: "SFMono-Regular", Consolas, monospace; font-size: 8px; }
-.reaction-failure-dialog-list p { margin: 0; color: var(--app-text-secondary); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
+.reaction-failure-dialog-list > div > span { display: grid; width: 24px; height: 24px; place-items: center; border-radius: 7px; color: #ff7896; background: rgba(244,86,120,.08); font-family: var(--font-mono); font-size: 8px; }
+.reaction-failure-dialog-list p { margin: 0; color: var(--app-text-secondary); font-family: var(--font-mono); font-size: 9px; line-height: 1.45; overflow-wrap: anywhere; }
 .reaction-help-backdrop { position: fixed; z-index: 1000; inset: 0; display: grid; width: 100vw; height: 100dvh; place-items: center; padding: 16px; background: rgba(3,4,10,.76); backdrop-filter: blur(8px); }
 .reaction-help-dialog { width: min(700px, calc(100vw - 2rem)); overflow: hidden; border: 1px solid rgba(255,255,255,.11); border-radius: 16px; background: linear-gradient(145deg, rgba(24,25,43,.99), rgba(11,12,23,.99)); box-shadow: 0 28px 80px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.045); }
 .reaction-help-dialog > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 16px; border-bottom: 1px solid var(--app-divider); }
@@ -9732,7 +9745,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   color: var(--app-muted);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   line-height: 1.45;
   scrollbar-width: none;
   white-space: nowrap;
@@ -9975,7 +9988,7 @@
 .landing-service-card > p:last-child { margin-top: .8rem; color: var(--app-text-secondary); font-size: .9rem; line-height: 1.7; }
 .landing-process ol { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; margin-top: 2.5rem; overflow: hidden; border: 1px solid var(--app-divider); border-radius: 22px; background: var(--app-divider); }
 .landing-process li { display: flex; gap: 1rem; min-height: 190px; padding: 1.4rem; background: var(--app-surface); }
-.landing-process li > span { color: var(--app-accent); font-family: ui-monospace,monospace; font-size: .72rem; font-weight: 800; }
+.landing-process li > span { color: var(--app-accent); font-family: var(--font-mono); font-size: .72rem; font-weight: 800; }
 .landing-process li div { display: grid; align-content: start; gap: .7rem; }
 .landing-process li strong { font-size: 1.05rem; }
 .landing-process li p { color: var(--app-text-secondary); font-size: .86rem; line-height: 1.65; }
@@ -10232,7 +10245,7 @@
   padding: 16px;
   background: rgba(5,6,13,.35);
   color: var(--app-text-secondary);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.6;
   outline: 0;
@@ -10417,7 +10430,7 @@
   border-radius: 12px;
   background: rgba(255,255,255,.035);
   color: var(--app-accent-bright);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 800;
 }
@@ -10515,7 +10528,7 @@
 
 .stock-token-index {
   color: var(--app-subtle);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
 }
@@ -10524,7 +10537,7 @@
 .stock-used-token-main code {
   min-width: 0;
   color: var(--app-text-secondary);
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.55;
   overflow-wrap: anywhere;
