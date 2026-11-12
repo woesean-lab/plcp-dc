@@ -1,29 +1,36 @@
 .order-status-indicator {
   --order-status-color: var(--app-accent-bright);
-  display: inline-flex;
-  align-items: center;
+  display: inline-grid;
+  align-content: center;
   justify-self: start;
-  gap: 8px;
-  min-height: 26px;
+  gap: 4px;
+  min-height: 38px;
   max-width: 100%;
-  color: var(--order-status-color);
+  padding: 3px 8px 3px 0;
+  color: var(--app-text-secondary);
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 550;
-  line-height: 1.5;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
   letter-spacing: 0;
 }
 
-.order-status-indicator-dot {
-  width: 6px;
-  height: 6px;
-  flex: 0 0 6px;
-  border-radius: 50%;
-  background: var(--order-status-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--order-status-color) 10%, transparent);
+.order-status-caption {
+  color: var(--app-muted);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: .06em;
+  line-height: 1;
+  text-transform: uppercase;
 }
+
+.order-status-value { display: inline-flex; align-items: center; gap: 6px; }
+.order-status-value > svg { width: 14px; height: 14px; flex: 0 0 14px; color: var(--order-status-color); stroke-width: 1.8; }
+.orders-row-status .order-status-caption { display: none; }
+.orders-row-status .order-status-indicator { min-height: 26px; font-size: 12px; }
 
 .order-status-indicator[data-tone="success"] { --order-status-color: var(--app-success); }
 .order-status-indicator[data-tone="danger"] { --order-status-color: var(--app-danger); }
 .order-status-indicator[data-tone="paused"] { --order-status-color: #9bd3df; }
 .order-status-indicator[data-tone="waiting"] { --order-status-color: #f5cf76; }
+.order-status-indicator[data-tone="partial"] { --order-status-color: #f5cf76; }
