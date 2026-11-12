@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
@@ -4264,7 +4263,7 @@ export default function HomePage() {
                                 ) : "—"}
                               </div>
                               <div className="orders-row-status">
-                                <OrderStatusIndicator status={order.status} />
+                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusTone(order.status) === "success" ? "success" : getOrderStatusTone(order.status) === "danger" ? "destructive" : "secondary"}>{String(order.status ?? "New").replace(/[_-]+/g, " ")}</Badge>
                               </div>
                               <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
