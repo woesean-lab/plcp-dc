@@ -4481,7 +4481,7 @@ export default function HomePage() {
                                     <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
                                     <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
                                     <code title={token}>{token}</code>
-                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="ghost" size="icon-sm" title="Copy token" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
+                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="secondary" size="icon-sm" title="Copy token" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
                                   </li>
                                 ))}
                               </ol>
@@ -4591,8 +4591,8 @@ export default function HomePage() {
                             <span className="boost-duration-label">{item.duration} month</span>
                             <span className="stock-used-date">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
                             <BoostStockStatus tone={item.boosted ? "success" : isBoostUsedTokenIssue(item) ? "danger" : "neutral"}>{item.boosted ? "Boosted" : (item.status || "Pending").replace(/_/g, " ")}</BoostStockStatus>
-                            <Button type="button" size="xs" variant="secondary" disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
-                              <RotateCcw className="h-3.5 w-3.5" /> {returningUsedTokenId === item.id ? "Returning..." : "Return"}
+                            <Button type="button" size="icon-sm" variant="secondary" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
+                              {returningUsedTokenId === item.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                             </Button>
                           </li>
                         ))}
