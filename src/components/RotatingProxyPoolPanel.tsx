@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Copy, Globe2, LoaderCircle, RefreshCw, Users } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, Globe2, LoaderCircle, RefreshCw, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { addRotatingBoostProxies, getRotatingBoostProxies } from "../lib/integration";
 import type { RotatingBoostAccount, RotatingProxyPool } from "../types";
@@ -10,6 +10,7 @@ import { Skeleton } from "./ui/skeleton";
 const PROXY_PAGE_SIZE = 50;
 
 export function RotatingProxyPoolPanel({ accounts, onChange }: { accounts: RotatingBoostAccount[]; onChange: () => void }) {
+  const [open, setOpen] = useState(false);
   const [pool, setPool] = useState<RotatingProxyPool | null>(null);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -36,13 +37,14 @@ export function RotatingProxyPoolPanel({ accounts, onChange }: { accounts: Rotat
     setError("");
   }
   useEffect(() => {
+    if (!open) return;
     let active = true;
     setLoading(true);
     void getRotatingBoostProxies().then((result) => { if (active) showPool(result); })
       .catch((err) => { if (active) setError(err instanceof Error ? err.message : "Fixed proxies could not be loaded."); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [bindingSignature]);
+  }, [bindingSignature, open]);
   async function refresh() {
     setLoading(true);
     try { showPool(await getRotatingBoostProxies()); }
@@ -63,7 +65,9 @@ export function RotatingProxyPoolPanel({ accounts, onChange }: { accounts: Rotat
     try { await navigator.clipboard.writeText(proxy); toast.success("Proxy copied."); }
     catch { toast.error("Proxy could not be copied."); }
   }
-  return <section className="dcord-proxy-panel onliner-proxy-pool boost-fixed-proxies" aria-label="Rotating proxy pool" aria-busy={loading || saving}>
+  return <details className="boost-routing-details" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary><span><Globe2 className="h-4 w-4" />Rotating proxy routing{pool ? <Badge variant="secondary">{pool.total} proxies</Badge> : null}</span><ChevronDown className="h-4 w-4" /></summary>
+    {open ? <section className="dcord-proxy-panel onliner-proxy-pool boost-fixed-proxies" aria-label="Rotating proxy pool" aria-busy={loading || saving}>
     <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <header className="dcord-proxy-header">
         <div><p className="app-kicker">Rotating routing</p><h2>Fixed proxy pool</h2></div>
@@ -89,5 +93,6 @@ export function RotatingProxyPoolPanel({ accounts, onChange }: { accounts: Rotat
       <div className="boost-proxy-pagination"><span aria-live="polite">{page * PROXY_PAGE_SIZE + 1}–{Math.min((page + 1) * PROXY_PAGE_SIZE, pool.proxies.length)} of {pool.proxies.length} proxies</span>{pageCount > 1 ? <div className="flex items-center gap-2"><Button type="button" variant="secondary" size="icon-sm" disabled={page === 0} aria-label="Previous proxy page" onClick={() => changePage(page - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button><span>{page + 1} / {pageCount}</span><Button type="button" variant="secondary" size="icon-sm" disabled={page + 1 >= pageCount} aria-label="Next proxy page" onClick={() => changePage(page + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button></div> : null}</div>
     </div> : !loading && !error ? <div className="stock-empty-state"><Globe2 className="h-5 w-5" /><strong>No fixed proxies yet</strong><span>Paste proxies above and save to start assigning Rotating accounts.</span></div> : null}
     <p id="rotating-proxy-help" className="app-copy text-xs">Each account keeps the same proxy across orders. Saving adds new proxies and skips duplicates; existing proxies and bindings are preserved.</p>
-  </section>;
+  </section> : null}
+  </details>;
 }
