@@ -466,6 +466,11 @@ function parseDelay(value?: string | number) {
   return undefined;
 }
 
+function formatOrderStatus(status?: string) {
+  const label = String(status ?? "New").trim().replace(/[_-]+/g, " ").toLowerCase();
+  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "New";
+}
+
 function getOrderStatusTone(status?: string): "active" | "success" | "danger" | "paused" {
   const normalized = String(status ?? "").toLowerCase();
   if (normalized.includes("completed")) return "success";
@@ -4263,7 +4268,7 @@ export default function HomePage() {
                                 ) : "—"}
                               </div>
                               <div className="orders-row-status">
-                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusTone(order.status) === "success" ? "success" : getOrderStatusTone(order.status) === "danger" ? "destructive" : "secondary"}>{String(order.status ?? "New").replace(/[_-]+/g, " ")}</Badge>
+                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusTone(order.status) === "success" ? "success" : getOrderStatusTone(order.status) === "danger" ? "destructive" : "secondary"}>{formatOrderStatus(order.status)}</Badge>
                               </div>
                               <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>

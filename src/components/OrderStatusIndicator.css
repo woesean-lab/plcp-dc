@@ -15,7 +15,6 @@
   white-space: nowrap;
 }
 
-.order-status-value > svg { width: 13px; height: 13px; flex: 0 0 13px; stroke-width: 2; }
 .order-status-indicator[data-tone="success"] { --order-status-color: var(--app-success); }
 .order-status-indicator[data-tone="danger"] { --order-status-color: var(--app-danger); }
 .order-status-indicator[data-tone="paused"] { --order-status-color: #9bd3df; }
