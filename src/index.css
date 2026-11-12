@@ -11982,15 +11982,17 @@
 .boost-time-left { color: var(--app-text-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
 .boost-time-left strong { font-weight: 500; }
 .boost-row-actions { justify-content: flex-end; }
-.stock-row-action { color: var(--app-subtle); }
+.stock-row-action { --stock-action-color: var(--app-text-secondary); color: var(--app-subtle); }
+.stock-row-action-details { --stock-action-color: var(--app-accent-bright); }
+.stock-row-action-return { --stock-action-color: var(--app-success); }
 .stock-row-action:not(:disabled):hover,
 .stock-row-action:not(:disabled):focus-visible {
-  border-color: color-mix(in srgb, var(--app-accent) 34%, var(--app-border));
-  color: var(--app-accent-bright);
-  background: color-mix(in srgb, var(--app-accent) 14%, var(--app-control-bg));
+  border-color: transparent;
+  color: var(--stock-action-color);
+  background: color-mix(in srgb, var(--stock-action-color) 14%, var(--app-control-bg));
   box-shadow: none;
 }
-.stock-row-action:not(:disabled):active { background: var(--app-accent-soft); }
+.stock-row-action:not(:disabled):active { background: color-mix(in srgb, var(--stock-action-color) 20%, var(--app-control-bg)); }
 .boost-account-drawer { padding: 20px 20px 20px 47px; border-top: 1px solid var(--app-divider); background: var(--app-input-bg); }
 .boost-rotating-details { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 20px; }
 .boost-rotating-details > div { display: grid; gap: 7px; min-width: 0; align-content: start; }

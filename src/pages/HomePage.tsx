@@ -4591,7 +4591,7 @@ export default function HomePage() {
                             <span className="boost-duration-label">{item.duration} month</span>
                             <span className="stock-used-date">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
                             <BoostStockStatus tone={item.boosted ? "success" : isBoostUsedTokenIssue(item) ? "danger" : "neutral"}>{item.boosted ? "Boosted" : (item.status || "Pending").replace(/_/g, " ")}</BoostStockStatus>
-                            <Button type="button" size="icon-sm" variant="ghost" className="stock-row-action" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
+                            <Button type="button" size="icon-sm" variant="ghost" className="stock-row-action stock-row-action-return" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
                               {returningUsedTokenId === item.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                             </Button>
                           </li>
