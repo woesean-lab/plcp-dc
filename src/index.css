@@ -12013,7 +12013,7 @@
 .boost-routing-details summary > span { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
 .boost-routing-details[open] summary { border-bottom: 1px solid var(--app-divider); }
 .boost-routing-details[open] summary > svg { transform: rotate(180deg); }
-.boost-fixed-proxies { margin: 0 20px 16px; border: 1px solid var(--app-border); background: var(--app-input-bg); }
+.boost-fixed-proxies { margin: 0 20px 16px; }
 .boost-fixed-proxies .onliner-proxy-usage-heading,
 .boost-fixed-proxies .onliner-proxy-usage-row { grid-template-columns: minmax(0, 1fr) 100px 110px 32px; }
 .boost-fixed-proxies .onliner-proxy-address { align-items: flex-start; }
