@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 
 export const BOOST_PERIOD_MS = 30 * 86400_000;
 export const BOOST_BUFFER_MS = 3 * 86400_000;
+export const BOOST_SUBSCRIPTION_MS = 90 * 86400_000;
 export const tokenIdentity = (token) => {
   const parts = String(token).trim().split(":");
   return parts.length >= 3 ? parts[2] : parts[0];
@@ -56,7 +57,7 @@ export function syncRotatingOrder(rows, order, now = Date.now()) {
 }
 
 // One encrypted inventory, protected by a PostgreSQL transaction lock across replicas.
-export function createRotatingBoostStock({ pool, encrypt, decrypt, legacyTokens }) {
+export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
   const key = "dcord_rotating_boost_stock";
   async function mutate(operation) {
     const client = await pool.connect();
@@ -106,23 +107,28 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt, legacyTokens 
       const ids = new Set(tokens.map(fingerprint));
       return rows.some((row) => ids.has(row.fingerprint));
     }),
-    add: (tokens, expiresAt) => mutate(async (rows, client) => {
-      const expiry = Date.parse(expiresAt);
-      if (!Number.isFinite(expiry) || expiry < Date.now() + BOOST_PERIOD_MS + BOOST_BUFFER_MS) {
-        fail("Subscription must have at least 33 days remaining.");
-      }
+    moveFromThreeMonth: (count) => mutate(async (rows, client) => {
+      if (!Number.isSafeInteger(count) || count < 1 || count > 1000) fail("Choose between 1 and 1000 accounts to move.");
+      const result = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 FOR UPDATE", ["dcord_boost_token_stock"]);
+      const raw = result.rows[0] ? JSON.parse(decrypt(result.rows[0].encrypted_value)) : {};
+      const stock = { oneMonth: raw.oneMonth ?? [], threeMonth: raw.threeMonth ?? [] };
       const existing = new Set(rows.map((row) => row.fingerprint));
-      const legacy = new Set((await legacyTokens(client)).map(fingerprint));
-      for (const token of tokens) {
-        if (!existing.has(fingerprint(token)) && legacy.has(fingerprint(token))) fail("A token already belongs to regular stock, an assigned order, or used history. Add a separate account.");
+      const oneMonth = new Set(stock.oneMonth.map(fingerprint));
+      const unique = new Map(stock.threeMonth.map((token) => [fingerprint(token), token]));
+      const selected = [...unique.entries()].filter(([id]) => !existing.has(id) && !oneMonth.has(id)).slice(0, count);
+      if (selected.length !== count) fail(`Only ${selected.length} accounts can be moved from 3 month stock.`);
+      const now = Date.now();
+      const moved = new Set(selected.map(([id]) => id));
+      for (const [id, token] of selected) {
+        rows.push({ id: crypto.randomUUID(), fingerprint: id, token, expiresAt: new Date(now + BOOST_SUBSCRIPTION_MS).toISOString(), status: "available", history: [], createdAt: new Date(now).toISOString() });
       }
-      for (const token of tokens) {
-        const id = fingerprint(token);
-        if (existing.has(id)) continue;
-        existing.add(id);
-        rows.push({ id: crypto.randomUUID(), fingerprint: id, token, expiresAt: new Date(expiry).toISOString(), status: "available", history: [], createdAt: new Date().toISOString() });
-      }
-      return publicRows(rows);
+      stock.threeMonth = stock.threeMonth.filter((token) => !moved.has(fingerprint(token)));
+      await client.query(
+        `INSERT INTO app_settings (setting_key, encrypted_value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
+        ["dcord_boost_token_stock", encrypt(JSON.stringify(stock))]
+      );
+      return { accounts: publicRows(rows), stock: { oneMonth: stock.oneMonth.length, threeMonth: stock.threeMonth.length } };
     }),
     reserve: (count, order, offset = 0) => mutate((rows) => {
       if (!Number.isSafeInteger(count) || count < 1) fail("Choose a valid account count.");

@@ -439,9 +439,9 @@ export function getRotatingBoostStock() {
   return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock");
 }
 
-export function addRotatingBoostStock(tokens: string, expiresAt: string) {
-  return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tokens, expiresAt })
+export function moveThreeMonthToRotatingStock(count: number) {
+  return requestJson<{ accounts: RotatingBoostAccount[]; stock: BoostStock }>("/api/dcord/rotating-stock/move", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ count })
   });
 }
 

@@ -66,8 +66,11 @@ baglamasini engeller. Ayarlar, runtime durumu ve loglar ortak PostgreSQL uzerind
 ## Rotating Boost Stock
 
 Boost Stock includes a separate **Rotating stock** inventory. Existing 1-month and
-3-month inventories keep their usual order flow. Add separate accounts with their
-actual subscription expiry, then select **Rotating · 30 Days** when creating an order.
+3-month inventories keep their usual order flow. Use **Move from 3 month stock** and
+choose how many accounts to transfer, then select **Rotating · 30 Days** when creating
+an order. Transferred accounts are removed from 3-month inventory in the same database
+transaction. Each transferred account starts with 90 days from the time of transfer;
+no expiry date or token entry is required.
 Each account supplies two boosts to one order at a time. Reservations are protected
 by a PostgreSQL transaction lock; the inventory and assignment history are encrypted
 in `app_settings`, so no additional migration is required.

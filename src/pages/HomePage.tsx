@@ -4417,7 +4417,7 @@ export default function HomePage() {
             </div>
 
             {stockCategory === "boosts" ? <>
-            <RotatingBoostStockPanel accounts={rotatingAccounts} loading={rotatingLoading} error={rotatingError} onRefresh={() => void refreshRotatingStock()} onChange={setRotatingAccounts} />
+            <RotatingBoostStockPanel accounts={rotatingAccounts} availableThreeMonth={boostStock.threeMonth} loading={rotatingLoading} error={rotatingError} onRefresh={() => { void refreshRotatingStock(); void refreshBoostStockTokens(); }} onChange={(accounts, stock) => { setRotatingAccounts(accounts); setBoostStock(stock); void refreshBoostStockTokens(); }} />
             <section className={`${shell} stock-overview`}>
               <div className="stock-overview-lead">
                 <span className="stock-overview-icon"><ListChecks className="h-5 w-5" aria-hidden="true" /></span>

@@ -5411,14 +5411,6 @@ const rotatingBoostStock = createRotatingBoostStock({
   pool,
   encrypt: encryptCredential,
   decrypt: decryptCredential,
-  legacyTokens: async (client) => {
-    const result = await client.query("SELECT setting_key, encrypted_value FROM app_settings WHERE setting_key = ANY($1::text[]) OR setting_key LIKE 'dcord_order_tokens_%'", [["dcord_boost_token_stock", "dcord_boost_token_usage"]]);
-    const settings = Object.fromEntries(result.rows.map((row) => [row.setting_key, JSON.parse(decryptCredential(row.encrypted_value))]));
-    const stock = normalizeBoostTokenStock(settings.dcord_boost_token_stock);
-    const history = normalizeUsedBoostTokenHistory(settings.dcord_boost_token_usage);
-    const assigned = Object.entries(settings).flatMap(([key, value]) => key.startsWith("dcord_order_tokens_") ? normalizeBoostTokenList(value) : []);
-    return [...stock.oneMonth, ...stock.threeMonth, ...history.map((item) => item.token), ...assigned];
-  }
 });
 
 async function saveBoostTokenStock(stock) {
@@ -14406,11 +14398,9 @@ app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => 
   catch (error) { next(error); }
 });
 
-app.post("/api/dcord/rotating-stock", requireSession, async (req, res, next) => {
+app.post("/api/dcord/rotating-stock/move", requireSession, async (req, res, next) => {
   try {
-    const tokens = normalizeBoostTokenList(req.body?.tokens);
-    if (!tokens.length || tokens.length > 1000) return res.status(400).json({ message: "Add between 1 and 1000 tokens." });
-    res.json({ accounts: await rotatingBoostStock.add(tokens, req.body?.expiresAt) });
+    res.json(await rotatingBoostStock.moveFromThreeMonth(req.body?.count));
   } catch (error) { next(error); }
 });
 

@@ -1,15 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createRotatingBoostStock, refreshRotatingRows, syncRotatingOrder, BOOST_PERIOD_MS } from "./rotating-boost-stock.mjs";
+import crypto from "node:crypto";
+import { createRotatingBoostStock, refreshRotatingRows, syncRotatingOrder, tokenIdentity, BOOST_PERIOD_MS, BOOST_SUBSCRIPTION_MS } from "./rotating-boost-stock.mjs";
 
 const day = 86400_000;
 const later = (days) => new Date(Date.now() + days * day).toISOString();
 
 // Transactional in-memory SQL adapter: exercises inventory operations without a live database.
-function fixture(legacy = []) {
+function fixture() {
   const settings = new Map();
   const orders = new Map();
   let queue = Promise.resolve();
+  let failInventoryWrite = false;
   const pool = {
     async connect() {
       let unlock;
@@ -33,6 +35,10 @@ function fixture(legacy = []) {
             return { rows: value ? [{ encrypted_value: value }] : [] };
           }
           if (sql.includes("INSERT INTO app_settings")) {
+            if (args[0] === "dcord_rotating_boost_stock" && failInventoryWrite) {
+              failInventoryWrite = false;
+              throw new Error("Inventory write failed");
+            }
             writes.set(args[0], args[1]);
             return { rows: [] };
           }
@@ -46,34 +52,82 @@ function fixture(legacy = []) {
       };
     }
   };
-  const stock = createRotatingBoostStock({ pool, encrypt: (text) => Buffer.from(text).toString("base64"), decrypt: (text) => Buffer.from(text, "base64").toString(), legacyTokens: async () => legacy });
+  const stock = createRotatingBoostStock({ pool, encrypt: (text) => Buffer.from(text).toString("base64"), decrypt: (text) => Buffer.from(text, "base64").toString() });
   const read = () => JSON.parse(Buffer.from(settings.get("dcord_rotating_boost_stock"), "base64").toString());
   const write = (rows) => settings.set("dcord_rotating_boost_stock", Buffer.from(JSON.stringify(rows)).toString("base64"));
-  return { stock, orders, read, write, settings };
+  const seed = async (tokens, expiresAt) => {
+    const rows = settings.has("dcord_rotating_boost_stock") ? read() : [];
+    for (const token of tokens) rows.push({ id: crypto.randomUUID(), fingerprint: crypto.createHash("sha256").update(tokenIdentity(token)).digest("hex"), token, expiresAt, status: "available", history: [], createdAt: new Date().toISOString() });
+    write(rows);
+    return stock.list();
+  };
+  const seedRegular = (value) => settings.set("dcord_boost_token_stock", Buffer.from(JSON.stringify(value)).toString("base64"));
+  const readRegular = () => JSON.parse(Buffer.from(settings.get("dcord_boost_token_stock"), "base64").toString());
+  return { stock, seed, seedRegular, readRegular, orders, read, write, settings, failNextInventoryWrite: () => { failInventoryWrite = true; } };
 }
 
-test("import deduplicates account identities and never exposes raw tokens", async () => {
-  const { stock, settings } = fixture();
-  const rows = await stock.add(["account-token", "mail:pass:account-token:2fa"], later(90));
+test("moving deduplicates account identities, starts 90 days and removes source tokens", async () => {
+  const { stock, seedRegular, readRegular, settings } = fixture();
+  seedRegular({ oneMonth: ["one-month"], threeMonth: ["account-token", "mail:pass:account-token:2fa", "keep-token"] });
+  const before = Date.now();
+  const { accounts: rows, stock: summary } = await stock.moveFromThreeMonth(1);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].status, "available");
   assert.equal("token" in rows[0], false);
   assert.equal(JSON.stringify(rows).includes("mail:pass"), false);
   assert.equal(settings.get("dcord_rotating_boost_stock").includes("account-token"), false);
+  assert.ok(Date.parse(rows[0].expiresAt) >= before + BOOST_SUBSCRIPTION_MS);
+  assert.ok(Date.parse(rows[0].expiresAt) <= Date.now() + BOOST_SUBSCRIPTION_MS);
+  assert.deepEqual(summary, { oneMonth: 1, threeMonth: 1 });
+  assert.deepEqual(readRegular(), { oneMonth: ["one-month"], threeMonth: ["keep-token"] });
 });
 
-test("rejects regular-stock overlaps and invalid or insufficient subscription dates", async () => {
-  const { stock } = fixture(["mail:pass:existing-token:2fa"]);
-  await assert.rejects(stock.add(["existing-token"], later(90)), /regular stock/);
-  for (const expiry of ["", "invalid", later(-1), later(32)]) {
-    await assert.rejects(stock.add(["new-token"], expiry), /33 days/);
+test("invalid counts and insufficient source stock leave both inventories unchanged", async () => {
+  const { stock, seedRegular, readRegular } = fixture();
+  const original = { oneMonth: ["one-month"], threeMonth: ["only-token"] };
+  seedRegular(original);
+  for (const count of [0, -1, 1.5, "1", 1001]) {
+    await assert.rejects(stock.moveFromThreeMonth(count), /between 1 and 1000/);
   }
+  await assert.rejects(stock.moveFromThreeMonth(2), /Only 1/);
+  assert.deepEqual(readRegular(), original);
   assert.deepEqual(await stock.list(), []);
 });
 
+test("a destination write failure rolls back source removal", async () => {
+  const { stock, seedRegular, readRegular, failNextInventoryWrite } = fixture();
+  const original = { oneMonth: ["one"], threeMonth: ["three"] };
+  seedRegular(original);
+  failNextInventoryWrite();
+  await assert.rejects(stock.moveFromThreeMonth(1), /Inventory write failed/);
+  assert.deepEqual(readRegular(), original);
+  assert.deepEqual(await stock.list(), []);
+  assert.equal((await stock.moveFromThreeMonth(1)).accounts.length, 1);
+});
+
+test("concurrent moves cannot transfer the same source account twice", async () => {
+  const { stock, seedRegular, readRegular } = fixture();
+  seedRegular({ oneMonth: [], threeMonth: ["three"] });
+  const results = await Promise.allSettled([stock.moveFromThreeMonth(1), stock.moveFromThreeMonth(1)]);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal(results.filter((result) => result.status === "rejected").length, 1);
+  assert.equal((await stock.list()).length, 1);
+  assert.deepEqual(readRegular().threeMonth, []);
+});
+
+test("moving skips identities already in rotating or one-month stock", async () => {
+  const { stock, seed, seedRegular, readRegular } = fixture();
+  const [original] = await seed(["existing"], later(40));
+  seedRegular({ oneMonth: ["one"], threeMonth: ["m:p:existing:2fa", "one", "fresh"] });
+  const result = await stock.moveFromThreeMonth(1);
+  assert.equal(result.accounts.length, 2);
+  assert.equal(result.accounts.find((row) => row.id === original.id).expiresAt, original.expiresAt);
+  assert.deepEqual(readRegular(), { oneMonth: ["one"], threeMonth: ["m:p:existing:2fa", "one"] });
+});
+
 test("concurrent orders cannot reserve the same account", async () => {
-  const { stock } = fixture();
-  await stock.add(["only-token"], later(90));
+  const { stock, seed } = fixture();
+  await seed(["only-token"], later(90));
   const results = await Promise.allSettled([
     stock.reserve(1, { uniqid: "order-a" }), stock.reserve(1, { uniqid: "order-b" })
   ]);
@@ -83,9 +137,9 @@ test("concurrent orders cannot reserve the same account", async () => {
 });
 
 test("earliest expiry is used first and a failed reservation leaves all accounts untouched", async () => {
-  const { stock } = fixture();
-  await stock.add(["long-token"], later(90));
-  await stock.add(["short-token"], later(40));
+  const { stock, seed } = fixture();
+  await seed(["long-token"], later(90));
+  await seed(["short-token"], later(40));
   await assert.rejects(stock.reserve(3, { uniqid: "too-large" }), /Only 4/);
   assert.equal((await stock.list()).filter((row) => row.status === "available").length, 2);
   assert.deepEqual(await stock.reserve(1, { uniqid: "valid" }), ["short-token"]);
@@ -129,8 +183,8 @@ test("recovery preserves actual delivery time and partial delivery holds the acc
 });
 
 test("elapsed periods automatically release and preserve history before the next reservation", async () => {
-  const { stock, read, write } = fixture();
-  await stock.add(["token"], later(90));
+  const { stock, seed, read, write } = fixture();
+  await seed(["token"], later(90));
   await stock.reserve(1, { uniqid: "o", serverName: "Customer" });
   await stock.sync({ uniqid: "o", dcordResults: [{ status: "success", boosted: true }] });
   await assert.rejects(stock.reserve(1, { uniqid: "too-early" }), /Only 0/);
@@ -146,8 +200,8 @@ test("elapsed periods automatically release and preserve history before the next
 });
 
 test("previously persisted review rows with elapsed periods are automatically migrated", async () => {
-  const { stock, read, write } = fixture();
-  await stock.add(["token"], later(90));
+  const { stock, seed, read, write } = fixture();
+  await seed(["token"], later(90));
   await stock.reserve(1, { uniqid: "o" });
   const rows = read();
   Object.assign(rows[0], { status: "review", customerEndsAt: later(-1) });
@@ -160,8 +214,8 @@ test("previously persisted review rows with elapsed periods are automatically mi
 });
 
 test("releasing an account with too little time retires it instead of reselling", async () => {
-  const { stock, read, write } = fixture();
-  await stock.add(["token"], later(40));
+  const { stock, seed, read, write } = fixture();
+  await seed(["token"], later(40));
   await stock.reserve(1, { uniqid: "o" });
   await stock.sync({ uniqid: "o", dcordResults: [{ status: "success", boosted: true }] });
   const rows = read(); rows[0].expiresAt = later(20); rows[0].customerEndsAt = later(-1); write(rows);
@@ -171,8 +225,8 @@ test("releasing an account with too little time retires it instead of reselling"
 });
 
 test("cancellation stays in separate review pool; legacy saves reject rotating identities", async () => {
-  const { stock, settings } = fixture();
-  await stock.add(["token"], later(90));
+  const { stock, seed, settings } = fixture();
+  await seed(["token"], later(90));
   await stock.reserve(1, { uniqid: "o" });
   assert.equal(await stock.release("o", ["token"]), 1);
   assert.equal((await stock.list())[0].status, "review");
@@ -183,8 +237,8 @@ test("cancellation stays in separate review pool; legacy saves reject rotating i
 });
 
 test("restart recovers persisted delivery results and orphan reservations", async () => {
-  const { stock, orders, read, write } = fixture();
-  await stock.add(["delivered", "orphan"], later(90));
+  const { stock, seed, orders, read, write } = fixture();
+  await seed(["delivered", "orphan"], later(90));
   await stock.reserve(1, { uniqid: "o" });
   await stock.reserve(1, { uniqid: "orphan-order" });
   orders.set("o", { uniqid: "o", status: "COMPLETED", dcordResults: [{ boosted: true, status: "success" }] });
@@ -195,8 +249,8 @@ test("restart recovers persisted delivery results and orphan reservations", asyn
 });
 
 test("an aged reservation cannot submit and a failed setup can be safely rolled back", async () => {
-  const { stock, read, write } = fixture();
-  await stock.add(["token"], later(40));
+  const { stock, seed, read, write } = fixture();
+  await seed(["token"], later(40));
   await stock.reserve(1, { uniqid: "o" });
   assert.equal(await stock.canSubmit("o", "token"), true);
   await stock.abortUnsubmitted("o");
@@ -208,8 +262,8 @@ test("an aged reservation cannot submit and a failed setup can be safely rolled 
 });
 
 test("concurrent replacement requests cannot reserve two accounts for one slot", async () => {
-  const { stock } = fixture();
-  await stock.add(["a", "b"], later(90));
+  const { stock, seed } = fixture();
+  await seed(["a", "b"], later(90));
   const results = await Promise.allSettled([stock.reserve(1, { uniqid: "same" }, 2), stock.reserve(1, { uniqid: "same" }, 2)]);
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal((await stock.list()).filter((row) => row.status === "available").length, 1);
