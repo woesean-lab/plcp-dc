@@ -12,10 +12,10 @@ export function OrderStatusIndicator({ status = "New", loading = false }: { stat
     : "active";
   const label = normalized.replace(/[_-]+/g, " ");
   const Icon = tone === "success" ? CircleCheck : tone === "danger" ? CircleAlert : tone === "paused" ? Pause : tone === "partial" ? ChartPie : tone === "waiting" ? Clock3 : CircleDashed;
-  return <span className="order-status-indicator" data-tone={tone} aria-busy={loading}>
-    <span className="order-status-caption">Status</span>
-    <span className="order-status-value"><Icon aria-hidden="true" />
+  return <span className="lookup-status order-status-indicator" data-tone={tone} aria-busy={loading}>
+    <small>Status</small>
+    <strong className="order-status-value"><Icon aria-hidden="true" />
       {loading ? <Skeleton className="h-3 w-16" /> : <span>{label ? label.charAt(0).toUpperCase() + label.slice(1) : "Unknown"}</span>}
-    </span>
+    </strong>
   </span>;
 }
