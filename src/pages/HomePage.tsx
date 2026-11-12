@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
+import { OrderListStatusBadge } from "../components/OrderListStatusBadge";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
@@ -464,11 +465,6 @@ function parseDelay(value?: string | number) {
   }
 
   return undefined;
-}
-
-function formatOrderStatus(status?: string) {
-  const label = String(status ?? "New").trim().replace(/[_-]+/g, " ").toLowerCase();
-  return label ? label.charAt(0).toUpperCase() + label.slice(1) : "New";
 }
 
 function getOrderStatusTone(status?: string): "active" | "success" | "danger" | "paused" {
@@ -4268,7 +4264,7 @@ export default function HomePage() {
                                 ) : "—"}
                               </div>
                               <div className="orders-row-status">
-                                <Badge className="orders-status-badge" data-status={String(order.status ?? "new").toLowerCase()} variant={getOrderStatusTone(order.status) === "success" ? "success" : getOrderStatusTone(order.status) === "danger" ? "destructive" : "secondary"}>{formatOrderStatus(order.status)}</Badge>
+                                <OrderListStatusBadge status={order.status} />
                               </div>
                               <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
