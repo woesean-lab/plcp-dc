@@ -10,6 +10,7 @@ const later = (days) => new Date(Date.now() + days * day).toISOString();
 function fixture() {
   const settings = new Map();
   const orders = new Map();
+  const assignments = new Map();
   let queue = Promise.resolve();
   let failInventoryWrite = false;
   const pool = {
@@ -52,7 +53,8 @@ function fixture() {
       };
     }
   };
-  const stock = createRotatingBoostStock({ pool, encrypt: (text) => Buffer.from(text).toString("base64"), decrypt: (text) => Buffer.from(text, "base64").toString() });
+  const reopen = () => createRotatingBoostStock({ pool, encrypt: (text) => Buffer.from(text).toString("base64"), decrypt: (text) => Buffer.from(text, "base64").toString(), loadOrderAssignment: async (orderId) => assignments.get(orderId) });
+  const stock = reopen();
   const read = () => JSON.parse(Buffer.from(settings.get("dcord_rotating_boost_stock"), "base64").toString());
   const write = (rows) => settings.set("dcord_rotating_boost_stock", Buffer.from(JSON.stringify(rows)).toString("base64"));
   const seed = async (tokens, expiresAt) => {
@@ -63,7 +65,7 @@ function fixture() {
   };
   const seedRegular = (value) => settings.set("dcord_boost_token_stock", Buffer.from(JSON.stringify(value)).toString("base64"));
   const readRegular = () => JSON.parse(Buffer.from(settings.get("dcord_boost_token_stock"), "base64").toString());
-  return { stock, seed, seedRegular, readRegular, orders, read, write, settings, failNextInventoryWrite: () => { failInventoryWrite = true; } };
+  return { stock, seed, seedRegular, readRegular, orders, assignments, reopen, read, write, settings, failNextInventoryWrite: () => { failInventoryWrite = true; } };
 }
 
 test("moving deduplicates account identities without starting the clock and removes source tokens", async () => {
@@ -316,4 +318,130 @@ test("admin inventory can read complete tokens without exposing fingerprints or 
   assert.equal("token" in redacted, false);
   assert.equal("fingerprint" in redacted, false);
   assert.equal(redacted.redactedToken, admin.redactedToken);
+});
+
+test("fixed proxies survive completed periods, application restarts and later orders", async (t) => {
+  let clock = Date.now();
+  t.mock.method(Date, "now", () => clock);
+  const { stock, seedRegular, reopen, settings } = fixture();
+  const proxy = "http://user:secret@fixed.example:8080";
+  const regularProxies = Buffer.from(JSON.stringify(["http://regular.example:8080"])).toString("base64");
+  settings.set("dcord_sticky_proxies", regularProxies);
+  seedRegular({ oneMonth: [], threeMonth: ["token"] });
+  await stock.moveFromThreeMonth(1);
+  await stock.addProxies([proxy]);
+  assert.deepEqual(await stock.reserveForDelivery(1, { uniqid: "first" }), { tokens: ["token"], proxies: [proxy] });
+  await stock.sync({ uniqid: "first", dcordResults: [{ boosted: true, status: "success" }] });
+  clock += BOOST_PERIOD_MS;
+  const restarted = reopen();
+  assert.deepEqual(await restarted.reserveForDelivery(1, { uniqid: "second" }), { tokens: ["token"], proxies: [proxy] });
+  const summary = await restarted.proxies();
+  assert.equal(summary.total, 1);
+  assert.equal(summary.available, 0);
+  assert.equal(summary.assigned, 1);
+  assert.equal(summary.proxies[0].label, "fixed.example:8080");
+  assert.equal(JSON.stringify(summary).includes("secret"), false);
+  const [account] = await restarted.list({ includeTokens: true });
+  assert.equal(account.hasFixedProxy, true);
+  assert.equal(account.proxyLabel, "fixed.example:8080");
+  assert.equal("proxy" in account, false);
+  assert.equal(settings.get("dcord_sticky_proxies"), regularProxies);
+});
+
+test("legacy proxy bindings are recovered by token identity, not account order", async () => {
+  const { stock, seed, read, write, assignments } = fixture();
+  await seed(["new-token", "old-token"], later(90));
+  const rows = read();
+  rows[1].history = [{ orderId: "previous", releasedAt: new Date().toISOString() }];
+  write(rows);
+  const previous = "http://user:secret@previous.example:8080";
+  const fresh = "http://user:secret@fresh.example:8080";
+  assignments.set("previous", { tokens: ["other-token", "mail:password:old-token:2fa"], proxies: ["http://wrong.example:8080", previous] });
+  await stock.addProxies([previous, fresh]);
+  const reservation = await stock.reserveForDelivery(2, { uniqid: "next" });
+  assert.deepEqual(reservation.tokens, ["new-token", "old-token"]);
+  assert.deepEqual(reservation.proxies, [fresh, previous]);
+  assert.equal((await stock.proxies()).available, 0);
+});
+
+test("current order bindings take precedence over historical proxies", async () => {
+  const { stock, seed, read, write, assignments } = fixture();
+  await seed(["token"], later(90));
+  const rows = read();
+  Object.assign(rows[0], { orderId: "current", status: "in_use", history: [{ orderId: "previous" }] });
+  write(rows);
+  assignments.set("current", { tokens: ["token"], proxies: ["http://current.example:8080"] });
+  assignments.set("previous", { tokens: ["token"], proxies: ["http://previous.example:8080"] });
+  const [account] = await stock.list();
+  assert.equal(account.proxyLabel, "current.example:8080");
+  assert.equal(read()[0].proxy, "http://current.example:8080");
+});
+
+test("insufficient fixed proxies fail atomically without starting account clocks", async () => {
+  const { stock, seedRegular, read } = fixture();
+  seedRegular({ oneMonth: [], threeMonth: ["a", "b"] });
+  await stock.moveFromThreeMonth(2);
+  await stock.addProxies(["http://one.example:8080"]);
+  await assert.rejects(stock.reserveForDelivery(2, { uniqid: "order" }), /Add 1 more fixed proxies/);
+  assert.ok(read().every((row) => row.status === "available" && row.expiresAt === null && !row.proxy));
+  assert.equal((await stock.proxies()).available, 1);
+});
+
+test("concurrent rotating orders cannot bind the same unassigned proxy", async () => {
+  const { stock, seed } = fixture();
+  await seed(["a", "b"], later(90));
+  await stock.addProxies(["http://one.example:8080"]);
+  const results = await Promise.allSettled([stock.reserveForDelivery(1, { uniqid: "one" }), stock.reserveForDelivery(1, { uniqid: "two" })]);
+  assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+  assert.equal((await stock.list()).filter((row) => row.status === "available").length, 1);
+});
+
+test("failed writes roll back account and proxy reservation together", async () => {
+  const { stock, seed, read, failNextInventoryWrite } = fixture();
+  await seed(["token"], later(90));
+  await stock.addProxies(["http://one.example:8080"]);
+  failNextInventoryWrite();
+  await assert.rejects(stock.reserveForDelivery(1, { uniqid: "failed" }), /Inventory write failed/);
+  assert.equal(read()[0].status, "available");
+  assert.equal(read()[0].proxy, undefined);
+  assert.equal((await stock.proxies()).available, 1);
+  assert.equal((await stock.reserveForDelivery(1, { uniqid: "retry" })).proxies[0], "http://one.example:8080");
+});
+
+test("replacement and aborted setup preserve each account's own fixed proxy", async () => {
+  const { stock, seed } = fixture();
+  await seed(["a", "b"], later(90));
+  await stock.addProxies(["http://one.example:8080", "http://two.example:8080"]);
+  const first = await stock.reserveForDelivery(1, { uniqid: "order" });
+  await stock.sync({ uniqid: "order", dcordResults: [{ status: "failed" }] });
+  const replacement = await stock.reserveForDelivery(1, { uniqid: "order" }, 0);
+  assert.deepEqual(first.proxies, ["http://one.example:8080"]);
+  assert.deepEqual(replacement.proxies, ["http://two.example:8080"]);
+  await stock.abortUnsubmitted("order", replacement.tokens);
+  const retry = await stock.reserveForDelivery(1, { uniqid: "retry" });
+  assert.deepEqual(retry, replacement);
+  assert.equal((await stock.proxies()).total, 2);
+});
+
+test("adding fixed proxies appends and deduplicates without changing bindings", async () => {
+  const { stock, seed } = fixture();
+  await seed(["a"], later(90));
+  await stock.addProxies(["http://one.example:8080"]);
+  await stock.reserveForDelivery(1, { uniqid: "order" });
+  const summary = await stock.addProxies(["http://one.example:8080", "http://two.example:8080"]);
+  assert.equal(summary.total, 2);
+  assert.equal(summary.assigned, 1);
+  assert.equal(summary.available, 1);
+  assert.equal((await stock.list())[0].proxyLabel, "one.example:8080");
+});
+
+test("already-bound available accounts remain usable without free pool proxies", async () => {
+  const { stock, seed, read, write } = fixture();
+  await seed(["unbound", "bound"], later(90));
+  const rows = read();
+  rows[1].proxy = "http://fixed.example:8080";
+  write(rows);
+  const reservation = await stock.reserveForDelivery(1, { uniqid: "next" });
+  assert.deepEqual(reservation, { tokens: ["bound"], proxies: ["http://fixed.example:8080"] });
+  assert.equal((await stock.list()).find((row) => row.redactedToken.startsWith("unboun")).status, "available");
 });

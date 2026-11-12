@@ -4605,7 +4605,7 @@ export default function HomePage() {
                 </div>
               ) : null}
             </section>
-            <details className={`${shell} dcord-proxy-panel boost-routing-details`}>
+            {stockView !== "rotating" ? <details className={`${shell} dcord-proxy-panel boost-routing-details`}>
               <summary><span><Globe2 className="h-4 w-4" /> Delivery routing <Badge variant="secondary">{dcordProxyCount} proxies</Badge></span><ChevronDown className="h-4 w-4" /></summary>
               <header className="dcord-proxy-header">
                 <div>
@@ -4635,7 +4635,7 @@ export default function HomePage() {
                 onChange={(event) => setDcordProxyDraft(normalizeProxyDraft(event.target.value))}
                 placeholder={"user:pass@host:port\nhost:port:user:pass"}
               />
-            </details>
+            </details> : null}
 
             </> : communityStockPanel}
           </>

@@ -5411,6 +5411,15 @@ const rotatingBoostStock = createRotatingBoostStock({
   pool,
   encrypt: encryptCredential,
   decrypt: decryptCredential,
+  normalizeProxy: (proxy) => normalizeDiscordOnlinerProxyUrl(normalizeDcordProxyForDcord(proxy)),
+  loadOrderAssignment: async (orderId, client) => {
+    const keys = [getDcordOrderTokensSettingKey(orderId), getDcordOrderProxiesSettingKey(orderId)];
+    const values = await Promise.all(keys.map(async (key) => {
+      const result = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1", [key]);
+      return result.rows[0] ? JSON.parse(decryptCredential(result.rows[0].encrypted_value)) : [];
+    }));
+    return { tokens: values[0], proxies: values[1] };
+  },
 });
 
 async function saveBoostTokenStock(stock) {
@@ -14398,6 +14407,24 @@ app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => 
   catch (error) { next(error); }
 });
 
+app.get("/api/dcord/rotating-stock/proxies", requireSession, async (_req, res, next) => {
+  try { res.set("Cache-Control", "no-store").json(await rotatingBoostStock.proxies()); }
+  catch (error) { next(error); }
+});
+
+app.post("/api/dcord/rotating-stock/proxies", requireSession, async (req, res, next) => {
+  try {
+    const input = Array.isArray(req.body?.proxies) ? req.body.proxies : String(req.body?.proxies ?? "").split(/[\r\n,]+/);
+    const lines = input.map((line) => String(line).trim()).filter(Boolean);
+    if (!lines.length || lines.length > 1000 || lines.some((line) => {
+      const proxy = normalizeDcordProxyForDcord(line);
+      const url = normalizeDiscordOnlinerProxyUrl(proxy);
+      return !url || proxy.length > 1000;
+    })) return res.status(400).json({ message: "Enter up to 1000 valid proxies, one per line. Use user:pass@host:port or host:port:user:pass." });
+    res.json(await rotatingBoostStock.addProxies(normalizeDcordStickyProxies(lines)));
+  } catch (error) { next(error); }
+});
+
 app.post("/api/dcord/rotating-stock/move", requireSession, async (req, res, next) => {
   try {
     res.json(await rotatingBoostStock.moveFromThreeMonth(req.body?.count));
@@ -14710,12 +14737,15 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     }
 
     const uniqid = createDcordOrderId();
-    const selectedTokens = boostStockPool === "rotating"
-      ? await rotatingBoostStock.reserve(requiredTokens, { uniqid, serverName: serverInfo.guildName, serverId: serverInfo.guildId })
+    const rotatingReservation = boostStockPool === "rotating"
+      ? await rotatingBoostStock.reserveForDelivery(requiredTokens, { uniqid, serverName: serverInfo.guildName, serverId: serverInfo.guildId })
+      : null;
+    const selectedTokens = rotatingReservation
+      ? rotatingReservation.tokens
       : stock[stockKey].slice(0, requiredTokens);
     let assignedProxies;
     try {
-      assignedProxies = useProxy ? await reserveDcordProxies(requiredTokens) : [];
+      assignedProxies = rotatingReservation ? rotatingReservation.proxies : useProxy ? await reserveDcordProxies(requiredTokens) : [];
     } catch (error) {
       if (boostStockPool === "rotating") await rotatingBoostStock.abortUnsubmitted(uniqid);
       throw error;
@@ -15155,8 +15185,9 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     if (rotating && (isRunnableDcordResult(currentResult) || isUncertainDcordTransportResult(currentResult))) {
       return res.status(409).json({ message: "Wait until the existing task result is confirmed before replacing this account." });
     }
-    const replacementToken = rotating
-      ? (await rotatingBoostStock.reserve(1, order, resultIndex))[0]
+    const rotatingReservation = rotating ? await rotatingBoostStock.reserveForDelivery(1, order, resultIndex) : null;
+    const replacementToken = rotatingReservation
+      ? rotatingReservation.tokens[0]
       : stock[stockKey][0];
     if (!replacementToken) {
       return res.status(409).json({ message: `No ${duration} month replacement tokens are in stock.` });
@@ -15164,7 +15195,7 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
 
     let replacementProxy;
     try {
-      replacementProxy = order.useProxy === true ? (await reserveDcordProxies(1))[0] : "";
+      replacementProxy = rotatingReservation ? rotatingReservation.proxies[0] : order.useProxy === true ? (await reserveDcordProxies(1))[0] : "";
     } catch (error) {
       if (rotating) await rotatingBoostStock.abortUnsubmitted(uniqid, [replacementToken]);
       throw error;

@@ -46,7 +46,8 @@ baglamasini engeller. Ayarlar, runtime durumu ve loglar ortak PostgreSQL uzerind
 ## Dcord Boosts
 
 - Siparisler yerel token stokundan token ayirir; her token 2x boost olarak sayilir.
-- Her token icin Boost Stock panelindeki listeden bir proxy rezerve edilir.
+- Normal 1/3 aylik stokta her token icin tek kullanimlik proxy listesinden bir proxy rezerve edilir.
+- Rotating stok kendi sabit proxy havuzunu kullanir; hesap-proxy eslesmesi sonraki siparislerde korunur.
 - `host:port:user:pass` girdileri `user:pass@host:port` formatina donusturulur.
 - Dcord endpointi su ortam degiskenleriyle ayarlanabilir:
   - `DCORD_API_BASE_URL`
@@ -88,6 +89,17 @@ The panel refreshes every 30 seconds; reservations also reconcile elapsed period
 Failed or uncertain deliveries are kept separate as delivery issues until resolved;
 they are not treated as successfully completed 30-day periods.
 Run lifecycle checks with `node --test server/rotating-boost-stock.test.mjs`.
+
+Rotating inventory has its own **Fixed proxies** panel. Add proxies there, one per
+line (`user:pass@host:port` or `host:port:user:pass`). On first delivery, a proxy
+binds to the account and is saved in encrypted inventory. Later orders and
+replacement deliveries use that account's same proxy; it is never consumed or
+returned to the one-time pool. Existing account bindings are recovered from
+the current or most recent saved order's token/proxy assignment when available.
+New accounts require an unassigned fixed proxy; an insufficient pool leaves both
+account reservations and subscription clocks unchanged. Adding proxies appends
+and deduplicates without removing existing bindings. The admin UI displays only
+proxy endpoints, never proxy passwords.
 
 ## Members OAuth
 

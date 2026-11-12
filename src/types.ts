@@ -268,6 +268,8 @@ export interface BoostStock {
 }
 
 export interface RotatingBoostAccount {
+  hasFixedProxy?: boolean;
+  proxyLabel?: string | null;
   token?: string;
   id: string;
   redactedToken: string;
@@ -280,6 +282,13 @@ export interface RotatingBoostAccount {
   startedAt?: string | null;
   customerEndsAt?: string | null;
   history: { orderId?: string; serverName?: string; startedAt?: string; customerEndsAt?: string; releasedAt: string }[];
+}
+
+export interface RotatingProxyPool {
+  total: number;
+  assigned: number;
+  available: number;
+  proxies: { label: string; assigned: boolean }[];
 }
 
 export interface BoostTokenStockInput {

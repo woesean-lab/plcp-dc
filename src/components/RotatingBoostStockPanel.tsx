@@ -8,6 +8,7 @@ import { Button } from "./ui/button";
 import { BoostStockStatus, boostStockOrderLink } from "./BoostStockStatus";
 import toast from "react-hot-toast";
 import { Input } from "./ui/input";
+import { RotatingProxyPoolPanel } from "./RotatingProxyPoolPanel";
 
 const labels: Record<RotatingBoostAccount["status"], string> = {
   available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Expired / low time"
@@ -85,6 +86,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
     const link = document.createElement("a"); link.href = url; link.download = "boost-rotating-tokens.txt"; link.click(); URL.revokeObjectURL(url);
   }
   return <section className="rotating-stock-panel" aria-label="Rotating inventory">
+    <RotatingProxyPoolPanel accounts={accounts} onChange={onRefresh} />
     <div className="boost-rotating-controls">
       <details className="boost-rotation-help"><summary><ShieldCheck className="h-3.5 w-3.5" />Pool rules</summary><p>Each account supplies 2 boosts for a 30-day delivery, with a 3-day buffer. The 90-day subscription starts on first assignment. Accounts return automatically when eligible.</p></details>
       <div className="boost-pool-actions">
@@ -124,6 +126,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
             <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong>{row.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(row.orderId)}>Open order <ArrowUpRight className="h-3.5 w-3.5" /></Link> : <span>No order assigned</span>}</div>
             <div><small>Customer period ends</small><strong>{formatDate(row.customerEndsAt)}</strong><span>{row.startedAt ? "Started " + formatDate(row.startedAt) : "Delivery has not started"}</span></div>
             <div><small>Subscription ends</small><strong>{row.expiresAt ? formatDate(row.expiresAt) : "90 days from first assignment"}</strong><span>2 boosts per delivery</span></div>
+            <div><small>Fixed proxy</small><strong>{row.proxyLabel || "Assigned on first delivery"}</strong><span>{row.hasFixedProxy ? "Reused for every order · never consumed" : "Uses the separate Rotating proxy pool"}</span></div>
           </div>
           <div className="boost-assignment-history"><strong>{row.history.length} previous assignments</strong>{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || "Previous assignment"}</strong>{entry.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(entry.orderId)}>{entry.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link> : null}<span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments yet.</p>}</div>
         </div> : null}
