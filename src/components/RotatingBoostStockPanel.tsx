@@ -4,6 +4,7 @@ import { ArrowRightLeft, LoaderCircle, RefreshCw, ShieldCheck } from "lucide-rea
 import { moveThreeMonthToRotatingStock } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
 
 const labels: Record<RotatingBoostAccount["status"], string> = {
   available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Insufficient time / expired"
@@ -107,7 +108,7 @@ export function RotatingBoostStockPanel({ accounts, availableThreeMonth, loading
           </div>
           <label className="grid gap-2">
             <span className="field-label">Accounts to move</span>
-            <input autoFocus required disabled={busy} type="number" min={1} max={moveLimit} step={1} className="ui-input" aria-describedby="rotating-count-help" value={count || ""} onChange={(event) => setCount(Number(event.target.value))} />
+            <Input autoFocus required disabled={busy} type="number" min={1} max={moveLimit} step={1} aria-describedby="rotating-count-help" value={count || ""} onChange={(event) => setCount(Number(event.target.value))} />
             <span id="rotating-count-help" className="text-xs text-[var(--app-muted)]">Choose 1–{moveLimit} accounts from your available 3 month inventory.</span>
           </label>
           {actionError ? <p role="alert" className="rotating-transfer-error">{actionError}</p> : null}
