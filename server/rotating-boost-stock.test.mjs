@@ -333,15 +333,19 @@ test("concurrent replacement requests cannot reserve two accounts for one slot",
 
 
 test("admin inventory can read complete tokens without exposing fingerprints or changing default redaction", async () => {
-  const { stock, seedRegular } = fixture();
+  const { stock, seedRegular, read, write } = fixture();
   const token = "mail:pass:complete-account-token:2fa";
   seedRegular({ oneMonth: [], threeMonth: [token] });
   await stock.moveFromThreeMonth(1);
+  const proxy = "http://user:secret@fixed.example:8080";
+  const rows = read(); rows[0].proxy = proxy; write(rows);
   const [admin] = await stock.list({ includeTokens: true });
   assert.equal(admin.token, token);
+  assert.equal(admin.proxy, proxy);
   assert.equal("fingerprint" in admin, false);
   const [redacted] = await stock.list();
   assert.equal("token" in redacted, false);
+  assert.equal("proxy" in redacted, false);
   assert.equal("fingerprint" in redacted, false);
   assert.equal(redacted.redactedToken, admin.redactedToken);
 });
@@ -370,8 +374,10 @@ test("fixed proxies survive completed periods, application restarts and later or
   const [account] = await restarted.list({ includeTokens: true });
   assert.equal(account.hasFixedProxy, true);
   assert.equal(account.proxyLabel, "fixed.example:8080");
-  assert.equal("proxy" in account, false);
-  assert.equal(JSON.stringify(account).includes("secret"), false);
+  assert.equal(account.proxy, proxy);
+  const [redacted] = await restarted.list();
+  assert.equal("proxy" in redacted, false);
+  assert.equal(JSON.stringify(redacted).includes("secret"), false);
   assert.equal(settings.get("dcord_sticky_proxies"), regularProxies);
 });
 

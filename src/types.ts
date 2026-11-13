@@ -268,6 +268,7 @@ export interface BoostStock {
 }
 
 export interface RotatingBoostAccount {
+  proxy?: string | null;
   onlinerConnected?: boolean;
   onlinerConnectionState?: string | null;
   onlinerLastError?: string | null;

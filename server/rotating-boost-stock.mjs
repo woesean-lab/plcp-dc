@@ -160,7 +160,7 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt, loadOrderAssi
       throw error;
     } finally { client.release(); }
   }
-  const publicRows = (rows, includeTokens = false) => rows.map(({ token, proxy, fingerprint: _fingerprint, ...row }) => ({ ...row, hasFixedProxy: Boolean(proxy), proxyLabel: proxy ? proxyLabel(proxy) : null, ...(includeTokens ? { token } : {}), redactedToken: `${tokenIdentity(token).slice(0, 6)}…${tokenIdentity(token).slice(-4)}` }));
+  const publicRows = (rows, includeTokens = false) => rows.map(({ token, proxy, fingerprint: _fingerprint, ...row }) => ({ ...row, hasFixedProxy: Boolean(proxy), proxyLabel: proxy ? proxyLabel(proxy) : null, ...(includeTokens ? { token, proxy: proxy || null } : {}), redactedToken: `${tokenIdentity(token).slice(0, 6)}…${tokenIdentity(token).slice(-4)}` }));
   return {
     withAccount: (id, operation) => mutate(async (rows, client) => {
       await restoreProxies(rows, client);
