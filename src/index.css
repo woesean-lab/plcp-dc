@@ -9419,7 +9419,7 @@
   cursor: pointer;
 }
 
-.community-member-priority-actions { gap: 5px; }
+.community-member-priority-actions { gap: 5px; flex-wrap: wrap; }
 
 .community-member-transfer-actions {
   display: flex;

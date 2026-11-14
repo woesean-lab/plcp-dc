@@ -263,6 +263,13 @@ export function disconnectCommunityMemberFromOnliner(discordUserId: string) {
   }).then(parseResponse<{ removed: boolean; removedProfiles: number }>);
 }
 
+export function disconnectCommunityMembersFromOnliner(ids: string[]) {
+  return fetch("/api/community/members/onliner/bulk-disconnect", {
+    method: "POST", cache: "no-store", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+  }).then(parseResponse<{ removedMembers: number; removedProfiles: number; skipped: number }>);
+}
+
 export function removeCommunityAuthorizations(ids: string[]) {
   return fetch("/api/community/members/bulk-delete", {
     method: "POST",

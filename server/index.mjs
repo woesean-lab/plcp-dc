@@ -13,6 +13,7 @@ import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
+import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -11223,6 +11224,50 @@ app.delete("/api/community/members/:discordUserId/onliner", requireSession, asyn
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/community/members/onliner/bulk-disconnect", requireSession, async (req, res, next) => {
+  const ids = [...new Set(Array.isArray(req.body?.ids) ? req.body.ids : [])];
+  if (!ids.length || ids.length > 10000 || ids.some((id) => typeof id !== "string" || !isDiscordGuildId(id))) {
+    return res.status(400).json({ message: "Choose between 1 and 10000 valid member IDs." });
+  }
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const saved = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 FOR UPDATE", [discordOnlinerSettingKey]);
+    const current = normalizeDiscordOnlinerConfig(saved.rows[0] ? JSON.parse(decryptCredential(saved.rows[0].encrypted_value)) : { enabled: false });
+    const runtimes = current.accounts.length ? await client.query(
+      "SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[]) AND payload->'bot'->>'id' = ANY($2::text[])",
+      [current.accounts.map((account) => account.id), ids]
+    ) : { rows: [] };
+    const plan = planCommunityOnlinerDisconnect(current.accounts, runtimes.rows, ids);
+    const candidate = normalizeDiscordOnlinerConfig({ ...current, accounts: plan.remainingAccounts });
+    if (plan.removedIds.length) {
+      const recovery = [...plan.recoverableTokens];
+      if (recovery.length) await client.query(
+        `UPDATE community_oauth_joins AS member
+         SET encrypted_account_token = COALESCE(member.encrypted_account_token, recovery.token)
+         FROM UNNEST($1::text[], $2::text[]) AS recovery(user_id, token)
+         WHERE member.discord_user_id = recovery.user_id`,
+        [recovery.map(([id]) => id), recovery.map(([, token]) => encryptCredential(token))]
+      );
+      await client.query("UPDATE app_settings SET encrypted_value = $2, updated_at = NOW() WHERE setting_key = $1", [discordOnlinerSettingKey, encryptCredential(JSON.stringify(candidate))]);
+      await client.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [plan.removedIds]);
+    }
+    await client.query("COMMIT");
+    for (const id of plan.removedIds) {
+      const runtime = discordOnlinerRuntimes.get(id);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      discordOnlinerRuntimes.delete(id);
+      discordOnlinerPendingRuntimeWrites.delete(id);
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+    appendDiscordOnlinerLog("info", `${plan.removedUsers.length} selected Members Stock accounts were removed from Onliner.`);
+    res.json({ removedMembers: plan.removedUsers.length, removedProfiles: plan.removedIds.length, skipped: ids.length - plan.removedUsers.length });
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    next(error);
+  } finally { client.release(); }
 });
 
 app.delete("/api/community/members/:discordUserId", requireSession, async (req, res, next) => {

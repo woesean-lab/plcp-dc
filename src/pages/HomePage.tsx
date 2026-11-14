@@ -73,6 +73,7 @@ import {
   createCommunityStockCategory,
   deleteCommunityStockCategory,
   disconnectCommunityMemberFromOnliner,
+  disconnectCommunityMembersFromOnliner,
   downloadCommunityMemberTokens,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
@@ -726,7 +727,7 @@ export default function HomePage() {
   const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
-  const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "joined">("all");
+  const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const communityMemberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
@@ -835,7 +836,7 @@ export default function HomePage() {
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
-  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | null>(null);
+  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_disconnect" | null>(null);
   const [exportingCommunityTokens, setExportingCommunityTokens] = useState<"access" | "account" | null>(null);
   const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
@@ -2256,8 +2257,26 @@ export default function HomePage() {
     }
   }
 
+  async function disconnectSelectedCommunityOnliner() {
+    if (!selectedCommunityMemberIds.length || communityBulkAction || communityOnlinerActionId || communityRichPresenceActionId) return;
+    const ids = [...selectedCommunityMemberIds];
+    setCommunityBulkAction("onliner_disconnect");
+    try {
+      const result = await disconnectCommunityMembersFromOnliner(ids);
+      const selected = new Set(ids);
+      setCommunityStatus((current) => current ? { ...current, recent: current.recent.map((record) => selected.has(record.id)
+        ? { ...record, onlinerConnected: false, onlinerAccountId: null, onlinerConnectionState: null, onlinerLastError: null, onlinerRichPresenceEnabled: null }
+        : record) } : current);
+      setSelectedCommunityMemberIds([]);
+      await refreshCommunityStatus(communityStockType);
+      notifySuccess(`${result.removedMembers} members removed from Onliner${result.skipped ? `; ${result.skipped} already disconnected` : ""}. Members Stock was not changed.`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected members could not be disconnected.");
+    } finally { setCommunityBulkAction(null); }
+  }
+
   async function disconnectCommunityMemberOnliner(record: CommunityAdminStatus["recent"][number]) {
-    if (communityOnlinerActionId) return;
+    if (communityOnlinerActionId || communityBulkAction) return;
     try {
       setCommunityOnlinerActionId(record.id);
       await disconnectCommunityMemberFromOnliner(record.id);
@@ -3115,7 +3134,12 @@ export default function HomePage() {
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
   const communityVisibleRecords = communityCategoryRecords
-    .filter((record) => communityServerFilter === "zero" ? (record.joinedServerCount ?? 0) === 0 : communityServerFilter === "joined" ? (record.joinedServerCount ?? 0) > 0 : true)
+    .filter((record) => {
+      const count = record.joinedServerCount ?? 0;
+      if (communityServerFilter === "all") return true;
+      if (communityServerFilter === "joined") return count > 0;
+      return count === { zero: 0, one: 1, two: 2, three: 3 }[communityServerFilter];
+    })
     .filter((record) => {
       if (communityMemberFilter === "active") return record.status !== "failed";
       if (communityMemberFilter === "inactive") return record.status === "failed";
@@ -3362,10 +3386,13 @@ export default function HomePage() {
             options={[
               { value: "all", label: "All server counts" },
               { value: "zero", label: `0 servers (${communityCategoryRecords.filter((record) => (record.joinedServerCount ?? 0) === 0).length})` },
+              { value: "one", label: `1 server (${communityCategoryRecords.filter((record) => record.joinedServerCount === 1).length})` },
+              { value: "two", label: `2 servers (${communityCategoryRecords.filter((record) => record.joinedServerCount === 2).length})` },
+              { value: "three", label: `3 servers (${communityCategoryRecords.filter((record) => record.joinedServerCount === 3).length})` },
               { value: "joined", label: `1+ servers (${communityCategoryRecords.filter((record) => (record.joinedServerCount ?? 0) > 0).length})` }
             ]}
             onChange={(value) => {
-              setCommunityServerFilter(value as "all" | "zero" | "joined");
+              setCommunityServerFilter(value as "all" | "zero" | "one" | "two" | "three" | "joined");
               setSelectedCommunityMemberIds([]);
               setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
             }}
@@ -3393,6 +3420,13 @@ export default function HomePage() {
           </Button>
         </div>
           <div className="community-member-priority-actions">
+            <Button type="button" variant="dangerGhost" size="sm"
+              title="Disconnect selected accounts from Onliner and keep them in Members Stock"
+              disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+              onClick={() => void disconnectSelectedCommunityOnliner()}>
+              {communityBulkAction === "onliner_disconnect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
+              {communityBulkAction === "onliner_disconnect" ? "Disconnecting..." : "Disconnect selected"}
+            </Button>
             <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
               {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
             </Button>
@@ -3525,7 +3559,7 @@ export default function HomePage() {
                       className="community-rich-presence-action"
                       title={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} without reconnecting`}
                       aria-label={`Turn Rich Presence ${record.onlinerRichPresenceEnabled === true ? "off" : "on"} for ${record.username}`}
-                      disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+                      disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null || communityBulkAction !== null}
                       onClick={() => void toggleCommunityMemberRichPresence(record)}
                     >
                       {communityRichPresenceActionId === record.id
@@ -3539,7 +3573,7 @@ export default function HomePage() {
                     variant={record.onlinerConnected ? "dangerGhost" : "secondary"}
                     title={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
                     aria-label={record.onlinerConnected ? `Remove ${record.username} from Onliner` : `Connect ${record.username} to Onliner`}
-                    disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+                    disabled={communityOnlinerActionId !== null || communityRichPresenceActionId !== null || communityBulkAction !== null}
                     onClick={() => record.onlinerConnected ? void disconnectCommunityMemberOnliner(record) : beginConnectingCommunityMemberToOnliner(record)}
                   >
                     {communityOnlinerActionId === record.id
