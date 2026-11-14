@@ -726,6 +726,8 @@ export default function HomePage() {
   const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
+  const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "joined">("all");
+  const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const communityMemberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
@@ -3113,6 +3115,7 @@ export default function HomePage() {
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
   const communityVisibleRecords = communityCategoryRecords
+    .filter((record) => communityServerFilter === "zero" ? (record.joinedServerCount ?? 0) === 0 : communityServerFilter === "joined" ? (record.joinedServerCount ?? 0) > 0 : true)
     .filter((record) => {
       if (communityMemberFilter === "active") return record.status !== "failed";
       if (communityMemberFilter === "inactive") return record.status === "failed";
@@ -3121,12 +3124,17 @@ export default function HomePage() {
       return true;
     })
     .sort((left, right) => {
+      if (communityMemberSort !== "name") {
+        const serverOrder = (left.joinedServerCount ?? 0) - (right.joinedServerCount ?? 0);
+        if (serverOrder) return communityMemberSort === "servers_asc" ? serverOrder : -serverOrder;
+      }
       const leftName = left.displayName || left.username;
       const rightName = right.displayName || right.username;
       const nameOrder = leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
       return nameOrder || left.id.localeCompare(right.id);
     });
   const visibleCommunityRecords = communityVisibleRecords.slice(0, visibleCommunityMemberCount);
+  const zeroServerCommunityRecords = communityVisibleRecords.filter((record) => (record.joinedServerCount ?? 0) === 0);
   const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
 
   useEffect(() => {
@@ -3346,6 +3354,43 @@ export default function HomePage() {
               setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
             }}
           />
+          <FilterDropdown
+            label="Server count filter"
+            showLabel={false}
+            className="community-member-filter"
+            value={communityServerFilter}
+            options={[
+              { value: "all", label: "All server counts" },
+              { value: "zero", label: `0 servers (${communityCategoryRecords.filter((record) => (record.joinedServerCount ?? 0) === 0).length})` },
+              { value: "joined", label: `1+ servers (${communityCategoryRecords.filter((record) => (record.joinedServerCount ?? 0) > 0).length})` }
+            ]}
+            onChange={(value) => {
+              setCommunityServerFilter(value as "all" | "zero" | "joined");
+              setSelectedCommunityMemberIds([]);
+              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+            }}
+          />
+          <FilterDropdown
+            label="Sort members"
+            showLabel={false}
+            className="community-member-filter"
+            value={communityMemberSort}
+            options={[
+              { value: "name", label: "Name · A–Z" },
+              { value: "servers_asc", label: "Servers · Low to high" },
+              { value: "servers_desc", label: "Servers · High to low" }
+            ]}
+            onChange={(value) => {
+              setCommunityMemberSort(value as "name" | "servers_asc" | "servers_desc");
+              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+            }}
+          />
+          <Button type="button" variant="secondary" size="xs"
+            disabled={!zeroServerCommunityRecords.length || communityBulkAction !== null}
+            title="Select all members with 0 servers matching the current filters, including unloaded rows"
+            onClick={() => setSelectedCommunityMemberIds(zeroServerCommunityRecords.map((record) => record.id))}>
+            <ListChecks className="h-3.5 w-3.5" />Select 0 servers ({zeroServerCommunityRecords.length})
+          </Button>
         </div>
           <div className="community-member-priority-actions">
             <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>

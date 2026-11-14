@@ -9366,6 +9366,7 @@
 
 .community-member-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
@@ -9384,6 +9385,8 @@
 
 .community-member-toolbar-filters {
   display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
   min-width: 0;
   align-items: center;
   gap: 8px;
