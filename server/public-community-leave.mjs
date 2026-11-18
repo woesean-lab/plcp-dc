@@ -1,9 +1,14 @@
+export function hasCommunityLeaveAllStarted(order) {
+  return Boolean(order?.publicLeaveAllRequestedAt || order?.membersLeaveAllRequestedAt || order?.membersLeftAt || order?.autoLeaveJob
+    || (Array.isArray(order?.communityResults) && order.communityResults.some((item) => item?.leftServerAt || item?.autoLeaveJobId || item?.autoLeaveStatus)));
+}
+
 export function hideCommunityLeaveInformation(order) {
   const sanitized = { ...order };
   for (const key of Object.keys(sanitized)) {
-    if (/^autoLeave/i.test(key) || key === "membersLeftAt" || key === "publicLeaveAllRequestedAt") delete sanitized[key];
+    if (/^autoLeave/i.test(key) || key === "membersLeftAt" || key === "membersLeaveAllRequestedAt" || key === "publicLeaveAllRequestedAt") delete sanitized[key];
   }
-  sanitized.publicLeaveAllUsed = Boolean(order.publicLeaveAllRequestedAt);
+  sanitized.publicLeaveAllUsed = hasCommunityLeaveAllStarted(order);
   if (Array.isArray(order.communityResults)) {
     sanitized.communityResults = order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
@@ -15,8 +20,7 @@ export function hideCommunityLeaveInformation(order) {
 
 export function canPublicLeaveAll(order) {
   return order?.provider === "community"
-    && !order.publicLeaveAllRequestedAt
-    && order.autoLeaveJob?.status !== "running"
+    && !hasCommunityLeaveAllStarted(order)
     && ["COMPLETED", "PARTIAL", "ERROR", "TERMINATED", "CANCELLED", "CANCELED"].includes(String(order.status ?? "").toUpperCase())
     && /^\d{16,22}$/.test(String(order.serverId ?? ""))
     && Array.isArray(order.communityResults)
@@ -36,7 +40,7 @@ export async function claimPublicLeaveAll(pool, orderId) {
       throw Object.assign(new Error("Members order could not be found."), { statusCode: 404 });
     }
     if (!canPublicLeaveAll(order)) {
-      throw Object.assign(new Error(order.publicLeaveAllRequestedAt
+      throw Object.assign(new Error(hasCommunityLeaveAllStarted(order)
         ? "Leave all has already been used for this order."
         : "Leave all is unavailable. Wait for member delivery and other member operations to finish."), { statusCode: 409 });
     }

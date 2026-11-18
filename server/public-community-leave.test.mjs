@@ -82,3 +82,24 @@ test("invalid and missing orders do not consume a use", async () => {
   assert.equal(pool.read().publicLeaveAllRequestedAt, undefined);
   await assert.rejects(claimPublicLeaveAll(fixture(null), "missing"), { statusCode: 404 });
 });
+
+test("previous admin, auto leave and legacy starts disable the monitor and reject another public request", async () => {
+  for (const previous of [
+    { membersLeaveAllRequestedAt: "previous-admin-start" },
+    { membersLeftAt: "previous-completion" },
+    { autoLeaveJob: { status: "running" } },
+    { autoLeaveJob: { status: "completed" } },
+    { autoLeaveJob: { status: "completed_with_errors" } },
+    { communityResults: [{ ...order().communityResults[0], leftServerAt: "previous-leave" }] },
+    { communityResults: [{ ...order().communityResults[0], autoLeaveStatus: "failed" }] }
+  ]) {
+    const source = { ...order(), ...previous };
+    assert.equal(canPublicLeaveAll(source), false);
+    const publicOrder = hideCommunityLeaveInformation(source);
+    assert.equal(publicOrder.publicLeaveAllUsed, true);
+    assert.equal(publicOrder.membersLeaveAllRequestedAt, undefined);
+    const pool = fixture(source);
+    await assert.rejects(claimPublicLeaveAll(pool, source.uniqid), { statusCode: 409, message: "Leave all has already been used for this order." });
+    assert.equal(pool.read().publicLeaveAllRequestedAt, undefined);
+  }
+});

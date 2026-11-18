@@ -5,7 +5,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, LogOut, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -1105,7 +1105,8 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title="Remove all delivered members from this server. Available once per order after delivery finishes.">
+                        <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
+                          <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
                         </Button>
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>

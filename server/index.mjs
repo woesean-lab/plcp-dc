@@ -6494,6 +6494,14 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
       error.statusCode = 409;
       throw error;
     }
+    // Record admin and public starts before external requests, including attempts
+    // that later fail. Public monitor access must never initiate a second run.
+    await pool.query(
+      `UPDATE tracked_orders
+       SET payload = jsonb_set(payload, '{membersLeaveAllRequestedAt}', COALESCE(payload->'membersLeaveAllRequestedAt', to_jsonb($2::text))), updated_at = NOW()
+       WHERE uniqid = $1`,
+      [orderId, new Date().toISOString()]
+    );
     const stock = await pool.query(
       `SELECT discord_user_id, encrypted_account_token
        FROM community_oauth_joins
