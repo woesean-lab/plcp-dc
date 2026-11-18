@@ -1,3 +1,4 @@
+import { BrandLogo } from "./components/BrandLogo";
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useEffect, useLayoutEffect, useState } from "react";
 import { Bot, Boxes, ListChecks, LoaderCircle, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
@@ -92,14 +93,9 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
       <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1520px] flex-col gap-6 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
         <header className="app-header sticky top-3 z-30">
           <div className="app-header-inner">
-            <button className="app-brand" type="button" onClick={() => navigate("/manage?tab=create")} aria-label="Pulcip Discord Console home">
-              <span className="brand-mark" aria-hidden="true">
-                <span className="brand-letter">P</span>
-              </span>
-              <span className="min-w-0 text-left">
-                <span className="brand-eyebrow">Pulcip</span>
-                <span className="brand-title">Discord Console</span>
-              </span>
+            <button className="app-brand" type="button" onClick={() => navigate("/manage?tab=create")} aria-label="Pulcip Console home">
+              <BrandLogo />
+              <span className="brand-console-label">Console</span>
             </button>
 
             <div className="app-nav-cluster">
@@ -240,9 +236,8 @@ function ProtectedGate() {
   if (authState === "loading") {
     return (
       <div className="session-loading-screen app-shell min-h-screen" role="status" aria-live="polite">
-        <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+        <BrandLogo />
         <span>
-          <span className="brand-eyebrow">Pulcip</span>
           <strong>Loading secure session…</strong>
         </span>
       </div>

@@ -1,3 +1,4 @@
+import { BrandLogo } from "../components/BrandLogo";
 import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Check, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles } from "lucide-react";
@@ -53,8 +54,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
         <aside className="login-story">
           <div>
             <div className="login-brand">
-              <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-              <span><span className="brand-eyebrow">Pulcip</span><strong>Members Suite</strong></span>
+              <BrandLogo />
             </div>
             <div className="login-hero-icon" aria-hidden="true"><Sparkles className="h-6 w-6" /></div>
             <h1 className="login-headline">Everything in control.<br />Beautifully simple.</h1>

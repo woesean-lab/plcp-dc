@@ -12081,3 +12081,35 @@
 }
 .list-pagination > div { display: flex; align-items: center; gap: 10px; }
 .list-pagination button { flex-shrink: 0; }
+
+/* Original Pulcip wordmark; preserve its wide aspect ratio. */
+.pulcip-logo {
+  display: block;
+  width: 104px;
+  height: auto;
+  max-width: 100%;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+:is(.app-brand, .monitor-brand, .login-brand, .landing-brand) {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+.app-brand { min-width: 0; flex-direction: row; align-items: center; gap: 12px; }
+.brand-console-label {
+  padding-left: 12px;
+  border-left: 1px solid var(--app-border-strong);
+  color: var(--app-muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+}
+:is(.app-brand, .monitor-brand, .login-brand, .landing-brand) .brand-eyebrow { display: none; }
+.pulcip-logo-gate { width: 144px; }
+.session-loading-screen > .pulcip-logo { width: 112px; }
+@media (max-width: 639px) {
+  .app-brand { min-width: 0; }
+  .pulcip-logo { width: 92px; }
+  .pulcip-logo-gate { width: 132px; }
+}
