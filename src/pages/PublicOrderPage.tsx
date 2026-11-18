@@ -1082,7 +1082,7 @@ export default function PublicOrderPage() {
                   <div className="monitor-token-panel community-order-log">
                     <div className="monitor-token-heading">
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
-                      <div className="monitor-token-actions">
+                      <span className="flex items-center gap-2">
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
                             <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
@@ -1109,8 +1109,8 @@ export default function PublicOrderPage() {
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
                         </Button>
-                        <span className="monitor-result-count">{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
-                      </div>
+                        <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
+                      </span>
                     </div>
                     {communityCheckNeedsBot && botInvite ? (
                       <div className="monitor-member-check-bot-alert" role="alert">

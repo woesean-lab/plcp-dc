@@ -4,7 +4,6 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 import "./components/ui/badge.css";
-import "./comfort.css";
 
 // Remove credentials left by older browser-only versions of the dashboard.
 localStorage.removeItem("integration.apiKey");
