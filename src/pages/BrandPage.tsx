@@ -1,4 +1,3 @@
-import { BrandLogo } from "../components/BrandLogo";
 import { ArrowUpRight, ShieldCheck, Store } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -11,7 +10,9 @@ export default function BrandPage() {
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
       <section className="brand-gate-card" aria-labelledby="brand-gate-title">
-        <BrandLogo className="pulcip-logo-gate" />
+        <div className="brand-gate-mark" aria-hidden="true">
+          <span className="brand-letter">P</span>
+        </div>
 
         <p className="brand-gate-eyebrow">PulcipStore</p>
         <h1 id="brand-gate-title">Pulcip Members</h1>

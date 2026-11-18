@@ -1,4 +1,3 @@
-import { BrandLogo } from "../components/BrandLogo";
 import { Activity, ArrowRight, ArrowUpRight, Check, Hexagon, ShieldCheck, Sparkles, Store, Timer, Users, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,7 +19,8 @@ export default function LandingPage() {
 
       <header className="landing-nav">
         <a className="landing-brand" href="/home" aria-label="Pulcip Members home">
-          <BrandLogo />
+          <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+          <span><span className="brand-eyebrow">PulcipStore</span><strong>Discord Members</strong></span>
         </a>
         <Badge variant="outline" className="landing-nav-badge"><Sparkles className="h-3 w-3" /> Available on Eldorado</Badge>
         <Button asChild size="sm"><a href={STORE_URL} target="_blank" rel="noreferrer">Visit store <ArrowUpRight className="h-4 w-4" /></a></Button>

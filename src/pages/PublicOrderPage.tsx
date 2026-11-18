@@ -1,4 +1,3 @@
-import { BrandLogo } from "../components/BrandLogo";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -879,8 +878,9 @@ export default function PublicOrderPage() {
   if (isInitialLoading) {
     return (
       <section className="session-loading-screen app-shell" role="status" aria-live="polite" aria-label="Loading order monitor">
-        <BrandLogo />
+        <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
         <span>
+          <span className="brand-eyebrow">Pulcip</span>
           <strong>Loading secure session…</strong>
         </span>
       </section>
@@ -895,7 +895,8 @@ export default function PublicOrderPage() {
       <main className="monitor-frame">
         <header className="monitor-topbar">
           <div className="monitor-brand">
-            <BrandLogo />
+            <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
+            <span><span className="brand-eyebrow">Pulcip</span><strong>Monitor</strong></span>
           </div>
 
           <div className="monitor-topbar-actions">
