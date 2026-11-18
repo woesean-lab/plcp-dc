@@ -559,7 +559,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
   const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
 
   return (
-    <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
+    <section className="space-y-7 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
       <span className="sr-only">Loading {loadingLabel}</span>
       {tab === "manage" ? (
         <header className="page-heading orders-page-heading" aria-hidden="true">
@@ -3611,7 +3611,7 @@ export default function HomePage() {
         hold={waitingForInitialOnlinerData}
         maxDelay={activeTab === "onliner" ? ONLINER_SKELETON_MAX_DELAY : undefined}
       >
-        <div className="space-y-5 tab-slide-in">
+        <div className="space-y-7 tab-slide-in">
         {activeTab === "create" ? (
           <>
             <header className="page-heading">
