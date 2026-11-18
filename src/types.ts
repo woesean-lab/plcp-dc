@@ -151,6 +151,8 @@ export interface OrderStatusResponse {
     }>;
   };
   canManageCommunityMembers?: boolean;
+  canPublicLeaveAll?: boolean;
+  publicLeaveAllUsed?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";

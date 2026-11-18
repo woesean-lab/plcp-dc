@@ -1,3 +1,4 @@
+import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -724,17 +725,16 @@ export default function HomePage() {
   const [boostSearch, setBoostSearch] = useState("");
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
-  const [visibleUsedBoostTokenCount, setVisibleUsedBoostTokenCount] = useState(STOCK_LIST_PAGE_SIZE);
-  const [visibleCommunityMemberCount, setVisibleCommunityMemberCount] = useState(STOCK_LIST_PAGE_SIZE);
+  const [usedBoostTokenPage, setUsedBoostTokenPage] = useState(1);
+  const [communityMemberPage, setCommunityMemberPage] = useState(1);
   const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
   const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
-  const communityMemberLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
-  const [visibleOnlinerAccountCount, setVisibleOnlinerAccountCount] = useState(ONLINER_ACCOUNT_PAGE_SIZE);
+  const [onlinerAccountPage, setOnlinerAccountPage] = useState(1);
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
@@ -991,8 +991,8 @@ export default function HomePage() {
     },
     [scopedUsedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter, boostSearch]
   );
-  const visibleUsedBoostTokens = filteredUsedBoostTokens.slice(0, visibleUsedBoostTokenCount);
-  const hasMoreUsedBoostTokens = visibleUsedBoostTokenCount < filteredUsedBoostTokens.length;
+  const usedTokenPagination = paginate(filteredUsedBoostTokens, usedBoostTokenPage, STOCK_LIST_PAGE_SIZE);
+  const visibleUsedBoostTokens = usedTokenPagination.items;
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
@@ -1204,7 +1204,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "onliner") return;
-    setVisibleOnlinerAccountCount(ONLINER_ACCOUNT_PAGE_SIZE);
+    setOnlinerAccountPage(1);
     setOnlinerCountdownNow(Date.now());
     const countdownTimer = window.setInterval(() => setOnlinerCountdownNow(Date.now()), 1_000);
     return () => window.clearInterval(countdownTimer);
@@ -1317,8 +1317,8 @@ export default function HomePage() {
 
   useEffect(() => {
     if (activeTab !== "stock") return;
-    setVisibleUsedBoostTokenCount(STOCK_LIST_PAGE_SIZE);
-    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+    setUsedBoostTokenPage(1);
+    setCommunityMemberPage(1);
     void refreshBoostStockTokens();
     void refreshCommunityStatus();
     if (stockCategory === "boosts") void refreshDcordProxies();
@@ -1327,12 +1327,12 @@ export default function HomePage() {
   }, [activeTab]);
 
   useEffect(() => {
-    setVisibleUsedBoostTokenCount(STOCK_LIST_PAGE_SIZE);
+    setUsedBoostTokenPage(1);
     setSelectedUsedBoostTokens({});
   }, [stockView, usedTokenDurationFilter, usedTokenStatusFilter, boostSearch]);
 
   useEffect(() => {
-    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+    setCommunityMemberPage(1);
   }, [communityStockType]);
 
   useEffect(() => {
@@ -3157,36 +3157,9 @@ export default function HomePage() {
       const nameOrder = leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
       return nameOrder || left.id.localeCompare(right.id);
     });
-  const visibleCommunityRecords = communityVisibleRecords.slice(0, visibleCommunityMemberCount);
+  const communityPagination = paginate(communityVisibleRecords, communityMemberPage, STOCK_LIST_PAGE_SIZE);
+  const visibleCommunityRecords = communityPagination.items;
   const zeroServerCommunityRecords = communityVisibleRecords.filter((record) => (record.joinedServerCount ?? 0) === 0);
-  const hasMoreCommunityRecords = visibleCommunityMemberCount < communityVisibleRecords.length;
-
-  useEffect(() => {
-    if (activeTab !== "stock" || stockCategory !== "offline" || !hasMoreCommunityRecords) return;
-    let frame = 0;
-    const loadWhenNearListEnd = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(() => {
-        const sentinel = communityMemberLoadMoreRef.current;
-        if (!sentinel) return;
-        const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-        if (sentinel.getBoundingClientRect().top <= viewportHeight + 320) {
-          setVisibleCommunityMemberCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, communityVisibleRecords.length));
-        }
-      });
-    };
-    loadWhenNearListEnd();
-    window.addEventListener("scroll", loadWhenNearListEnd, true);
-    window.addEventListener("wheel", loadWhenNearListEnd, { passive: true });
-    window.addEventListener("touchmove", loadWhenNearListEnd, { passive: true });
-    return () => {
-      window.cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", loadWhenNearListEnd, true);
-      window.removeEventListener("wheel", loadWhenNearListEnd);
-      window.removeEventListener("touchmove", loadWhenNearListEnd);
-    };
-  }, [activeTab, stockCategory, communityStockType, hasMoreCommunityRecords, communityVisibleRecords.length, visibleCommunityMemberCount]);
-
   const communityStockPanel = communityStockLoading ? (
     <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
       <div className="community-admin-heading">
@@ -3258,7 +3231,7 @@ export default function HomePage() {
                   onClick={() => {
                     setCommunityStockType(category.id);
                     setSelectedCommunityMemberIds([]);
-                    setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+                    setCommunityMemberPage(1);
                     setCommunityAccessTokens({});
                     setCommunityImportFile(null);
                     if (communityImportInputRef.current) communityImportInputRef.current.value = "";
@@ -3375,7 +3348,7 @@ export default function HomePage() {
             onChange={(value) => {
               setCommunityMemberFilter(value as "all" | "active" | "inactive" | "onliner" | "not_onliner");
               setSelectedCommunityMemberIds([]);
-              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+              setCommunityMemberPage(1);
             }}
           />
           <FilterDropdown
@@ -3394,7 +3367,7 @@ export default function HomePage() {
             onChange={(value) => {
               setCommunityServerFilter(value as "all" | "zero" | "one" | "two" | "three" | "joined");
               setSelectedCommunityMemberIds([]);
-              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+              setCommunityMemberPage(1);
             }}
           />
           <FilterDropdown
@@ -3409,7 +3382,7 @@ export default function HomePage() {
             ]}
             onChange={(value) => {
               setCommunityMemberSort(value as "name" | "servers_asc" | "servers_desc");
-              setVisibleCommunityMemberCount(STOCK_LIST_PAGE_SIZE);
+              setCommunityMemberPage(1);
             }}
           />
           <Button type="button" variant="secondary" size="xs"
@@ -3598,7 +3571,7 @@ export default function HomePage() {
             );
           })}
           </div>
-          {hasMoreCommunityRecords ? <div ref={communityMemberLoadMoreRef} className="community-member-load-sentinel" aria-hidden="true" /> : null}
+          <ListPagination {...communityPagination} onChange={setCommunityMemberPage} label="Member stock pages" />
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
@@ -3624,11 +3597,8 @@ export default function HomePage() {
       .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting")),
     [onlinerSnapshot?.accounts]
   );
-  const visibleOnlinerAccounts = sortedOnlinerAccounts.slice(0, visibleOnlinerAccountCount);
-  const hasMoreOnlinerAccounts = visibleOnlinerAccountCount < sortedOnlinerAccounts.length;
-  const loadMoreOnlinerAccounts = () => {
-    setVisibleOnlinerAccountCount((current) => Math.min(current + ONLINER_ACCOUNT_PAGE_SIZE, sortedOnlinerAccounts.length));
-  };
+  const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, ONLINER_ACCOUNT_PAGE_SIZE);
+  const visibleOnlinerAccounts = onlinerPagination.items;
   const visibleGatewayLogs = (onlinerConsoleView === "issues" ? onlinerIssueLogs : onlinerSnapshot?.logs ?? [])
     .filter((entry) => isVisibleGatewayConsoleLog(entry.message));
 
@@ -4465,7 +4435,7 @@ export default function HomePage() {
                           <div className={`stock-selection-bar ${selectedCount ? "has-selection" : ""}`}>
                             <label className="stock-select-all">
                               <input type="checkbox" checked={Boolean(visibleTokens.length && selectedCount === visibleTokens.length)} onChange={(event) => setAllBoostTokens(group.duration, event.target.checked)} disabled={!visibleTokens.length} />
-                              <span>{selectedCount ? `${selectedCount} selected` : `Select visible · ${visibleTokens.length} tokens`}</span>
+                              <span>{selectedCount ? `${selectedCount} selected` : `Select filtered · ${visibleTokens.length} tokens`}</span>
                             </label>
                             <div className="stock-selection-actions">
                               {selectedCount ? <Button type="button" size="xs" variant="ghost" onClick={() => setAllBoostTokens(group.duration, false)}>Clear</Button> : <Button type="button" size="xs" variant="ghost" onClick={() => downloadBoostTokens(group.duration)} disabled={!group.tokens.length}><Download className="h-3.5 w-3.5" />Export all</Button>}
@@ -4487,16 +4457,18 @@ export default function HomePage() {
 
                           <div className="stock-token-scroll">
                             {visibleTokens.length ? (
+                              <PaginatedList key={`${group.duration}:${boostSearch}`} items={visibleTokens} label="Ready token pages">{(pageItems, pageStart) => (
                               <ol className="stock-token-list">
-                                {visibleTokens.map((token, index) => (
+                                {pageItems.map((token, pageIndex) => (
                                   <li key={`${group.duration}-${token}`} className={selectedBoostTokens[`${group.duration}:${token}`] ? "is-selected" : ""}>
-                                    <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${index + 1}`} />
-                                    <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
+                                    <input type="checkbox" checked={Boolean(selectedBoostTokens[`${group.duration}:${token}`])} onChange={(event) => toggleBoostToken(group.duration, token, event.target.checked)} aria-label={`Select ${group.label} token ${pageStart + pageIndex + 1}`} />
+                                    <span className="stock-token-index">{String(pageStart + pageIndex + 1).padStart(2, "0")}</span>
                                     <code title={token}>{token}</code>
-                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="ghost" className="stock-row-action" size="icon-sm" title="Copy token" aria-label={`Copy token ${index + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
+                                    <span className="boost-token-tools"><BoostStockStatus tone="success">Ready</BoostStockStatus><Button type="button" variant="ghost" className="stock-row-action" size="icon-sm" title="Copy token" aria-label={`Copy token ${pageStart + pageIndex + 1}`} onClick={() => void copyBoostTokens([token])}><Copy className="h-3.5 w-3.5" /></Button></span>
                                   </li>
                                 ))}
                               </ol>
+                              )}</PaginatedList>
                             ) : (
                               <div className="stock-empty-state"><ListChecks className="h-5 w-5" /><strong>{boostSearch ? "No matching tokens" : "No tokens in this inventory"}</strong><span>{boostSearch ? "Try a different search." : `Add ${group.label} tokens to make them available for orders.`}</span></div>
                             )}
@@ -4582,20 +4554,14 @@ export default function HomePage() {
 
                   <div
                     className="stock-used-scroll"
-                    onScroll={(event) => {
-                      const list = event.currentTarget;
-                      if (hasMoreUsedBoostTokens && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
-                        setVisibleUsedBoostTokenCount((current) => Math.min(current + STOCK_LIST_PAGE_SIZE, filteredUsedBoostTokens.length));
-                      }
-                    }}
                   >
                     {filteredUsedBoostTokens.length ? (
                       <>
                         <ol className="stock-used-list">
                         {visibleUsedBoostTokens.map((item, index) => (
                           <li key={item.id} className={selectedUsedBoostTokens[item.id] ? "is-selected" : ""}>
-                            <input type="checkbox" checked={Boolean(selectedUsedBoostTokens[item.id])} onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)} aria-label={`Select used token ${index + 1}`} />
-                            <span className="stock-token-index">{String(index + 1).padStart(2, "0")}</span>
+                            <input type="checkbox" checked={Boolean(selectedUsedBoostTokens[item.id])} onChange={(event) => toggleUsedBoostToken(item.id, event.target.checked)} aria-label={`Select used token ${usedTokenPagination.start + index + 1}`} />
+                            <span className="stock-token-index">{String(usedTokenPagination.start + index + 1).padStart(2, "0")}</span>
                             <div className="stock-used-token-main">
                               <code title={item.token}>{item.token}</code>
                               <span>{item.orderId ? <Link className="boost-order-link" to={boostStockOrderLink(item.orderId)}>Order {item.orderId}<ExternalLink className="h-3 w-3" /></Link> : "Manually marked as used"}{item.boostMessage ? ` · ${item.boostMessage}` : ""}</span>
@@ -4603,12 +4569,13 @@ export default function HomePage() {
                             <span className="boost-duration-label">{item.duration} month</span>
                             <span className="stock-used-date">{formatTrackedDate(item.resultAt ?? item.usedAt)}</span>
                             <BoostStockStatus tone={item.boosted ? "success" : isBoostUsedTokenIssue(item) ? "danger" : "neutral"}>{item.boosted ? "Boosted" : (item.status || "Pending").replace(/_/g, " ")}</BoostStockStatus>
-                            {stockView !== "rotating_used" ? <Button type="button" size="icon-sm" variant="ghost" className="stock-row-action stock-row-action-return" title="Return to stock" aria-label={`Return used token ${index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
+                            {stockView !== "rotating_used" ? <Button type="button" size="icon-sm" variant="ghost" className="stock-row-action stock-row-action-return" title="Return to stock" aria-label={`Return used token ${usedTokenPagination.start + index + 1} to stock`} disabled={returningUsedTokenId !== null || deletingUsedTokens} onClick={() => void handleReturnUsedBoostToken(item)}>
                               {returningUsedTokenId === item.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                             </Button> : null}
                           </li>
                         ))}
                         </ol>
+                        <ListPagination {...usedTokenPagination} onChange={setUsedBoostTokenPage} label="Used token pages" />
                       </>
                     ) : (
                       <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No matching used tokens</strong><span>Adjust the duration or status filters.</span></div>
@@ -4727,10 +4694,6 @@ export default function HomePage() {
                     {onlinerSnapshot?.accounts.length ? (
                       <div
                         className="onliner-account-list"
-                        onScroll={(event) => {
-                          const list = event.currentTarget;
-                          if (hasMoreOnlinerAccounts && list.scrollHeight - list.scrollTop - list.clientHeight < 80) loadMoreOnlinerAccounts();
-                        }}
                       >
                         {visibleOnlinerAccounts.map((account, index) => (
                           <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
@@ -4766,6 +4729,7 @@ export default function HomePage() {
                             </div>
                           </div>
                           ))}
+                      <ListPagination {...onlinerPagination} onChange={setOnlinerAccountPage} label="Onliner account pages" />
                       </div>
                     ) : null}
                     <div className="grid gap-4">
@@ -4815,7 +4779,8 @@ export default function HomePage() {
                             <span>Saved proxy</span><span>Country</span><span>Accounts</span><span>Status</span><span>Health</span><span aria-hidden="true" />
                           </div>
                           <div className="onliner-proxy-usage-list">
-                            {onlinerProxyDetails.map((proxy) => (
+                            <PaginatedList items={onlinerProxyDetails} label="Onliner proxy pages">{(pageItems) => (<>
+                            {pageItems.map((proxy) => (
                               <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status === "cooling" || proxy.errorAccounts > 0 ? "cooling" : proxy.connectedAccounts > 0 ? "live" : "available"}>
                                 <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
                                 <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><small>{proxy.countryName ?? "Unknown"}</small></span>
@@ -4830,6 +4795,7 @@ export default function HomePage() {
                                 </button>
                               </div>
                             ))}
+                            </>)}</PaginatedList>
                           </div>
                         </div>
                       ) : null}
@@ -4976,7 +4942,8 @@ export default function HomePage() {
                   </button>
                 </div>
                 <div className="onliner-console" role="log" aria-live="polite">
-                  {visibleGatewayLogs.length ? [...visibleGatewayLogs].reverse().map((entry) => {
+                  {visibleGatewayLogs.length ? <PaginatedList key={onlinerConsoleView} items={[...visibleGatewayLogs].reverse()} label="Gateway log pages">{(pageItems) => (<>
+                  {pageItems.map((entry) => {
                     const accountIndex = entry.accountId ? (onlinerSnapshot?.accounts.findIndex((account) => account.id === entry.accountId) ?? -1) : -1;
                     const account = accountIndex >= 0 ? onlinerSnapshot?.accounts[accountIndex] ?? null : null;
                     const accountLabel = account ? account.bot?.username ?? `Bot ${accountIndex + 1}` : entry.accountId ? "Removed bot" : "System";
@@ -4988,7 +4955,8 @@ export default function HomePage() {
                         <span className="onliner-console-message">{entry.message}</span>
                       </div>
                     );
-                  }) : (
+                  })}
+                  </>)}</PaginatedList> : (
                     <div className="onliner-console-empty">{onlinerConsoleView === "issues" ? "No warnings or errors have been recorded." : "Gateway events will appear here when the Onliner starts."}</div>
                   )}
                 </div>
@@ -5057,7 +5025,8 @@ export default function HomePage() {
                           <div className="community-guild-manager-loading"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading servers...</div>
                         ) : (
                           <div className="community-guild-list">
-                            {communityGuilds.map((guild) => {
+                            <PaginatedList items={communityGuilds} label="Bot server pages">{(pageItems) => (<>
+                            {pageItems.map((guild) => {
                               const selected = selectedCommunityGuildIds[guild.id] === true;
                               return (
                                 <button key={guild.id} type="button" className="community-guild-row" data-selected={selected ? "true" : "false"} role="checkbox" aria-checked={selected} onClick={() => setSelectedCommunityGuildIds((current) => ({ ...current, [guild.id]: !selected }))}>
@@ -5079,6 +5048,7 @@ export default function HomePage() {
                                 </button>
                               );
                             })}
+                            </>)}</PaginatedList>
                           </div>
                         )}
                         {leavingCommunityGuilds && communityGuildLeaveProgress ? (

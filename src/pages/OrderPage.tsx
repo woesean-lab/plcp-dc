@@ -1,3 +1,4 @@
+import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
@@ -1491,7 +1492,9 @@ export default function OrderPage() {
                     <span>Token</span>
                     <span className="public-token-result-flow"><span /><span>Join</span><span>Boost</span><span>Slots</span></span>
                   </div>
-                  {dcordTokenResults.map((item, index) => {
+                  <PaginatedList key={uniqid} items={dcordTokenResults} label="Token result pages">{(pageItems, pageStart) => (<>
+                  {pageItems.map((item, pageIndex) => {
+                    const index = pageStart + pageIndex;
                     const humanizerResult = effectiveHumanizerOrderJob?.results[index];
                     const humanizerState = humanizerResult?.state;
                     const rejoinResult = dcordRejoinResults.find((entry) => entry.index === item.index);
@@ -1532,6 +1535,7 @@ export default function OrderPage() {
                     </div>
                     );
                   })}
+                  </>)}</PaginatedList>
                 </div>
               ) : (
                 <p className="public-token-results-empty">Waiting for token results.</p>
@@ -1610,7 +1614,8 @@ export default function OrderPage() {
 
               {communityMemberResults.length ? (
                 <div className="community-order-result-list">
-                  {communityMemberResults.map((item) => (
+                  <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
+                  {pageItems.map((item) => (
                     <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
                       <span className="community-order-avatar" aria-hidden="true">
                         {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
@@ -1662,6 +1667,7 @@ export default function OrderPage() {
                           : item.completedAt ? formatTime(item.completedAt) : "-"}</time>
                     </div>
                   ))}
+                  </>)}</PaginatedList>
                 </div>
               ) : (
                 <p className="public-token-results-empty">Waiting for member results.</p>

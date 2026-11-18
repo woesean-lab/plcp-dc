@@ -14,6 +14,7 @@ import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
+import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation } from "./public-community-leave.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -12419,13 +12420,17 @@ async function reconcileCommunityPendingJoinResults(order) {
 }
 
 function sanitizePublicCommunityOrder(order) {
-  if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.communityResults)) return order;
+  if (!order || typeof order !== "object" || Array.isArray(order)) return order;
+  const canLeaveAll = canPublicLeaveAll(order);
+  order = hideCommunityLeaveInformation(order);
+  if (!Array.isArray(order.communityResults)) return { ...order, canPublicLeaveAll: canLeaveAll };
   const generatedBotInvite = getCommunityOrderJoinMethod(order) !== "directly" && !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
     ? createCommunityBotInvite({ clientId: String(order.botApplicationId) }, String(order.serverId), getCommunityOrderJoinMethod(order))
     : order.botInvite;
   return {
     ...order,
     botInvite: generatedBotInvite,
+    canPublicLeaveAll: canLeaveAll,
     communityResults: order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const sanitized = { ...item };
@@ -12581,6 +12586,19 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
       ? await scheduleExpiredCommunityAutoLeave(uniqid)
       : await leaveAllCommunityOrderMembers(order);
     res.set("Cache-Control", "no-store").json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/public/orders/:uniqid/leave-all", async (req, res, next) => {
+  try {
+    const uniqid = String(req.params.uniqid ?? "").trim();
+    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
+    if (communityOrderLeaveAllActive.has(uniqid)) return res.status(409).json({ message: "Leave all is already running for this order." });
+    const order = await claimPublicLeaveAll(pool, uniqid);
+    const result = await leaveAllCommunityOrderMembers(order);
+    res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });
   } catch (error) {
     next(error);
   }

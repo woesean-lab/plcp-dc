@@ -1,3 +1,4 @@
+import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
@@ -229,7 +230,7 @@ export default function HumanizerPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [categoryId, setCategoryId] = useState("all");
   const [search, setSearch] = useState("");
-  const [visibleAccountCount, setVisibleAccountCount] = useState(HUMANIZER_ACCOUNT_PAGE_SIZE);
+  const [accountPage, setAccountPage] = useState(1);
   const [usernames, setUsernames] = useState("");
   const [displayNames, setDisplayNames] = useState("");
   const [bios, setBios] = useState("");
@@ -237,7 +238,7 @@ export default function HumanizerPage() {
   const [avatarData, setAvatarData] = useState<HumanizerAvatar[]>([]);
   const [selectedFields, setSelectedFields] = useState<HumanizerField[]>([]);
   const [uploadingAvatars, setUploadingAvatars] = useState(0);
-  const [avatarPreviewLimit, setAvatarPreviewLimit] = useState(60);
+  const [avatarPage, setAvatarPage] = useState(1);
   const [hypesquad, setHypesquad] = useState<"none" | "random" | "bravery" | "brilliance" | "balance">("none");
   const [concurrency, setConcurrency] = useState(2);
   const [starting, setStarting] = useState(false);
@@ -322,11 +323,12 @@ export default function HumanizerPage() {
         || left.id.localeCompare(right.id)
       ));
   }, [catalog, categoryId, search]);
-  const renderedAccounts = visibleAccounts.slice(0, visibleAccountCount);
-  const hasMoreAccounts = visibleAccountCount < visibleAccounts.length;
+  const avatarPagination = paginate(avatarData, avatarPage, 60);
+  const accountPagination = paginate(visibleAccounts, accountPage, HUMANIZER_ACCOUNT_PAGE_SIZE);
+  const renderedAccounts = accountPagination.items;
 
   useEffect(() => {
-    setVisibleAccountCount(HUMANIZER_ACCOUNT_PAGE_SIZE);
+    setAccountPage(1);
   }, [catalog, categoryId, search]);
 
   const eligibleVisibleIds = visibleAccounts
@@ -491,7 +493,7 @@ export default function HumanizerPage() {
     setPronouns(selectedPackage.pronouns.join("\n"));
     setAvatarData(selectedPackage.avatars);
     setSelectedFields(selectedPackage.enabledFields);
-    setAvatarPreviewLimit(60);
+    setAvatarPage(1);
     setHypesquad(selectedPackage.hypesquad);
     setConcurrency(selectedPackage.concurrency);
     setPackageName(selectedPackage.name);
@@ -593,12 +595,6 @@ export default function HumanizerPage() {
 
             <div
               className="humanizer-account-list"
-              onScroll={(event) => {
-                const list = event.currentTarget;
-                if (hasMoreAccounts && list.scrollHeight - list.scrollTop - list.clientHeight < 100) {
-                  setVisibleAccountCount((current) => Math.min(current + HUMANIZER_ACCOUNT_PAGE_SIZE, visibleAccounts.length));
-                }
-              }}
             >
             {loading ? (
               <div className="flex min-h-48 items-center justify-center text-sm text-[var(--app-muted)]"><LoaderCircle className="mr-2 h-4 w-4 animate-spin" /> Loading accounts…</div>
@@ -628,6 +624,7 @@ export default function HumanizerPage() {
               </div>
             )}
             </div>
+            <ListPagination {...accountPagination} onChange={setAccountPage} label="Humanizer account pages" />
             <footer className="humanizer-pane-foot"><ListFilter className="h-3.5 w-3.5" /><span>{visibleAccounts.length} visible · {eligibleVisibleIds.length} eligible</span></footer>
           </section>
 
@@ -734,7 +731,7 @@ export default function HumanizerPage() {
               {avatarData.length ? (
                 <div className="humanizer-avatar-preview-section">
                 <div className="humanizer-avatar-preview-grid" aria-label="Selected avatar previews">
-                {avatarData.slice(0, avatarPreviewLimit).map((avatar, index) => (
+                {avatarPagination.items.map((avatar, index) => (
                   <div key={`${avatar.name}-${index}`} className="humanizer-avatar-preview">
                     <div className="humanizer-avatar-preview-image">
                       <img src={avatar.url} alt={`Preview of ${avatar.name}`} loading="lazy" decoding="async" />
@@ -758,11 +755,7 @@ export default function HumanizerPage() {
                   </div>
                 ))}
                 </div>
-                {avatarData.length > avatarPreviewLimit ? (
-                  <Button type="button" size="xs" variant="ghost" className="humanizer-avatar-show-more" onClick={() => setAvatarPreviewLimit((current) => Math.min(current + 60, avatarData.length))}>
-                    Show 60 more <span>{avatarPreviewLimit}/{avatarData.length}</span>
-                  </Button>
-                ) : null}
+                <ListPagination {...avatarPagination} onChange={setAvatarPage} label="Avatar pages" />
                 </div>
               ) : (
                 <div className="humanizer-avatar-empty">
@@ -834,7 +827,8 @@ export default function HumanizerPage() {
             </div>
           ) : null}
           <div className="humanizer-results mt-4">
-            {job.results.map((result) => (
+            <PaginatedList key={job.id} items={job.results} label="Profile result pages">{(pageItems) => (<>
+            {pageItems.map((result) => (
               <div key={result.id} className="humanizer-result-row">
                 <span className={`humanizer-result-state is-${result.state}`}>
                   {result.state === "running" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : result.state === "success" ? <Check className="h-4 w-4" /> : result.state === "pending" ? <span /> : <CircleAlert className="h-4 w-4" />}
@@ -850,6 +844,7 @@ export default function HumanizerPage() {
                 <Badge variant={result.state === "success" ? "success" : result.state === "failed" || result.state === "partial" ? "destructive" : "secondary"}>{result.state}</Badge>
               </div>
             ))}
+            </>)}</PaginatedList>
           </div>
           </div>
         </section>

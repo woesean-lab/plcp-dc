@@ -99,6 +99,12 @@ export function getPublicOrderStatus(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "status");
 }
 
+export function leaveAllPublicCommunityOrderMembers(uniqid: string) {
+  return requestJson<{ order: OrderStatusResponse; summary: { total: number; left: number; alreadyLeft: number; failed: number } }>(
+    `/api/public/orders/${encodeURIComponent(uniqid)}/leave-all`, { method: "POST" }
+  );
+}
+
 export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfile?: "safe" | "balanced" | "fast" | "custom") {
   return requestPublicOrderApi<unknown>(uniqid, "delay", {
     method: "POST",

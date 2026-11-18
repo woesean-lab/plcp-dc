@@ -1,3 +1,4 @@
+import { PaginatedList } from "./ListPagination";
 import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
@@ -557,7 +558,9 @@ export function ReactionPanel({
             <ChevronDown aria-hidden="true" />
           </summary>
           <div>
-            {[...requests].reverse().map((request, index) => {
+            <PaginatedList items={[...requests].reverse()} label="Reaction history pages">{(pageItems, pageStart) => (<>
+            {pageItems.map((request, pageIndex) => {
+              const index = pageStart + pageIndex;
               const requestProgress = request.assignedCount > 0 ? Math.min(100, Math.round((request.completedCount / request.assignedCount) * 100)) : 0;
               const requestPending = Math.max(0, request.assignedCount - request.completedCount - (request.failedCount ?? 0) - (request.cancelledCount ?? 0));
               return (
@@ -588,6 +591,7 @@ export function ReactionPanel({
                 </div>
               );
             })}
+            </>)}</PaginatedList>
           </div>
         </details>
       ) : null}
@@ -606,9 +610,11 @@ export function ReactionPanel({
               </button>
             </header>
             <div className="reaction-failure-dialog-list">
-              {failureRequest.failureMessages?.map((message, index) => (
-                <div key={`${message}-${index}`}><span>{String(index + 1).padStart(2, "0")}</span><p>{message}</p></div>
+              <PaginatedList key={failureRequest.id} items={failureRequest.failureMessages ?? []} label="Reaction failure pages">{(pageItems, pageStart) => (<>
+              {pageItems.map((message, index) => (
+                <div key={`${message}-${index}`}><span>{String(pageStart + index + 1).padStart(2, "0")}</span><p>{message}</p></div>
               ))}
+              </>)}</PaginatedList>
             </div>
           </div>
         </div>

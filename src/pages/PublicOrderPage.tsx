@@ -1,3 +1,4 @@
+import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
@@ -8,7 +9,7 @@ import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, Pause, Pla
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
-import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
+import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, leaveAllPublicCommunityOrderMembers, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import type { OrderStatusResponse } from "../types";
@@ -59,16 +60,10 @@ type CommunityMemberResult = {
   reactionDetails?: string;
   reactionCompletedAt?: string;
   reactionRequestId?: string;
-  autoLeaveStatus?: string;
-  autoLeaveDetails?: string;
-  autoLeaveScheduledAt?: string;
-  autoLeaveCompletedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
   const state = item.state.toLowerCase();
-  if (item.autoLeaveStatus === "failed") return 0;
-  if (["waiting", "processing"].includes(item.autoLeaveStatus ?? "")) return 1;
   if (item.onlinerLive === false) return 0;
   if (item.authorizationStatus === "inactive") return 1;
   if (item.membershipStatus === "removed") return 2;
@@ -118,10 +113,6 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       reactionDetails: typeof row.reactionDetails === "string" ? row.reactionDetails : undefined,
       reactionCompletedAt: typeof row.reactionCompletedAt === "string" ? row.reactionCompletedAt : undefined,
       reactionRequestId: typeof row.reactionRequestId === "string" ? row.reactionRequestId : undefined,
-      autoLeaveStatus: typeof row.autoLeaveStatus === "string" ? row.autoLeaveStatus : undefined,
-      autoLeaveDetails: typeof row.autoLeaveDetails === "string" ? row.autoLeaveDetails : undefined,
-      autoLeaveScheduledAt: typeof row.autoLeaveScheduledAt === "string" ? row.autoLeaveScheduledAt : undefined,
-      autoLeaveCompletedAt: typeof row.autoLeaveCompletedAt === "string" ? row.autoLeaveCompletedAt : undefined,
     }];
   }).sort((left, right) => getCommunityMemberLogPriority(left) - getCommunityMemberLogPriority(right) || left.index - right.index);
 }
@@ -273,6 +264,8 @@ export default function PublicOrderPage() {
   const [restartingOrder, setRestartingOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
+  const [leavingAllMembers, setLeavingAllMembers] = useState(false);
+  const leaveAllInFlightRef = useRef(false);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
@@ -512,7 +505,6 @@ export default function PublicOrderPage() {
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
   const communityMemberResults = getCommunityMemberResults(status);
-  const autoLeaveJob = status?.autoLeaveJob;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -696,6 +688,28 @@ export default function PublicOrderPage() {
       toast.error(err instanceof Error ? err.message : "Token could not be replaced.");
     } finally {
       setReplacingTokenIndex(null);
+    }
+  }
+
+  async function handleLeaveAllMembers() {
+    if (!uniqid || leaveAllInFlightRef.current || !status?.canPublicLeaveAll || status.publicLeaveAllUsed) return;
+    leaveAllInFlightRef.current = true;
+    setLeavingAllMembers(true);
+    try {
+      const result = await leaveAllPublicCommunityOrderMembers(uniqid);
+      setStatus((current) => mergeOrderStatus(current, result.order));
+      if (result.summary.failed) toast.error("Leave all finished with some failures. Contact support for help.");
+      else toast.success("All delivered members have left the server.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Members could not leave the server.");
+      // A lost response can still mean the server consumed the single use.
+      try {
+        const latest = await getPublicOrderStatus(uniqid);
+        setStatus((current) => mergeOrderStatus(current, latest));
+      } catch { /* The live stream or next refresh will reconcile the state. */ }
+    } finally {
+      leaveAllInFlightRef.current = false;
+      setLeavingAllMembers(false);
     }
   }
 
@@ -1091,7 +1105,9 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        {autoLeaveJob ? <span>Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span> : null}
+                        <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title="Remove all delivered members from this server. Available once per order after delivery finishes.">
+                          {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
+                        </Button>
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>
@@ -1113,7 +1129,8 @@ export default function PublicOrderPage() {
                     ) : null}
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list">
-                        {communityMemberResults.map((item) => (
+                        <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
+                        {pageItems.map((item) => (
                           <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
                             <span className="community-order-avatar" aria-hidden="true">
                               {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
@@ -1121,31 +1138,11 @@ export default function PublicOrderPage() {
                             <span className="community-order-result-copy">
                               <strong>{item.username}</strong>
                               <small>{item.details}</small>
-                              {item.autoLeaveDetails ? <small>{item.autoLeaveDetails}</small> : null}
                             </span>
                             <span className="community-order-result-state">
                               {item.authorizationStatus === "inactive" ? (
                                 <span className="public-token-result-pill status-badge" data-state="inactive">
                                   Inactive
-                                </span>
-                              ) : null}
-                              {item.autoLeaveStatus ? (
-                                <span className="public-token-result-pill status-badge" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
-                                  {item.autoLeaveStatus === "waiting"
-                                    ? "Leave queued"
-                                    : item.autoLeaveStatus === "processing"
-                                      ? "Leaving..."
-                                      : item.autoLeaveStatus === "left"
-                                        ? "Auto leave"
-                                        : item.autoLeaveStatus === "already_left"
-                                          ? "Already outside"
-                                          : item.autoLeaveStatus === "failed"
-                                            ? "Leave failed"
-                                            : item.autoLeaveStatus}
-                                </span>
-                              ) : item.membershipStatus === "removed" ? (
-                                <span className="public-token-result-pill status-badge" data-state="removed" title={item.membershipDetails}>
-                                  Left server
                                 </span>
                               ) : null}
                               {typeof item.onlinerLive === "boolean" ? (
@@ -1155,13 +1152,10 @@ export default function PublicOrderPage() {
                               ) : null}
                               <span className="public-token-result-pill status-badge" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
                             </span>
-                            <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
-                              ? formatDateTime(item.autoLeaveCompletedAt)
-                              : item.autoLeaveScheduledAt
-                                ? formatDateTime(item.autoLeaveScheduledAt)
-                                : item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
+                            <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
                           </div>
                         ))}
+                        </>)}</PaginatedList>
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive. Members still present in the server are not replaceable.</p> : null}
@@ -1188,7 +1182,9 @@ export default function PublicOrderPage() {
                           <span>Slots</span>
                         </span>
                       </div>
-                      {dcordTokenResults.map((item, index) => {
+                      <PaginatedList key={uniqid} items={dcordTokenResults} label="Token result pages">{(pageItems, pageStart) => (<>
+                      {pageItems.map((item, pageIndex) => {
+                        const index = pageStart + pageIndex;
                         return (
                           <div key={`${item.token}-${index}`} className="public-token-result-row" data-result={item.state}>
                             <span className="public-token-result-index">{String(index + 1).padStart(2, "0")}</span>
@@ -1219,6 +1215,7 @@ export default function PublicOrderPage() {
                           </div>
                         );
                       })}
+                      </>)}</PaginatedList>
                     </div>
                   ) : (
                     <p className="public-token-results-empty">Waiting for the first token result.</p>

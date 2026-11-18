@@ -9516,7 +9516,6 @@
   min-width: 0;
 }
 
-.community-member-load-sentinel { height: 1px; pointer-events: none; }
 
 .community-recent-list > div {
   display: grid;
@@ -12069,3 +12068,16 @@
 }
 
 .boost-rotating-status { display: grid; justify-items: start; gap: 6px; min-width: 0; }
+.list-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 4px;
+  color: var(--app-muted);
+  font-size: 11px;
+}
+.list-pagination > div { display: flex; align-items: center; gap: 10px; }
+.list-pagination button { flex-shrink: 0; }
