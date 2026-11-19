@@ -4353,6 +4353,10 @@ export default function HomePage() {
                         const autoLeaveFinished = Boolean(autoLeaveJob && autoLeaveJob.status !== "running");
                         const autoLeaveProcessed = Math.max(0, Number(autoLeaveJob?.processed) || 0);
                         const autoLeaveTotal = Math.max(0, Number(autoLeaveJob?.total) || 0);
+                        const autoLeaveFailed = Math.max(0, Number(autoLeaveJob?.failed) || 0);
+                        const autoLeaveSummary = autoLeaveJob
+                          ? `Auto Leave: ${autoLeaveProcessed}/${autoLeaveTotal} processed; ${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed; ${autoLeaveFailed} failed. ${autoLeaveFinished ? "Finished." : `Next member in ${formatAutoLeaveCountdown(autoLeaveJob.nextRunAt, autoLeaveClock)}.`} Open order for details.`
+                          : "";
                         const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
 
                         return (
@@ -4379,6 +4383,12 @@ export default function HomePage() {
                               </div>
                               <div className="orders-row-status">
                                 <OrderListStatusBadge status={order.status} />
+                                {autoLeaveJob ? (
+                                  <Link className="orders-leave-summary" data-state={!autoLeaveFinished ? "running" : autoLeaveFailed ? "failed" : "finished"} to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}#member-log`} title={autoLeaveSummary} aria-label={autoLeaveSummary}>
+                                    <LogOut className="h-3 w-3" aria-hidden="true" />
+                                    <span>{!autoLeaveFinished ? `Leave ${autoLeaveProcessed}/${autoLeaveTotal}` : autoLeaveFailed ? `Leave: ${autoLeaveFailed} failed` : "Leave finished"}</span>
+                                  </Link>
+                                ) : null}
                               </div>
                               <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
                                 <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
@@ -4386,10 +4396,10 @@ export default function HomePage() {
                                 {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
-                              <time className="orders-row-expiration" dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
+                              <time className="orders-row-expiration" data-expired={directSupportExpired} dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {canAutoLeaveExpired ? <Button type="button" variant="destructive" size="icon" title={autoLeaveFinished ? "Auto Leave finished" : "Auto leave expired members"} aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null || autoLeaveFinished} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
+                                {canAutoLeaveExpired && !autoLeaveJob ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
                                 <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
                                 <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
                               </div>
@@ -4403,18 +4413,7 @@ export default function HomePage() {
                                 <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
                                 <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
                               </div> : null}
-                              {autoLeaveJob ? <div className="orders-row-alert">
-                                <span>
-                                  <LogOut className="h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-                                  <strong>Auto Leave {autoLeaveProcessed}/{autoLeaveTotal}</strong>
-                                  <small className="orders-auto-leave-status">
-                                    <span>{autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed{autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}</span>
-                                    {autoLeaveJob.status === "running" ? <b className="orders-auto-leave-live"><Timer className="h-3 w-3" /> Next member in {formatAutoLeaveCountdown(autoLeaveJob.nextRunAt, autoLeaveClock)}</b> : <b>Finished</b>}
-                                    {autoLeaveJob.status === "running" ? <span>5 minute interval</span> : null}
-                                  </small>
-                                </span>
-                                <Button asChild type="button" size="xs"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}&provider=community#member-log`}><Eye className="h-3.5 w-3.5" /> View details</Link></Button>
-                              </div> : null}
+
                             </article>
                           </li>
                         );

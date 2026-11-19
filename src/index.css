@@ -3822,6 +3822,16 @@
 
   .orders-row-expiration:not([datetime]) { color: var(--app-subtle); }
 
+  .orders-row-status { display: grid; justify-items: start; align-content: center; gap: 6px; }
+  .orders-leave-summary { display: inline-flex; min-width: 0; max-width: 100%; align-items: center; gap: 4px; color: var(--app-muted); font-size: 9px; line-height: 1.4; text-decoration: none; }
+  .orders-leave-summary > svg { flex-shrink: 0; }
+  .orders-leave-summary > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .orders-leave-summary[data-state="failed"] { color: #f5cf76; }
+  .orders-leave-summary[data-state="running"] { color: var(--app-accent-bright); font-variant-numeric: tabular-nums; }
+  .orders-leave-summary:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .orders-leave-summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 3px; border-radius: 3px; }
+  .orders-row-expiration[data-expired="true"]::before { content: "Expired"; display: block; margin-bottom: 3px; color: #f5cf76; font-size: 8px; font-weight: 600; line-height: 1.4; }
+
   .orders-row-reaction-use {
     min-width: 0;
     margin: 0;
