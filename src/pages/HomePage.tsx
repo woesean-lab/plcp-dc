@@ -606,7 +606,7 @@ export default function HomePage() {
   const [usedBoostTokenPageSize, setUsedBoostTokenPageSize] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberPage, setCommunityMemberPage] = useState(1);
   const [communityMemberPageSize, setCommunityMemberPageSize] = useState(STOCK_LIST_PAGE_SIZE);
-  const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
+  const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "onliner_failed" | "not_onliner">("all");
   const [communityMemberSearch, setCommunityMemberSearch] = useState("");
   const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
@@ -2986,6 +2986,7 @@ export default function HomePage() {
       if (communityMemberFilter === "active") return record.status !== "failed";
       if (communityMemberFilter === "inactive") return record.status === "failed";
       if (communityMemberFilter === "onliner") return record.onlinerConnected;
+      if (communityMemberFilter === "onliner_failed") return record.onlinerConnected && record.onlinerConnectionState === "error";
       if (communityMemberFilter === "not_onliner") return !record.onlinerConnected;
       return true;
     })
@@ -3184,10 +3185,11 @@ export default function HomePage() {
               { value: "active", label: `Active (${communityCategoryRecords.filter((record) => record.status !== "failed").length})` },
               { value: "inactive", label: `Inactive (${communityCategoryRecords.filter((record) => record.status === "failed").length})` },
               { value: "onliner", label: `Onliner (${communityCategoryRecords.filter((record) => record.onlinerConnected).length})` },
+              { value: "onliner_failed", label: `Onliner failed (${communityCategoryRecords.filter((record) => record.onlinerConnected && record.onlinerConnectionState === "error").length})` },
               { value: "not_onliner", label: `Not on Onliner (${communityCategoryRecords.filter((record) => !record.onlinerConnected).length})` }
             ]}
             onChange={(value) => {
-              setCommunityMemberFilter(value as "all" | "active" | "inactive" | "onliner" | "not_onliner");
+              setCommunityMemberFilter(value as "all" | "active" | "inactive" | "onliner" | "onliner_failed" | "not_onliner");
               setSelectedCommunityMemberIds([]);
               setCommunityMemberPage(1);
             }}

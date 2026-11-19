@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { Link } from "react-router-dom";
-import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, LogOut, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { FilterDropdown } from "./ui/filter-dropdown";
 import { Skeleton } from "./ui/skeleton";
 import { ListPagination, paginate } from "./ListPagination";
+import { AutoLeaveActionButton, type AutoLeaveActionState } from "./AutoLeaveActionButton";
 import { getOrderPeriod } from "../lib/order-period";
 import { canStartOrderLeave, EMPTY_ORDERS_FILTERS, filterWorkspaceOrders, hasFailedLeave, orderDelivery, orderIsBoost, orderStatus, type OrdersFilters } from "../lib/orders-workspace";
 import { extractBotInvite } from "../lib/bot-invite";
@@ -54,6 +55,8 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
   const runningLeave = job?.status === "running";
   const leaveFailed = hasFailedLeave(order);
   const canLeave = canStartOrderLeave(order, now);
+  const leaveState: AutoLeaveActionState = actions.autoLeavingId === order.uniqid ? "starting" : runningLeave ? "running" : leaveFailed ? "failed" : job || order.membersLeftAt ? "completed" : "not-started";
+  const leaveDetails = job ? `${job.processed}/${job.total} processed · ${job.failed} failed` : order.membersLeftAt ? "Already used for this order" : canLeave ? "Start removing expired members" : period.state === "active" || period.state === "soon" ? "Available when member support expires" : "No expired members available to remove";
   const botInvite = ["NEW", "WAITING"].includes(String(order.status).toUpperCase()) ? extractBotInvite(order) : null;
   const invitesPaused = String(order.status).toUpperCase().includes("INVITES PAUSED") && !boost;
   const service = boost ? "Server boosts" : order.service === "COMMUNITY-ONLINE" ? "Online members" : "Offline members";
@@ -92,13 +95,13 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
       <td className="od-actions-cell">
         <div className="community-member-row-actions od-row-actions">
+          {!boost && (order.provider === "community" || job || order.membersLeftAt) ? <AutoLeaveActionButton state={leaveState} details={leaveDetails} disabled={!canLeave || actions.autoLeavingId !== null} onStart={() => actions.onAutoLeave(order)} /> : null}
           <Button asChild variant="secondary" size="icon-sm"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
           <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
             <Button asChild variant="secondary" size="icon-sm"><summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /></summary></Button>
             <div className="od-action-popover">
               {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
               <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
-              {canLeave ? <button type="button" disabled={actions.autoLeavingId !== null} onClick={(event) => { closeMenu(event); actions.onAutoLeave(order); }}><LogOut />Remove expired members</button> : null}
               <button type="button" className="od-delete-action" disabled={runningLeave} title={runningLeave ? "Wait for member removal to finish" : undefined} onClick={(event) => { closeMenu(event); actions.onDelete(order); }}><Trash2 />Delete order</button>
             </div>
           </details>

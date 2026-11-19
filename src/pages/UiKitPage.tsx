@@ -9,11 +9,12 @@ import { Input } from "../components/ui/input";
 import { FilterDropdown } from "../components/ui/filter-dropdown";
 import { Skeleton } from "../components/ui/skeleton";
 import { ListPagination, paginate } from "../components/ListPagination";
+import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import "../components/OrdersWorkspace.css";
 import "./UiKitPage.css";
 
 const SECTIONS = [
-  { id: "buttons", title: "Buttons & actions", tags: "members stock icon loading disabled hover" },
+  { id: "buttons", title: "Buttons & actions", tags: "members stock icon loading disabled hover auto leave started completed" },
   { id: "tabs", title: "Tabs & navigation", tags: "stock duration categories selected" },
   { id: "fields", title: "Fields & filters", tags: "input search dropdown checkbox toggle" },
   { id: "badges", title: "Status badges", tags: "active inactive onliner presence servers" },
@@ -126,6 +127,9 @@ export default function UiKitPage() {
           </Example>
           <Example title="Members Stock actions" source="src/pages/HomePage.tsx · community-member-row-actions" code={'<span className="community-member-row-actions">\n  <Button size="icon-sm" variant="secondary" className="community-rich-presence-action" aria-label="Rich Presence">\n    <Star className="h-3.5 w-3.5 fill-current" />\n  </Button>\n  <Button size="icon-sm" variant="dangerGhost" aria-label="Disconnect"><Power className="h-3.5 w-3.5" /></Button>\n  <Button size="icon-sm" variant="dangerGhost" aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>\n</span>'}>
             <div className="ui-ref-row"><StockActions /><Button asChild variant="secondary" size="icon-sm"><a href="#buttons" aria-label="Open example" title="Open example"><ExternalLink className="h-3.5 w-3.5" /></a></Button><span className="ui-ref-hint">Try hover, keyboard focus and the star / power toggles.</span></div>
+          </Example>
+          <Example title="Auto leave action states" source="src/components/AutoLeaveActionButton.tsx" code={'<AutoLeaveActionButton state="not-started" disabled={!canStart} onStart={openConfirmation} />\n<AutoLeaveActionButton state="running" details="10/200 processed" />\n<AutoLeaveActionButton state="completed" />\n<AutoLeaveActionButton state="failed" details="3 failed" />'}>
+            <div className="ui-ref-row">{([{ state: "not-started", label: "Not started" }, { state: "starting", label: "Starting" }, { state: "running", label: "In progress" }, { state: "completed", label: "Finished" }, { state: "failed", label: "Finished with errors" }] as const).map(({ state, label }) => <div className="ui-ref-row" key={state}><AutoLeaveActionButton state={state} onStart={previewClick} /><span className="ui-ref-hint">{label}</span></div>)}</div>
           </Example>
         </Section> : null}
 
