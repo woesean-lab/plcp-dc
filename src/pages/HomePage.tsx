@@ -634,7 +634,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
             </div>
             <div className="orders-table">
               <div className="orders-table-head">
-                <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
+                <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Period</span><span>Actions</span>
               </div>
               <ol className="orders-row-list">
                 {Array.from({ length: 4 }).map((_, index) => (
@@ -645,16 +645,14 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
                         <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-28 max-w-full" /></span>
                       </div>
                       <div className="orders-row-service"><Skeleton className="h-4 w-20" /><Skeleton className="h-2.5 w-14" /></div>
-                      <Skeleton className="orders-row-join-method h-3 w-16" />
                       <div className="orders-row-status"><Skeleton className="h-6 w-20" /></div>
                       <div className="orders-row-delivery">
                         <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
                         <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
                         <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
                       </div>
-                      <Skeleton className="orders-row-date h-3 w-20" />
                       <Skeleton className="orders-row-expiration h-3 w-20" />
-                      <div className="orders-row-actions"><Skeleton className="h-10 w-10" /><Skeleton className="h-10 w-10" /><Skeleton className="h-10 w-10" /></div>
+                      <div className="orders-row-actions"><Skeleton className="h-7 w-8" /><Skeleton className="h-7 w-8" /><Skeleton className="h-7 w-8" /></div>
                     </div>
                   </li>
                 ))}
@@ -734,6 +732,7 @@ export default function HomePage() {
   const [communityMemberPage, setCommunityMemberPage] = useState(1);
   const [communityMemberPageSize, setCommunityMemberPageSize] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
+  const [communityMemberSearch, setCommunityMemberSearch] = useState("");
   const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
@@ -3214,7 +3213,10 @@ export default function HomePage() {
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
+  const communityMemberQuery = communityMemberSearch.trim().replace(/^@/, "").toLowerCase();
   const communityVisibleRecords = communityCategoryRecords
+    .filter((record) => !communityMemberQuery || [record.username, record.displayName, record.id]
+      .some((value) => value?.toLowerCase().includes(communityMemberQuery)))
     .filter((record) => {
       const count = record.joinedServerCount ?? 0;
       if (communityServerFilter === "all") return true;
@@ -3404,6 +3406,14 @@ export default function HomePage() {
 
       <div className="community-member-toolbar">
         <div className="community-member-toolbar-filters">
+          <label className="community-member-search">
+            <Search className="h-3.5 w-3.5" aria-hidden="true" />
+            <Input value={communityMemberSearch} placeholder="Search username, name or ID..." aria-label="Search stock members by username, display name or ID" onChange={(event) => {
+              setCommunityMemberSearch(event.target.value);
+              setCommunityMemberPage(1);
+              setSelectedCommunityMemberIds([]);
+            }} />
+          </label>
           <label className="community-member-select-all">
             <input
               type="checkbox"
@@ -3656,7 +3666,7 @@ export default function HomePage() {
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
-          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members match this filter</strong><span>Choose another member filter to see accounts in this category.</span></div>
+          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No matching members</strong><span>Change the search or filters to see accounts in this category.</span></div>
         ) : (
           <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
         )
@@ -4358,7 +4368,7 @@ export default function HomePage() {
                 {filteredOrders.length ? (
                   <div className="orders-table" role="table" aria-label="Tracked orders">
                     <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Join Method</span><span>Status</span><span>Delivery</span><span>Created</span><span>Expires</span><span>Actions</span>
+                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Period</span><span>Actions</span>
                     </div>
                     <ol className="orders-row-list">
                       {paginatedOrders.map((order, index) => {
@@ -4370,7 +4380,6 @@ export default function HomePage() {
                         const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
                         const joinMethod = order.provider === "community" ? (order.joinMethod ?? "create_invite") : null;
                         const joinMethodLabel = joinMethod === "experimental_join" ? "Experimental Join" : joinMethod === "directly" ? "Directly" : "Create Invite";
-                        const JoinMethodIcon = joinMethod === "experimental_join" ? Sparkles : joinMethod === "directly" ? Zap : Bot;
                         const botInvite = extractBotInvite(order);
                         const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
                         const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
@@ -4412,19 +4421,13 @@ export default function HomePage() {
                                 <span className="min-w-0">
                                   <h2 id={titleId}>{order.serverName || order.serverId || "Discord server"}</h2>
                                   <code title={order.uniqid}>{order.uniqid}</code>
+                                  <time className="orders-created-caption" dateTime={order.createdAt} title={`Created ${order.createdAt}`}>Created {formatTrackedDate(order.createdAt)}</time>
                                 </span>
                               </div>
                               <div className="orders-row-service">
                                 <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
                                 <span>{boostOrder && order.duration ? order.boostStockPool === "rotating" ? "Rotating · 30 days" : `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
-                              </div>
-                              <div className={`orders-row-join-method ${joinMethod ? "" : "is-empty"}`}>
-                                {joinMethod ? (
-                                  <span className="orders-join-method-badge status-badge" data-join-method={joinMethod} title={joinMethodLabel}>
-                                    <JoinMethodIcon className="h-3 w-3" aria-hidden="true" />
-                                    <span>{joinMethodLabel}</span>
-                                  </span>
-                                ) : "—"}
+                                {joinMethod ? <span className="orders-service-method">{joinMethodLabel}</span> : null}
                               </div>
                               <div className="orders-row-status">
                                 <OrderListStatusBadge status={order.status} />
@@ -4440,7 +4443,6 @@ export default function HomePage() {
                                 <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
                                 {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
-                              <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
                               <div className="orders-row-expiration orders-period-cell">
                                 {orderPeriod === "expired" || orderPeriod === "soon" ? <span className="orders-period-badge" data-period={orderPeriod}><Timer className="h-3 w-3" aria-hidden="true" />{orderPeriod === "expired" ? "Expired" : "Expiring"}</span> : <span className="orders-period-caption">Expires</span>}
                                 <time dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>

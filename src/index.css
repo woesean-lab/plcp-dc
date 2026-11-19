@@ -3643,14 +3643,14 @@
   .orders-table-head,
   .orders-row {
     display: grid;
-    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 180px;
+    grid-template-columns: minmax(200px, 1.5fr) minmax(140px, 1fr) minmax(105px, .75fr) 150px 110px 144px;
     align-items: center;
     column-gap: .8rem;
   }
 
   .orders-table[data-reaction-use="true"] .orders-table-head,
   .orders-table[data-reaction-use="true"] .orders-row {
-    grid-template-columns: minmax(180px, 1.5fr) 95px 125px 105px 150px 80px 80px 80px 180px;
+    grid-template-columns: minmax(200px, 1.5fr) minmax(140px, 1fr) minmax(105px, .75fr) 150px 110px 80px 144px;
   }
 
   .orders-table-head {
@@ -3739,6 +3739,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .orders-created-caption { display: block; margin-top: 4px; color: var(--app-subtle); font-size: 8px; line-height: 1.4; }
+  .orders-row-service .orders-service-method { font-size: 9px; color: var(--app-subtle); line-height: 1.4; }
 
   .orders-row-service,
   .orders-row-status { display: grid; min-width: 0; gap: .3rem; }
@@ -3847,7 +3849,7 @@
     gap: .35rem;
   }
 
-  .orders-row-actions > .ui-button { width: 32px; height: 32px; flex: 0 0 32px; padding-inline: 0; border-radius: 8px; }
+  .orders-row-actions > .ui-button { width: 32px; height: 28px; flex: 0 0 32px; padding-inline: 0; border-radius: 7px; }
   .orders-row-actions > .ui-button > svg { width: 14px; height: 14px; }
   .orders-row-actions > .ui-button-danger-ghost {
     border-color: var(--app-border);
@@ -3902,8 +3904,8 @@
     .orders-commandbar { grid-template-columns: minmax(240px, 1fr) repeat(3, 145px); }
     .orders-table-head { display: none; }
     .orders-row {
-      grid-template-areas: "identity service status date expiration" "delivery delivery joinmethod actions actions" "alert alert alert alert alert";
-      grid-template-columns: minmax(200px, 1fr) 110px minmax(130px, .7fr) 95px 95px;
+      grid-template-areas: "identity service status expiration" "delivery delivery actions actions" "alert alert alert alert";
+      grid-template-columns: minmax(200px, 1fr) minmax(140px, 1fr) 120px 110px;
       row-gap: .7rem;
     }
     .orders-row-identity { grid-area: identity; }
@@ -3916,8 +3918,8 @@
     .orders-row-actions { grid-area: actions; }
     .orders-row-alert { grid-area: alert; }
     .orders-table[data-reaction-use="true"] .orders-row {
-      grid-template-areas: "identity service status date expiration reaction" "delivery delivery delivery joinmethod actions actions" "alert alert alert alert alert alert";
-      grid-template-columns: minmax(190px, 1fr) 105px minmax(120px, .7fr) 85px 85px 90px;
+      grid-template-areas: "identity service status expiration reaction" "delivery delivery delivery actions actions" "alert alert alert alert alert";
+      grid-template-columns: minmax(190px, 1fr) minmax(140px, 1fr) 120px 110px 80px;
     }
     .orders-row-reaction-use { grid-area: reaction; }
   }
@@ -3941,7 +3943,7 @@
     .orders-row-list { display: grid; gap: .55rem; }
     .orders-row-list > li + li { border-top: 0; }
     .orders-row {
-      grid-template-areas: "identity status" "service date" "expiration expiration" "joinmethod joinmethod" "delivery delivery" "actions actions" "alert alert";
+      grid-template-areas: "identity status" "service expiration" "delivery delivery" "actions actions" "alert alert";
       grid-template-columns: minmax(0, 1fr) auto;
       min-height: 0;
       row-gap: .7rem;
@@ -3952,7 +3954,7 @@
       background: rgba(255,255,255,.018);
     }
     .orders-table[data-reaction-use="true"] .orders-row {
-      grid-template-areas: "identity status" "service date" "expiration reaction" "joinmethod joinmethod" "delivery delivery" "actions actions" "alert alert";
+      grid-template-areas: "identity status" "service expiration" "delivery reaction" "actions actions" "alert alert";
       grid-template-columns: minmax(0, 1fr) auto;
     }
     .orders-row[data-has-reaction-use="false"] .orders-row-expiration { grid-column: 1 / -1; }
@@ -9430,6 +9432,12 @@
 }
 
 .community-member-priority-actions { gap: 5px; flex-wrap: wrap; }
+.community-member-search { position: relative; flex: 1 1 220px; min-width: 0; max-width: 320px; }
+.community-member-search > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--app-muted); pointer-events: none; }
+.community-member-search > .ui-input { height: 34px; min-height: 34px; padding: 0 10px 0 31px; border-radius: 9px; font-size: 11px; }
+@media (max-width: 639px) {
+  .community-member-search { flex-basis: 100%; max-width: none; width: 100%; }
+}
 
 .community-member-transfer-actions {
   display: flex;
