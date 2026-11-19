@@ -986,6 +986,13 @@ export default function HomePage() {
     : communityCategories.flatMap((category) => category.id === form.communityCategoryId ? [{ category, amount: form.amount }] : []);
   const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
+  const defaultCommunitySupportMonths = form.amount >= 500 ? 2 : 1;
+  useEffect(() => {
+    if (!selectedIsCommunity || !selectedCommunityHasPeriodic) return;
+    setForm((current) => current.communityDurationMonths === defaultCommunitySupportMonths
+      ? current
+      : { ...current, communityDurationMonths: defaultCommunitySupportMonths });
+  }, [selectedIsCommunity, selectedCommunityHasPeriodic, defaultCommunitySupportMonths]);
   const selectedCommunityJoinMethods = (["create_invite", "experimental_join", "directly"] as CommunityJoinMethod[]).filter((method) =>
     selectedCommunityAllocations.length > 0 && selectedCommunityAllocations.every(({ category }) => (category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).includes(method))
   );

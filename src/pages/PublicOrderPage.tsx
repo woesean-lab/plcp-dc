@@ -1119,7 +1119,8 @@ export default function PublicOrderPage() {
                     {supportExpired ? (
                       <div className="monitor-expired-support-note" id="public-member-support-expired" role="note">
                         <Timer className="h-4 w-4" aria-hidden="true" />
-                        <div><strong>Support period expired</strong><p>Check members and replacements are disabled because this order's support period has ended.</p></div>
+                        <strong>Support period expired</strong>
+                        <p>Check members and replacements are disabled because this order's support period has ended.</p>
                       </div>
                     ) : null}
                     {communityCheckNeedsBot && botInvite ? (

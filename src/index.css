@@ -11110,18 +11110,19 @@
 .monitor-support-context .monitor-extend-button { width: fit-content; height: 30px; margin-top: 8px; padding-inline: 10px; font-size: 11px; }
 .monitor-support-context.is-expired > span > small { color: #f5cf76; }
 .monitor-expired-support-note {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px 10px;
   margin: 14px 0;
   padding: 12px 14px;
   border: 1px solid rgba(245, 207, 118, .25);
   border-radius: 10px;
   background: rgba(245, 207, 118, .06);
 }
-.monitor-expired-support-note > svg { flex-shrink: 0; margin-top: 2px; color: #f5cf76; }
-.monitor-expired-support-note strong { color: #f5cf76; font-size: 12px; }
-.monitor-expired-support-note p { margin: 4px 0 0; color: var(--app-text-secondary); font-size: 11px; line-height: 1.6; }
+.monitor-expired-support-note > svg { grid-column: 1; grid-row: 1; align-self: center; margin: 0; color: #f5cf76; }
+.monitor-expired-support-note strong { grid-column: 2; grid-row: 1; color: #f5cf76; font-size: 12px; line-height: 20px; }
+.monitor-expired-support-note p { grid-column: 2; margin: 0; color: var(--app-text-secondary); font-size: 11px; line-height: 1.6; }
 
 .public-extension-modal {
   width: min(100%, 500px);
