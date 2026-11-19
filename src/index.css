@@ -12081,3 +12081,16 @@
 }
 .list-pagination > div { display: flex; align-items: center; gap: 10px; }
 .list-pagination button { flex-shrink: 0; }
+.list-pagination > div { flex-wrap: wrap; }
+.list-page-size { display: flex; align-items: center; gap: 8px; margin-right: 8px; white-space: nowrap; }
+.list-page-size select {
+  min-height: 32px;
+  border: 1px solid var(--app-border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  color: var(--app-text);
+  background: var(--app-input-bg);
+  font: inherit;
+  cursor: pointer;
+}
+.list-page-size select:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }

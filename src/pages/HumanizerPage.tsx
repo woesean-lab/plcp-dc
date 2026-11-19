@@ -231,6 +231,7 @@ export default function HumanizerPage() {
   const [categoryId, setCategoryId] = useState("all");
   const [search, setSearch] = useState("");
   const [accountPage, setAccountPage] = useState(1);
+  const [accountPageSize, setAccountPageSize] = useState(HUMANIZER_ACCOUNT_PAGE_SIZE);
   const [usernames, setUsernames] = useState("");
   const [displayNames, setDisplayNames] = useState("");
   const [bios, setBios] = useState("");
@@ -239,6 +240,7 @@ export default function HumanizerPage() {
   const [selectedFields, setSelectedFields] = useState<HumanizerField[]>([]);
   const [uploadingAvatars, setUploadingAvatars] = useState(0);
   const [avatarPage, setAvatarPage] = useState(1);
+  const [avatarPageSize, setAvatarPageSize] = useState(50);
   const [hypesquad, setHypesquad] = useState<"none" | "random" | "bravery" | "brilliance" | "balance">("none");
   const [concurrency, setConcurrency] = useState(2);
   const [starting, setStarting] = useState(false);
@@ -323,8 +325,8 @@ export default function HumanizerPage() {
         || left.id.localeCompare(right.id)
       ));
   }, [catalog, categoryId, search]);
-  const avatarPagination = paginate(avatarData, avatarPage, 60);
-  const accountPagination = paginate(visibleAccounts, accountPage, HUMANIZER_ACCOUNT_PAGE_SIZE);
+  const avatarPagination = paginate(avatarData, avatarPage, avatarPageSize);
+  const accountPagination = paginate(visibleAccounts, accountPage, accountPageSize);
   const renderedAccounts = accountPagination.items;
 
   useEffect(() => {
@@ -624,7 +626,7 @@ export default function HumanizerPage() {
               </div>
             )}
             </div>
-            <ListPagination {...accountPagination} onChange={setAccountPage} label="Humanizer account pages" />
+            <ListPagination {...accountPagination} onChange={setAccountPage} onPageSizeChange={setAccountPageSize} label="Humanizer account pages" />
             <footer className="humanizer-pane-foot"><ListFilter className="h-3.5 w-3.5" /><span>{visibleAccounts.length} visible · {eligibleVisibleIds.length} eligible</span></footer>
           </section>
 
@@ -755,7 +757,7 @@ export default function HumanizerPage() {
                   </div>
                 ))}
                 </div>
-                <ListPagination {...avatarPagination} onChange={setAvatarPage} label="Avatar pages" />
+                <ListPagination {...avatarPagination} onChange={setAvatarPage} onPageSizeChange={setAvatarPageSize} label="Avatar pages" />
                 </div>
               ) : (
                 <div className="humanizer-avatar-empty">

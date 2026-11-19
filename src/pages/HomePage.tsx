@@ -727,7 +727,9 @@ export default function HomePage() {
   const [usedTokenDurationFilter, setUsedTokenDurationFilter] = useState<"all" | 1 | 3>("all");
   const [usedTokenStatusFilter, setUsedTokenStatusFilter] = useState<"all" | "boosted" | "issues">("all");
   const [usedBoostTokenPage, setUsedBoostTokenPage] = useState(1);
+  const [usedBoostTokenPageSize, setUsedBoostTokenPageSize] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberPage, setCommunityMemberPage] = useState(1);
+  const [communityMemberPageSize, setCommunityMemberPageSize] = useState(STOCK_LIST_PAGE_SIZE);
   const [communityMemberFilter, setCommunityMemberFilter] = useState<"all" | "active" | "inactive" | "onliner" | "not_onliner">("all");
   const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
@@ -736,6 +738,7 @@ export default function HomePage() {
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
   const [onlinerAccountPage, setOnlinerAccountPage] = useState(1);
+  const [onlinerAccountPageSize, setOnlinerAccountPageSize] = useState(ONLINER_ACCOUNT_PAGE_SIZE);
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
@@ -994,7 +997,7 @@ export default function HomePage() {
     },
     [scopedUsedBoostTokens, usedTokenDurationFilter, usedTokenStatusFilter, boostSearch]
   );
-  const usedTokenPagination = paginate(filteredUsedBoostTokens, usedBoostTokenPage, STOCK_LIST_PAGE_SIZE);
+  const usedTokenPagination = paginate(filteredUsedBoostTokens, usedBoostTokenPage, usedBoostTokenPageSize);
   const visibleUsedBoostTokens = usedTokenPagination.items;
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
@@ -3160,7 +3163,7 @@ export default function HomePage() {
       const nameOrder = leftName.localeCompare(rightName, undefined, { sensitivity: "base", numeric: true });
       return nameOrder || left.id.localeCompare(right.id);
     });
-  const communityPagination = paginate(communityVisibleRecords, communityMemberPage, STOCK_LIST_PAGE_SIZE);
+  const communityPagination = paginate(communityVisibleRecords, communityMemberPage, communityMemberPageSize);
   const visibleCommunityRecords = communityPagination.items;
   const zeroServerCommunityRecords = communityVisibleRecords.filter((record) => (record.joinedServerCount ?? 0) === 0);
   const communityStockPanel = communityStockLoading ? (
@@ -3574,7 +3577,7 @@ export default function HomePage() {
             );
           })}
           </div>
-          <ListPagination {...communityPagination} onChange={setCommunityMemberPage} label="Member stock pages" />
+          <ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" />
         </div>
       ) : communityStatus?.configured ? (
         communityCategoryRecords.length ? (
@@ -3600,7 +3603,7 @@ export default function HomePage() {
       .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting")),
     [onlinerSnapshot?.accounts]
   );
-  const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, ONLINER_ACCOUNT_PAGE_SIZE);
+  const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, onlinerAccountPageSize);
   const filteredOnlinerProxies = useMemo(() => {
     const search = onlinerProxySearch.trim().toLowerCase();
     const isIssue = (proxy: DiscordOnlinerProxyDetail) => ["issue", "cooling"].includes(getOnlinerProxyStatus(proxy));
@@ -4587,7 +4590,7 @@ export default function HomePage() {
                           </li>
                         ))}
                         </ol>
-                        <ListPagination {...usedTokenPagination} onChange={setUsedBoostTokenPage} label="Used token pages" />
+                        <ListPagination {...usedTokenPagination} onChange={setUsedBoostTokenPage} onPageSizeChange={setUsedBoostTokenPageSize} label="Used token pages" />
                       </>
                     ) : (
                       <div className="stock-empty-state"><History className="h-5 w-5" /><strong>No matching used tokens</strong><span>Adjust the duration or status filters.</span></div>
@@ -4741,7 +4744,7 @@ export default function HomePage() {
                             </div>
                           </div>
                           ))}
-                      <ListPagination {...onlinerPagination} onChange={setOnlinerAccountPage} label="Onliner account pages" />
+                      <ListPagination {...onlinerPagination} onChange={setOnlinerAccountPage} onPageSizeChange={setOnlinerAccountPageSize} label="Onliner account pages" />
                       </div>
                     ) : null}
                     <div className="grid gap-4">
