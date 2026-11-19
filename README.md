@@ -39,6 +39,13 @@ kodlarla toplar. Ornekler gercek ortak bilesenleri kullanir; demo islemleri
 uretim API'lerine istek gondermez. Yeni UI calismalarinda
 [UI referansini](docs/ui-reference.md) ve ilgili kaynak bileseni esas alin.
 
+## Members Stock toplu Onliner baglantisi
+
+Members Stock'ta secili hesaplar **Connect selected** ile kayitli tokenlari
+kullanilarak Onliner'a eklenebilir. Rich Presence bir defa secilir; profil eklemeleri
+sirayla yapilir. Zaten Onliner'da bulunanlar atlanir, basarisiz hesaplar hata
+mesajlariyla secili kalir. Kontrol: `node --test tools/community-onliner-connect.test.mjs`.
+
 ## Mevcut Members siparislerini baska kategoriye tasima
 
 Stock > Members Stock > kategori yonetimindeki **Move existing orders** (iki yonlu ok)

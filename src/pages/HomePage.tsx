@@ -1,5 +1,6 @@
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
+import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { normalizeOnlinerProxyImportDraft } from "../../shared/onliner-proxy-import.mjs";
 import { getOnlinerProxyStatus } from "../lib/onliner";
@@ -712,6 +713,10 @@ export default function HomePage() {
   const [communityAccountProgress, setCommunityAccountProgress] = useState({ completed: 0, total: 0 });
   const [communityAccountBulkErrors, setCommunityAccountBulkErrors] = useState<Array<{ lineNumber: number; message: string }>>([]);
   const [communityOnlinerMember, setCommunityOnlinerMember] = useState<CommunityAdminStatus["recent"][number] | null>(null);
+  const [communityOnlinerBulkMembers, setCommunityOnlinerBulkMembers] = useState<CommunityAdminStatus["recent"] | null>(null);
+  const [communityOnlinerBulkProgress, setCommunityOnlinerBulkProgress] = useState({ completed: 0, total: 0 });
+  const [communityOnlinerBulkErrors, setCommunityOnlinerBulkErrors] = useState<CommunityOnlinerConnectFailure[]>([]);
+  const communityOnlinerBulkInFlightRef = useRef(false);
   const [communityOnlinerRichPresence, setCommunityOnlinerRichPresence] = useState(true);
   const [communityOnlinerActionId, setCommunityOnlinerActionId] = useState<string | null>(null);
   const [communityRichPresenceActionId, setCommunityRichPresenceActionId] = useState<string | null>(null);
@@ -728,7 +733,7 @@ export default function HomePage() {
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
-  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_disconnect" | null>(null);
+  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_connect" | "onliner_disconnect" | null>(null);
   const [exportingCommunityTokens, setExportingCommunityTokens] = useState<"access" | "account" | null>(null);
   const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
@@ -910,7 +915,7 @@ export default function HomePage() {
   }, [activeTab, runningAutoLeaveOrderKey]);
 
   useEffect(() => {
-    if (!orderPendingDeletion && !orderPendingAutoLeave && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember) return;
+    if (!orderPendingDeletion && !orderPendingAutoLeave && !communityMemberPendingDeletion && !communityBulkDeleteOpen && !communityCategoryModalOpen && !communityCategoryPendingDeletion && !communityAccountCategory && !communityOnlinerMember && !communityOnlinerBulkMembers) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -922,14 +927,14 @@ export default function HomePage() {
       if (communityCategoryModalOpen && !savingCommunityCategory) resetCommunityCategoryDraft();
       if (communityCategoryPendingDeletion && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null);
       if (communityAccountCategory && !addingCommunityAccount) closeCommunityAccountModal();
-      if (communityOnlinerMember && communityOnlinerActionId === null) closeCommunityOnlinerModal();
+      if ((communityOnlinerMember || communityOnlinerBulkMembers) && communityOnlinerActionId === null && communityBulkAction !== "onliner_connect") closeCommunityOnlinerModal();
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [orderPendingDeletion, orderPendingAutoLeave, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, deletingTrackedOrder, autoLeavingOrderId, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
+  }, [orderPendingDeletion, orderPendingAutoLeave, communityMemberPendingDeletion, communityBulkDeleteOpen, communityCategoryModalOpen, communityCategoryPendingDeletion, communityAccountCategory, communityOnlinerMember, communityOnlinerBulkMembers, deletingTrackedOrder, autoLeavingOrderId, removingCommunityUserId, communityBulkAction, savingCommunityCategory, addingCommunityAccount, communityOnlinerActionId]);
 
   useEffect(() => {
     if (!showAddTokensModal) return;
@@ -2074,16 +2079,68 @@ export default function HomePage() {
       return;
     }
     setCommunityOnlinerMember(record);
+    setCommunityOnlinerBulkMembers(null);
+    setCommunityOnlinerBulkErrors([]);
+    setCommunityOnlinerRichPresence(true);
+  }
+
+  function beginConnectingSelectedCommunityMembers() {
+    if (communityBulkAction || communityOnlinerActionId || communityRichPresenceActionId) return;
+    const selected = new Set(selectedCommunityMemberIds);
+    const members = communityCategoryRecords.filter((record) => selected.has(record.id));
+    if (!members.length) return;
+    if (members.every((member) => member.onlinerConnected)) return notifySuccess("Selected accounts are already on Onliner.");
+    setCommunityOnlinerMember(null);
+    setCommunityOnlinerBulkMembers(members);
+    setCommunityOnlinerBulkErrors([]);
+    setCommunityOnlinerBulkProgress({ completed: 0, total: 0 });
     setCommunityOnlinerRichPresence(true);
   }
 
   function closeCommunityOnlinerModal() {
     setCommunityOnlinerMember(null);
+    setCommunityOnlinerBulkMembers(null);
+    setCommunityOnlinerBulkErrors([]);
+    setCommunityOnlinerBulkProgress({ completed: 0, total: 0 });
     setCommunityOnlinerRichPresence(true);
+  }
+
+  async function connectSelectedCommunityOnliner() {
+    if (!communityOnlinerBulkMembers?.length || communityBulkAction || communityOnlinerActionId || communityRichPresenceActionId || communityOnlinerBulkInFlightRef.current) return;
+    const members = [...communityOnlinerBulkMembers];
+    communityOnlinerBulkInFlightRef.current = true;
+    setCommunityBulkAction("onliner_connect");
+    setCommunityOnlinerBulkErrors([]);
+    try {
+      const result = await connectCommunityMembersToOnliner(members, communityOnlinerRichPresence, { onProgress: setCommunityOnlinerBulkProgress });
+      const added = new Map(result.connected.map((member) => [member.id, member.accountId]));
+      setCommunityStatus((current) => current ? { ...current, recent: current.recent.map((record) => added.has(record.id)
+        ? { ...record, onlinerConnected: true, onlinerAccountId: added.get(record.id)!, onlinerConnectionState: "connecting", onlinerLastError: null, onlinerRichPresenceEnabled: communityOnlinerRichPresence }
+        : record) } : current);
+      const failedIds = new Set(result.failed.map((member) => member.id));
+      setSelectedCommunityMemberIds([...failedIds]);
+      setCommunityMemberPage(1);
+      if (result.failed.length) {
+        setCommunityOnlinerBulkMembers(members.filter((member) => failedIds.has(member.id)));
+        setCommunityOnlinerBulkErrors(result.failed);
+        setCommunityOnlinerBulkProgress({ completed: 0, total: 0 });
+        notifyError(`${result.connected.length} accounts added to Onliner; ${result.failed.length} failed${result.skipped.length ? `; ${result.skipped.length} already on Onliner` : ""}. Only failed accounts remain selected.`);
+      } else {
+        closeCommunityOnlinerModal();
+        notifySuccess(`${result.connected.length} accounts added to Onliner${result.skipped.length ? `; ${result.skipped.length} already on Onliner` : ""}.`);
+      }
+      await refreshCommunityStatus(communityStockType).catch(() => notifyError("Connections were saved. Refresh Members Stock to load their latest status."));
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected accounts could not be connected.");
+    } finally {
+      communityOnlinerBulkInFlightRef.current = false;
+      setCommunityBulkAction(null);
+    }
   }
 
   async function handleConnectCommunityMemberToOnliner(event: FormEvent) {
     event.preventDefault();
+    if (communityOnlinerBulkMembers) { await connectSelectedCommunityOnliner(); return; }
     const member = communityOnlinerMember;
     if (!member || communityOnlinerActionId) return;
     try {
@@ -3252,6 +3309,13 @@ export default function HomePage() {
             onClick={() => setSelectedCommunityMemberIds(zeroServerCommunityRecords.map((record) => record.id))}>
             <ListChecks className="h-3.5 w-3.5" />Select 0 servers ({zeroServerCommunityRecords.length})
           </Button>
+            <Button type="button" variant="secondary" size="sm"
+              title="Connect selected accounts to Onliner using their saved tokens"
+              disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+              onClick={beginConnectingSelectedCommunityMembers}>
+              {communityBulkAction === "onliner_connect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RadioTower className="h-3.5 w-3.5" />}
+              {communityBulkAction === "onliner_connect" ? "Connecting..." : "Connect selected"}
+            </Button>
             <Button type="button" variant="dangerGhost" size="sm"
               title="Disconnect selected accounts from Onliner and keep them in Members Stock"
               disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
@@ -5079,23 +5143,25 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {communityOnlinerMember ? (
-        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && communityOnlinerActionId === null) closeCommunityOnlinerModal(); }}>
-          <form className="confirm-modal community-account-modal" onSubmit={handleConnectCommunityMemberToOnliner} role="dialog" aria-modal="true" aria-labelledby="connect-member-onliner-title">
+      {communityOnlinerMember || communityOnlinerBulkMembers ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && communityOnlinerActionId === null && communityBulkAction !== "onliner_connect") closeCommunityOnlinerModal(); }}>
+          <form className={`confirm-modal community-account-modal${communityOnlinerBulkMembers ? " max-h-[calc(100dvh-40px)] overflow-y-auto" : ""}`} onSubmit={handleConnectCommunityMemberToOnliner} role="dialog" aria-modal="true" aria-labelledby="connect-member-onliner-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><RadioTower className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · Onliner</p>
-            <h2 id="connect-member-onliner-title">Connect {communityOnlinerMember.displayName || communityOnlinerMember.username}</h2>
-            <p>The saved account token will be used automatically, and the least-used proxy will be selected from the central Onliner proxy pool.</p>
+            <h2 id="connect-member-onliner-title">Connect {communityOnlinerBulkMembers ? `${communityOnlinerBulkMembers.length} selected accounts` : communityOnlinerMember?.displayName || communityOnlinerMember?.username}</h2>
+            <p>{communityOnlinerBulkMembers ? "Connect the selected accounts using their saved tokens. Proxies are assigned automatically. Accounts already on Onliner are skipped." : "The saved account token will be used automatically, and the least-used proxy will be selected from the central Onliner proxy pool."}</p>
             <label className="onliner-enabled-card mt-5 text-left">
-              <input type="checkbox" checked={communityOnlinerRichPresence} disabled={communityOnlinerActionId !== null} onChange={(event) => setCommunityOnlinerRichPresence(event.target.checked)} />
+              <input type="checkbox" checked={communityOnlinerRichPresence} disabled={communityOnlinerActionId !== null || communityBulkAction === "onliner_connect"} onChange={(event) => setCommunityOnlinerRichPresence(event.target.checked)} />
               <Star className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
               <span><strong>Use Rich Presence</strong><small>Turn it off to keep the account online without activities.</small></span>
             </label>
+            {communityBulkAction === "onliner_connect" ? <p className="community-account-bulk-summary" role="status"><span>{communityOnlinerBulkProgress.completed}/{communityOnlinerBulkProgress.total} processed</span></p> : null}
+            {communityOnlinerBulkErrors.length ? <div className="community-account-bulk-errors" role="alert"><div className="community-account-bulk-error-heading"><span aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span><div><strong>{communityOnlinerBulkErrors.length} accounts need attention</strong><small>Only failed accounts remain selected, ready to retry.</small></div></div><ul>{communityOnlinerBulkErrors.slice(0, 12).map((failure, index) => <li key={failure.id}><span>{index + 1}</span><div><strong>{failure.name}</strong><small>{failure.message}</small></div></li>)}</ul>{communityOnlinerBulkErrors.length > 12 ? <small>And {communityOnlinerBulkErrors.length - 12} more failed accounts.</small> : null}</div> : null}
             <div className="confirm-modal-actions">
-              <Button type="button" variant="secondary" disabled={communityOnlinerActionId !== null} onClick={closeCommunityOnlinerModal}>Cancel</Button>
-              <Button autoFocus type="submit" disabled={communityOnlinerActionId !== null}>
-                {communityOnlinerActionId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
-                {communityOnlinerActionId ? "Connecting..." : "Connect to Onliner"}
+              <Button type="button" variant="secondary" disabled={communityOnlinerActionId !== null || communityBulkAction === "onliner_connect"} onClick={closeCommunityOnlinerModal}>Cancel</Button>
+              <Button autoFocus type="submit" disabled={communityOnlinerActionId !== null || communityBulkAction === "onliner_connect"}>
+                {communityOnlinerActionId || communityBulkAction === "onliner_connect" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
+                {communityBulkAction === "onliner_connect" ? `${communityOnlinerBulkProgress.completed}/${communityOnlinerBulkProgress.total} connecting…` : communityOnlinerActionId ? "Connecting..." : communityOnlinerBulkMembers ? `Connect ${communityOnlinerBulkMembers.length} accounts` : "Connect to Onliner"}
               </Button>
             </div>
           </form>

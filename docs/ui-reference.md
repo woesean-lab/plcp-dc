@@ -30,6 +30,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Cards | `src/components/ui/card.tsx` | Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter |
 | Surfaces | `app-panel`, `app-panel-soft`, `payload-panel` | Main panels, nested groups and code/payload blocks |
 | Member rows | `community-recent-list`, `community-recent-avatar`, `community-member-row-actions` | Members Stock; keep selection/actions distinct from search |
+| Bulk Onliner connections | `src/lib/community-onliner-connect.ts`, Members Stock toolbar | Existing secondary Button and connection modal; optional Rich Presence, progress, skip existing profiles, keep failures selected for retry |
 | Pagination | `src/components/ListPagination.tsx`: `paginate` and ListPagination | 50 / 100 / 200 / 500; optional `showNavigationLabels`; reset page when filters/page size change. Keep the shared button/dropdown sizes, corners and spacing; page CSS must not override these controls. |
 | Order warnings | `od-order-alert`, `od-alert-copy`, `od-alert-actions` in `src/components/OrdersWorkspace.css` | Paused invite warning stays a red card with its Continue action |
 | Expired support notice | `monitor-expired-support-note` | Monitor's amber warning; icon and heading stay aligned |
