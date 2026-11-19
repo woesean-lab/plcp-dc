@@ -7,6 +7,7 @@ export type BoostStockPool = "regular" | "rotating";
 export type CommunityJoinMethod = "create_invite" | "experimental_join" | "directly";
 
 export interface CommunityCategoryAllocation {
+  allocationId?: string;
   categoryId: string;
   categoryName?: string;
   colorKey?: string;

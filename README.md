@@ -56,8 +56,9 @@ monitor baglantilari, mevcut destek bitis tarihleri ve Auto Leave kayitlari koru
 Uye stogu ayrica tasinmis olmalidir. Devam eden teslimat, kontrol ve Auto Leave
 islemleri de kesilmeden tasinabilir; sonraki ilerleme kayitlari kategoriyi geri
 ceviremez. Ilerleme, mevcut destek tarihleri ve tek kullanimlik leave kayitlari
-korunur. Her iki kategoriyi zaten iceren karma siparisler onizlemede belirtilir
-ve degistirilmez; farkli destek sureleri birlestirilmez.
+korunur. Her iki kategoriyi zaten iceren karma siparisler de tasinir. Ayni havuzu
+kullansalar da satin alinan bolumlerin uye sayilari, teslimat sayaclari ve destek
+bitisleri ayri tutulur; Check members ve Auto Leave ilgili bolumun suresini kullanir.
 Kontroller: `node --test server/community-order-category-transfer.test.mjs`.
 
 Veritabani korumasi canli DB'ye baglanmadan, ayri bir bellek ici PostgreSQL ile

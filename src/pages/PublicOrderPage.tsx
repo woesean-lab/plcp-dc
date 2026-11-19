@@ -11,6 +11,7 @@ import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
 import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckProgress, getPublicOrderStatus, leaveAllPublicCommunityOrderMembers, pausePublicCommunityOrder, pausePublicDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartPublicCommunityOrder, resumePublicCommunityOrder, resumePublicDcordBoostOrder, updatePublicOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
+import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import type { OrderStatusResponse } from "../types";
 
@@ -44,6 +45,7 @@ type CommunityMemberResult = {
   username: string;
   avatarUrl: string | null;
   categoryId?: string;
+  allocationId?: string;
   state: string;
   details: string;
   completedAt?: string;
@@ -97,6 +99,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       username: typeof row.username === "string" && row.username.trim() ? maskUsername(row.username) : `Member ${index + 1}`,
       avatarUrl: typeof row.avatarUrl === "string" && row.avatarUrl.trim() ? row.avatarUrl.trim() : null,
       categoryId: typeof row.categoryId === "string" ? row.categoryId : undefined,
+      allocationId: typeof row.allocationId === "string" ? row.allocationId : undefined,
       state: typeof row.state === "string" && row.state.trim() ? row.state.trim() : "queued",
       details: typeof row.details === "string" && row.details.trim() ? row.details.trim() : "Waiting for delivery.",
       completedAt: typeof row.completedAt === "string" ? row.completedAt : undefined,
@@ -516,7 +519,7 @@ export default function PublicOrderPage() {
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
     if (item.onlinerLive !== false) return false;
-    const allocation = categoryAllocations.find((entry) => entry.categoryId === item.categoryId);
+    const allocation = getCommunityResultAllocation({ categoryAllocations, categoryId: status?.categoryId }, item);
     if ((allocation?.checkReplacementEnabled ?? status?.categoryCheckReplacementEnabled) === false) return false;
     const expirationValue = allocation?.expiredAt ?? status?.expiredAt ?? status?.expired_at;
     const expirationTime = expirationValue ? new Date(expirationValue).getTime() : Number.NaN;
@@ -1043,7 +1046,7 @@ export default function PublicOrderPage() {
                   <div className="category-progress-grid">
                     {categoryAllocations.map((allocation) => {
                       const categoryProgress = allocation.amount > 0 ? Math.min((allocation.added ?? 0) / allocation.amount, 1) : 0;
-                      return <div key={allocation.categoryId} className="category-progress-item">
+                      return <div key={allocation.allocationId || allocation.categoryId} className="category-progress-item">
                         <span><strong>{allocation.categoryName ?? allocation.categoryId}</strong><small>{allocation.added ?? 0}/{allocation.amount}</small></span>
                         <i><b style={{ width: `${categoryProgress * 100}%` }} /></i>
                       </div>;

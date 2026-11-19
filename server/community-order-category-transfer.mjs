@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { getCommunityResultAllocation, getCommunityCategoryName } from "../shared/community-order-allocations.mjs";
 
 function primaryCategory(order) {
   return order.categoryId || order.stockType || (order.service === "COMMUNITY-ONLINE" ? "online" : "offline");
@@ -11,9 +12,10 @@ export function planCommunityOrderCategoryTransfer(order, source, target, transf
   const members = Array.isArray(order.communityResults) ? order.communityResults : [];
   const categoryIds = [primary, ...allocations.map((item) => item?.categoryId), ...members.map((item) => item?.categoryId || primary)];
   if (!categoryIds.includes(source.id)) return { matched: false };
-  if (categoryIds.includes(target.id)) return { matched: true, blocked: "This order already contains both categories. Its separate support periods need to be kept." };
+  // Keep purchased portions separate even when they now use the same stock pool.
+  const identifiedAllocations = allocations.map((allocation, index) => ({ ...allocation, allocationId: allocation.allocationId || `allocation-${index + 1}` }));
   const display = { categoryId: target.id, categoryName: target.name, colorKey: target.color_key };
-  const nextAllocations = allocations.map((allocation) => allocation?.categoryId === source.id ? {
+  const nextAllocations = identifiedAllocations.map((allocation) => allocation?.categoryId === source.id ? {
     ...allocation, ...display,
     checkReplacementEnabled: target.check_replacement_enabled !== false,
     reactionUseEnabled: target.reaction_use_enabled === true
@@ -22,21 +24,32 @@ export function planCommunityOrderCategoryTransfer(order, source, target, transf
     ...order,
     ...(primary === source.id ? {
       categoryId: target.id, stockType: target.id,
-      categoryName: allocations.length > 1 ? `${allocations.length} categories` : target.name,
+      categoryName: getCommunityCategoryName(nextAllocations, target.name),
       categoryColorKey: target.color_key,
       categoryCheckReplacementEnabled: allocations.length > 1
         ? nextAllocations.some((allocation) => allocation.checkReplacementEnabled !== false)
         : target.check_replacement_enabled !== false,
       categoryReactionUseEnabled: target.reaction_use_enabled === true
     } : {}),
-    ...(Array.isArray(order.categoryAllocations) ? { categoryAllocations: nextAllocations } : {}),
-    ...(Array.isArray(order.communityResults) ? { communityResults: members.map((member) =>
-      member && typeof member === "object" && !Array.isArray(member) && (member.categoryId || primary) === source.id ? { ...member, ...display, reactionUseEnabled: target.reaction_use_enabled === true } : member) } : {}),
+    ...(Array.isArray(order.categoryAllocations) ? {
+      categoryAllocations: nextAllocations,
+      categoryName: getCommunityCategoryName(nextAllocations, primary === source.id ? target.name : order.categoryName)
+    } : {}),
+    ...(Array.isArray(order.communityResults) ? { communityResults: members.map((member) => {
+      if (!member || typeof member !== "object" || Array.isArray(member)) return member;
+      const allocation = getCommunityResultAllocation({ ...order, categoryAllocations: identifiedAllocations }, member);
+      return {
+        ...member,
+        ...(allocation?.allocationId ? { allocationId: allocation.allocationId } : {}),
+        ...((member.categoryId || primary) === source.id ? { ...display, reactionUseEnabled: target.reaction_use_enabled === true } : {})
+      };
+    }) } : {}),
     categoryTransferHistory: [...(Array.isArray(order.categoryTransferHistory) ? order.categoryTransferHistory : []), {
       fromCategoryId: source.id, fromCategoryName: source.name,
       toCategoryId: target.id, toCategoryName: target.name, toColorKey: target.color_key,
       toCheckReplacementEnabled: target.check_replacement_enabled !== false,
-      toReactionUseEnabled: target.reaction_use_enabled === true, transferredAt
+      toReactionUseEnabled: target.reaction_use_enabled === true,
+      allocationOrigins: identifiedAllocations.map(({ allocationId, categoryId }) => ({ allocationId, categoryId })), transferredAt
     }]
   } };
 }

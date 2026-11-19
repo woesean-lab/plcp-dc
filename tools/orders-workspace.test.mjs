@@ -16,7 +16,7 @@ function load(relative) {
   const exports = {};
   cache.set(filename, exports);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
-  vm.runInNewContext(code, { exports, require: (name) => name.startsWith(".") ? load(path.relative(root, path.resolve(path.dirname(filename), name + ".ts"))) : require(name), Date, Number });
+  vm.runInNewContext(code, { exports, require: (name) => name.startsWith(".") ? load(path.relative(root, path.resolve(path.dirname(filename), name.endsWith(".mjs") ? name : name + ".ts"))) : require(name), Date, Number });
   return exports;
 }
 
@@ -66,4 +66,14 @@ test("leave action only targets eligible expired members and cannot repeat finis
   const mixed = { ...base, categoryAllocations: [{ categoryId: "expired", isPeriodic: true, expiredAt: at(-1) }, { categoryId: "active", isPeriodic: true, expiredAt: at(20) }], communityResults: [{ categoryId: "expired", state: "joined", membershipStatus: "active" }, { categoryId: "active", state: "joined" }] };
   assert.equal(canStartOrderLeave(mixed, now), true);
   assert.equal(canStartOrderLeave({ ...mixed, communityResults: [{ categoryId: "expired", state: "joined", membershipStatus: "removed" }] }, now), false);
+});
+
+test("leave eligibility respects separate support portions after both categories move to Online", () => {
+  const order = { ...base, expiredAt: at(30), categoryId: "online", categoryAllocations: [
+    { categoryId: "online", allocationId: "active", amount: 1, isPeriodic: true, expiredAt: at(30) },
+    { categoryId: "online", allocationId: "expired", amount: 1, isPeriodic: true, expiredAt: at(-1) }
+  ], communityResults: [{ categoryId: "online", allocationId: "active", state: "joined" }] };
+  assert.equal(canStartOrderLeave(order, now), false, "active member cannot be removed because another portion expired");
+  order.communityResults.push({ categoryId: "online", allocationId: "expired", state: "joined" });
+  assert.equal(canStartOrderLeave(order, now), true);
 });

@@ -19,6 +19,7 @@ import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/o
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
+import { getCommunityResultAllocation, communityResultMatchesAllocation, getCommunityCategoryName } from "../shared/community-order-allocations.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -4772,10 +4773,7 @@ function isCommunityOrderManagementExpired(order) {
 }
 
 function isCommunityResultManagementExpired(order, result) {
-  const categoryId = getCommunityResultStockType(order, result);
-  const allocation = Array.isArray(order?.categoryAllocations)
-    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
-    : null;
+  const allocation = getCommunityResultAllocation(order, result);
   if (!allocation) return isCommunityOrderManagementExpired(order);
   if (allocation.isPeriodic !== true || !allocation.expiredAt) return false;
   const expiresAt = new Date(allocation.expiredAt).getTime();
@@ -4785,10 +4783,7 @@ function isCommunityResultManagementExpired(order, result) {
 const communityOnlinerReplacementCheckMaxAgeMs = 5 * 60_000;
 
 function isCommunityOnlinerCheckEnabled(order, result) {
-  const categoryId = getCommunityResultStockType(order, result);
-  const allocation = Array.isArray(order?.categoryAllocations)
-    ? order.categoryAllocations.find((item) => item?.categoryId === categoryId)
-    : null;
+  const allocation = getCommunityResultAllocation(order, result);
   return (allocation?.checkReplacementEnabled ?? order?.categoryCheckReplacementEnabled) !== false;
 }
 
@@ -7481,7 +7476,7 @@ async function runCommunityOrder(order, members, config) {
           categoryAllocations: payload.categoryAllocations.map((allocation) => ({
             ...allocation,
             added: mergedResults.filter((item) =>
-              getCommunityResultStockType(payload, item) === allocation.categoryId
+              communityResultMatchesAllocation(payload, item, allocation)
               && String(item?.state ?? "").toLowerCase() === "joined"
             ).length
           }))
@@ -12277,11 +12272,18 @@ async function activateWaitingCommunityOrder(order) {
       ...existingResults.filter((item) => !pendingStates.has(String(item?.state ?? "").toLowerCase())),
       ...unavailablePendingResults
     ];
+    const failedPendingIds = new Set(unavailablePendingResults.map((item) => String(item.discordUserId)));
+    const replacementSlots = existingResults.filter((item) => pendingStates.has(String(item?.state ?? "").toLowerCase())
+      && !availableUserIds.has(String(item?.discordUserId ?? "")) && !failedPendingIds.has(String(item?.discordUserId ?? "")));
     const pendingResults = members.map((member) => {
       const existing = existingByUserId.get(String(member.discord_user_id));
+      const slotIndex = existing ? -1 : replacementSlots.findIndex((item) => getCommunityResultStockType(current, item) === normalizeCommunityStockType(member.category_id));
+      const slot = slotIndex >= 0 ? replacementSlots.splice(slotIndex, 1)[0] : null;
+      const allocation = getCommunityResultAllocation(current, slot || { categoryId: member.category_id });
       return existing && pendingStates.has(String(existing?.state ?? "").toLowerCase())
         ? { ...existing, state: "queued", details: "Waiting for delivery." }
-        : { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, categoryId: member.category_id, state: "queued", details: "Waiting for delivery." };
+        : { discordUserId: member.discord_user_id, username: member.username, avatarUrl: member.avatar_url ?? null, categoryId: member.category_id,
+            ...(allocation?.allocationId ? { allocationId: allocation.allocationId } : {}), state: "queued", details: "Waiting for delivery." };
     });
     const activeOrder = {
       ...current,
@@ -12579,8 +12581,8 @@ async function hydrateCommunityOrderCategories(order) {
   const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
   return {
     ...order,
-    categoryName: Array.isArray(categoryAllocations) && categoryAllocations.length > 1
-      ? `${categoryAllocations.length} categories`
+    categoryName: Array.isArray(categoryAllocations) && categoryAllocations.length
+      ? getCommunityCategoryName(categoryAllocations, order.categoryName)
       : primaryCategory?.name ?? order.categoryName,
     categoryColorKey: primaryCategory?.color_key ?? order.categoryColorKey,
     categoryCheckReplacementEnabled: primaryCategory
@@ -12731,7 +12733,7 @@ app.post("/api/community/orders/:uniqid/cancel", requireSession, async (req, res
         categoryAllocations: order.categoryAllocations.map((allocation) => ({
           ...allocation,
           added: Array.isArray(communityResults) ? communityResults.filter((item) =>
-            getCommunityResultStockType(order, item) === allocation.categoryId
+            communityResultMatchesAllocation(order, item, allocation)
             && String(item?.state ?? "").toLowerCase() === "joined"
           ).length : Number(allocation?.added ?? 0)
         }))

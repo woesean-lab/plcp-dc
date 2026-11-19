@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { planCommunityOrderCategoryTransfer, createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
+import { getCommunityResultAllocation, communityResultMatchesAllocation } from "../shared/community-order-allocations.mjs";
 
 const source = { id: "premium", name: "OAuth Premium", color_key: "violet", updated_at: "2026-11-01" };
 const target = { id: "online", name: "OAuth Online", color_key: "cyan", check_replacement_enabled: true, reaction_use_enabled: false, updated_at: "2026-11-01" };
@@ -27,10 +28,41 @@ test("legacy orders and mixed categories retain their original deadlines", () =>
   const other = { categoryId: "other", amount: 10, isPeriodic: true, expiredAt: "2027-01-01" };
   const mixed = { ...base, categoryAllocations: [...base.categoryAllocations, other], communityResults: [...base.communityResults, { discordUserId: "other-member", categoryId: "other" }] };
   const result = planCommunityOrderCategoryTransfer(mixed, source, target, "now").order;
-  assert.deepEqual(result.categoryAllocations[1], other);
-  assert.deepEqual(result.communityResults[1], mixed.communityResults[1]);
+  assert.deepEqual(result.categoryAllocations[1], { ...other, allocationId: "allocation-2" });
+  assert.deepEqual(result.communityResults[1], { ...mixed.communityResults[1], allocationId: "allocation-2" });
   assert.equal(result.categoryName, "2 categories");
-  assert.ok(planCommunityOrderCategoryTransfer({ ...mixed, categoryAllocations: [...mixed.categoryAllocations, { categoryId: target.id, expiredAt: "2027-02-01" }] }, source, target, "now").blocked, "existing target support must not be merged");
+});
+
+test("orders already containing the destination move both portions without merging support or delivery", () => {
+  for (const primary of [source, target]) {
+    const mixed = { ...base, categoryId: primary.id, stockType: primary.id, categoryName: "2 categories", status: "PAUSED", amount: 806, added: 505,
+      categoryAllocations: [
+        { categoryId: target.id, categoryName: target.name, amount: 94, added: 93, isPeriodic: true, expiredAt: "2027-02-01", durationMonths: 3 },
+        { categoryId: source.id, categoryName: source.name, amount: 712, added: 412, isPeriodic: true, expiredAt: "2026-11-01", durationMonths: 2 }
+      ],
+      communityResults: [{ discordUserId: "online-member", categoryId: target.id, state: "joined" }, { discordUserId: "premium-member", categoryId: source.id, state: "joined" }]
+    };
+    const original = structuredClone(mixed);
+    const plan = planCommunityOrderCategoryTransfer(mixed, source, target, "now");
+    assert.equal(plan.blocked, undefined);
+    const moved = plan.order;
+    assert.equal(moved.categoryId, target.id);
+    assert.equal(moved.categoryName, target.name);
+    assert.equal(moved.amount, 806); assert.equal(moved.added, 505); assert.equal(moved.status, "PAUSED");
+    assert.deepEqual(moved.categoryAllocations.map((allocation) => allocation.categoryId), [target.id, target.id]);
+    assert.equal(new Set(moved.categoryAllocations.map((allocation) => allocation.allocationId)).size, 2);
+    for (let i = 0; i < 2; i++) {
+      const allocation = getCommunityResultAllocation(moved, moved.communityResults[i]);
+      for (const key of ["amount", "added", "isPeriodic", "expiredAt", "durationMonths"]) assert.equal(allocation[key], mixed.categoryAllocations[i][key]);
+      assert.equal(communityResultMatchesAllocation(moved, moved.communityResults[i], moved.categoryAllocations[1 - i]), false);
+    }
+    assert.deepEqual(mixed, original);
+    assert.equal(planCommunityOrderCategoryTransfer(moved, source, target, "again").matched, false);
+    const next = { ...target, id: "next" };
+    const chained = planCommunityOrderCategoryTransfer(moved, target, next, "later").order;
+    assert.deepEqual(chained.communityResults.map((member) => member.allocationId), moved.communityResults.map((member) => member.allocationId));
+    assert.deepEqual(chained.categoryAllocations.map((allocation) => allocation.expiredAt), ["2027-02-01", "2026-11-01"]);
+  }
 });
 
 test("active, waiting and paused orders move without changing operation state", () => {
@@ -94,6 +126,17 @@ test("ongoing progress does not expire the preview; apply keeps the latest progr
   assert.equal(busy.payload().added, 195);
   assert.equal(busy.payload().autoLeaveJob.processed, 120);
   assert.equal(busy.payload().status, "PROCESS");
+});
+
+test("preview and apply include a paused order which already contains the destination", async () => {
+  const api = endpoint();
+  api.advance({ status: "PAUSED", categoryAllocations: [...base.categoryAllocations, { categoryId: target.id, amount: 50, added: 20, isPeriodic: true, expiredAt: "2027-02-01" }] });
+  const preview = await api.request({});
+  assert.equal(preview.body.blockedCount, 0);
+  assert.equal(preview.body.transferable, 1);
+  assert.equal((await api.request({ apply: true, previewToken: preview.body.previewToken })).body.moved, 1);
+  assert.equal(api.payload().categoryAllocations[0].expiredAt, "2026-11-01");
+  assert.equal(api.payload().categoryAllocations[1].expiredAt, "2027-02-01");
 });
 
 test("write failures roll back and clear transfer guards", async () => {

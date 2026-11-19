@@ -1,6 +1,7 @@
 import type { TrackedOrder } from "../types";
 import { isBoostService } from "./services";
 import { getOrderPeriod } from "./order-period";
+import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 
 export type OrdersFilters = { search: string; service: string; status: string; period: string; sort: string };
 export const EMPTY_ORDERS_FILTERS: OrdersFilters = { search: "", service: "all", status: "all", period: "all", sort: "newest" };
@@ -35,13 +36,13 @@ export function hasFailedLeave(order: TrackedOrder) {
 export function canStartOrderLeave(order: TrackedOrder, now: number) {
   if (order.provider !== "community" || order.autoLeaveJob || order.membersLeftAt) return false;
   if (typeof order.autoLeaveCandidateCount === "number") return order.autoLeaveCandidateCount > 0;
-  const expiredCategories = new Set((order.categoryAllocations ?? [])
-    .filter((category) => category.isPeriodic && category.expiredAt && new Date(category.expiredAt).getTime() <= now)
-    .map((category) => category.categoryId));
   const expired = getOrderPeriod(order, now).state === "expired";
   if (!order.communityResults?.length) return expired && Number(order.added) > 0;
-  return order.communityResults.some((member) => String(member.state).toLowerCase() === "joined" && member.membershipStatus !== "removed"
-    && (expiredCategories.size ? expiredCategories.has(String(member.categoryId ?? order.categoryId ?? "")) : expired));
+  return order.communityResults.some((member) => {
+    if (String(member.state).toLowerCase() !== "joined" || member.membershipStatus === "removed") return false;
+    const allocation = getCommunityResultAllocation(order, member);
+    return allocation ? Boolean(allocation.isPeriodic && allocation.expiredAt && new Date(allocation.expiredAt).getTime() <= now) : expired;
+  });
 }
 
 export function filterWorkspaceOrders(orders: TrackedOrder[], filters: OrdersFilters, now: number) {

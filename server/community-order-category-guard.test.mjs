@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
 import { planCommunityOrderCategoryTransfer } from "./community-order-category-transfer.mjs";
+import { getCommunityResultAllocation, communityResultMatchesAllocation } from "../shared/community-order-allocations.mjs";
 
 // Optional isolated PostgreSQL runtime; never connects to the application's DB.
 const runtime = process.env.PGLITE_MODULE_PATH
@@ -109,6 +110,64 @@ test("PostgreSQL preserves transfers across live workers and stale upserts", { s
         assert.equal(saved.categoryTransferHistory.length, 2);
         assert.equal(saved.details, "Latest worker progress");
       }
+    });
+
+    await t.test("two purchased portions retain distinct support and counters across stale delivery writes", async () => {
+      const mixed = { ...structuredClone(initial), uniqid: "mixed", categoryId: target.id, stockType: target.id, categoryName: "2 categories", amount: 4, added: 2,
+        categoryAllocations: [
+          { categoryId: target.id, categoryName: target.name, amount: 2, added: 1, isPeriodic: true, expiredAt: "2027-02-01", durationMonths: 3 },
+          { categoryId: source.id, categoryName: source.name, amount: 2, added: 1, isPeriodic: true, expiredAt: "2026-11-01", durationMonths: 1 }
+        ],
+        communityResults: [
+          { discordUserId: "online-one", categoryId: target.id, state: "joined" },
+          { discordUserId: "online-two", categoryId: target.id, state: "queued" },
+          { discordUserId: "premium-one", categoryId: source.id, state: "joined" },
+          { discordUserId: "premium-two", categoryId: source.id, state: "joining" }
+        ]
+      };
+      await db.query("INSERT INTO tracked_orders VALUES ($1, $2::jsonb)", [mixed.uniqid, JSON.stringify(mixed)]);
+      await save(planCommunityOrderCategoryTransfer(mixed, source, target, "now").order);
+      let moved = await read(mixed.uniqid);
+      assert.equal(moved.categoryName, target.name);
+      assert.deepEqual(moved.categoryAllocations.map((allocation) => allocation.expiredAt), ["2027-02-01", "2026-11-01"]);
+      assert.equal(getCommunityResultAllocation(moved, moved.communityResults[0]).expiredAt, "2027-02-01");
+      assert.equal(getCommunityResultAllocation(moved, moved.communityResults[2]).expiredAt, "2026-11-01");
+
+      // A support extension and a Leave all claim happen while an older worker runs.
+      moved.categoryAllocations[0].expiredAt = "2027-03-01";
+      moved.categoryAllocations[1].expiredAt = "2026-12-01";
+      moved.publicLeaveAllRequestedAt = "2026-11-20T01:00:00Z";
+      await save(moved);
+      const stale = structuredClone(mixed);
+      stale.added = 3; stale.communityResults[1].state = "joined";
+      await db.query("INSERT INTO tracked_orders VALUES ($1, $2::jsonb) ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload", [stale.uniqid, JSON.stringify(stale)]);
+      moved = await read(mixed.uniqid);
+      assert.equal(moved.categoryName, target.name);
+      assert.ok(moved.communityResults.every((member) => member.categoryId === target.id && member.allocationId));
+      assert.deepEqual(moved.categoryAllocations.map((allocation) => allocation.expiredAt), ["2027-03-01", "2026-12-01"]);
+      assert.deepEqual(moved.categoryAllocations.map((allocation) => allocation.added), [2, 1]);
+      assert.equal(moved.added, 3);
+      assert.equal(moved.publicLeaveAllRequestedAt, "2026-11-20T01:00:00Z");
+
+      // An older replacement writer still knows the original Premium category.
+      const replacement = structuredClone(stale);
+      replacement.communityResults[3] = { discordUserId: "new-premium", categoryId: source.id, state: "joined" };
+      replacement.added = 4;
+      await save(replacement);
+      moved = await read(mixed.uniqid);
+      assert.equal(getCommunityResultAllocation(moved, moved.communityResults[3]).expiredAt, "2026-12-01");
+      assert.deepEqual(moved.categoryAllocations.map((allocation) => allocation.added), [2, 2]);
+      for (const allocation of moved.categoryAllocations) assert.equal(moved.communityResults.filter((member) => communityResultMatchesAllocation(moved, member, allocation)).length, 2);
+
+      // A subsequent move keeps the same portions even though their pool is shared.
+      const next = { ...target, id: "next", name: "Next pool" };
+      await save(planCommunityOrderCategoryTransfer(moved, target, next, "later").order);
+      await save(replacement);
+      const chained = await read(mixed.uniqid);
+      assert.equal(chained.categoryName, next.name);
+      assert.ok(chained.communityResults.every((member) => member.categoryId === next.id));
+      assert.deepEqual(chained.categoryAllocations.map((allocation) => allocation.expiredAt), ["2027-03-01", "2026-12-01"]);
+      assert.deepEqual(chained.categoryAllocations.map((allocation) => allocation.added), [2, 2]);
     });
 
     await t.test("ordinary orders and unrelated providers are unchanged", async () => {
