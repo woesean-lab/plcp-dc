@@ -1,0 +1,178 @@
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Link } from "react-router-dom";
+import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, LogOut, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
+import { Button } from "./ui/button";
+import { FilterDropdown } from "./ui/filter-dropdown";
+import { Skeleton } from "./ui/skeleton";
+import { ListPagination, paginate } from "./ListPagination";
+import { getOrderPeriod } from "../lib/order-period";
+import { canStartOrderLeave, EMPTY_ORDERS_FILTERS, filterWorkspaceOrders, hasFailedLeave, orderDelivery, orderIsBoost, orderStatus, type OrdersFilters } from "../lib/orders-workspace";
+import { extractBotInvite } from "../lib/bot-invite";
+import type { TrackedOrder } from "../types";
+import "./OrdersWorkspace.css";
+
+type Props = {
+  orders: TrackedOrder[];
+  syncing: boolean;
+  canSync: boolean;
+  loading?: boolean;
+  autoLeavingId: string | null;
+  resumingId: string | null;
+  onSync: () => void;
+  onCopyMonitor: (order: TrackedOrder) => void;
+  onCopyInvite: (invite: string) => void;
+  onAutoLeave: (order: TrackedOrder) => void;
+  onDelete: (order: TrackedOrder) => void;
+  onResume: (order: TrackedOrder) => void;
+};
+
+const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
+function date(value?: string | number | null, time = false) {
+  if (!value || !Number.isFinite(new Date(value).getTime())) return "—";
+  return new Intl.DateTimeFormat("en-US", time ? { hour: "numeric", minute: "2-digit" } : { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function relativePeriod(expiresAt: number, now: number) {
+  const days = Math.ceil(Math.abs(expiresAt - now) / 86400_000);
+  if (expiresAt <= now) {
+    const elapsed = Math.floor((now - expiresAt) / 86400_000);
+    return elapsed === 0 ? "Expired less than a day ago" : `Expired ${elapsed} day${elapsed === 1 ? "" : "s"} ago`;
+  }
+  return days <= 1 ? "Less than a day left" : `${days} days remaining`;
+}
+
+function closeMenu(event: MouseEvent<HTMLElement>) { event.currentTarget.closest("details")?.removeAttribute("open"); }
+
+function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number } & Pick<Props, "autoLeavingId" | "resumingId" | "onCopyMonitor" | "onCopyInvite" | "onAutoLeave" | "onDelete" | "onResume">) {
+  const boost = orderIsBoost(order);
+  const status = orderStatus(order.status);
+  const delivery = orderDelivery(order);
+  const period = getOrderPeriod(order, now);
+  const name = order.serverName || order.serverId || "Discord server";
+  const orderUrl = `/orders?uniqid=${encodeURIComponent(order.uniqid)}${order.provider ? `&provider=${order.provider}` : ""}`;
+  const job = order.autoLeaveJob;
+  const runningLeave = job?.status === "running";
+  const leaveFailed = hasFailedLeave(order);
+  const canLeave = canStartOrderLeave(order, now);
+  const botInvite = ["NEW", "WAITING"].includes(String(order.status).toUpperCase()) ? extractBotInvite(order) : null;
+  const invitesPaused = String(order.status).toUpperCase().includes("INVITES PAUSED") && !boost;
+  const service = boost ? "Server boosts" : order.service === "COMMUNITY-ONLINE" ? "Online members" : "Offline members";
+  const joinMethod = order.joinMethod === "directly" ? "Direct join" : order.joinMethod === "experimental_join" ? "Experimental join" : "Create invite";
+  const delay = order.statusDelay ?? order.delay;
+  const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
+  const leaveTitle = job ? `${job.processed}/${job.total} processed · ${job.left + job.alreadyLeft} removed · ${job.failed} failed${runningLeave && job.nextRunAt ? ` · Next: ${new Date(job.nextRunAt).toLocaleTimeString()}` : ""}` : "";
+
+  return <>
+    <tr className="od-record" data-notice={Boolean(botInvite || invitesPaused)}>
+      <td className="od-order-cell">
+        <div className="od-order-identity">
+          <span className="od-service-icon" data-service={boost ? "boosts" : "members"} aria-hidden="true">{boost ? <Gem /> : <Users />}</span>
+          <div>
+            <Link className="od-order-name" to={orderUrl} title={name}>{name}</Link>
+            <div className="od-order-description"><span>{order.categoryName || service}</span><span aria-hidden="true">·</span><code title={order.uniqid}>#{order.uniqid.length > 16 ? order.uniqid.slice(-12) : order.uniqid}</code></div>
+            <span className="od-order-context">{duration}{!boost ? ` · ${joinMethod}` : ""}</span>
+          </div>
+        </div>
+      </td>
+      <td className="od-delivery-cell">
+        <div className="od-status" data-tone={status.tone}><i aria-hidden="true" />{status.label}</div>
+        <div className="od-delivery-numbers"><span><b>{number(delivery.delivered)}</b><span> / {delivery.total === null ? "—" : number(delivery.total)}</span></span><small>{delivery.remaining === null ? "" : delivery.remaining === 0 ? "Delivered" : `${number(delivery.remaining)} left`}</small></div>
+        <div className="od-progress" data-tone={status.tone} role="progressbar" aria-label={`Delivery for ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={delivery.total ? Math.round(delivery.percent) : undefined}><span style={{ width: `${delivery.percent}%` }} /></div>
+        {!boost && typeof delay === "number" && delivery.remaining !== 0 ? <span className="od-delivery-delay">{delay}s between members</span> : null}
+      </td>
+      <td className="od-support-cell">
+        <span className="od-period-label" data-state={period.state}>{period.state === "expired" ? <><Clock3 /> Expired</> : period.state === "soon" ? <><Clock3 /> Expiring soon</> : period.state === "active" ? <><ShieldCheck /> Active support</> : <><span className="od-no-period">—</span> No expiry</>}</span>
+        {period.state !== "none" ? <span className="od-period-relative" title={`${date(period.expiresAt)} at ${date(period.expiresAt, true)}`}>{relativePeriod(period.expiresAt, now)}</span> : null}
+        {job ? <Link className="od-leave-state" data-state={runningLeave ? "running" : leaveFailed ? "failed" : "done"} to={`${orderUrl}#member-log`} title={leaveTitle}>{runningLeave ? <LoaderCircle className="animate-spin" /> : leaveFailed ? <TriangleAlert /> : <Check />}{runningLeave ? `Removing ${job.processed}/${job.total}` : leaveFailed ? `${job.failed} leave${job.failed === 1 ? "" : "s"} failed` : "Members removed"}<ChevronRight /></Link>
+          : period.state !== "none" ? <time className="od-period-date" dateTime={new Date(period.expiresAt).toISOString()} title={`${date(period.expiresAt)} at ${date(period.expiresAt, true)}`}>{period.state === "expired" ? "Ended" : "Ends"} {date(period.expiresAt)}</time> : null}
+      </td>
+      <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
+      <td className="od-actions-cell">
+        <div className="od-row-actions">
+          <Link className="od-open-order" to={orderUrl} aria-label={`Open order ${order.uniqid}`}>Open <ArrowUpRight /></Link>
+          <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
+            <summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal /></summary>
+            <div className="od-action-popover">
+              {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
+              <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
+              {canLeave ? <button type="button" disabled={actions.autoLeavingId !== null} onClick={(event) => { closeMenu(event); actions.onAutoLeave(order); }}><LogOut />Remove expired members</button> : null}
+              <button type="button" className="od-delete-action" disabled={runningLeave} title={runningLeave ? "Wait for member removal to finish" : undefined} onClick={(event) => { closeMenu(event); actions.onDelete(order); }}><Trash2 />Delete order</button>
+            </div>
+          </details>
+        </div>
+      </td>
+    </tr>
+    {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={5}><div>
+      <TriangleAlert aria-hidden="true" /><span>{botInvite ? "Add the bot to start delivery." : "Invites are paused. Check the invite to continue."}</span>
+      {botInvite ? <><button type="button" onClick={() => actions.onCopyInvite(botInvite)}>Copy invite</button><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></> : <button type="button" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue delivery"}</button>}
+    </div></td></tr> : null}
+  </>;
+}
+
+export default function OrdersWorkspace(props: Props) {
+  const { orders, loading = false } = props;
+  const [filters, setFilters] = useState<OrdersFilters>(EMPTY_ORDERS_FILTERS);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [now, setNow] = useState(() => Date.now());
+  const hasRunningLeave = orders.some((order) => order.autoLeaveJob?.status === "running");
+  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), hasRunningLeave ? 1000 : 60_000); return () => window.clearInterval(timer); }, [hasRunningLeave]);
+  const stats = useMemo(() => ({
+    total: orders.length,
+    live: orders.filter((order) => ["PROCESS", "RECOVERING"].includes(String(order.status).toUpperCase())).length,
+    soon: orders.filter((order) => getOrderPeriod(order, now).state === "soon").length,
+    expired: orders.filter((order) => getOrderPeriod(order, now).state === "expired").length,
+    failedLeave: orders.filter(hasFailedLeave).length
+  }), [orders, now]);
+  const filtered = useMemo(() => filterWorkspaceOrders(orders, filters, now), [orders, filters, now]);
+  const pagination = paginate(filtered, page, pageSize);
+  const changeFilter = (patch: Partial<OrdersFilters>) => { setFilters((current) => ({ ...current, ...patch })); setPage(1); };
+  const reset = () => { setFilters(EMPTY_ORDERS_FILTERS); setPage(1); };
+  const filteredView = Boolean(filters.search || filters.status !== "all" || filters.service !== "all" || filters.period !== "all");
+  const statusOptions = useMemo(() => {
+    const known = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
+    return [{ value: "all", label: "All delivery statuses" }, { value: "live", label: "In progress" }, { value: "attention", label: "Needs attention" }, ...[...new Set([...known, ...orders.map((order) => String(order.status ?? "NEW").toUpperCase())])].filter((value) => value !== "PROCESS").map((value) => ({ value, label: orderStatus(value).label }))];
+  }, [orders]);
+  const metrics = [
+    { key: "total", title: "All orders", count: stats.total, detail: "Your complete order history", Icon: Layers3, active: !filteredView, onClick: reset },
+    { key: "live", title: "In progress", count: stats.live, detail: "Deliveries currently running", Icon: RefreshCw, active: filters.status === "live", onClick: () => { setFilters({ ...EMPTY_ORDERS_FILTERS, status: "live" }); setPage(1); } },
+    { key: "soon", title: "Expiring soon", count: stats.soon, detail: "Support ends in the next 7 days", Icon: Timer, active: filters.period === "soon", onClick: () => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "soon", sort: "expiry_asc" }); setPage(1); } },
+    { key: "expired", title: "Expired", count: stats.expired, detail: "Orders with ended support", Icon: Clock3, active: filters.period === "expired", onClick: () => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "expired", sort: "expiry_desc" }); setPage(1); } }
+  ];
+
+  return <section className="orderdesk" aria-label="Order management" aria-busy={loading}>
+    <header className="od-heading">
+      <div><span className="od-eyebrow">YOUR WORKSPACE</span><h1>Orders<span>{loading ? "—" : number(stats.total)}</span></h1><p>Manage deliveries and keep track of support periods.</p></div>
+      <div className="od-heading-actions"><Button type="button" variant="secondary" size="sm" disabled={loading || props.syncing || !props.canSync} onClick={props.onSync}><RefreshCw className={props.syncing ? "animate-spin" : ""} />{props.syncing ? "Syncing…" : "Sync active"}</Button><Button asChild size="sm"><Link to="/manage?tab=create"><Plus />New order</Link></Button></div>
+    </header>
+
+    <div className="od-metrics" aria-label="Order overview">{metrics.map(({ key, title, count, detail, Icon, active, onClick }) => <button type="button" key={key} data-kind={key} aria-pressed={active} onClick={onClick} disabled={loading}>
+      <span className="od-metric-title">{title}<Icon /></span><strong>{loading ? <Skeleton className="h-8 w-12" /> : number(count)}</strong><span className="od-metric-detail">{detail}<ArrowUpRight /></span>
+    </button>)}</div>
+
+    <div className="od-board">
+      <div className="od-board-heading"><div><h2>Order history</h2><span>{loading ? "Loading your orders…" : `${number(stats.total)} orders in your workspace`}</span></div>
+        <div className="od-service-tabs" role="group" aria-label="Filter by service">{[{ value: "all", label: "All orders" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }].map((tab) => <button key={tab.value} type="button" aria-pressed={filters.service === tab.value} onClick={() => changeFilter({ service: tab.value })}>{tab.label}</button>)}</div>
+      </div>
+      <div className="od-toolbar">
+        <label className="od-search"><Search aria-hidden="true" /><input type="search" aria-label="Search orders" placeholder="Search server, order ID or service…" value={filters.search} onChange={(event) => changeFilter({ search: event.target.value })} /></label>
+        <FilterDropdown className="od-status-filter" label="Delivery status" showLabel={false} portal value={filters.status} onChange={(value) => changeFilter({ status: value })} options={statusOptions} />
+        <FilterDropdown className="od-period-filter" label="Support period" showLabel={false} portal value={filters.period} onChange={(value) => changeFilter({ period: value, sort: value === "expired" || value === "leave_failed" ? "expiry_desc" : value === "soon" ? "expiry_asc" : "newest" })} options={[{ value: "all", label: "All support periods" }, { value: "active", label: "Active support" }, { value: "soon", label: "Expiring in 7 days" }, { value: "expired", label: "Expired support" }, { value: "leave_failed", label: "Member removal failed" }]} />
+      </div>
+      <div className="od-results-bar"><div><span><b>{number(filtered.length)}</b> {filteredView ? "matching orders" : "orders"}</span>{filteredView ? <button type="button" onClick={reset}><X />Clear filters</button> : null}</div>
+        <div><ArrowDownWideNarrow aria-hidden="true" /><FilterDropdown label="Order sorting" showLabel={false} portal value={filters.sort} onChange={(value) => changeFilter({ sort: value })} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "expiry_asc", label: "Expiring soonest" }, { value: "expiry_desc", label: filters.period === "expired" ? "Recently expired" : "Latest expiry first" }]} /></div>
+      </div>
+
+      <table className="od-table"><colgroup><col className="od-col-order" /><col className="od-col-delivery" /><col className="od-col-support" /><col className="od-col-created" /><col className="od-col-actions" /></colgroup>
+        <thead><tr><th scope="col">Order & service</th><th scope="col">Delivery</th><th scope="col">Support period</th><th scope="col">Created</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+        <tbody>{loading ? Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>) : pagination.items.map((order) => <OrderRow key={order.uniqid} order={order} now={now} {...props} />)}</tbody>
+      </table>
+      {!loading && !filtered.length ? <div className="od-empty"><span><Search /></span><h3>{orders.length ? "No orders found" : "Your orders start here"}</h3><p>{orders.length ? "Try another search or clear the filters to see your orders." : "Create your first order to follow its delivery and support period."}</p>{orders.length ? <Button type="button" variant="secondary" size="sm" onClick={reset}>Clear filters</Button> : <Button asChild size="sm"><Link to="/manage?tab=create"><Plus />Create an order</Link></Button>}</div> : null}
+      {!loading ? <div className="od-board-footer"><ListPagination {...pagination} onChange={setPage} onPageSizeChange={setPageSize} label="Orders pages" />{stats.failedLeave > 0 ? <button className="od-failed-shortcut" type="button" onClick={() => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "leave_failed", sort: "expiry_desc" }); setPage(1); }}><TriangleAlert />{stats.failedLeave} orders need a removal check<ChevronRight /></button> : null}</div> : null}
+    </div>
+  </section>;
+}
+
+export function OrdersWorkspaceLoading() {
+  return <OrdersWorkspace orders={[]} loading syncing={false} canSync={false} autoLeavingId={null} resumingId={null} onSync={() => {}} onCopyMonitor={() => {}} onCopyInvite={() => {}} onAutoLeave={() => {}} onDelete={() => {}} onResume={() => {}} />;
+}

@@ -1,3 +1,4 @@
+import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { normalizeOnlinerProxyImportDraft } from "../../shared/onliner-proxy-import.mjs";
 import { getOnlinerProxyStatus } from "../lib/onliner";
@@ -5,7 +6,6 @@ import { bulkDiscordOnlinerAccounts } from "../lib/onliner";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
-import { OrderListStatusBadge } from "../components/OrderListStatusBadge";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { Input } from "@/components/ui/input";
@@ -21,8 +21,6 @@ import {
   Gamepad2,
   Gem,
   Globe2,
-  ChevronLeft,
-  ChevronRight,
   ChevronDown,
   ChevronUp,
   ChevronsDown,
@@ -67,7 +65,6 @@ import {
   Zap,
 } from "lucide-react";
 import { deleteTrackedOrder, loadTrackedOrders, saveTrackedOrders } from "../data/orders";
-import { extractBotInvite } from "../lib/bot-invite";
 import { extractDiscordInviteCode, resolveDiscordGuildInfo } from "../lib/discord";
 import { buildGuestOrderLink } from "../lib/order-links";
 import {
@@ -135,8 +132,6 @@ import {
   type DiscordOnlinerSnapshot
 } from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
-import { getOrderSupportExpiration } from "../lib/order-status";
-import { getOrderPeriod } from "../lib/order-period";
 import {
   checkAvailableAmount,
   clearDcordApiKey,
@@ -375,13 +370,6 @@ const PAGE_SKELETON_DELAY = 300;
 const ONLINER_SKELETON_MAX_DELAY = 5_000;
 const ACTIVE_SYNC_BATCH_SIZE = 3;
 const ACTIVE_SYNC_PAUSE_MS = 1000;
-const ORDER_PAGE_SIZE = 20;
-
-function formatNumber(value?: number) {
-  return typeof value === "number" && !Number.isNaN(value)
-    ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value)
-    : "—";
-}
 
 function formatTrackedDate(value: string) {
   const date = new Date(value);
@@ -393,19 +381,6 @@ function formatTrackedDate(value: string) {
     hour: "numeric",
     minute: "2-digit"
   }).format(date);
-}
-
-function formatAutoLeaveCountdown(value: string | null | undefined, now: number) {
-  const target = value ? new Date(value).getTime() : Number.NaN;
-  if (!Number.isFinite(target)) return "Preparing...";
-  const totalSeconds = Math.max(0, Math.ceil((target - now) / 1_000));
-  if (totalSeconds === 0) return "Processing...";
-  const hours = Math.floor(totalSeconds / 3_600);
-  const minutes = Math.floor((totalSeconds % 3_600) / 60);
-  const seconds = totalSeconds % 60;
-  return hours > 0
-    ? `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`
-    : `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
 function formatOnlinerProxyLabel(proxy: string) {
@@ -448,10 +423,6 @@ function getTrackedTimestamp(value?: string) {
   return Number.isNaN(timestamp) ? Number.NEGATIVE_INFINITY : timestamp;
 }
 
-function formatDelay(value?: number) {
-  return typeof value === "number" && !Number.isNaN(value) ? `${formatNumber(value)}s` : "—";
-}
-
 function notifySuccess(message: string) {
   toast.success(message);
 }
@@ -473,16 +444,6 @@ function parseDelay(value?: string | number) {
   return undefined;
 }
 
-function getOrderStatusTone(status?: string): "active" | "success" | "danger" | "paused" {
-  const normalized = String(status ?? "").toLowerCase();
-  if (normalized.includes("completed")) return "success";
-  if (normalized === "paused") return "paused";
-  if (["error", "invalid", "terminated", "canceled", "cancelled", "invites paused"].some((value) => normalized.includes(value))) {
-    return "danger";
-  }
-  return "active";
-}
-
 function isTerminalOrder(status?: string) {
   const normalized = String(status ?? "").toLowerCase();
   return ["completed", "partial", "canceled", "cancelled", "terminated", "invalid", "error"].some((value) => normalized.includes(value));
@@ -490,29 +451,6 @@ function isTerminalOrder(status?: string) {
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => window.setTimeout(resolve, ms));
-}
-
-function getOrderProgress(order: TrackedOrder) {
-  if (typeof order.amount !== "number") {
-    return null;
-  }
-
-  const inferredUsed =
-    typeof order.added === "number"
-      ? order.added
-      : String(order.status ?? "").toUpperCase() === "COMPLETED"
-        ? order.amount
-        : 0;
-  const used = Math.max(inferredUsed, 0);
-  const total = Math.max(order.amount, 0);
-  const clampedUsed = Math.min(used, total);
-  const remaining = Math.max(total - clampedUsed, 0);
-
-  return {
-    used: clampedUsed,
-    total,
-    remaining
-  };
 }
 
 function TimedReveal({ children, fallback, delay = PAGE_SKELETON_DELAY, hold = false, maxDelay }: { children: ReactNode; fallback: ReactNode; delay?: number; hold?: boolean; maxDelay?: number }) {
@@ -562,22 +500,12 @@ function SkeletonField({ className = "" }: { className?: string }) {
 function HomePageSkeleton({ tab }: { tab: AdminTab }) {
   const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
 
+  if (tab === "manage") return <OrdersWorkspaceLoading />;
+
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
       <span className="sr-only">Loading {loadingLabel}</span>
-      {tab === "manage" ? (
-        <header className="page-heading orders-page-heading" aria-hidden="true">
-          <div className="w-full max-w-2xl">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="mt-3 h-9 w-40" />
-            <Skeleton className="mt-3 h-4 w-96 max-w-full" />
-          </div>
-          <div className="orders-heading-actions">
-            <Skeleton className="h-10 w-28" />
-            <Skeleton className="h-10 w-28" />
-          </div>
-        </header>
-      ) : <SkeletonHeading />}
+      <SkeletonHeading />
 
       {tab === "create" ? (
         <div className={`${shell} p-5 sm:p-6`} aria-hidden="true">
@@ -605,59 +533,6 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
               <SkeletonField className="md:col-span-2" />
             </div>
             <Skeleton className="h-10 w-40" />
-          </div>
-        </div>
-      ) : null}
-
-      {tab === "manage" ? (
-        <div className="grid gap-5" aria-hidden="true">
-          <div className="orders-summary-strip">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index}>
-                <span><Skeleton className="h-2.5 w-20" /></span>
-                <strong><Skeleton className="h-7 w-8" /></strong>
-                <small><Skeleton className="h-2.5 w-24" /></small>
-              </div>
-            ))}
-          </div>
-
-          <div className={`${shell} orders-workspace`}>
-            <div className="orders-commandbar">
-              <Skeleton className="h-11 w-full" />
-              <SkeletonField />
-              <SkeletonField />
-              <SkeletonField />
-            </div>
-            <div className="orders-list-meta">
-              <Skeleton className="h-2.5 w-28" />
-              <Skeleton className="h-2.5 w-16" />
-            </div>
-            <div className="orders-table">
-              <div className="orders-table-head">
-                <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Period</span><span>Actions</span>
-              </div>
-              <ol className="orders-row-list">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <li key={index}>
-                    <div className="orders-row">
-                      <div className="orders-row-identity">
-                        <Skeleton className="h-[34px] w-[34px]" />
-                        <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-28 max-w-full" /></span>
-                      </div>
-                      <div className="orders-row-service"><Skeleton className="h-4 w-20" /><Skeleton className="h-2.5 w-14" /></div>
-                      <div className="orders-row-status"><Skeleton className="h-6 w-20" /></div>
-                      <div className="orders-row-delivery">
-                        <div><Skeleton className="h-2.5 w-12" /><Skeleton className="mt-2 h-4 w-8" /></div>
-                        <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
-                        <div><Skeleton className="h-2.5 w-10" /><Skeleton className="mt-2 h-4 w-10" /></div>
-                      </div>
-                      <Skeleton className="orders-row-expiration h-3 w-20" />
-                      <div className="orders-row-actions"><Skeleton className="h-7 w-8" /><Skeleton className="h-7 w-8" /><Skeleton className="h-7 w-8" /></div>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </div>
           </div>
         </div>
       ) : null}
@@ -847,7 +722,6 @@ export default function HomePage() {
   const [orderPendingDeletion, setOrderPendingDeletion] = useState<TrackedOrder | null>(null);
   const [orderPendingAutoLeave, setOrderPendingAutoLeave] = useState<TrackedOrder | null>(null);
   const [autoLeavingOrderId, setAutoLeavingOrderId] = useState<string | null>(null);
-  const [autoLeaveClock, setAutoLeaveClock] = useState(() => Date.now());
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
@@ -864,51 +738,6 @@ export default function HomePage() {
   const communityStatusRequestRef = useRef(0);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
-  const [currentOrderPage, setCurrentOrderPage] = useState(1);
-  const [orderSearch, setOrderSearch] = useState("");
-  const [orderStatusFilter, setOrderStatusFilter] = useState("all");
-  const [orderTypeFilter, setOrderTypeFilter] = useState("all");
-  const [orderSupportFilter, setOrderSupportFilter] = useState("all");
-  const [orderPeriodClock, setOrderPeriodClock] = useState(() => Date.now());
-  useEffect(() => {
-    if (activeTab !== "manage") return;
-    setOrderPeriodClock(Date.now());
-    const timer = window.setInterval(() => setOrderPeriodClock(Date.now()), 60_000);
-    return () => window.clearInterval(timer);
-  }, [activeTab]);
-  const orderPeriodCounts = useMemo(() => {
-    const counts = { expired: 0, soon: 0, leave_failed: 0 };
-    for (const order of orders) {
-      const { state } = getOrderPeriod(order, orderPeriodClock);
-      if (state === "expired") {
-        counts.expired++;
-        if (order.autoLeaveJob && order.autoLeaveJob.status !== "running" && order.autoLeaveJob.failed > 0) counts.leave_failed++;
-      } else if (state === "soon") counts.soon++;
-    }
-    return counts;
-  }, [orders, orderPeriodClock]);
-  function handleOrderPeriodShortcut(filter: string) {
-    setOrderSupportFilter(orderSupportFilter === filter ? "all" : filter);
-    setOrderSearch("");
-    setOrderStatusFilter("all");
-    setOrderTypeFilter("all");
-    setCurrentOrderPage(1);
-  }
-  const orderStatusOptions = useMemo(() => {
-    const knownStatuses = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
-    const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
-    const statuses = Array.from(new Set([...knownStatuses, ...actualStatuses]));
-    return [
-      { value: "all", label: "All statuses" },
-      ...statuses.map((status) => ({
-        value: status,
-        label: status === "INVITES PAUSED"
-          ? "Invites paused"
-          : status.charAt(0) + status.slice(1).toLowerCase()
-      }))
-    ];
-  }, [orders]);
-
   const activeOrders = useMemo(
     () => orders.filter((order) => !isTerminalOrder(order.status) || order.autoLeaveJob?.status === "running"),
     [orders]
@@ -919,61 +748,6 @@ export default function HomePage() {
   );
   const runningAutoLeaveOrderKey = runningAutoLeaveOrderIds.join("|");
 
-  useEffect(() => {
-    if (activeTab !== "manage" || !runningAutoLeaveOrderIds.length) return;
-    setAutoLeaveClock(Date.now());
-    const timer = window.setInterval(() => setAutoLeaveClock(Date.now()), 1_000);
-    return () => window.clearInterval(timer);
-  }, [activeTab, runningAutoLeaveOrderKey]);
-  const completedOrderCount = useMemo(
-    () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("COMPLETED")).length,
-    [orders]
-  );
-  const processingOrderCount = useMemo(
-    () => orders.filter((order) => String(order.status ?? "").toUpperCase().includes("PROCESS")).length,
-    [orders]
-  );
-  const attentionOrderCount = useMemo(
-    () => orders.filter((order) => ["WAITING", "ERROR", "INVALID", "TERMINATED", "PAUSED", "INVITE"].some((value) => String(order.status ?? "").toUpperCase().includes(value))).length,
-    [orders]
-  );
-  const filteredOrders = useMemo(() => {
-    const query = orderSearch.trim().toLowerCase();
-    return orders.filter((order) => {
-      const normalizedStatus = String(order.status ?? "NEW").trim().toUpperCase();
-      const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-      const period = getOrderPeriod(order, orderPeriodClock);
-      const supportExpired = period.state === "expired";
-      const matchesSearch = !query || [
-        order.uniqid,
-        order.serverName,
-        order.serverId,
-        order.service,
-        order.status,
-        order.details
-      ].some((value) => String(value ?? "").toLowerCase().includes(query));
-      const matchesStatus =
-        orderStatusFilter === "all" ||
-        normalizedStatus === orderStatusFilter;
-      const matchesSupport =
-        orderSupportFilter === "all" ||
-        (orderSupportFilter === "expired" && supportExpired) ||
-        (orderSupportFilter === "active" && ["active", "soon"].includes(period.state)) ||
-        (orderSupportFilter === "soon" && period.state === "soon") ||
-        (orderSupportFilter === "leave_failed" && supportExpired && order.autoLeaveJob?.status !== "running" && Number(order.autoLeaveJob?.failed) > 0);
-      const matchesType =
-        orderTypeFilter === "all" ||
-        (orderTypeFilter === "boosts" && boostOrder) ||
-        (orderTypeFilter === "members" && !boostOrder);
-
-      return matchesSearch && matchesStatus && matchesType && matchesSupport;
-    }).sort((left, right) => {
-      if (!["expired", "soon", "leave_failed"].includes(orderSupportFilter)) return 0;
-      const difference = getOrderPeriod(left, orderPeriodClock).expiresAt - getOrderPeriod(right, orderPeriodClock).expiresAt;
-      return orderSupportFilter === "soon" ? difference : -difference;
-    });
-  }, [orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter, orders, orderPeriodClock]);
-  const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
   const communityCategories = communityStatus?.stockCategories ?? [];
@@ -1047,21 +821,6 @@ export default function HomePage() {
   const selectedUsedTokenIds = filteredUsedBoostTokens.filter((item) => selectedUsedBoostTokens[item.id]).map((item) => item.id);
   const dcordProxyDraftCount = useMemo(() => parseProxyDraft(dcordProxyDraft).length, [dcordProxyDraft]);
   const boostServiceOption = SERVICE_OPTIONS.find((option) => option.kind === "boosts");
-  const paginatedOrders = useMemo(() => {
-    const start = (currentOrderPage - 1) * ORDER_PAGE_SIZE;
-    return filteredOrders.slice(start, start + ORDER_PAGE_SIZE);
-  }, [currentOrderPage, filteredOrders]);
-
-  useEffect(() => {
-    if (activeTab === "manage") {
-      setCurrentOrderPage(1);
-    }
-  }, [activeTab, orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter]);
-
-  useEffect(() => {
-    setCurrentOrderPage((current) => Math.min(Math.max(current, 1), orderPageCount));
-  }, [orderPageCount]);
-
   async function syncActiveOrders(sourceOrders: TrackedOrder[]) {
     const syncedOrders = [...sourceOrders];
 
@@ -4312,175 +4071,20 @@ export default function HomePage() {
         ) : null}
 
         {activeTab === "manage" ? (
-          showManageSkeleton ? (
-            <HomePageSkeleton tab="manage" />
-          ) : (
-            <>
-              <header className="page-heading orders-page-heading">
-                <div>
-                  <p className={labelClass}>Operations</p>
-                  <h1 className="page-title">Orders</h1>
-                  <p className="app-copy page-copy">Track delivery, spot blocked orders, and open the full order record.</p>
-                </div>
-                <div className="orders-heading-actions">
-                  <Button asChild size="sm"><Link to="/manage?tab=create"><Plus className="h-4 w-4" /> New order</Link></Button>
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void syncTrackedOrders()} disabled={refreshingManage || !activeOrders.length}>
-                    <RefreshCw className={`h-4 w-4 ${refreshingManage ? "animate-spin" : ""}`} />
-                    {refreshingManage ? "Syncing..." : "Sync active"}
-                  </Button>
-                </div>
-              </header>
-
-              <section className="orders-summary-strip" aria-label="Order overview">
-                <div><span>Total orders</span><strong>{orders.length}</strong><small>tracked records</small></div>
-                <div data-tone="active"><span>In progress</span><strong>{processingOrderCount}</strong><small>live deliveries</small></div>
-                <div data-tone="success"><span>Completed</span><strong>{completedOrderCount}</strong><small>finished orders</small></div>
-                <div data-tone={attentionOrderCount ? "danger" : "muted"}><span>Needs attention</span><strong>{attentionOrderCount}</strong><small>waiting or failed</small></div>
-              </section>
-
-              <section className={`${shell} orders-workspace`}>
-                <div className="orders-period-tracker" role="group" aria-label="Track order periods">
-                  <span><Timer className="h-3.5 w-3.5" aria-hidden="true" /> Period tracking</span>
-                  <button type="button" data-tone="expired" aria-pressed={orderSupportFilter === "expired"} onClick={() => handleOrderPeriodShortcut("expired")}>Expired <b>{orderPeriodCounts.expired}</b></button>
-                  <button type="button" data-tone="soon" aria-pressed={orderSupportFilter === "soon"} onClick={() => handleOrderPeriodShortcut("soon")}>Expires in 7 days <b>{orderPeriodCounts.soon}</b></button>
-                  <button type="button" data-tone="failed" aria-pressed={orderSupportFilter === "leave_failed"} onClick={() => handleOrderPeriodShortcut("leave_failed")}>Leave failed <b>{orderPeriodCounts.leave_failed}</b></button>
-                  {orderSupportFilter !== "all" ? <button type="button" className="orders-period-reset" onClick={() => setOrderSupportFilter("all")}>Show all</button> : null}
-                </div>
-                <div className="orders-commandbar">
-                  <label className="orders-search-field">
-                    <Search className="h-4 w-4" aria-hidden="true" />
-                    <Input value={orderSearch} onChange={(event) => setOrderSearch(event.target.value)} placeholder="Search order ID, server or service" aria-label="Search orders" />
-                  </label>
-                  <FilterDropdown label="Status" showLabel={false} value={orderStatusFilter} onChange={setOrderStatusFilter} options={orderStatusOptions} />
-                  <FilterDropdown label="Type" showLabel={false} value={orderTypeFilter} onChange={setOrderTypeFilter} options={[
-                    { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
-                  ]} />
-                  <FilterDropdown label="Support" showLabel={false} value={orderSupportFilter} onChange={setOrderSupportFilter} options={[
-                    { value: "all", label: "All periods" }, { value: "active", label: "Active" }, { value: "expired", label: "Expired" }, { value: "soon", label: "Expires in 7 days" }, { value: "leave_failed", label: "Leave failed" }
-                  ]} />
-                </div>
-
-                <div className="orders-list-meta">
-                  <span>{filteredOrders.length} results · {orderSupportFilter === "expired" || orderSupportFilter === "leave_failed" ? "most recently expired first" : orderSupportFilter === "soon" ? "expiring soonest first" : "newest first"}</span>
-                  <span>Page {currentOrderPage} / {orderPageCount}</span>
-                </div>
-
-                {filteredOrders.length ? (
-                  <div className="orders-table" role="table" aria-label="Tracked orders">
-                    <div className="orders-table-head" role="row">
-                      <span>Order</span><span>Service</span><span>Status</span><span>Delivery</span><span>Period</span><span>Actions</span>
-                    </div>
-                    <ol className="orders-row-list">
-                      {paginatedOrders.map((order, index) => {
-                        const serviceOption = SERVICE_OPTIONS.find((option) => option.value === order.service);
-                        const ServiceIcon = serviceOption?.icon ?? KeyRound;
-                        const progress = getOrderProgress(order);
-                        const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-                        const providerQuery = order.provider === "dcord" ? "&provider=dcord" : order.provider === "community" ? "&provider=community" : "";
-                        const serviceKind = boostOrder ? "boosts" : order.provider === "community" ? "community" : "members";
-                        const joinMethod = order.provider === "community" ? (order.joinMethod ?? "create_invite") : null;
-                        const joinMethodLabel = joinMethod === "experimental_join" ? "Experimental Join" : joinMethod === "directly" ? "Directly" : "Create Invite";
-                        const botInvite = extractBotInvite(order);
-                        const botInviteRequired = ["NEW", "WAITING"].includes(String(order.status ?? "").trim().toUpperCase()) ? botInvite : null;
-                        const isInvitesPaused = String(order.status ?? "").trim().toUpperCase().includes("INVITES PAUSED");
-                        const delayValue = order.statusDelay ?? order.delay;
-                        const supportExpiration = getOrderSupportExpiration(order);
-                        const supportExpirationTime = supportExpiration ? new Date(supportExpiration).getTime() : Number.NaN;
-                        const expiredCategoryIds = new Set((order.categoryAllocations ?? [])
-                          .filter((allocation) => allocation.isPeriodic === true && allocation.expiredAt && new Date(allocation.expiredAt).getTime() <= Date.now())
-                          .map((allocation) => allocation.categoryId));
-                        const directSupportExpired = Number.isFinite(supportExpirationTime) && supportExpirationTime <= orderPeriodClock;
-                        const orderPeriod = getOrderPeriod(order, orderPeriodClock).state;
-                        const hasServerCandidateCount = typeof order.autoLeaveCandidateCount === "number";
-                        const autoLeaveCandidateCount = hasServerCandidateCount
-                          ? Number(order.autoLeaveCandidateCount)
-                          : (order.communityResults ?? []).filter((item) => {
-                              if (String(item.state ?? "").toLowerCase() !== "joined" || String(item.membershipStatus ?? "").toLowerCase() === "removed") return false;
-                              const categoryId = String(item.categoryId ?? order.categoryId ?? "");
-                              return expiredCategoryIds.size ? expiredCategoryIds.has(categoryId) : directSupportExpired;
-                            }).length;
-                        const canAutoLeaveExpired = order.provider === "community"
-                          && (autoLeaveCandidateCount > 0 || (!hasServerCandidateCount && !order.communityResults?.length && directSupportExpired && Number(order.added ?? 0) > 0))
-                          && order.autoLeaveJob?.status !== "running"
-                          && !order.membersLeftAt;
-                        const autoLeaveJob = order.autoLeaveJob;
-                        const autoLeaveFinished = Boolean(autoLeaveJob && autoLeaveJob.status !== "running");
-                        const autoLeaveProcessed = Math.max(0, Number(autoLeaveJob?.processed) || 0);
-                        const autoLeaveTotal = Math.max(0, Number(autoLeaveJob?.total) || 0);
-                        const autoLeaveFailed = Math.max(0, Number(autoLeaveJob?.failed) || 0);
-                        const autoLeaveSummary = autoLeaveJob
-                          ? `Auto Leave: ${autoLeaveProcessed}/${autoLeaveTotal} processed; ${autoLeaveJob.left + autoLeaveJob.alreadyLeft} removed; ${autoLeaveFailed} failed. ${autoLeaveFinished ? "Finished." : `Next member in ${formatAutoLeaveCountdown(autoLeaveJob.nextRunAt, autoLeaveClock)}.`} Open order for details.`
-                          : "";
-                        const titleId = `orders-row-${(currentOrderPage - 1) * ORDER_PAGE_SIZE + index}`;
-
-                        return (
-                          <li key={order.uniqid}>
-                            <article className="orders-row" data-period={orderPeriod} data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
-                              <div className="orders-row-identity">
-                                <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
-                                <span className="min-w-0">
-                                  <h2 id={titleId}>{order.serverName || order.serverId || "Discord server"}</h2>
-                                  <code title={order.uniqid}>{order.uniqid}</code>
-                                  <time className="orders-created-caption" dateTime={order.createdAt} title={`Created ${order.createdAt}`}>Created {formatTrackedDate(order.createdAt)}</time>
-                                </span>
-                              </div>
-                              <div className="orders-row-service">
-                                <strong>{order.provider === "community" ? (order.categoryName ?? serviceOption?.title ?? "Members 2") : (serviceOption?.title ?? "Manual")}</strong>
-                                <span>{boostOrder && order.duration ? order.boostStockPool === "rotating" ? "Rotating · 30 days" : `${order.duration} month` : order.provider === "community" ? order.categoryIsPeriodic ? `${order.durationMonths} month support` : "Members 2" : "Members"}</span>
-                                {joinMethod ? <span className="orders-service-method">{joinMethodLabel}</span> : null}
-                              </div>
-                              <div className="orders-row-status">
-                                <OrderListStatusBadge status={order.status} />
-                                {autoLeaveJob ? (
-                                  <Link className="orders-leave-summary" data-state={!autoLeaveFinished ? "running" : autoLeaveFailed ? "failed" : "finished"} to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}#member-log`} title={autoLeaveSummary} aria-label={autoLeaveSummary}>
-                                    <LogOut className="h-3 w-3" aria-hidden="true" />
-                                    <span>{!autoLeaveFinished ? `Leave ${autoLeaveProcessed}/${autoLeaveTotal}` : autoLeaveFailed ? `Leave: ${autoLeaveFailed} failed` : "Leave finished"}</span>
-                                  </Link>
-                                ) : null}
-                              </div>
-                              <dl className={`orders-row-delivery ${boostOrder ? "is-boosts" : ""}`}>
-                                <div><dt>Total</dt><dd>{formatNumber(order.amount)}</dd></div>
-                                <div><dt>Remaining</dt><dd>{progress ? formatNumber(progress.remaining) : "-"}</dd></div>
-                                {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
-                              </dl>
-                              <div className="orders-row-expiration orders-period-cell">
-                                {orderPeriod === "expired" || orderPeriod === "soon" ? <span className="orders-period-badge" data-period={orderPeriod}><Timer className="h-3 w-3" aria-hidden="true" />{orderPeriod === "expired" ? "Expired" : "Expiring"}</span> : <span className="orders-period-caption">Expires</span>}
-                                <time dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
-                              </div>
-                              <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
-                                {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
-                                {canAutoLeaveExpired && !autoLeaveJob ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
-                                <Button asChild variant="secondary" size="icon" title="Open order"><Link to={`/orders?uniqid=${encodeURIComponent(order.uniqid)}${providerQuery}`} aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-4 w-4" /></Link></Button>
-                                <Button variant="dangerGhost" size="icon" type="button" title={autoLeaveJob?.status === "running" ? "Wait for Auto Leave to finish" : "Remove order"} aria-label={`Remove ${order.uniqid}`} disabled={autoLeaveJob?.status === "running"} onClick={() => setOrderPendingDeletion(order)}><Trash2 className="h-4 w-4" /></Button>
-                              </div>
-
-                              {botInviteRequired ? <div className="orders-row-alert" data-tone="waiting">
-                                <span><Bot className="h-4 w-4" /><strong>Bot required</strong><small>Add the bot to start this order.</small></span>
-                                <Button type="button" size="xs" variant="secondary" onClick={() => void copyBotInviteLink(botInviteRequired)}><Copy className="h-3.5 w-3.5" /> Copy link</Button>
-                                <Button asChild size="xs"><a href={botInviteRequired} target="_blank" rel="noreferrer"><Bot className="h-3.5 w-3.5" /> Add bot</a></Button>
-                              </div> : null}
-                              {isInvitesPaused && !boostOrder ? <div className="orders-row-alert" data-tone="danger">
-                                <span><TriangleAlert className="h-4 w-4" /><strong>Invites paused</strong><small>Check the invite before continuing.</small></span>
-                                <Button type="button" variant="destructive" size="xs" disabled={restartingOrderId !== null} onClick={() => void handleRestartOrder(order)}><RotateCcw className={`h-3.5 w-3.5 ${restartingOrderId === order.uniqid ? "animate-spin" : ""}`} /> Continue</Button>
-                              </div> : null}
-
-                            </article>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                    <div className="orders-pagination">
-                      <span>Showing {filteredOrders.length ? (currentOrderPage - 1) * ORDER_PAGE_SIZE + 1 : 0}-{Math.min(currentOrderPage * ORDER_PAGE_SIZE, filteredOrders.length)} of {filteredOrders.length}</span>
-                      <div>
-                        <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentOrderPage((current) => Math.max(current - 1, 1))} disabled={currentOrderPage <= 1}><ChevronLeft className="h-3.5 w-3.5" /> Prev</Button>
-                        <Button type="button" variant="secondary" size="xs" onClick={() => setCurrentOrderPage((current) => Math.min(current + 1, orderPageCount))} disabled={currentOrderPage >= orderPageCount}>Next <ChevronRight className="h-3.5 w-3.5" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                ) : <div className="orders-empty-state"><Search className="h-5 w-5" /><strong>{orders.length ? "No matching orders" : "No orders yet"}</strong><span>{orders.length ? "Adjust the search or filters." : "Create an order to start tracking delivery."}</span></div>}
-              </section>
-            </>
-          )
+          <OrdersWorkspace
+            orders={orders}
+            loading={showManageSkeleton}
+            syncing={refreshingManage}
+            canSync={activeOrders.length > 0}
+            autoLeavingId={autoLeavingOrderId}
+            resumingId={restartingOrderId}
+            onSync={() => void syncTrackedOrders()}
+            onCopyMonitor={(order) => void copyGuestLink(order)}
+            onCopyInvite={(invite) => void copyBotInviteLink(invite)}
+            onAutoLeave={setOrderPendingAutoLeave}
+            onDelete={setOrderPendingDeletion}
+            onResume={(order) => void handleRestartOrder(order)}
+          />
         ) : null}
 
         {activeTab === "stock" ? (

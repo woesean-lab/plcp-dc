@@ -39,6 +39,7 @@ export function FilterDropdown({
   useLayoutEffect(() => {
     if (!open || !portal || !triggerRef.current || !menuRef.current) return;
     const trigger = triggerRef.current.getBoundingClientRect();
+    menuRef.current.style.width = `${Math.max(trigger.width, 88)}px`;
     const menu = menuRef.current.getBoundingClientRect();
     const preferredTop = placement === "top" ? trigger.top - menu.height - 8 : trigger.bottom + 8;
     setMenuPosition({
