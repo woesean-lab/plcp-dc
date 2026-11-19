@@ -4818,7 +4818,7 @@ export default function HomePage() {
                       <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(event.target.value)} onBlur={() => setOnlinerProxyDraft((value) => normalizeOnlinerProxyImportDraft(value))} placeholder={"host:port:user:pass\nhost:port:user:pass:old_ip\nsocks5://user:pass@host:port"} />
                       {onlinerProxyDetails.length ? (
                         <div className="onliner-proxy-usage">
-                          <div className="grid gap-3 border-b border-[var(--app-divider)] p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+                          <div className="onliner-account-filters onliner-proxy-filters">
                             <Input aria-label="Search Onliner proxies" placeholder="Search proxy or country..." value={onlinerProxySearch} onChange={(event) => setOnlinerProxySearch(event.target.value)} />
                             <FilterDropdown label="Proxy status" showLabel={false} value={onlinerProxyFilter} onChange={setOnlinerProxyFilter} options={[
                               { value: "all", label: "All statuses" },
