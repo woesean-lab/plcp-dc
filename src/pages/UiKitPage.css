@@ -1,0 +1,65 @@
+/* Reference-page layout only. Example components keep their existing styles. */
+.ui-reference { display: grid; gap: 24px; min-width: 0; padding-block: 8px 24px; }
+.ui-ref-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+.ui-ref-heading h1 { margin-top: 5px; color: var(--app-text); font-size: 30px; font-weight: 700; letter-spacing: -.03em; }
+.ui-ref-heading > div > p:last-child { margin-top: 7px; color: var(--app-muted); font-size: 13px; }
+.ui-ref-layout { display: grid; grid-template-columns: 215px minmax(0, 1fr); align-items: start; gap: 24px; }
+.ui-ref-sidebar { position: sticky; top: 112px; min-width: 0; }
+.ui-ref-nav-panel { display: grid; gap: 16px; padding: 14px; }
+.ui-ref-nav-panel .community-member-search { width: 100%; }
+.ui-ref-nav-panel nav { display: grid; gap: 4px; }
+.ui-ref-nav-panel nav > a { padding: 7px 8px; border-radius: 7px; color: var(--app-muted); font-size: 12px; text-decoration: none; transition: color .15s, background-color .15s; }
+.ui-ref-nav-panel nav > a:hover, .ui-ref-nav-panel nav > a:focus-visible { color: var(--app-text); background: var(--app-hover); }
+.ui-ref-nav-panel > p { color: var(--app-subtle); font-size: 11px; line-height: 1.7; }
+.ui-ref-content { display: grid; min-width: 0; gap: 22px; }
+.ui-ref-section { display: grid; min-width: 0; gap: 24px; padding: 24px; scroll-margin-top: 120px; }
+.ui-ref-section-heading { display: flex; align-items: center; gap: 12px; padding-bottom: 16px; border-bottom: 1px solid var(--app-divider); }
+.ui-ref-section-heading h2 { color: var(--app-text); font-size: 17px; font-weight: 650; letter-spacing: -.02em; }
+.ui-ref-example { display: grid; min-width: 0; gap: 14px; }
+.ui-ref-example + .ui-ref-example { padding-top: 22px; border-top: 1px solid var(--app-divider); }
+.ui-ref-example-heading { display: grid; gap: 4px; }
+.ui-ref-example-heading h3 { color: var(--app-text-secondary); font-size: 13px; font-weight: 650; }
+.ui-ref-example-heading > code { color: var(--app-subtle); font-size: 10px; overflow-wrap: anywhere; }
+.ui-ref-preview { min-width: 0; }
+.ui-ref-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.ui-ref-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 16px; align-items: start; }
+.ui-ref-stack { display: flex; flex-direction: column; gap: 12px; }
+.ui-ref-field { display: grid; gap: 7px; }
+.ui-ref-hint { color: var(--app-muted); font-size: 11px; line-height: 1.6; }
+.ui-ref-preview > .ui-ref-hint { margin-top: 10px; }
+.ui-ref-variant-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(275px, 100%), 1fr)); gap: 20px; }
+.ui-ref-variant-grid > div { display: grid; gap: 8px; }
+.ui-ref-variant-grid > div > code { color: var(--app-subtle); font-size: 11px; }
+.ui-ref-code > summary { width: fit-content; padding-block: 3px; color: var(--app-accent-bright); font-size: 11px; cursor: pointer; }
+.ui-ref-code > summary:hover { color: var(--app-accent-hover); }
+.ui-ref-code > .payload-panel { display: grid; justify-items: start; gap: 12px; margin-top: 12px; padding: 14px; }
+.ui-ref-code pre { max-width: 100%; overflow-x: auto; color: var(--app-text-secondary); font-size: 11px; line-height: 1.8; }
+.ui-ref-surface { display: grid; align-content: center; gap: 8px; min-height: 115px; padding: 18px; }
+.ui-ref-surface > strong { color: var(--app-text-secondary); font-size: 12px; }
+.ui-ref-member-list { display: grid; gap: 12px; min-width: 0; }
+.ui-ref-list-scroll { max-height: 340px; overflow: auto; }
+.ui-ref-order-preview.orderdesk { padding: 0; }
+.ui-ref-help { margin-left: auto; }
+.ui-ref-colors { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 10px; }
+.ui-ref-colors > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ui-ref-colors > div > span { width: 30px; height: 30px; flex: 0 0 30px; border: 1px solid var(--app-border-strong); border-radius: 7px; }
+.ui-ref-colors code { color: var(--app-muted); font-size: 10px; overflow-wrap: anywhere; }
+.ui-ref-dialog { position: fixed; inset: 0; max-height: calc(100dvh - 32px); margin: auto; overflow-y: auto; color: var(--app-text); }
+.ui-ref-dialog::backdrop { background: var(--app-overlay-bg); backdrop-filter: blur(14px); }
+@media (max-width: 1023px) {
+  .ui-ref-layout { grid-template-columns: 1fr; gap: 20px; }
+  .ui-ref-sidebar { position: static; }
+  .ui-ref-nav-panel nav { display: flex; flex-wrap: wrap; gap: 5px; }
+  .ui-ref-nav-panel > p { max-width: 65ch; }
+}
+@media (max-width: 639px) {
+  .ui-ref-heading { align-items: flex-start; flex-direction: column; gap: 16px; }
+  .ui-ref-section { padding: 17px; gap: 20px; scroll-margin-top: 100px; }
+  .ui-ref-section-heading h2 { font-size: 16px; }
+  .ui-ref-list-scroll .community-recent-list > div { grid-template-columns: 16px 34px minmax(0, 1fr); }
+  .ui-ref-list-scroll .community-recent-list > div > .status-badge { grid-column: 3; }
+  .ui-ref-list-scroll .community-member-row-actions { grid-column: 3; }
+  .ui-ref-preview .boost-proxy-toggle { grid-template-columns: 16px 34px minmax(0, 1fr); }
+  .ui-ref-preview .boost-proxy-toggle small { grid-column: 3; white-space: normal; }
+  .ui-ref-dialog .confirm-modal-actions { flex-wrap: wrap; }
+}

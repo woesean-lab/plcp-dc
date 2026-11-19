@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
-import { useEffect, useLayoutEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import { Bot, Boxes, ListChecks, LoaderCircle, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
@@ -14,6 +14,8 @@ import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
 import { getCommunityConfig } from "./lib/community";
 import { checkDcordConnection, getAdminConfig } from "./lib/integration";
+
+const UiKitPage = lazy(() => import("./pages/UiKitPage"));
 
 function ScrollToRouteTop() {
   const { pathname } = useLocation();
@@ -209,6 +211,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
             <Route path="/admin" element={<HomePage />} />
             <Route path="/humanizer" element={<HumanizerPage />} />
             <Route path="/reactions" element={<ReactionsPage />} />
+            <Route path="/ui-kit" element={<Suspense fallback={<div className="app-panel p-6 text-sm text-[var(--app-muted)]" role="status">Loading UI Kit…</div>}><UiKitPage /></Suspense>} />
             <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
           </Routes>
         </main>
@@ -217,6 +220,8 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
           <span>Pulcip Members</span>
           <span className="app-footer-divider" aria-hidden="true" />
           <span>Private operations suite</span>
+          <span className="app-footer-divider" aria-hidden="true" />
+          <Link to="/ui-kit" className="hover:text-[var(--app-accent-bright)]" aria-current={location.pathname === "/ui-kit" ? "page" : undefined}>UI Kit</Link>
         </footer>
       </div>
     </div>

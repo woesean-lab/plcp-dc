@@ -31,6 +31,14 @@ npm run build
 
 Production container `Dockerfile` ve `nginx.conf` ile SPA fallback destekli olarak calisir.
 
+## UI referansi
+
+Admin footer'indaki **UI Kit** baglantisi (`/ui-kit`), mevcut buton, sekme, form,
+rozet, kart, liste, sayfalama ve uyari stillerini canli ornekler ve kopyalanabilir
+kodlarla toplar. Ornekler gercek ortak bilesenleri kullanir; demo islemleri
+uretim API'lerine istek gondermez. Yeni UI calismalarinda
+[UI referansini](docs/ui-reference.md) ve ilgili kaynak bileseni esas alin.
+
 ## EasyPanel servis rolleri
 
 Ayni image iki ayri EasyPanel App servisinde calistirilabilir:
