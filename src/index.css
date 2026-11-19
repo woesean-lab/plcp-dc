@@ -3847,7 +3847,8 @@
     gap: .35rem;
   }
 
-  .orders-row-actions > .ui-button { width: 40px; height: 40px; flex: 0 0 40px; padding-inline: 0; }
+  .orders-row-actions > .ui-button { width: 32px; height: 32px; flex: 0 0 32px; padding-inline: 0; border-radius: 8px; }
+  .orders-row-actions > .ui-button > svg { width: 14px; height: 14px; }
   .orders-row-actions > .ui-button-danger-ghost {
     border-color: var(--app-border);
     background: var(--app-control-bg);
@@ -12159,7 +12160,8 @@
 .orders-row-expiration.orders-period-cell { display: grid; justify-items: start; align-content: center; gap: 5px; }
 .orders-row-expiration.orders-period-cell::before { content: none; }
 .orders-period-cell > time { color: var(--app-muted); font-size: 9px; line-height: 1.5; }
-.orders-period-badge { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 4px 6px; border: 1px solid var(--app-danger-button-border); border-radius: 5px; color: var(--app-danger); background: var(--app-danger-soft); font-size: 10px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.orders-period-badge { display: inline-flex; align-items: center; gap: 4px; width: fit-content; padding: 3px 6px; border: 1px solid var(--app-danger-button-border); border-radius: 5px; color: var(--app-danger); background: var(--app-danger-soft); font-size: 10px; font-weight: 700; line-height: 1; white-space: nowrap; }
+.orders-period-badge > svg { width: 11px; height: 11px; }
 .orders-period-badge[data-period="soon"] { color: #f5cf76; border-color: rgba(245,207,118,.25); background: rgba(245,207,118,.08); }
 .orders-row[data-period="expired"] { border-left-color: #f5cf76; }
 .orders-period-caption { display: none; }
