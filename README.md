@@ -39,6 +39,18 @@ kodlarla toplar. Ornekler gercek ortak bilesenleri kullanir; demo islemleri
 uretim API'lerine istek gondermez. Yeni UI calismalarinda
 [UI referansini](docs/ui-reference.md) ve ilgili kaynak bileseni esas alin.
 
+## Mevcut Members siparislerini baska kategoriye tasima
+
+Stock > Members Stock > kategori yonetimindeki **Move existing orders** (iki yonlu ok)
+aksiyonunu kullanin. Kaynak kategoride `OAuth Premium`, hedefte `OAuth Online` secilip
+**Preview transfer** ile sayilar gorulur; **Move … orders** aktarimi uygular.
+Bu islem yalnizca siparislerin kategori baglantisini degistirir. Teslimat gecmisi,
+monitor baglantilari, mevcut destek bitis tarihleri ve Auto Leave kayitlari korunur.
+Uye stogu ayrica tasinmis olmalidir. Islemdeki siparisler ve her iki kategoriyi
+zaten iceren karma siparisler onizlemede belirtilir ve degistirilmez; farkli destek
+sureleri birlestirilmez. Islem bittiginde bekleyenler icin tekrar onizleme alinabilir.
+Kontroller: `node --test server/community-order-category-transfer.test.mjs`.
+
 ## EasyPanel servis rolleri
 
 Ayni image iki ayri EasyPanel App servisinde calistirilabilir:

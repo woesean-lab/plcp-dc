@@ -430,3 +430,22 @@ export async function deleteCommunityStockCategory(categoryId: string) {
     throw new Error(payload.message ?? `Request failed with ${response.status}`);
   }
 }
+
+export type CommunityOrderCategoryTransfer = {
+  sourceName: string;
+  targetName: string;
+  matched: number;
+  transferable: number;
+  moved: number;
+  blocked: { uniqid: string; reason: string }[];
+  blockedCount: number;
+  previewToken: string;
+};
+
+export function transferCommunityOrderCategory(sourceCategoryId: string, targetCategoryId: string, previewToken?: string) {
+  return fetch(`/api/community/categories/${encodeURIComponent(sourceCategoryId)}/transfer-orders`, {
+    method: "POST", cache: "no-store", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ targetCategoryId, apply: Boolean(previewToken), previewToken })
+  }).then(parseResponse<CommunityOrderCategoryTransfer>);
+}

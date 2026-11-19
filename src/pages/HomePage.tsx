@@ -1,4 +1,5 @@
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
+import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { normalizeOnlinerProxyImportDraft } from "../../shared/onliner-proxy-import.mjs";
 import { getOnlinerProxyStatus } from "../lib/onliner";
@@ -12,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import toast from "react-hot-toast";
 import {
+  ArrowRightLeft,
   Bot,
   Check,
   Copy,
@@ -698,6 +700,7 @@ export default function HomePage() {
   const [editingCommunityCategoryId, setEditingCommunityCategoryId] = useState<string | null>(null);
   const [communityCategoryModalOpen, setCommunityCategoryModalOpen] = useState(false);
   const [communityCategoryPendingDeletion, setCommunityCategoryPendingDeletion] = useState<CommunityStockCategory | null>(null);
+  const [communityOrderTransferSource, setCommunityOrderTransferSource] = useState<CommunityStockCategory | null>(null);
   const [savingCommunityCategory, setSavingCommunityCategory] = useState(false);
   const [communityAccountCategory, setCommunityAccountCategory] = useState<CommunityStockCategory | null>(null);
   const [communityAccountMode, setCommunityAccountMode] = useState<"single" | "bulk">("single");
@@ -3105,6 +3108,7 @@ export default function HomePage() {
                   <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
                 </button>
                 <div className="community-category-actions">
+                  <Button type="button" variant="ghost" size="icon-sm" title={`Move existing ${category.name} orders`} aria-label={`Move existing ${category.name} orders`} disabled={communityCategories.length < 2 || savingCommunityCategory} onClick={() => setCommunityOrderTransferSource(category)}><ArrowRightLeft className="h-3.5 w-3.5" /></Button>
                   <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
                   <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
                 </div>
@@ -5311,6 +5315,8 @@ export default function HomePage() {
           </form>
         </div>
       ) : null}
+
+      {communityOrderTransferSource ? <OrderCategoryTransferDialog source={communityOrderTransferSource} categories={communityCategories} onClose={() => setCommunityOrderTransferSource(null)} onMoved={async () => { setOrders(await loadTrackedOrders()); }} /> : null}
 
       {communityCategoryPendingDeletion ? (
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !savingCommunityCategory) setCommunityCategoryPendingDeletion(null); }}>

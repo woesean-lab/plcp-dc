@@ -17,6 +17,7 @@ import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.m
 import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
+import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -63,6 +64,7 @@ const communityAutoLeavePollMs = 10_000;
 const communityOrderMemberCheckProgress = new Map();
 const reactionWorkspaceMemberCheckProgress = new Map();
 const communityOrderLeaveAllActive = new Set();
+const communityOrderCategoryTransfers = new Set();
 const dcordOrderProcessingJobs = new Set();
 const dcordOrderPausedJobs = new Set();
 const dcordOrderRetryTimers = new Map();
@@ -7800,7 +7802,7 @@ async function runCommunityOrder(order, members, config) {
 
 async function processCommunityOrder(order, members, config) {
   const orderId = String(order?.uniqid ?? "").trim();
-  if (!orderId) return false;
+  if (!orderId || communityOrderCategoryTransfers.has(orderId)) return false;
   const ownerToken = `${communityWorkerInstanceId}-${crypto.randomBytes(8).toString("hex")}`;
   const lock = await pool.query(
     `INSERT INTO community_order_worker_leases (order_id, owner_token, expires_at)
@@ -9132,6 +9134,12 @@ async function hasActiveSession(req) {
 const app = express();
 app.set("trust proxy", 1);
 app.use(express.json({ limit: "10mb" }));
+app.use(["/api/community/orders/:uniqid", "/api/public/orders/:uniqid", "/api/orders/:uniqid"], (req, res, next) => {
+  if (communityOrderCategoryTransfers.has(String(req.params.uniqid ?? ""))) {
+    return res.status(409).json({ message: "This order's category is being updated. Please try again shortly." });
+  }
+  next();
+});
 
 app.get("/api/humanizer/catalog", requireSession, async (_req, res, next) => {
   try {
@@ -10379,6 +10387,11 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     next(error);
   }
 });
+
+app.post("/api/community/categories/:categoryId/transfer-orders", requireSession, createCommunityOrderCategoryTransferHandler({
+  pool, getConfig: getCommunityOAuthConfig, transfers: communityOrderCategoryTransfers,
+  isBusy: (id) => Boolean(communityOrderMemberCheckProgress.get(id)?.active || reactionWorkspaceMemberCheckProgress.get(id)?.active || communityOrderLeaveAllActive.has(id))
+}));
 
 app.delete("/api/community/categories/:categoryId", requireSession, async (req, res, next) => {
   const client = await pool.connect();

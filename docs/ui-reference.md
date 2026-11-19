@@ -38,6 +38,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Loading | `src/components/ui/skeleton.tsx` | Skeleton placeholders; LoaderCircle for pending actions |
 | Empty state | `stock-empty-state` | Icon, concise heading and helpful next step |
 | Confirmation | `confirm-modal`, `confirm-modal-actions` | Existing confirmations; retain accessible focus/keyboard behavior |
+| Order category transfer | `src/components/OrderCategoryTransferDialog.tsx` | Existing confirmation styling, native dialog focus behavior, themed destination dropdown, preview before moving existing orders |
 | Help tooltip | `member-check-control`, `member-check-help`, `member-check-tooltip` | Monitor help; show on hover and keyboard focus |
 | Colors | `--app-*` in `src/index.css` | Current dark surfaces, purple accent, green success and red danger |
 | Text | `app-kicker`, `field-label`, `--app-text`, `--app-text-secondary`, `--app-muted`, `--app-subtle` | Preserve the existing hierarchy |
