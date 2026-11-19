@@ -739,6 +739,9 @@ export default function HomePage() {
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
   const [onlinerAccountPage, setOnlinerAccountPage] = useState(1);
   const [onlinerAccountPageSize, setOnlinerAccountPageSize] = useState(ONLINER_ACCOUNT_PAGE_SIZE);
+  const [onlinerAccountSearch, setOnlinerAccountSearch] = useState("");
+  const [onlinerAccountFilter, setOnlinerAccountFilter] = useState("all");
+  const [onlinerPresenceFilter, setOnlinerPresenceFilter] = useState("all");
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
@@ -3598,11 +3601,16 @@ export default function HomePage() {
   const onlinerNextConnectionSeconds = onlinerSnapshot?.nextConnectionAt
     ? Math.max(0, Math.ceil((new Date(onlinerSnapshot.nextConnectionAt).getTime() - onlinerCountdownNow) / 1_000))
     : null;
-  const sortedOnlinerAccounts = useMemo(
-    () => [...(onlinerSnapshot?.accounts ?? [])]
-      .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting")),
-    [onlinerSnapshot?.accounts]
-  );
+  const sortedOnlinerAccounts = useMemo(() => {
+    const search = onlinerAccountSearch.trim().toLowerCase();
+    return (onlinerSnapshot?.accounts ?? [])
+      .filter((account) => onlinerAccountFilter === "all" || account.connectionState === onlinerAccountFilter)
+      .filter((account) => onlinerPresenceFilter === "all" || account.richPresenceEnabled === (onlinerPresenceFilter === "on"))
+      .filter((account) => !search || [account.bot?.username, account.bot?.tag, account.bot?.id, account.id]
+        .some((value) => value?.toLowerCase().includes(search)))
+      .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting"));
+  }, [onlinerSnapshot?.accounts, onlinerAccountSearch, onlinerAccountFilter, onlinerPresenceFilter]);
+  useEffect(() => { setOnlinerAccountPage(1); }, [onlinerAccountSearch, onlinerAccountFilter, onlinerPresenceFilter]);
   const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, onlinerAccountPageSize);
   const filteredOnlinerProxies = useMemo(() => {
     const search = onlinerProxySearch.trim().toLowerCase();
@@ -4707,9 +4715,27 @@ export default function HomePage() {
                       </div>
                     ) : null}
                     {onlinerSnapshot?.accounts.length ? (
+                      <>
+                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_170px_160px]">
+                        <Input aria-label="Search Onliner bots" placeholder="Search bot name or ID..." value={onlinerAccountSearch} onChange={(event) => setOnlinerAccountSearch(event.target.value)} />
+                        <FilterDropdown label="Bot connection status" showLabel={false} value={onlinerAccountFilter} onChange={setOnlinerAccountFilter} options={[
+                          { value: "all", label: "All statuses" },
+                          { value: "connected", label: "Connected" },
+                          { value: "connecting", label: "Connecting" },
+                          { value: "reconnecting", label: "Reconnecting" },
+                          { value: "disconnected", label: "Disconnected" },
+                          { value: "error", label: "Error" }
+                        ]} />
+                        <FilterDropdown label="Bot Rich Presence" showLabel={false} value={onlinerPresenceFilter} onChange={setOnlinerPresenceFilter} options={[
+                          { value: "all", label: "Rich Presence: all" },
+                          { value: "on", label: "Rich Presence: on" },
+                          { value: "off", label: "Rich Presence: off" }
+                        ]} />
+                      </div>
                       <div
                         className="onliner-account-list"
                       >
+                        {!visibleOnlinerAccounts.length ? <p className="app-copy p-4 text-xs" role="status">No bots match these filters.</p> : null}
                         {visibleOnlinerAccounts.map((account, index) => (
                           <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
                             <span className="onliner-bot-avatar" aria-hidden="true">
@@ -4746,6 +4772,7 @@ export default function HomePage() {
                           ))}
                       <ListPagination {...onlinerPagination} onChange={setOnlinerAccountPage} onPageSizeChange={setOnlinerAccountPageSize} label="Onliner account pages" />
                       </div>
+                      </>
                     ) : null}
                     <div className="grid gap-4">
                       <label className="grid gap-2">
