@@ -46,10 +46,8 @@
 .od-board-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 21px 23px 18px; }
 .od-board-heading h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -.015em; }
 .od-board-heading > div > span { display: block; margin-top: 3px; color: var(--od-faint); font-size: 11px; }
-.od-service-tabs { display: flex; gap: 3px; padding: 3px; border: 1px solid var(--od-line); border-radius: 8px; background: var(--app-input-bg); }
-.od-service-tabs > button { border: 1px solid transparent; border-radius: 5px; padding: 5px 12px; background: transparent; color: var(--od-muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
-.od-service-tabs > button:hover { color: var(--od-text); }
-.od-service-tabs > button[aria-pressed="true"] { color: var(--od-text); background: var(--app-control-bg); border-color: var(--app-inset-line); box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.od-service-tabs { flex-shrink: 0; }
+.od-service-tabs > button { justify-content: center; cursor: pointer; white-space: nowrap; transition: border-color .15s, background-color .15s, color .15s; }
 .od-toolbar { display: grid; grid-template-columns: minmax(200px, 1fr) 185px 190px; gap: 10px; padding: 0 23px 17px; }
 .od-search { display: flex; min-width: 0; align-items: center; gap: 9px; height: 36px; border: 1px solid var(--od-line); border-radius: 8px; padding: 0 11px; background: var(--app-input-bg); }
 .od-search:focus-within { border-color: var(--app-accent-border); box-shadow: 0 0 0 2px var(--app-accent-soft); }
@@ -77,7 +75,8 @@
 .od-table th:first-child, .od-table td:first-child { padding-left: 23px; }
 .od-table th:last-child, .od-table td:last-child { padding-right: 23px; }
 .od-table .od-record > td { height: 100px; padding: 18px 16px; border-top: 1px solid var(--od-line); vertical-align: middle; }
-.od-record:hover { background: var(--app-hover); }
+.od-order-group { transition: background-color .15s; }
+.od-order-group:hover, .od-order-group:focus-within { background: var(--app-hover); }
 .od-order-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }
 .od-service-icon { display: grid; width: 36px; height: 36px; flex: 0 0 36px; place-items: center; border: 1px solid var(--app-border-strong); border-radius: 10px; color: var(--app-success); background: var(--app-success-soft); }
 .od-service-icon[data-service="boosts"] { color: var(--app-accent-bright); background: var(--app-accent-soft); }
@@ -124,15 +123,14 @@
 .od-created-cell > span:not(.od-mobile-caption) { display: block; margin-top: 3px; color: var(--od-faint); font-size: 10px; }
 .od-mobile-caption { display: none; }
 .od-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.orderdesk .od-open-order.ui-button { width: 32px; height: 28px; min-height: 28px; padding: 0; border-radius: 7px; flex: 0 0 32px; }
-.od-open-order > svg { width: 14px; height: 14px; }
-.od-open-order:hover { color: var(--od-purple); border-color: var(--app-accent-border); }
+.orderdesk .od-row-action.ui-button { width: 32px; height: 28px; min-height: 28px; padding: 0; border-radius: 7px; flex: 0 0 32px; }
+.od-row-action > svg { width: 14px; height: 14px; }
 .od-action-menu { position: relative; }
 .od-action-menu[open] { z-index: 30; }
-.od-action-menu > summary { display: grid; width: 26px; height: 28px; place-items: center; border-radius: 6px; color: var(--od-faint); list-style: none; cursor: pointer; }
+.od-action-menu > summary { list-style: none; cursor: pointer; }
 .od-action-menu > summary::-webkit-details-marker { display: none; }
 .od-action-menu > summary > svg { width: 15px; height: 15px; }
-.od-action-menu > summary:hover, .od-action-menu[open] > summary { color: var(--od-text); background: var(--app-control-bg); }
+.od-action-menu[open] > summary { border-color: var(--app-border-strong); color: var(--app-text); background: var(--app-hover-strong); }
 .od-action-popover { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 7px); display: grid; width: 210px; padding: 5px; border: 1px solid var(--app-border-strong); border-radius: 10px; background: var(--app-surface-raised); box-shadow: 0 12px 36px #0007; }
 .od-action-popover > :is(button, a) { display: flex; width: 100%; align-items: center; gap: 8px; min-height: 32px; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--app-text-secondary); text-align: left; text-decoration: none; font-size: 11px; cursor: pointer; }
 .od-action-popover > :is(button, a):hover { background: var(--app-hover); }
@@ -153,7 +151,7 @@
 .od-board-footer { border-top: 1px solid var(--od-line); padding: 0 23px; }
 .orderdesk .list-pagination { padding: 15px 0; color: var(--od-faint); font-size: 11px; gap: 12px; }
 .orderdesk .list-pagination > div { gap: 8px; }
-.orderdesk .list-pagination .ui-button { width: 28px; height: 28px; min-height: 28px; border-radius: 6px; background: transparent; border-color: var(--od-line); }
+.orderdesk .list-pagination .ui-button { width: 28px; height: 28px; min-height: 28px; border-radius: 7px; }
 .orderdesk .list-pagination .list-page-nav { width: auto; min-width: 64px; gap: 5px; padding: 0 9px; font-size: 11px; }
 .orderdesk .list-page-size { gap: 8px; margin-right: 10px; }
 .orderdesk .list-page-size .filter-dropdown-trigger { width: 65px; height: 28px; min-height: 28px; padding-inline: 8px; border-radius: 6px; }

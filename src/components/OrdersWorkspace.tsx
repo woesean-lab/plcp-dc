@@ -61,7 +61,7 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
   const delay = order.statusDelay ?? order.delay;
   const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
 
-  return <>
+  return <tbody className="od-order-group">
     <tr className="od-record" data-notice={Boolean(botInvite || invitesPaused)}>
       <td className="od-order-cell">
         <div className="od-order-identity">
@@ -92,9 +92,9 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
       <td className="od-actions-cell">
         <div className="od-row-actions">
-          <Button asChild variant="secondary" size="icon-sm" className="od-open-order"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
+          <Button asChild variant="secondary" size="icon-sm" className="od-row-action"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
           <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
-            <summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal /></summary>
+            <Button asChild variant="secondary" size="icon-sm" className="od-row-action"><summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal /></summary></Button>
             <div className="od-action-popover">
               {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
               <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
@@ -110,7 +110,7 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       <div className="od-alert-copy"><strong>{botInvite ? "Bot invite required" : "Invites paused"}</strong><span>{botInvite ? "Add the bot to start delivery." : "Check the invite before continuing."}</span></div>
       <div className="od-alert-actions">{botInvite ? <><Button type="button" variant="secondary" size="xs" onClick={() => actions.onCopyInvite(botInvite)}><Copy />Copy invite</Button><Button asChild size="xs"><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></Button></> : <Button type="button" variant="destructive" size="xs" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue"}</Button>}</div>
     </div></td></tr> : null}
-  </>;
+  </tbody>;
 }
 
 export default function OrdersWorkspace(props: Props) {
@@ -156,7 +156,7 @@ export default function OrdersWorkspace(props: Props) {
 
     <div className="od-board app-panel">
       <div className="od-board-heading"><div><h2>Order history</h2><span>{loading ? "Loading your orders…" : `${number(stats.total)} orders in your workspace`}</span></div>
-        <div className="od-service-tabs" role="group" aria-label="Filter by service">{[{ value: "all", label: "All orders" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }].map((tab) => <button key={tab.value} type="button" aria-pressed={filters.service === tab.value} onClick={() => changeFilter({ service: tab.value })}>{tab.label}</button>)}</div>
+        <div className="stock-duration-filter od-service-tabs" role="group" aria-label="Filter by service">{[{ value: "all", label: "All orders" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }].map((tab) => <button key={tab.value} type="button" className={filters.service === tab.value ? "is-active" : undefined} aria-pressed={filters.service === tab.value} onClick={() => changeFilter({ service: tab.value })}>{tab.label}</button>)}</div>
       </div>
       <div className="od-toolbar">
         <label className="od-search"><Search aria-hidden="true" /><input type="search" aria-label="Search orders" placeholder="Search server, order ID or service…" value={filters.search} onChange={(event) => changeFilter({ search: event.target.value })} /></label>
@@ -169,7 +169,7 @@ export default function OrdersWorkspace(props: Props) {
 
       <table className="od-table"><colgroup><col className="od-col-order" /><col className="od-col-delivery" /><col className="od-col-support" /><col className="od-col-created" /><col className="od-col-actions" /></colgroup>
         <thead><tr><th scope="col">Order & service</th><th scope="col">Delivery</th><th scope="col">Support period</th><th scope="col">Created</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-        <tbody>{loading ? Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>) : pagination.items.map((order) => <OrderRow key={order.uniqid} order={order} now={now} {...props} />)}</tbody>
+        {loading ? <tbody>{Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>)}</tbody> : pagination.items.map((order) => <OrderRow key={order.uniqid} order={order} now={now} {...props} />)}
       </table>
       {!loading && !filtered.length ? <div className="od-empty"><span><Search /></span><h3>{orders.length ? "No orders found" : "Your orders start here"}</h3><p>{orders.length ? "Try another search or clear the filters to see your orders." : "Create your first order to follow its delivery and support period."}</p>{orders.length ? <Button type="button" variant="secondary" size="sm" onClick={reset}>Clear filters</Button> : <Button asChild size="sm"><Link to="/manage?tab=create"><Plus />Create an order</Link></Button>}</div> : null}
       {!loading ? <div className="od-board-footer"><ListPagination {...pagination} onChange={setPage} onPageSizeChange={setPageSize} label="Orders pages" showNavigationLabels />{stats.failedLeave > 0 ? <button className="od-failed-shortcut" type="button" onClick={() => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "leave_failed", sort: "expiry_desc" }); setPage(1); }}><TriangleAlert />{stats.failedLeave} orders need a removal check<ChevronRight /></button> : null}</div> : null}
