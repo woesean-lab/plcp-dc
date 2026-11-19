@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { FilterDropdown } from "./ui/filter-dropdown";
@@ -45,6 +45,7 @@ function relativePeriod(expiresAt: number, now: number) {
 function closeMenu(event: MouseEvent<HTMLElement>) { event.currentTarget.closest("details")?.removeAttribute("open"); }
 
 function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number } & Pick<Props, "autoLeavingId" | "resumingId" | "onCopyMonitor" | "onCopyInvite" | "onAutoLeave" | "onDelete" | "onResume">) {
+  const navigate = useNavigate();
   const boost = orderIsBoost(order);
   const status = orderStatus(order.status);
   const delivery = orderDelivery(order);
@@ -64,8 +65,16 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
   const delay = order.statusDelay ?? order.delay;
   const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
 
+  function openOrder(event: MouseEvent<HTMLTableRowElement>) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest("a, button, input, select, textarea, summary, [role='button'], [role='link'], [contenteditable='true'], .od-actions-cell")) return;
+    if (window.getSelection()?.toString()) return;
+    navigate(orderUrl);
+  }
+
   return <tbody className="od-order-group">
-    <tr className="od-record" data-notice={Boolean(botInvite || invitesPaused)}>
+    <tr className="od-record" data-notice={Boolean(botInvite || invitesPaused)} onClick={openOrder}>
       <td className="od-order-cell">
         <div className="od-order-identity">
           <span className="od-service-icon" data-service={boost ? "boosts" : "members"} aria-hidden="true">{boost ? <Gem /> : <Users />}</span>

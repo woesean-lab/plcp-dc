@@ -75,6 +75,7 @@
 .od-table th:first-child, .od-table td:first-child { padding-left: 23px; }
 .od-table th:last-child, .od-table td:last-child { padding-right: 23px; }
 .od-table .od-record > td { height: 100px; padding: 18px 16px; border-top: 1px solid var(--od-line); vertical-align: middle; }
+.od-table .od-record > td:not(.od-actions-cell) { cursor: pointer; }
 .od-order-group { transition: background-color .15s; }
 .od-order-group:hover, .od-order-group:focus-within { background: var(--app-hover); }
 .od-order-identity { display: flex; min-width: 0; align-items: center; gap: 12px; }

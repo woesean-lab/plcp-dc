@@ -34,7 +34,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Pagination | `src/components/ListPagination.tsx`: `paginate` and ListPagination | 50 / 100 / 200 / 500; optional `showNavigationLabels`; reset page when filters/page size change. Keep the shared button/dropdown sizes, corners and spacing; page CSS must not override these controls. |
 | Order warnings | `od-order-alert`, `od-alert-copy`, `od-alert-actions` in `src/components/OrdersWorkspace.css` | Paused invite warning stays a red card with its Continue action |
 | Expired support notice | `monitor-expired-support-note` | Monitor's amber warning; icon and heading stay aligned |
-| Row hover | `od-order-group` in `OrdersWorkspace.tsx` and its CSS | Order details and warning belong to the same hover group |
+| Row hover & navigation | `od-order-group` in `OrdersWorkspace.tsx` and its CSS | Order details and warning share hover. The main row opens order details; actions and text selection stay independent. Keep the name and Open links for keyboard navigation. |
 | Progress | `monitor-live-progress-track` | Monitor's existing purple track |
 | Loading | `src/components/ui/skeleton.tsx` | Skeleton placeholders; LoaderCircle for pending actions |
 | Empty state | `stock-empty-state` | Icon, concise heading and helpful next step |
