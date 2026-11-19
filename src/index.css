@@ -9432,6 +9432,8 @@
 }
 
 .community-member-priority-actions { gap: 5px; flex-wrap: wrap; }
+.community-member-toolbar > .community-member-priority-actions { width: 100%; padding-top: 10px; border-top: 1px solid var(--app-divider); }
+.community-member-priority-actions > .community-member-select-all { flex: 0 0 auto; min-height: 32px; margin-right: 8px; white-space: nowrap; }
 .community-member-search { position: relative; flex: 1 1 220px; min-width: 0; max-width: 320px; }
 .community-member-search > svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--app-muted); pointer-events: none; }
 .community-member-search > .ui-input { height: 34px; min-height: 34px; padding: 0 10px 0 31px; border-radius: 9px; font-size: 11px; }

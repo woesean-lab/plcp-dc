@@ -3173,16 +3173,7 @@ export default function HomePage() {
               setSelectedCommunityMemberIds([]);
             }} />
           </label>
-          <label className="community-member-select-all">
-            <input
-              type="checkbox"
-              disabled={!communityVisibleRecords.length}
-              checked={communityVisibleRecords.length > 0 && selectedCommunityMemberIds.length === communityVisibleRecords.length}
-              ref={(element) => { if (element) element.indeterminate = selectedCommunityMemberIds.length > 0 && selectedCommunityMemberIds.length < communityVisibleRecords.length; }}
-              onChange={(event) => setSelectedCommunityMemberIds(event.target.checked ? communityVisibleRecords.map((record) => record.id) : [])}
-            />
-            <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
-          </label>
+
           <FilterDropdown
             label="Member filter"
             showLabel={false}
@@ -3235,14 +3226,26 @@ export default function HomePage() {
               setCommunityMemberPage(1);
             }}
           />
+
+        </div>
+          <div className="community-member-priority-actions">
+          <label className="community-member-select-all">
+            <input
+              type="checkbox"
+              aria-label="Select all filtered members"
+              disabled={!communityVisibleRecords.length}
+              checked={communityVisibleRecords.length > 0 && selectedCommunityMemberIds.length === communityVisibleRecords.length}
+              ref={(element) => { if (element) element.indeterminate = selectedCommunityMemberIds.length > 0 && selectedCommunityMemberIds.length < communityVisibleRecords.length; }}
+              onChange={(event) => setSelectedCommunityMemberIds(event.target.checked ? communityVisibleRecords.map((record) => record.id) : [])}
+            />
+            <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
+          </label>
           <Button type="button" variant="secondary" size="xs"
             disabled={!zeroServerCommunityRecords.length || communityBulkAction !== null}
             title="Select all members with 0 servers matching the current filters, including unloaded rows"
             onClick={() => setSelectedCommunityMemberIds(zeroServerCommunityRecords.map((record) => record.id))}>
             <ListChecks className="h-3.5 w-3.5" />Select 0 servers ({zeroServerCommunityRecords.length})
           </Button>
-        </div>
-          <div className="community-member-priority-actions">
             <Button type="button" variant="dangerGhost" size="sm"
               title="Disconnect selected accounts from Onliner and keep them in Members Stock"
               disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}

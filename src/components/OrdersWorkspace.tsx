@@ -60,7 +60,6 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
   const joinMethod = order.joinMethod === "directly" ? "Direct join" : order.joinMethod === "experimental_join" ? "Experimental join" : "Create invite";
   const delay = order.statusDelay ?? order.delay;
   const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
-  const leaveTitle = job ? `${job.processed}/${job.total} processed · ${job.left + job.alreadyLeft} removed · ${job.failed} failed${runningLeave && job.nextRunAt ? ` · Next: ${new Date(job.nextRunAt).toLocaleTimeString()}` : ""}` : "";
 
   return <>
     <tr className="od-record" data-notice={Boolean(botInvite || invitesPaused)}>
@@ -83,13 +82,17 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       <td className="od-support-cell">
         <span className="od-period-label" data-state={period.state}>{period.state === "expired" ? <><Clock3 /> Expired</> : period.state === "soon" ? <><Clock3 /> Expiring soon</> : period.state === "active" ? <><ShieldCheck /> Active support</> : <><span className="od-no-period">—</span> No expiry</>}</span>
         {period.state !== "none" ? <span className="od-period-relative" title={`${date(period.expiresAt)} at ${date(period.expiresAt, true)}`}>{relativePeriod(period.expiresAt, now)}</span> : null}
-        {job ? <Link className="od-leave-state" data-state={runningLeave ? "running" : leaveFailed ? "failed" : "done"} to={`${orderUrl}#member-log`} title={leaveTitle}>{runningLeave ? <LoaderCircle className="animate-spin" /> : leaveFailed ? <TriangleAlert /> : <Check />}{runningLeave ? `Removing ${job.processed}/${job.total}` : leaveFailed ? `${job.failed} leave${job.failed === 1 ? "" : "s"} failed` : "Members removed"}<ChevronRight /></Link>
+        {job ? <div className="od-leave-summary" role="status">
+          <span className="od-leave-state" data-state={runningLeave ? "running" : leaveFailed ? "failed" : "done"}>{runningLeave ? <LoaderCircle className="animate-spin" /> : leaveFailed ? <TriangleAlert /> : <Check />}{runningLeave ? `Removing ${job.processed}/${job.total}` : `Removal finished · ${job.processed}/${job.total}`}</span>
+          <span className="od-leave-counts">{number(job.left + job.alreadyLeft)} removed <span aria-hidden="true">·</span> <span data-failed={job.failed > 0}>{number(job.failed)} failed</span></span>
+          {runningLeave && job.nextRunAt ? <span className="od-leave-next">Next: {date(job.nextRunAt, true)}</span> : null}
+        </div>
           : period.state !== "none" ? <time className="od-period-date" dateTime={new Date(period.expiresAt).toISOString()} title={`${date(period.expiresAt)} at ${date(period.expiresAt, true)}`}>{period.state === "expired" ? "Ended" : "Ends"} {date(period.expiresAt)}</time> : null}
       </td>
       <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
       <td className="od-actions-cell">
         <div className="od-row-actions">
-          <Link className="od-open-order" to={orderUrl} aria-label={`Open order ${order.uniqid}`}>Open <ArrowUpRight /></Link>
+          <Button asChild variant="secondary" size="icon-sm" className="od-open-order"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
           <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
             <summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal /></summary>
             <div className="od-action-popover">
@@ -102,9 +105,10 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
         </div>
       </td>
     </tr>
-    {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={5}><div>
-      <TriangleAlert aria-hidden="true" /><span>{botInvite ? "Add the bot to start delivery." : "Invites are paused. Check the invite to continue."}</span>
-      {botInvite ? <><button type="button" onClick={() => actions.onCopyInvite(botInvite)}>Copy invite</button><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></> : <button type="button" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue delivery"}</button>}
+    {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={5}><div className="od-order-alert" data-tone={invitesPaused ? "danger" : "waiting"}>
+      <TriangleAlert aria-hidden="true" />
+      <div className="od-alert-copy"><strong>{botInvite ? "Bot invite required" : "Invites paused"}</strong><span>{botInvite ? "Add the bot to start delivery." : "Check the invite before continuing."}</span></div>
+      <div className="od-alert-actions">{botInvite ? <><Button type="button" variant="secondary" size="xs" onClick={() => actions.onCopyInvite(botInvite)}><Copy />Copy invite</Button><Button asChild size="xs"><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></Button></> : <Button type="button" variant="destructive" size="xs" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue"}</Button>}</div>
     </div></td></tr> : null}
   </>;
 }
@@ -146,11 +150,11 @@ export default function OrdersWorkspace(props: Props) {
       <div className="od-heading-actions"><Button type="button" variant="secondary" size="sm" disabled={loading || props.syncing || !props.canSync} onClick={props.onSync}><RefreshCw className={props.syncing ? "animate-spin" : ""} />{props.syncing ? "Syncing…" : "Sync active"}</Button><Button asChild size="sm"><Link to="/manage?tab=create"><Plus />New order</Link></Button></div>
     </header>
 
-    <div className="od-metrics" aria-label="Order overview">{metrics.map(({ key, title, count, detail, Icon, active, onClick }) => <button type="button" key={key} data-kind={key} aria-pressed={active} onClick={onClick} disabled={loading}>
+    <div className="od-metrics" aria-label="Order overview">{metrics.map(({ key, title, count, detail, Icon, active, onClick }) => <button className="app-panel" type="button" key={key} data-kind={key} aria-pressed={active} onClick={onClick} disabled={loading}>
       <span className="od-metric-title">{title}<Icon /></span><strong>{loading ? <Skeleton className="h-8 w-12" /> : number(count)}</strong><span className="od-metric-detail">{detail}<ArrowUpRight /></span>
     </button>)}</div>
 
-    <div className="od-board">
+    <div className="od-board app-panel">
       <div className="od-board-heading"><div><h2>Order history</h2><span>{loading ? "Loading your orders…" : `${number(stats.total)} orders in your workspace`}</span></div>
         <div className="od-service-tabs" role="group" aria-label="Filter by service">{[{ value: "all", label: "All orders" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }].map((tab) => <button key={tab.value} type="button" aria-pressed={filters.service === tab.value} onClick={() => changeFilter({ service: tab.value })}>{tab.label}</button>)}</div>
       </div>
@@ -168,7 +172,7 @@ export default function OrdersWorkspace(props: Props) {
         <tbody>{loading ? Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>) : pagination.items.map((order) => <OrderRow key={order.uniqid} order={order} now={now} {...props} />)}</tbody>
       </table>
       {!loading && !filtered.length ? <div className="od-empty"><span><Search /></span><h3>{orders.length ? "No orders found" : "Your orders start here"}</h3><p>{orders.length ? "Try another search or clear the filters to see your orders." : "Create your first order to follow its delivery and support period."}</p>{orders.length ? <Button type="button" variant="secondary" size="sm" onClick={reset}>Clear filters</Button> : <Button asChild size="sm"><Link to="/manage?tab=create"><Plus />Create an order</Link></Button>}</div> : null}
-      {!loading ? <div className="od-board-footer"><ListPagination {...pagination} onChange={setPage} onPageSizeChange={setPageSize} label="Orders pages" />{stats.failedLeave > 0 ? <button className="od-failed-shortcut" type="button" onClick={() => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "leave_failed", sort: "expiry_desc" }); setPage(1); }}><TriangleAlert />{stats.failedLeave} orders need a removal check<ChevronRight /></button> : null}</div> : null}
+      {!loading ? <div className="od-board-footer"><ListPagination {...pagination} onChange={setPage} onPageSizeChange={setPageSize} label="Orders pages" showNavigationLabels />{stats.failedLeave > 0 ? <button className="od-failed-shortcut" type="button" onClick={() => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "leave_failed", sort: "expiry_desc" }); setPage(1); }}><TriangleAlert />{stats.failedLeave} orders need a removal check<ChevronRight /></button> : null}</div> : null}
     </div>
   </section>;
 }
