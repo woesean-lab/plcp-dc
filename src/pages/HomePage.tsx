@@ -1,4 +1,5 @@
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
+import { getOnlinerProxyStatus } from "../lib/onliner";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -753,6 +754,8 @@ export default function HomePage() {
   const [onlinerAvailableProxyCount, setOnlinerAvailableProxyCount] = useState(0);
   const [onlinerCoolingProxyCount, setOnlinerCoolingProxyCount] = useState(0);
   const [onlinerProxyDetails, setOnlinerProxyDetails] = useState<DiscordOnlinerProxyDetail[]>([]);
+  const [onlinerProxyFilter, setOnlinerProxyFilter] = useState("all");
+  const [onlinerProxySearch, setOnlinerProxySearch] = useState("");
   const [savingOnlinerProxies, setSavingOnlinerProxies] = useState(false);
   const [showAddOnlinerProxiesModal, setShowAddOnlinerProxiesModal] = useState(false);
   const [onlinerProxyAddDraft, setOnlinerProxyAddDraft] = useState("");
@@ -3598,6 +3601,15 @@ export default function HomePage() {
     [onlinerSnapshot?.accounts]
   );
   const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, ONLINER_ACCOUNT_PAGE_SIZE);
+  const filteredOnlinerProxies = useMemo(() => {
+    const search = onlinerProxySearch.trim().toLowerCase();
+    const isIssue = (proxy: DiscordOnlinerProxyDetail) => ["issue", "cooling"].includes(getOnlinerProxyStatus(proxy));
+    return onlinerProxyDetails
+      .filter((proxy) => onlinerProxyFilter === "all" || getOnlinerProxyStatus(proxy) === onlinerProxyFilter)
+      .filter((proxy) => !search || [formatOnlinerProxyLabel(proxy.proxy), proxy.countryName, proxy.countryCode]
+        .some((value) => value?.toLowerCase().includes(search)))
+      .sort((left, right) => Number(isIssue(left)) - Number(isIssue(right)));
+  }, [onlinerProxyDetails, onlinerProxyFilter, onlinerProxySearch]);
   const visibleOnlinerAccounts = onlinerPagination.items;
   const visibleGatewayLogs = (onlinerConsoleView === "issues" ? onlinerIssueLogs : onlinerSnapshot?.logs ?? [])
     .filter((entry) => isVisibleGatewayConsoleLog(entry.message));
@@ -4775,17 +4787,28 @@ export default function HomePage() {
                       <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
                       {onlinerProxyDetails.length ? (
                         <div className="onliner-proxy-usage">
+                          <div className="grid gap-3 border-b border-[var(--app-divider)] p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
+                            <Input aria-label="Search Onliner proxies" placeholder="Search proxy or country..." value={onlinerProxySearch} onChange={(event) => setOnlinerProxySearch(event.target.value)} />
+                            <FilterDropdown label="Proxy status" showLabel={false} value={onlinerProxyFilter} onChange={setOnlinerProxyFilter} options={[
+                              { value: "all", label: "All statuses" },
+                              { value: "live", label: "Live" },
+                              { value: "available", label: "Available" },
+                              { value: "issue", label: "Issue" },
+                              { value: "cooling", label: "Cooling" }
+                            ]} />
+                          </div>
                           <div className="onliner-proxy-usage-heading">
                             <span>Saved proxy</span><span>Country</span><span>Accounts</span><span>Status</span><span>Health</span><span aria-hidden="true" />
                           </div>
                           <div className="onliner-proxy-usage-list">
-                            <PaginatedList items={onlinerProxyDetails} label="Onliner proxy pages">{(pageItems) => (<>
+                            {!filteredOnlinerProxies.length ? <p className="app-copy p-4 text-xs" role="status">No proxies match these filters.</p> : null}
+                            <PaginatedList key={`${onlinerProxyFilter}:${onlinerProxySearch}`} items={filteredOnlinerProxies} label="Onliner proxy pages">{(pageItems) => (<>
                             {pageItems.map((proxy) => (
                               <div className="onliner-proxy-usage-row" key={proxy.proxy} data-status={proxy.status === "cooling" || proxy.errorAccounts > 0 ? "cooling" : proxy.connectedAccounts > 0 ? "live" : "available"}>
                                 <span className="onliner-proxy-address"><Globe2 className="h-3.5 w-3.5" /><code>{formatOnlinerProxyLabel(proxy.proxy)}</code></span>
                                 <span className="onliner-proxy-country"><i aria-hidden="true">{formatCountryFlag(proxy.countryCode)}</i><small>{proxy.countryName ?? "Unknown"}</small></span>
                                 <span className="onliner-proxy-assigned"><Users className="h-3.5 w-3.5" /><strong>{proxy.assignedAccounts}</strong><small>{proxy.assignedAccounts === 1 ? "account" : "accounts"}</small></span>
-                                <span className="onliner-proxy-health-state"><Badge variant={proxy.status === "cooling" || proxy.errorAccounts > 0 ? "destructive" : "success"}>{proxy.status === "cooling" ? "Cooling" : proxy.connectedAccounts > 0 ? "Live" : proxy.errorAccounts > 0 ? "Issue" : "Available"}</Badge><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
+                                <span className="onliner-proxy-health-state"><Badge variant={["cooling", "issue"].includes(getOnlinerProxyStatus(proxy)) ? "destructive" : "success"}>{({ cooling: "Cooling", issue: "Issue", live: "Live", available: "Available" })[getOnlinerProxyStatus(proxy)]}</Badge><small>{formatOnlinerProxyCooldown(proxy.cooldownUntil, onlinerCountdownNow)}</small></span>
                                 <span className="onliner-proxy-health-copy">
                                   <strong>{proxy.failureCount ? `${proxy.failureCount} recent failure${proxy.failureCount === 1 ? "" : "s"}` : proxy.assignedAccounts ? `${proxy.connectedAccounts}/${proxy.assignedAccounts} connected${proxy.connectingAccounts ? ` · ${proxy.connectingAccounts} connecting` : ""}` : "No assigned accounts"}</strong>
                                   <small>{proxy.lastSuccessAt ? `Last success ${formatOnlinerProxyEvent(proxy.lastSuccessAt)}` : proxy.lastFailureAt ? `Last failure ${formatOnlinerProxyEvent(proxy.lastFailureAt)}` : "Waiting for first connection"}</small>

@@ -119,6 +119,13 @@ export type DiscordOnlinerProxyDetail = {
   lastFailureAt: string | null;
 };
 
+export function getOnlinerProxyStatus(proxy: DiscordOnlinerProxyDetail) {
+  if (proxy.status === "cooling") return "cooling";
+  if (proxy.errorAccounts > 0) return "issue";
+  if (proxy.connectedAccounts > 0) return "live";
+  return "available";
+}
+
 export type DiscordOnlinerProxyPool = {
   proxies: string[];
   details: DiscordOnlinerProxyDetail[];
