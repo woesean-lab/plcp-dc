@@ -122,14 +122,11 @@
 .od-table .od-created-cell > time { display: block; color: var(--app-text-secondary); font-size: 11px; }
 .od-created-cell > span:not(.od-mobile-caption) { display: block; margin-top: 3px; color: var(--od-faint); font-size: 10px; }
 .od-mobile-caption { display: none; }
-.od-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
-.orderdesk .od-row-action.ui-button { width: 32px; height: 28px; min-height: 28px; padding: 0; border-radius: 7px; flex: 0 0 32px; }
-.od-row-action > svg { width: 14px; height: 14px; }
+.od-row-actions { justify-content: flex-end; }
 .od-action-menu { position: relative; }
 .od-action-menu[open] { z-index: 30; }
 .od-action-menu > summary { list-style: none; cursor: pointer; }
 .od-action-menu > summary::-webkit-details-marker { display: none; }
-.od-action-menu > summary > svg { width: 15px; height: 15px; }
 .od-action-menu[open] > summary { border-color: var(--app-border-strong); color: var(--app-text); background: var(--app-hover-strong); }
 .od-action-popover { position: absolute; z-index: 30; right: 0; bottom: calc(100% + 7px); display: grid; width: 210px; padding: 5px; border: 1px solid var(--app-border-strong); border-radius: 10px; background: var(--app-surface-raised); box-shadow: 0 12px 36px #0007; }
 .od-action-popover > :is(button, a) { display: flex; width: 100%; align-items: center; gap: 8px; min-height: 32px; padding: 7px 8px; border: 0; border-radius: 6px; background: transparent; color: var(--app-text-secondary); text-align: left; text-decoration: none; font-size: 11px; cursor: pointer; }

@@ -91,10 +91,10 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       </td>
       <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
       <td className="od-actions-cell">
-        <div className="od-row-actions">
-          <Button asChild variant="secondary" size="icon-sm" className="od-row-action"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
+        <div className="community-member-row-actions od-row-actions">
+          <Button asChild variant="secondary" size="icon-sm"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
           <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
-            <Button asChild variant="secondary" size="icon-sm" className="od-row-action"><summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal /></summary></Button>
+            <Button asChild variant="secondary" size="icon-sm"><summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /></summary></Button>
             <div className="od-action-popover">
               {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
               <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
