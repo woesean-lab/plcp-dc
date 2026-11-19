@@ -951,9 +951,11 @@ export default function PublicOrderPage() {
                   <span>
                     <small>{supportExpired ? "Expired" : "Expires"}</small>
                     <strong>{formatDateTime(expiredAt)}</strong>
-                    <button type="button" className="monitor-extend-link" onClick={() => setShowExtensionModal(true)}>
-                      Extend period
-                    </button>
+                    {!supportExpired ? (
+                      <Button type="button" className="monitor-extend-button" size="xs" onClick={() => setShowExtensionModal(true)}>
+                        <Timer className="h-3.5 w-3.5" aria-hidden="true" /> Extend period
+                      </Button>
+                    ) : null}
                   </span>
                 </div>
               ) : null}
@@ -1085,17 +1087,19 @@ export default function PublicOrderPage() {
                       <span className="flex items-center gap-2">
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
-                            <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                            <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                               {checkingCommunityMembers
                                 ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
-                                : "Check members"}
+                                : supportExpired ? "Check members · Expired" : "Check members"}
                             </Button>
                             <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="public-member-check-description">
                               <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
                             </button>
                             <span id="public-member-check-description" className="member-check-tooltip" role="tooltip">
-                              Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is online. Offline members can be replaced when their category allows it and support is active.
+                              {supportExpired
+                                ? "Check members is unavailable because this order's support period has expired. Member checks and replacements require an active support period."
+                                : "Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is online. Offline members can be replaced when their category allows it and support is active."}
                             </span>
                           </span>
                         ) : null}
@@ -1112,6 +1116,12 @@ export default function PublicOrderPage() {
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>
+                    {supportExpired ? (
+                      <div className="monitor-expired-support-note" id="public-member-support-expired" role="note">
+                        <Timer className="h-4 w-4" aria-hidden="true" />
+                        <div><strong>Support period expired</strong><p>Check members and replacements are disabled because this order's support period has ended.</p></div>
+                      </div>
+                    ) : null}
                     {communityCheckNeedsBot && botInvite ? (
                       <div className="monitor-member-check-bot-alert" role="alert">
                         <span><Bot className="h-4 w-4" aria-hidden="true" /><strong>Bot access is required to check or replace members.</strong></span>
@@ -1160,7 +1170,6 @@ export default function PublicOrderPage() {
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive. Members still present in the server are not replaceable.</p> : null}
-                    {supportExpired ? <p className="public-token-results-empty">This order has expired. Member checks and replacements are no longer available.</p> : null}
                   </div>
                 ) : null}
 
@@ -1233,7 +1242,7 @@ export default function PublicOrderPage() {
           <span>Order #{uniqid ? uniqid.slice(-8).toUpperCase() : "-"}</span>
         </footer>
       </main>
-      {showExtensionModal ? createPortal(
+      {showExtensionModal && !supportExpired ? createPortal(
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExtensionModal(false); }}>
           <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-extension-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Timer className="h-5 w-5" /></span>
