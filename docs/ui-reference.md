@@ -17,7 +17,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Row actions | `Button size="icon-sm"`; `community-member-row-actions` | Members Stock in `src/pages/HomePage.tsx`; 32px controls, standard rounded corners and shared hover |
 | Rich Presence action | `community-rich-presence-action` plus existing Button variant | Members Stock star action; preserve the purple tint |
 | Destructive icon action | `Button variant="dangerGhost" size="icon-sm"` | Members Stock power/delete; red hover treatment |
-| Auto leave action | `src/components/AutoLeaveActionButton.tsx` | Orders action column; exit = not started (Members Stock's `dangerGhost` red hover), spinner = starting/running, green check = finished, warning = finished with errors. Uses the standard icon Button; previously started jobs stay disabled. |
+| Leave all action | `src/components/AutoLeaveActionButton.tsx` | Last on the right, separated from the standard row icons. Uses the shared text Button (`size="xs"`) labelled Leave all with the Members Stock `dangerGhost` hover. Exit = not started; spinner = starting/running; check = finished; warning = errors. Previously started jobs stay disabled. |
 | Compact tabs | `stock-duration-filter`, `is-active`, `aria-pressed` | Stock filters and Orders service filter |
 | Stock category tabs | `stock-category-tabs`, `is-active` | Stock section's larger category cards |
 | Text inputs | `src/components/ui/input.tsx` | Shared Input; visible labels and disabled state |

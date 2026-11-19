@@ -94,8 +94,8 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
       </td>
       <td className="od-created-cell"><span className="od-mobile-caption">Created</span><time dateTime={order.createdAt}>{date(order.createdAt)}</time><span>{date(order.createdAt, true)}</span></td>
       <td className="od-actions-cell">
-        <div className="community-member-row-actions od-row-actions">
-          {!boost && (order.provider === "community" || job || order.membersLeftAt) ? <AutoLeaveActionButton state={leaveState} details={leaveDetails} disabled={!canLeave || actions.autoLeavingId !== null} onStart={() => actions.onAutoLeave(order)} /> : null}
+        <div className="od-row-actions">
+          <div className="community-member-row-actions">
           <Button asChild variant="secondary" size="icon-sm"><Link to={orderUrl} title="Open order" aria-label={`Open order ${order.uniqid}`}><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button>
           <details className="od-action-menu" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) event.currentTarget.removeAttribute("open"); }} onKeyDown={(event) => { if (event.key === "Escape") { event.currentTarget.removeAttribute("open"); event.currentTarget.querySelector("summary")?.focus(); } }}>
             <Button asChild variant="secondary" size="icon-sm"><summary aria-label={`More actions for ${order.uniqid}`} title="More actions"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /></summary></Button>
@@ -105,6 +105,8 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
               <button type="button" className="od-delete-action" disabled={runningLeave} title={runningLeave ? "Wait for member removal to finish" : undefined} onClick={(event) => { closeMenu(event); actions.onDelete(order); }}><Trash2 />Delete order</button>
             </div>
           </details>
+          </div>
+          {!boost && (order.provider === "community" || job || order.membersLeftAt) ? <AutoLeaveActionButton state={leaveState} details={leaveDetails} disabled={!canLeave || actions.autoLeavingId !== null} onStart={() => actions.onAutoLeave(order)} /> : null}
         </div>
       </td>
     </tr>

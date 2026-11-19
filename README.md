@@ -53,10 +53,20 @@ aksiyonunu kullanin. Kaynak kategoride `OAuth Premium`, hedefte `OAuth Online` s
 **Preview transfer** ile sayilar gorulur; **Move … orders** aktarimi uygular.
 Bu islem yalnizca siparislerin kategori baglantisini degistirir. Teslimat gecmisi,
 monitor baglantilari, mevcut destek bitis tarihleri ve Auto Leave kayitlari korunur.
-Uye stogu ayrica tasinmis olmalidir. Islemdeki siparisler ve her iki kategoriyi
-zaten iceren karma siparisler onizlemede belirtilir ve degistirilmez; farkli destek
-sureleri birlestirilmez. Islem bittiginde bekleyenler icin tekrar onizleme alinabilir.
+Uye stogu ayrica tasinmis olmalidir. Devam eden teslimat, kontrol ve Auto Leave
+islemleri de kesilmeden tasinabilir; sonraki ilerleme kayitlari kategoriyi geri
+ceviremez. Ilerleme, mevcut destek tarihleri ve tek kullanimlik leave kayitlari
+korunur. Her iki kategoriyi zaten iceren karma siparisler onizlemede belirtilir
+ve degistirilmez; farkli destek sureleri birlestirilmez.
 Kontroller: `node --test server/community-order-category-transfer.test.mjs`.
+
+Veritabani korumasi canli DB'ye baglanmadan, ayri bir bellek ici PostgreSQL ile
+test edilebilir. Test paketi uygulamanin bagimliliklarini degistirmez:
+
+```bash
+npm install --prefix output/category-transfer-test --no-save --package-lock=false --ignore-scripts --no-audit --no-fund @electric-sql/pglite
+node --test server/community-order-category-guard.test.mjs
+```
 
 ## EasyPanel servis rolleri
 

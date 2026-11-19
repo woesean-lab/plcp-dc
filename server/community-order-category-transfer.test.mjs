@@ -33,21 +33,27 @@ test("legacy orders and mixed categories retain their original deadlines", () =>
   assert.ok(planCommunityOrderCategoryTransfer({ ...mixed, categoryAllocations: [...mixed.categoryAllocations, { categoryId: target.id, expiredAt: "2027-02-01" }] }, source, target, "now").blocked, "existing target support must not be merged");
 });
 
-test("active operations and unrelated providers are not rewritten", () => {
-  for (const status of ["NEW", "PROCESS", "RECOVERING", "WAITING", "PAUSED", "INVITES PAUSED"]) assert.ok(planCommunityOrderCategoryTransfer({ ...base, status }, source, target, "now").blocked);
-  assert.ok(planCommunityOrderCategoryTransfer({ ...base, autoLeaveJob: { status: "running" } }, source, target, "now").blocked);
+test("active, waiting and paused orders move without changing operation state", () => {
+  for (const status of ["NEW", "PROCESS", "RECOVERING", "WAITING", "PAUSED", "INVITES PAUSED"]) {
+    const order = { ...base, status, autoLeaveJob: { status: "running", processed: 10, total: 200 } };
+    const plan = planCommunityOrderCategoryTransfer(order, source, target, "now");
+    assert.equal(plan.order.categoryId, target.id);
+    assert.equal(plan.order.status, status);
+    assert.deepEqual(plan.order.autoLeaveJob, order.autoLeaveJob);
+  }
   assert.equal(planCommunityOrderCategoryTransfer({ ...base, provider: "dcord" }, source, target, "now").matched, false);
 });
 
 function endpoint({ busy = false, failUpdate = false } = {}) {
   let payload = structuredClone(base);
+  let updatedAt = "2026-11-19";
+  if (busy) { payload.status = "PROCESS"; payload.autoLeaveJob.status = "running"; }
   const log = [];
   const transfers = new Set();
   const client = { release() { log.push("release"); }, async query(sql, values) {
     log.push(sql);
     if (sql.startsWith("SELECT id, name")) return { rows: [source, target], rowCount: 2 };
-    if (sql.includes("SELECT uniqid, payload")) return { rows: [{ uniqid: payload.uniqid, payload, updated_at: "2026-11-19" }], rowCount: 1 };
-    if (sql.startsWith("SELECT order_id")) return { rows: [] };
+    if (sql.includes("SELECT uniqid, payload")) return { rows: [{ uniqid: payload.uniqid, payload, updated_at: updatedAt }], rowCount: 1 };
     if (sql.includes("UPDATE tracked_orders AS orders")) {
       assert.ok(transfers.has(base.uniqid), "order is guarded during mutation");
       if (failUpdate) throw new Error("write failed");
@@ -55,13 +61,13 @@ function endpoint({ busy = false, failUpdate = false } = {}) {
     }
     return { rows: [], rowCount: 1 };
   } };
-  const handler = createCommunityOrderCategoryTransferHandler({ pool: { connect: async () => client }, getConfig: async () => ({ configured: true, guildId: "stock", clientId: "application" }), transfers, isBusy: () => busy });
+  const handler = createCommunityOrderCategoryTransferHandler({ pool: { connect: async () => client }, getConfig: async () => ({ configured: true, guildId: "stock", clientId: "application" }), transfers });
   async function request(body) {
     const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
     await handler({ params: { categoryId: source.id }, body: { targetCategoryId: target.id, ...body } }, response, (error) => { response.error = error; });
     return response;
   }
-  return { request, log, transfers, payload: () => payload };
+  return { request, log, transfers, payload: () => payload, advance(fields) { payload = { ...payload, ...fields }; updatedAt = "2026-11-20"; } };
 }
 
 test("preview does not write; apply requires that exact preview and releases guards", async () => {
@@ -77,13 +83,20 @@ test("preview does not write; apply requires that exact preview and releases gua
   assert.equal(api.transfers.size, 0);
 });
 
-test("busy orders stay unchanged and write failures roll back and clear guards", async () => {
+test("ongoing progress does not expire the preview; apply keeps the latest progress", async () => {
   const busy = endpoint({ busy: true });
   const preview = await busy.request({});
-  assert.equal(preview.body.blockedCount, 1);
-  assert.equal(preview.body.transferable, 0);
-  assert.equal((await busy.request({ apply: true, previewToken: preview.body.previewToken })).body.moved, 0);
-  assert.equal(busy.payload().categoryId, source.id);
+  assert.equal(preview.body.blockedCount, 0);
+  assert.equal(preview.body.transferable, 1);
+  busy.advance({ added: 195, details: "Latest delivery progress", autoLeaveJob: { status: "running", processed: 120, total: 200 } });
+  assert.equal((await busy.request({ apply: true, previewToken: preview.body.previewToken })).body.moved, 1);
+  assert.equal(busy.payload().categoryId, target.id);
+  assert.equal(busy.payload().added, 195);
+  assert.equal(busy.payload().autoLeaveJob.processed, 120);
+  assert.equal(busy.payload().status, "PROCESS");
+});
+
+test("write failures roll back and clear transfer guards", async () => {
   const failing = endpoint({ failUpdate: true });
   const initial = await failing.request({});
   assert.ok((await failing.request({ apply: true, previewToken: initial.body.previewToken })).error);

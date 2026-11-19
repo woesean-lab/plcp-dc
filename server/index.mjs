@@ -18,6 +18,7 @@ import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation }
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
+import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -8878,6 +8879,7 @@ async function initializeDatabase() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(COMMUNITY_ORDER_CATEGORY_GUARD_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -10389,8 +10391,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
 });
 
 app.post("/api/community/categories/:categoryId/transfer-orders", requireSession, createCommunityOrderCategoryTransferHandler({
-  pool, getConfig: getCommunityOAuthConfig, transfers: communityOrderCategoryTransfers,
-  isBusy: (id) => Boolean(communityOrderMemberCheckProgress.get(id)?.active || reactionWorkspaceMemberCheckProgress.get(id)?.active || communityOrderLeaveAllActive.has(id))
+  pool, getConfig: getCommunityOAuthConfig, transfers: communityOrderCategoryTransfers
 }));
 
 app.delete("/api/community/categories/:categoryId", requireSession, async (req, res, next) => {

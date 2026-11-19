@@ -12,13 +12,6 @@ export function planCommunityOrderCategoryTransfer(order, source, target, transf
   const categoryIds = [primary, ...allocations.map((item) => item?.categoryId), ...members.map((item) => item?.categoryId || primary)];
   if (!categoryIds.includes(source.id)) return { matched: false };
   if (categoryIds.includes(target.id)) return { matched: true, blocked: "This order already contains both categories. Its separate support periods need to be kept." };
-  if (!["COMPLETED", "PARTIAL", "ERROR", "FAILED", "CANCELLED", "CANCELED", "TERMINATED", "INVALID"].includes(String(order.status ?? "").toUpperCase())) {
-    return { matched: true, blocked: "Finish or cancel delivery before moving this order." };
-  }
-  if (order.autoLeaveJob?.status === "running"
-      || members.some((member) => ["joining", "replacing"].includes(String(member?.state ?? "").toLowerCase()))) {
-    return { matched: true, blocked: "An operation is still running for this order. Try again when it finishes." };
-  }
   const display = { categoryId: target.id, categoryName: target.name, colorKey: target.color_key };
   const nextAllocations = allocations.map((allocation) => allocation?.categoryId === source.id ? {
     ...allocation, ...display,
@@ -41,12 +34,14 @@ export function planCommunityOrderCategoryTransfer(order, source, target, transf
       member && typeof member === "object" && !Array.isArray(member) && (member.categoryId || primary) === source.id ? { ...member, ...display, reactionUseEnabled: target.reaction_use_enabled === true } : member) } : {}),
     categoryTransferHistory: [...(Array.isArray(order.categoryTransferHistory) ? order.categoryTransferHistory : []), {
       fromCategoryId: source.id, fromCategoryName: source.name,
-      toCategoryId: target.id, toCategoryName: target.name, transferredAt
+      toCategoryId: target.id, toCategoryName: target.name, toColorKey: target.color_key,
+      toCheckReplacementEnabled: target.check_replacement_enabled !== false,
+      toReactionUseEnabled: target.reaction_use_enabled === true, transferredAt
     }]
   } };
 }
 
-export function createCommunityOrderCategoryTransferHandler({ pool, getConfig, transfers, isBusy = () => false }) {
+export function createCommunityOrderCategoryTransferHandler({ pool, getConfig, transfers }) {
   const parseCategoryId = (value) => {
     const normalized = String(value ?? "").trim().toLowerCase();
     return /^[a-z0-9][a-z0-9_-]{0,63}$/.test(normalized) ? normalized : null;
@@ -84,19 +79,18 @@ export function createCommunityOrderCategoryTransferHandler({ pool, getConfig, t
       if (transfers.has(row.uniqid)) throw Object.assign(new Error("An order category transfer is already running."), { statusCode: 409 });
       transfers.add(row.uniqid); lockedIds.push(row.uniqid);
     }
-    const leases = tracked.rowCount ? await client.query("SELECT order_id FROM community_order_worker_leases WHERE order_id = ANY($1::text[]) AND expires_at > NOW() UNION SELECT order_id FROM community_reaction_jobs WHERE order_id = ANY($1::text[]) AND status IN ('pending', 'processing', 'running')", [tracked.rows.map((row) => row.uniqid)]) : { rows: [] };
-    const busy = new Set(leases.rows.map((row) => row.order_id));
     const now = new Date().toISOString();
     const patches = [];
     const blocked = [];
     for (const row of tracked.rows) {
       const plan = planCommunityOrderCategoryTransfer(row.payload, source, target, now);
       if (!plan.matched) continue;
-      const active = busy.has(row.uniqid) || isBusy(row.uniqid);
-      if (plan.blocked || active) blocked.push({ uniqid: row.uniqid, reason: plan.blocked || "A member operation is still running. Try again when it finishes." });
+      if (plan.blocked) blocked.push({ uniqid: row.uniqid, reason: plan.blocked });
       else patches.push({ uniqid: row.uniqid, payload: plan.order });
     }
-    const previewToken = crypto.createHash("sha256").update(JSON.stringify([categories.rows, tracked.rows.map((row) => [row.uniqid, row.updated_at]), blocked])).digest("hex");
+    // Ongoing progress must not invalidate the preview. Apply always plans from
+    // freshly locked rows; only a change in the selected orders/categories does.
+    const previewToken = crypto.createHash("sha256").update(JSON.stringify([categories.rows, patches.map((row) => row.uniqid), blocked])).digest("hex");
     if (apply && req.body?.previewToken !== previewToken) {
       await client.query("ROLLBACK"); return res.status(409).json({ message: "Orders changed since the preview. Preview the transfer again." });
     }
