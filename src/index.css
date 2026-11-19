@@ -12083,7 +12083,7 @@
 .list-pagination button { flex-shrink: 0; }
 .list-pagination > div { flex-wrap: wrap; }
 .list-page-size { display: flex; align-items: center; gap: 8px; margin-right: 8px; white-space: nowrap; }
-.list-page-size select {
+.list-page-size .filter-dropdown-trigger {
   min-height: 32px;
   border: 1px solid var(--app-border);
   border-radius: 8px;
@@ -12093,4 +12093,5 @@
   font: inherit;
   cursor: pointer;
 }
-.list-page-size select:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.list-page-size .filter-dropdown-trigger:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
+.filter-dropdown-portal { min-width: 88px; font-size: 12px; }
