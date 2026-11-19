@@ -16,6 +16,7 @@ import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-bo
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
 import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
+import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -9838,6 +9839,51 @@ app.post("/api/onliner/accounts/bulk", requireSession, async (req, res, next) =>
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/onliner/accounts/bulk-action", requireSession, async (req, res, next) => {
+  try {
+    const { action, accountIds } = req.body ?? {};
+    if (!["reconnect", "rotate-proxy", "remove"].includes(action) || !Array.isArray(accountIds) || !accountIds.length || accountIds.length > 10_000
+      || accountIds.some((id) => typeof id !== "string" || !id || id.length > 160)) {
+      return res.status(400).json({ message: "Choose an action and valid bot profiles." });
+    }
+    const current = await getDiscordOnlinerConfig();
+    if (action === "reconnect") {
+      if (!current.enabled) return res.status(409).json({ message: "Enable the Onliner before reconnecting bots." });
+      const worker = await pool.query("SELECT connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1");
+      if (worker.rows[0]?.connection_paused === true) return res.status(409).json({ message: "Gateway connections are paused. Continue them before reconnecting bots." });
+    }
+    const plan = planOnlinerBulkAction(current, accountIds, action, selectDiscordOnlinerProxy);
+    const candidate = action === "reconnect" ? current : normalizeDiscordOnlinerConfig({ ...current, accounts: plan.accounts });
+    if (plan.succeeded.length) {
+      if (action !== "reconnect") await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+      if (action === "remove") {
+        for (const id of plan.succeeded) {
+          const runtime = discordOnlinerRuntimes.get(id);
+          if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+          discordOnlinerRuntimes.delete(id);
+          discordOnlinerPendingRuntimeWrites.delete(id);
+        }
+        await pool.query("DELETE FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [plan.succeeded]);
+      } else if (action === "reconnect") {
+        if (serviceRunsOnliner) {
+          const selected = new Set(plan.succeeded);
+          for (const account of current.accounts) if (selected.has(account.id)) reconnectDiscordOnlinerAccount(current, account);
+        } else {
+          await pool.query(
+            "INSERT INTO discord_onliner_commands (command_type, payload) SELECT 'reconnect_account', jsonb_build_object('accountId', id) FROM unnest($1::text[]) AS selected(id)",
+            [plan.succeeded]
+          );
+        }
+      } else if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
+        await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
+      }
+      if (action !== "reconnect" && serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = candidate;
+      appendDiscordOnlinerLog("info", `Bulk ${action}: ${plan.succeeded.length} bot profiles processed.`);
+    }
+    res.json({ snapshot: await getDiscordOnlinerSnapshotForApi(candidate), succeededIds: plan.succeeded, failures: plan.failed });
+  } catch (error) { next(error); }
 });
 
 app.delete("/api/onliner/accounts/:accountId", requireSession, async (req, res, next) => {

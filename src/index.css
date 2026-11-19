@@ -12120,6 +12120,20 @@
   padding: 12px;
   border-bottom: 1px solid var(--app-divider);
 }
+.onliner-bulk-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 8px; border-bottom: 1px solid var(--app-divider); color: var(--app-muted); font-size: 11px; }
+.onliner-bulk-toolbar > label, .onliner-bulk-toolbar > div { display: flex; align-items: center; gap: 8px; }
+.onliner-bulk-toolbar > div { flex-wrap: wrap; }
+.onliner-bulk-toolbar .ui-button { height: 30px; padding-inline: 8px; font-size: 10px; }
+.onliner-account-row.is-selectable { grid-template-columns: 16px 34px minmax(0, 1fr) auto auto; }
+.onliner-account-row[data-selected="true"] { background: var(--app-accent-soft); }
+.onliner-account-checkbox, .onliner-bulk-toolbar input { width: 14px; height: 14px; accent-color: var(--app-accent); cursor: pointer; }
+@media (max-width: 520px) {
+  .onliner-account-row.is-selectable { grid-template-columns: 16px 34px minmax(0, 1fr); }
+  .onliner-account-row.is-selectable .onliner-account-checkbox { grid-column: 1; grid-row: 1; }
+  .onliner-account-row.is-selectable .onliner-bot-avatar { grid-column: 2; }
+  .onliner-account-row.is-selectable .onliner-account-copy { grid-column: 3; }
+  .onliner-account-row.is-selectable .onliner-account-actions { grid-column: 2 / -1; }
+}
 @media (max-width: 639px) {
   .onliner-account-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .onliner-account-filters > .ui-input { grid-column: 1 / -1; }

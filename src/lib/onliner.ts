@@ -256,6 +256,16 @@ export function removeDiscordOnlinerAccount(accountId: string) {
   }).then(parseResponse);
 }
 
+export async function bulkDiscordOnlinerAccounts(action: "reconnect" | "rotate-proxy" | "remove", accountIds: string[]) {
+  const response = await fetch("/api/onliner/accounts/bulk-action", {
+    method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, accountIds })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.message ?? `Request failed with ${response.status}`);
+  return payload as { snapshot: DiscordOnlinerSnapshot; succeededIds: string[]; failures: Array<{ accountId: string; message: string }> };
+}
+
 export function reconnectDiscordOnlinerAccount(accountId: string) {
   return fetch(`/api/onliner/accounts/${encodeURIComponent(accountId)}/reconnect`, {
     method: "POST",

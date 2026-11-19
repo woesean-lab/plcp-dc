@@ -1,6 +1,7 @@
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
 import { normalizeOnlinerProxyImportDraft } from "../../shared/onliner-proxy-import.mjs";
 import { getOnlinerProxyStatus } from "../lib/onliner";
+import { bulkDiscordOnlinerAccounts } from "../lib/onliner";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
@@ -743,6 +744,10 @@ export default function HomePage() {
   const [onlinerAccountSearch, setOnlinerAccountSearch] = useState("");
   const [onlinerAccountFilter, setOnlinerAccountFilter] = useState("all");
   const [onlinerPresenceFilter, setOnlinerPresenceFilter] = useState("all");
+  const [selectedOnlinerAccountIds, setSelectedOnlinerAccountIds] = useState<string[]>([]);
+  const [onlinerBulkAction, setOnlinerBulkAction] = useState<"reconnect" | "rotate-proxy" | "remove" | null>(null);
+  const [onlinerAccountsPendingRemoval, setOnlinerAccountsPendingRemoval] = useState<string[]>([]);
+  const onlinerBulkInFlightRef = useRef(false);
   const [onlinerDraft, setOnlinerDraft] = useState(EMPTY_ONLINER_DRAFT);
   const [onlinerAccountDraft, setOnlinerAccountDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
   const [loadingOnliner, setLoadingOnliner] = useState(false);
@@ -1931,6 +1936,7 @@ export default function HomePage() {
   }
 
   async function handleRemoveOnlinerAccount(accountId: string) {
+    if (onlinerBulkInFlightRef.current) return;
     try {
       setRemovingOnlinerAccountId(accountId);
       setOnlinerSnapshot(await removeDiscordOnlinerAccount(accountId));
@@ -1943,6 +1949,7 @@ export default function HomePage() {
   }
 
   async function handleReconnectOnlinerAccount(accountId: string) {
+    if (onlinerBulkInFlightRef.current) return;
     try {
       setReconnectingOnlinerAccountId(accountId);
       setOnlinerSnapshot(await reconnectDiscordOnlinerAccount(accountId));
@@ -1955,6 +1962,7 @@ export default function HomePage() {
   }
 
   async function handleRotateOnlinerProxy(accountId: string) {
+    if (onlinerBulkInFlightRef.current) return;
     try {
       setChangingOnlinerProxyId(accountId);
       setOnlinerSnapshot(await rotateDiscordOnlinerAccountProxy(accountId));
@@ -1970,7 +1978,33 @@ export default function HomePage() {
     }
   }
 
+  async function handleOnlinerBulkAction(action: "reconnect" | "rotate-proxy" | "remove", ids = selectedOnlinerAccountIds) {
+    if (onlinerBulkInFlightRef.current || !ids.length || removingOnlinerAccountId || reconnectingOnlinerAccountId || changingOnlinerProxyId || savingOnlinerAccount || onlinerControlAction) return;
+    onlinerBulkInFlightRef.current = true;
+    setOnlinerBulkAction(action);
+    try {
+      const result = await bulkDiscordOnlinerAccounts(action, ids);
+      setOnlinerSnapshot(result.snapshot);
+      setSelectedOnlinerAccountIds(result.failures.map((failure) => failure.accountId));
+      setOnlinerAccountsPendingRemoval([]);
+      if (result.failures.length) notifyError(`${result.succeededIds.length} processed; ${result.failures.length} failed. ${result.failures[0].message}`);
+      else notifySuccess(`${result.succeededIds.length} bots ${action === "remove" ? "removed" : action === "reconnect" ? "queued for reconnect" : "assigned another proxy"}.`);
+      if (action !== "reconnect") {
+        const proxies = await getDiscordOnlinerProxies();
+        setOnlinerAvailableProxyCount(proxies.availableCount);
+        setOnlinerCoolingProxyCount(proxies.coolingDownCount);
+        setOnlinerProxyDetails(proxies.details);
+      }
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Bulk bot action failed.");
+    } finally {
+      onlinerBulkInFlightRef.current = false;
+      setOnlinerBulkAction(null);
+    }
+  }
+
   async function handleOnlinerControl(action: "start" | "reconnect" | "connect_all" | "continue" | "pause" | "stop") {
+    if (onlinerBulkInFlightRef.current) return;
     try {
       setOnlinerControlAction(action);
       const snapshot = action === "start"
@@ -3611,7 +3645,11 @@ export default function HomePage() {
         .some((value) => value?.toLowerCase().includes(search)))
       .sort((left, right) => Number(right.connectionState === "reconnecting") - Number(left.connectionState === "reconnecting"));
   }, [onlinerSnapshot?.accounts, onlinerAccountSearch, onlinerAccountFilter, onlinerPresenceFilter]);
-  useEffect(() => { setOnlinerAccountPage(1); }, [onlinerAccountSearch, onlinerAccountFilter, onlinerPresenceFilter]);
+  useEffect(() => { setOnlinerAccountPage(1); setSelectedOnlinerAccountIds([]); }, [onlinerAccountSearch, onlinerAccountFilter, onlinerPresenceFilter]);
+  useEffect(() => {
+    const existing = new Set(onlinerSnapshot?.accounts.map((account) => account.id) ?? []);
+    setSelectedOnlinerAccountIds((ids) => ids.filter((id) => existing.has(id)));
+  }, [onlinerSnapshot?.accounts]);
   const onlinerPagination = paginate(sortedOnlinerAccounts, onlinerAccountPage, onlinerAccountPageSize);
   const filteredOnlinerProxies = useMemo(() => {
     const search = onlinerProxySearch.trim().toLowerCase();
@@ -3623,6 +3661,9 @@ export default function HomePage() {
       .sort((left, right) => Number(isIssue(left)) - Number(isIssue(right)));
   }, [onlinerProxyDetails, onlinerProxyFilter, onlinerProxySearch]);
   const visibleOnlinerAccounts = onlinerPagination.items;
+  const selectedOnlinerAccountSet = new Set(selectedOnlinerAccountIds);
+  const onlinerAccountsBusy = Boolean(onlinerBulkAction || removingOnlinerAccountId || reconnectingOnlinerAccountId || changingOnlinerProxyId || savingOnlinerAccount || onlinerControlAction);
+  const selectedOnlinerPageCount = visibleOnlinerAccounts.filter((account) => selectedOnlinerAccountSet.has(account.id)).length;
   const visibleGatewayLogs = (onlinerConsoleView === "issues" ? onlinerIssueLogs : onlinerSnapshot?.logs ?? [])
     .filter((entry) => isVisibleGatewayConsoleLog(entry.message));
 
@@ -4736,9 +4777,34 @@ export default function HomePage() {
                       <div
                         className="onliner-account-list"
                       >
+                        <div className="onliner-bulk-toolbar">
+                          <label>
+                            <input type="checkbox" aria-label="Select bots on this page" disabled={onlinerAccountsBusy || !visibleOnlinerAccounts.length}
+                              checked={visibleOnlinerAccounts.length > 0 && selectedOnlinerPageCount === visibleOnlinerAccounts.length}
+                              ref={(input) => { if (input) input.indeterminate = selectedOnlinerPageCount > 0 && selectedOnlinerPageCount < visibleOnlinerAccounts.length; }}
+                              onChange={(event) => {
+                                const checked = event.target.checked;
+                                const pageIds = new Set(visibleOnlinerAccounts.map((account) => account.id));
+                                setSelectedOnlinerAccountIds((ids) => checked ? [...new Set([...ids, ...pageIds])] : ids.filter((id) => !pageIds.has(id)));
+                              }} />
+                            <span>{selectedOnlinerAccountIds.length ? `${selectedOnlinerAccountIds.length} selected` : "Select page"}</span>
+                          </label>
+                          <div>
+                            <Button type="button" variant="ghost" size="xs" disabled={onlinerAccountsBusy || !sortedOnlinerAccounts.length} onClick={() => setSelectedOnlinerAccountIds(sortedOnlinerAccounts.map((account) => account.id))}>Select filtered ({sortedOnlinerAccounts.length})</Button>
+                            {selectedOnlinerAccountIds.length ? <Button type="button" variant="ghost" size="xs" disabled={onlinerAccountsBusy} onClick={() => setSelectedOnlinerAccountIds([])}>Clear</Button> : null}
+                            <Button type="button" variant="secondary" size="xs" disabled={onlinerAccountsBusy || !selectedOnlinerAccountIds.length || !onlinerSnapshot.enabled || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleOnlinerBulkAction("reconnect")}><RefreshCw className="h-3.5 w-3.5" />Reconnect</Button>
+                            <Button type="button" variant="secondary" size="xs" disabled={onlinerAccountsBusy || !selectedOnlinerAccountIds.length || onlinerProxyCount < 2} onClick={() => void handleOnlinerBulkAction("rotate-proxy")}><Globe2 className="h-3.5 w-3.5" />Change proxy</Button>
+                            <Button type="button" variant="dangerGhost" size="xs" disabled={onlinerAccountsBusy || !selectedOnlinerAccountIds.length} onClick={() => setOnlinerAccountsPendingRemoval([...selectedOnlinerAccountIds])}><Trash2 className="h-3.5 w-3.5" />Remove</Button>
+                          </div>
+                          {onlinerBulkAction ? <span role="status">Processing selected bots…</span> : null}
+                        </div>
                         {!visibleOnlinerAccounts.length ? <p className="app-copy p-4 text-xs" role="status">No bots match these filters.</p> : null}
                         {visibleOnlinerAccounts.map((account, index) => (
-                          <div key={account.id} className="onliner-account-row" data-state={account.connectionState}>
+                          <div key={account.id} className="onliner-account-row is-selectable" data-state={account.connectionState} data-selected={selectedOnlinerAccountSet.has(account.id)}>
+                            <input className="onliner-account-checkbox" type="checkbox" aria-label={`Select ${account.bot?.username ?? account.id}`} disabled={onlinerAccountsBusy} checked={selectedOnlinerAccountSet.has(account.id)} onChange={(event) => {
+                              const checked = event.target.checked;
+                              setSelectedOnlinerAccountIds((ids) => checked ? [...new Set([...ids, account.id])] : ids.filter((id) => id !== account.id));
+                            }} />
                             <span className="onliner-bot-avatar" aria-hidden="true">
                               {account.bot?.avatarUrl ? <img src={account.bot.avatarUrl} alt="" /> : <Bot className="h-4 w-4" />}
                             </span>
@@ -4756,16 +4822,16 @@ export default function HomePage() {
                               {account.connectionState}
                             </Badge>
                             <div className="onliner-account-actions">
-                              <Button className="onliner-account-reconnect" type="button" size="xs" variant="ghost" aria-label={`Reconnect ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Reconnect this bot" disabled={reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || savingOnlinerAccount || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleReconnectOnlinerAccount(account.id)}>
+                              <Button className="onliner-account-reconnect" type="button" size="xs" variant="ghost" aria-label={`Reconnect ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Reconnect this bot" disabled={Boolean(onlinerBulkAction) || reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || savingOnlinerAccount || onlinerControlAction !== null || onlinerSnapshot.worker?.connectionPaused === true} onClick={() => void handleReconnectOnlinerAccount(account.id)}>
                                 {reconnectingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                               </Button>
-                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token" disabled={loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
+                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Edit ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Edit token" disabled={Boolean(onlinerBulkAction) || loadingOnlinerCredentials || savingOnlinerAccount || removingOnlinerAccountId !== null} onClick={() => void handleOpenOnlinerAccountEditor(account.id)}>
                                 {loadingOnlinerCredentials && editingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Pencil className="h-3.5 w-3.5" />}
                               </Button>
-                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Change proxy for ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Change to another available proxy" disabled={changingOnlinerProxyId !== null || reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || onlinerProxyCount < 2} onClick={() => void handleRotateOnlinerProxy(account.id)}>
+                              <Button className="onliner-account-edit" type="button" size="xs" variant="ghost" aria-label={`Change proxy for ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Change to another available proxy" disabled={Boolean(onlinerBulkAction) || changingOnlinerProxyId !== null || reconnectingOnlinerAccountId !== null || removingOnlinerAccountId !== null || onlinerProxyCount < 2} onClick={() => void handleRotateOnlinerProxy(account.id)}>
                                 {changingOnlinerProxyId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Globe2 className="h-3.5 w-3.5" />}
                               </Button>
-                              <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={removingOnlinerAccountId !== null || savingOnlinerAccount} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
+                              <Button className="onliner-account-remove" type="button" size="xs" variant="dangerGhost" aria-label={`Remove ${account.bot?.username ?? `Bot ${index + 1}`}`} title="Remove bot profile" disabled={Boolean(onlinerBulkAction) || removingOnlinerAccountId !== null || savingOnlinerAccount} onClick={() => void handleRemoveOnlinerAccount(account.id)}>
                                 {removingOnlinerAccountId === account.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                               </Button>
                             </div>
@@ -5891,6 +5957,20 @@ export default function HomePage() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      ) : null}
+
+      {onlinerAccountsPendingRemoval.length ? (
+        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !onlinerBulkAction) setOnlinerAccountsPendingRemoval([]); }}>
+          <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-onliner-bots-title" onKeyDown={(event) => { if (event.key === "Escape" && !onlinerBulkAction) setOnlinerAccountsPendingRemoval([]); }}>
+            <span className="confirm-modal-icon" aria-hidden="true"><Trash2 className="h-5 w-5" /></span>
+            <h2 id="remove-onliner-bots-title">Remove {onlinerAccountsPendingRemoval.length} bot profiles?</h2>
+            <p>The selected bot profiles will be removed from Onliner and their Gateway connections will stop. You will need their tokens to add them again.</p>
+            <div className="mt-5 flex justify-end gap-3">
+              <Button autoFocus type="button" variant="secondary" disabled={Boolean(onlinerBulkAction)} onClick={() => setOnlinerAccountsPendingRemoval([])}>Cancel</Button>
+              <Button type="button" variant="destructive" disabled={Boolean(onlinerBulkAction)} onClick={() => void handleOnlinerBulkAction("remove", onlinerAccountsPendingRemoval)}>{onlinerBulkAction ? "Removing…" : `Remove ${onlinerAccountsPendingRemoval.length} bots`}</Button>
+            </div>
           </div>
         </div>
       ) : null}
