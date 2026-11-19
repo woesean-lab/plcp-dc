@@ -19,7 +19,7 @@ export function AutoLeaveActionButton({ state, details, disabled = false, onStar
 }) {
   const label = `Auto leave: ${LABELS[state]}${details ? ` · ${details}` : ""}`;
   return <span className="inline-flex" title={label}>
-    <Button type="button" size="icon-sm" variant={state === "not-started" || state === "starting" ? "destructive" : "secondary"}
+    <Button type="button" size="icon-sm" variant={state === "not-started" || state === "starting" ? "dangerGhost" : "secondary"}
       aria-label={label} data-auto-leave-state={state} disabled={disabled || state !== "not-started"} onClick={onStart}>
       {state === "starting" || state === "running" ? <LoaderCircle className={`h-3.5 w-3.5 animate-spin${state === "running" ? " text-[var(--app-accent-bright)]" : ""}`} aria-hidden="true" />
         : state === "completed" ? <Check className="h-3.5 w-3.5 text-[var(--app-success)]" aria-hidden="true" />
