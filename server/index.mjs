@@ -15,6 +15,7 @@ import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
 import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation } from "./public-community-leave.mjs";
+import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 
 const { Pool } = pg;
 const execFile = promisify(execFileCallback);
@@ -2076,7 +2077,7 @@ function findDiscordOnlinerApplication(value) {
 }
 
 function normalizeDiscordOnlinerProxyUrl(value) {
-  let proxyUrl = String(value ?? "").trim();
+  let proxyUrl = convertOnlinerProxyImport(value);
   if (!proxyUrl || proxyUrl.length > 2000) return "";
 
   if (!/^[a-z][a-z\d+.-]*:\/\//i.test(proxyUrl)) {
@@ -9502,11 +9503,11 @@ app.post("/api/onliner/proxies", requireSession, async (req, res, next) => {
     for (let index = 0; index < requested.length; index += 1) {
       const proxy = normalizeDiscordOnlinerProxyUrl(requested[index]);
       if (!proxy) return res.status(400).json({ message: `Proxy line ${index + 1} is invalid.` });
-      if (!additions.includes(proxy)) additions.push(proxy);
+      additions.push(proxy);
     }
 
     const current = await getDiscordOnlinerConfig();
-    const newProxies = additions.filter((proxy) => !current.proxyPool.includes(proxy));
+    const { newProxies, duplicateCount } = mergeOnlinerProxyImports(current.proxyPool, additions);
     if (current.proxyPool.length + newProxies.length > 10_000) {
       return res.status(400).json({ message: "Onliner supports up to 10,000 saved proxies." });
     }
@@ -9523,7 +9524,7 @@ app.post("/api/onliner/proxies", requireSession, async (req, res, next) => {
     res.status(201).json({
       ...(await getDiscordOnlinerProxyPoolResponse(candidate)),
       addedCount: newProxies.length,
-      duplicateCount: additions.length - newProxies.length
+      duplicateCount
     });
   } catch (error) {
     next(error);

@@ -18,5 +18,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /app/dist ./dist
 COPY server ./server
+COPY shared ./shared
 EXPOSE 3000
 CMD ["node", "server/index.mjs"]

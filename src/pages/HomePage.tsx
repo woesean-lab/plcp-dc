@@ -1,4 +1,5 @@
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
+import { normalizeOnlinerProxyImportDraft } from "../../shared/onliner-proxy-import.mjs";
 import { getOnlinerProxyStatus } from "../lib/onliner";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
@@ -1887,7 +1888,7 @@ export default function HomePage() {
 
   async function handleAddOnlinerProxies(event: FormEvent) {
     event.preventDefault();
-    const proxies = parseProxyDraft(onlinerProxyAddDraft);
+    const proxies = parseProxyDraft(normalizeOnlinerProxyImportDraft(onlinerProxyAddDraft));
     if (!proxies.length) return;
     try {
       setAddingOnlinerProxies(true);
@@ -5904,7 +5905,8 @@ export default function HomePage() {
             <form className="mt-5 grid gap-4" onSubmit={handleAddOnlinerProxies}>
               <label className="grid gap-2">
                 <span className={fieldLabelClass}>Proxies · one per line</span>
-                <textarea className="ui-input min-h-56 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6" value={onlinerProxyAddDraft} onChange={(event) => setOnlinerProxyAddDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} autoFocus />
+                <textarea className="ui-input min-h-56 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6" value={onlinerProxyAddDraft} onChange={(event) => setOnlinerProxyAddDraft(event.target.value)} onBlur={() => setOnlinerProxyAddDraft((value) => normalizeOnlinerProxyImportDraft(value))} placeholder={"host:port:user:pass:old_ip\nsocks5://user:pass@host:port\nhost:port:user:pass"} autoFocus />
+                <span className="text-xs text-[var(--app-muted)]">host:port:user:pass:old_ip is converted to SOCKS5. The last IP is ignored. Saved addresses and ports are not added again.</span>
                 <span className="text-xs text-[var(--app-muted)]">{parseProxyDraft(onlinerProxyAddDraft).length} new line(s) ready · duplicates will be skipped</span>
               </label>
               <div className="confirm-modal-actions">
