@@ -2084,7 +2084,7 @@ function normalizeDiscordOnlinerProxyUrl(value) {
     const parts = proxyUrl.split(":");
     if (parts.length === 4 && parts.every(Boolean)) {
       const [host, port, username, password] = parts;
-      proxyUrl = `http://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
+      proxyUrl = `socks5://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${host}:${port}`;
     } else {
       proxyUrl = `http://${proxyUrl}`;
     }

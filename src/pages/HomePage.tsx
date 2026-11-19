@@ -1871,7 +1871,7 @@ export default function HomePage() {
   async function handleSaveOnlinerProxies() {
     try {
       setSavingOnlinerProxies(true);
-      const result = await saveDiscordOnlinerProxies(parseProxyDraft(onlinerProxyDraft));
+      const result = await saveDiscordOnlinerProxies(parseProxyDraft(normalizeOnlinerProxyImportDraft(onlinerProxyDraft)));
       setOnlinerProxyDraft(result.proxies.join("\n"));
       setOnlinerProxyCount(result.count);
       setOnlinerAvailableProxyCount(result.availableCount);
@@ -4815,7 +4815,7 @@ export default function HomePage() {
                           </Button>
                         </div>
                       </header>
-                      <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(normalizeProxyDraft(event.target.value))} placeholder={"user:pass@host:port\nhost:port:user:pass"} />
+                      <textarea className="dcord-proxy-textarea" spellCheck={false} value={onlinerProxyDraft} onChange={(event) => setOnlinerProxyDraft(event.target.value)} onBlur={() => setOnlinerProxyDraft((value) => normalizeOnlinerProxyImportDraft(value))} placeholder={"host:port:user:pass\nhost:port:user:pass:old_ip\nsocks5://user:pass@host:port"} />
                       {onlinerProxyDetails.length ? (
                         <div className="onliner-proxy-usage">
                           <div className="grid gap-3 border-b border-[var(--app-divider)] p-3 sm:grid-cols-[minmax(0,1fr)_180px]">
@@ -5906,7 +5906,7 @@ export default function HomePage() {
               <label className="grid gap-2">
                 <span className={fieldLabelClass}>Proxies · one per line</span>
                 <textarea className="ui-input min-h-56 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6" value={onlinerProxyAddDraft} onChange={(event) => setOnlinerProxyAddDraft(event.target.value)} onBlur={() => setOnlinerProxyAddDraft((value) => normalizeOnlinerProxyImportDraft(value))} placeholder={"host:port:user:pass:old_ip\nsocks5://user:pass@host:port\nhost:port:user:pass"} autoFocus />
-                <span className="text-xs text-[var(--app-muted)]">host:port:user:pass:old_ip is converted to SOCKS5. The last IP is ignored. Saved addresses and ports are not added again.</span>
+                <span className="text-xs text-[var(--app-muted)]">host:port:user:pass and host:port:user:pass:old_ip are converted to SOCKS5. The old IP is ignored. Saved addresses and ports are not added again.</span>
                 <span className="text-xs text-[var(--app-muted)]">{parseProxyDraft(onlinerProxyAddDraft).length} new line(s) ready · duplicates will be skipped</span>
               </label>
               <div className="confirm-modal-actions">
