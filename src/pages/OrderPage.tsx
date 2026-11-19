@@ -1570,7 +1570,7 @@ export default function OrderPage() {
                           <CircleHelp className="h-3.5 w-3.5" aria-hidden="true" />
                         </button>
                         <span id="admin-member-check-description" className="member-check-tooltip" role="tooltip">
-                          Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is online. Offline members can be replaced when their category allows it and support is active.
+                          Checks whether members are still in your server and online.
                         </span>
                       </span>
                     </>

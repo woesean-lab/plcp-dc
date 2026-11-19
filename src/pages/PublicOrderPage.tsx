@@ -1098,8 +1098,8 @@ export default function PublicOrderPage() {
                             </button>
                             <span id="public-member-check-description" className="member-check-tooltip" role="tooltip">
                               {supportExpired
-                                ? "Check members is unavailable because this order's support period has expired. Member checks and replacements require an active support period."
-                                : "Refreshes OAuth access, confirms whether each member is still in the server, and checks whether the member is online. Offline members can be replaced when their category allows it and support is active."}
+                                ? "Your order has expired, so member checks are no longer available."
+                                : "Checks whether members are still in your server and online."}
                             </span>
                           </span>
                         ) : null}
