@@ -136,6 +136,7 @@ import {
 } from "../lib/onliner";
 import { isBoostService, isCommunityService, SERVICE_OPTIONS } from "../lib/services";
 import { getOrderSupportExpiration } from "../lib/order-status";
+import { getOrderPeriod } from "../lib/order-period";
 import {
   checkAvailableAmount,
   clearDcordApiKey,
@@ -869,6 +870,31 @@ export default function HomePage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState("all");
   const [orderTypeFilter, setOrderTypeFilter] = useState("all");
   const [orderSupportFilter, setOrderSupportFilter] = useState("all");
+  const [orderPeriodClock, setOrderPeriodClock] = useState(() => Date.now());
+  useEffect(() => {
+    if (activeTab !== "manage") return;
+    setOrderPeriodClock(Date.now());
+    const timer = window.setInterval(() => setOrderPeriodClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, [activeTab]);
+  const orderPeriodCounts = useMemo(() => {
+    const counts = { expired: 0, soon: 0, leave_failed: 0 };
+    for (const order of orders) {
+      const { state } = getOrderPeriod(order, orderPeriodClock);
+      if (state === "expired") {
+        counts.expired++;
+        if (order.autoLeaveJob && order.autoLeaveJob.status !== "running" && order.autoLeaveJob.failed > 0) counts.leave_failed++;
+      } else if (state === "soon") counts.soon++;
+    }
+    return counts;
+  }, [orders, orderPeriodClock]);
+  function handleOrderPeriodShortcut(filter: string) {
+    setOrderSupportFilter(orderSupportFilter === filter ? "all" : filter);
+    setOrderSearch("");
+    setOrderStatusFilter("all");
+    setOrderTypeFilter("all");
+    setCurrentOrderPage(1);
+  }
   const orderStatusOptions = useMemo(() => {
     const knownStatuses = ["NEW", "PROCESS", "RECOVERING", "WAITING", "INVITES PAUSED", "PAUSED", "COMPLETED", "PARTIAL", "ERROR", "CANCELLED", "INVALID", "TERMINATED"];
     const actualStatuses = orders.map((order) => String(order.status ?? "NEW").trim().toUpperCase()).filter(Boolean);
@@ -917,10 +943,8 @@ export default function HomePage() {
     return orders.filter((order) => {
       const normalizedStatus = String(order.status ?? "NEW").trim().toUpperCase();
       const boostOrder = order.provider === "dcord" || isBoostService(order.service);
-      const supportExpiration = getOrderSupportExpiration(order);
-      const supportExpired = supportExpiration !== null
-        && Number.isFinite(new Date(supportExpiration).getTime())
-        && new Date(supportExpiration).getTime() <= Date.now();
+      const period = getOrderPeriod(order, orderPeriodClock);
+      const supportExpired = period.state === "expired";
       const matchesSearch = !query || [
         order.uniqid,
         order.serverName,
@@ -935,15 +959,21 @@ export default function HomePage() {
       const matchesSupport =
         orderSupportFilter === "all" ||
         (orderSupportFilter === "expired" && supportExpired) ||
-        (orderSupportFilter === "active" && supportExpiration !== null && !supportExpired);
+        (orderSupportFilter === "active" && ["active", "soon"].includes(period.state)) ||
+        (orderSupportFilter === "soon" && period.state === "soon") ||
+        (orderSupportFilter === "leave_failed" && supportExpired && order.autoLeaveJob?.status !== "running" && Number(order.autoLeaveJob?.failed) > 0);
       const matchesType =
         orderTypeFilter === "all" ||
         (orderTypeFilter === "boosts" && boostOrder) ||
         (orderTypeFilter === "members" && !boostOrder);
 
       return matchesSearch && matchesStatus && matchesType && matchesSupport;
+    }).sort((left, right) => {
+      if (!["expired", "soon", "leave_failed"].includes(orderSupportFilter)) return 0;
+      const difference = getOrderPeriod(left, orderPeriodClock).expiresAt - getOrderPeriod(right, orderPeriodClock).expiresAt;
+      return orderSupportFilter === "soon" ? difference : -difference;
     });
-  }, [orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter, orders]);
+  }, [orderSearch, orderStatusFilter, orderTypeFilter, orderSupportFilter, orders, orderPeriodClock]);
   const orderPageCount = Math.max(1, Math.ceil(filteredOrders.length / ORDER_PAGE_SIZE));
   const selectedIsBoost = isBoostService(form.service);
   const selectedIsCommunity = isCommunityService(form.service);
@@ -4292,6 +4322,13 @@ export default function HomePage() {
               </section>
 
               <section className={`${shell} orders-workspace`}>
+                <div className="orders-period-tracker" role="group" aria-label="Track order periods">
+                  <span><Timer className="h-3.5 w-3.5" aria-hidden="true" /> Period tracking</span>
+                  <button type="button" data-tone="expired" aria-pressed={orderSupportFilter === "expired"} onClick={() => handleOrderPeriodShortcut("expired")}>Expired <b>{orderPeriodCounts.expired}</b></button>
+                  <button type="button" data-tone="soon" aria-pressed={orderSupportFilter === "soon"} onClick={() => handleOrderPeriodShortcut("soon")}>Expires in 7 days <b>{orderPeriodCounts.soon}</b></button>
+                  <button type="button" data-tone="failed" aria-pressed={orderSupportFilter === "leave_failed"} onClick={() => handleOrderPeriodShortcut("leave_failed")}>Leave failed <b>{orderPeriodCounts.leave_failed}</b></button>
+                  {orderSupportFilter !== "all" ? <button type="button" className="orders-period-reset" onClick={() => setOrderSupportFilter("all")}>Show all</button> : null}
+                </div>
                 <div className="orders-commandbar">
                   <label className="orders-search-field">
                     <Search className="h-4 w-4" aria-hidden="true" />
@@ -4302,12 +4339,12 @@ export default function HomePage() {
                     { value: "all", label: "All services" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }
                   ]} />
                   <FilterDropdown label="Support" showLabel={false} value={orderSupportFilter} onChange={setOrderSupportFilter} options={[
-                    { value: "all", label: "All periods" }, { value: "active", label: "Active" }, { value: "expired", label: "Expired" }
+                    { value: "all", label: "All periods" }, { value: "active", label: "Active" }, { value: "expired", label: "Expired" }, { value: "soon", label: "Expires in 7 days" }, { value: "leave_failed", label: "Leave failed" }
                   ]} />
                 </div>
 
                 <div className="orders-list-meta">
-                  <span>{filteredOrders.length} results · newest first</span>
+                  <span>{filteredOrders.length} results · {orderSupportFilter === "expired" || orderSupportFilter === "leave_failed" ? "most recently expired first" : orderSupportFilter === "soon" ? "expiring soonest first" : "newest first"}</span>
                   <span>Page {currentOrderPage} / {orderPageCount}</span>
                 </div>
 
@@ -4336,7 +4373,8 @@ export default function HomePage() {
                         const expiredCategoryIds = new Set((order.categoryAllocations ?? [])
                           .filter((allocation) => allocation.isPeriodic === true && allocation.expiredAt && new Date(allocation.expiredAt).getTime() <= Date.now())
                           .map((allocation) => allocation.categoryId));
-                        const directSupportExpired = Number.isFinite(supportExpirationTime) && supportExpirationTime <= Date.now();
+                        const directSupportExpired = Number.isFinite(supportExpirationTime) && supportExpirationTime <= orderPeriodClock;
+                        const orderPeriod = getOrderPeriod(order, orderPeriodClock).state;
                         const hasServerCandidateCount = typeof order.autoLeaveCandidateCount === "number";
                         const autoLeaveCandidateCount = hasServerCandidateCount
                           ? Number(order.autoLeaveCandidateCount)
@@ -4361,7 +4399,7 @@ export default function HomePage() {
 
                         return (
                           <li key={order.uniqid}>
-                            <article className="orders-row" data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
+                            <article className="orders-row" data-period={orderPeriod} data-status-tone={getOrderStatusTone(order.status)} data-service-kind={serviceKind} aria-labelledby={titleId}>
                               <div className="orders-row-identity">
                                 <span className="orders-row-service-icon" aria-hidden="true"><ServiceIcon className="h-4 w-4" /></span>
                                 <span className="min-w-0">
@@ -4396,7 +4434,10 @@ export default function HomePage() {
                                 {!boostOrder ? <div><dt>Delay</dt><dd>{formatDelay(delayValue)}</dd></div> : null}
                               </dl>
                               <time className="orders-row-date" dateTime={order.createdAt} title={order.createdAt}>{formatTrackedDate(order.createdAt)}</time>
-                              <time className="orders-row-expiration" data-expired={directSupportExpired} dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
+                              <div className="orders-row-expiration orders-period-cell">
+                                {orderPeriod === "expired" || orderPeriod === "soon" ? <span className="orders-period-badge" data-period={orderPeriod}><Timer className="h-3 w-3" aria-hidden="true" />{orderPeriod === "expired" ? "Expired" : "Expiring"}</span> : <span className="orders-period-caption">Expires</span>}
+                                <time dateTime={supportExpiration ? String(supportExpiration) : undefined} title={supportExpiration ? String(supportExpiration) : undefined}>{supportExpiration ? formatTrackedDate(String(supportExpiration)) : "-"}</time>
+                              </div>
                               <div className="orders-row-actions" role="group" aria-label={`Actions for ${order.uniqid}`}>
                                 {!boostOrder ? <Button type="button" variant="secondary" size="icon" title="Copy monitor link" aria-label="Copy monitor link" onClick={() => void copyGuestLink(order)}><Copy className="h-4 w-4" /></Button> : null}
                                 {canAutoLeaveExpired && !autoLeaveJob ? <Button type="button" variant="destructive" size="icon" title="Auto leave expired members" aria-label={`Auto leave expired members for ${order.uniqid}`} disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(order)}><LogOut className="h-4 w-4" /></Button> : null}
