@@ -7803,7 +7803,7 @@ async function runCommunityOrder(order, members, config) {
 
 async function processCommunityOrder(order, members, config) {
   const orderId = String(order?.uniqid ?? "").trim();
-  if (!orderId || communityOrderCategoryTransfers.has(orderId)) return false;
+  if (!orderId) return false;
   const ownerToken = `${communityWorkerInstanceId}-${crypto.randomBytes(8).toString("hex")}`;
   const lock = await pool.query(
     `INSERT INTO community_order_worker_leases (order_id, owner_token, expires_at)
