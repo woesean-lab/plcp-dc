@@ -12095,3 +12095,27 @@
 }
 .list-page-size .filter-dropdown-trigger:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
 .filter-dropdown-portal { min-width: 88px; font-size: 12px; }
+
+.onliner-account-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 156px;
+  align-items: center;
+  gap: 8px;
+}
+.onliner-account-filters :is(.ui-input, .filter-dropdown-trigger) {
+  height: 34px;
+  min-height: 34px;
+  border-radius: 9px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 500;
+}
+.onliner-account-filters .filter-dropdown { gap: 0; }
+.onliner-account-filters .filter-dropdown-trigger { gap: 6px; }
+.onliner-account-filters .filter-dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onliner-account-filters .filter-dropdown-trigger > svg { flex-shrink: 0; width: 13px; height: 13px; }
+.onliner-account-filters .filter-dropdown-option { min-height: 30px; padding: 6px 8px; font-size: 11px; white-space: nowrap; }
+@media (max-width: 639px) {
+  .onliner-account-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .onliner-account-filters > .ui-input { grid-column: 1 / -1; }
+}

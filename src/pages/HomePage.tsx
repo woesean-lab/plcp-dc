@@ -4716,7 +4716,7 @@ export default function HomePage() {
                     ) : null}
                     {onlinerSnapshot?.accounts.length ? (
                       <>
-                      <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_170px_160px]">
+                      <div className="onliner-account-filters">
                         <Input aria-label="Search Onliner bots" placeholder="Search bot name or ID..." value={onlinerAccountSearch} onChange={(event) => setOnlinerAccountSearch(event.target.value)} />
                         <FilterDropdown label="Bot connection status" showLabel={false} value={onlinerAccountFilter} onChange={setOnlinerAccountFilter} options={[
                           { value: "all", label: "All statuses" },
