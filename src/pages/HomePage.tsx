@@ -692,12 +692,13 @@ export default function HomePage() {
   const [communityGuildsPendingLeave, setCommunityGuildsPendingLeave] = useState<CommunityBotGuild[]>([]);
   const [communityImportFile, setCommunityImportFile] = useState<File | null>(null);
   const [communityStockType, setCommunityStockType] = useState<CommunityStockType>("offline");
-  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; joinMethods: CommunityJoinMethod[]; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
+  const [communityCategoryDraft, setCommunityCategoryDraft] = useState<{ name: string; joinMethods: CommunityJoinMethod[]; isPeriodic: boolean; checkReplacementEnabled: boolean; reactionUseEnabled: boolean; publicLeaveAllEnabled: boolean; iconName: string; colorKey: CommunityCategoryColorKey }>({
     name: "",
     joinMethods: ["create_invite", "experimental_join", "directly"],
     isPeriodic: false,
     checkReplacementEnabled: true,
     reactionUseEnabled: false,
+    publicLeaveAllEnabled: false,
     iconName: "Users",
     colorKey: "violet"
   });
@@ -1993,6 +1994,7 @@ export default function HomePage() {
       isPeriodic: category.isPeriodic,
       checkReplacementEnabled: category.checkReplacementEnabled,
       reactionUseEnabled: category.reactionUseEnabled,
+      publicLeaveAllEnabled: category.publicLeaveAllEnabled === true,
       iconName: category.iconName || (category.isPeriodic ? "Timer" : "Users"),
       colorKey: category.colorKey || "violet"
     });
@@ -2001,7 +2003,7 @@ export default function HomePage() {
 
   function beginCreatingCommunityCategory() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, publicLeaveAllEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(true);
   }
 
@@ -2214,7 +2216,7 @@ export default function HomePage() {
 
   function resetCommunityCategoryDraft() {
     setEditingCommunityCategoryId(null);
-    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, iconName: "Users", colorKey: "violet" });
+    setCommunityCategoryDraft({ name: "", joinMethods: ["create_invite", "experimental_join", "directly"], isPeriodic: false, checkReplacementEnabled: true, reactionUseEnabled: false, publicLeaveAllEnabled: false, iconName: "Users", colorKey: "violet" });
     setCommunityCategoryModalOpen(false);
   }
 
@@ -2226,6 +2228,7 @@ export default function HomePage() {
       isPeriodic: communityCategoryDraft.isPeriodic,
       checkReplacementEnabled: communityCategoryDraft.checkReplacementEnabled,
       reactionUseEnabled: communityCategoryDraft.reactionUseEnabled,
+      publicLeaveAllEnabled: communityCategoryDraft.publicLeaveAllEnabled,
       iconName: communityCategoryDraft.iconName.trim(),
       colorKey: communityCategoryDraft.colorKey
     };
@@ -5379,6 +5382,17 @@ export default function HomePage() {
                   <label className={!communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={!communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: false }))} />
                     <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check is informational only</small></span>
+                  </label>
+                </div>
+                <div className="community-category-rule-heading"><strong>Monitor Leave all</strong><small>For mixed orders, enable this for every category.</small></div>
+                <div className="community-category-period-options community-category-replacement-options">
+                  <label className={communityCategoryDraft.publicLeaveAllEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryPublicLeaveAll" checked={communityCategoryDraft.publicLeaveAllEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, publicLeaveAllEnabled: true }))} />
+                    <LogOut className="h-4 w-4" /><span><strong>Enabled</strong><small>Customers can remove delivered members</small></span>
+                  </label>
+                  <label className={!communityCategoryDraft.publicLeaveAllEnabled ? "is-selected" : ""}>
+                    <input className="sr-only" type="radio" name="categoryPublicLeaveAll" checked={!communityCategoryDraft.publicLeaveAllEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, publicLeaveAllEnabled: false }))} />
+                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Hide Leave all on the customer monitor</small></span>
                   </label>
                 </div>
                 <div className="community-category-rule-heading"><strong>Reaction workspace</strong><small>Choose whether this category can be scanned and used for reactions.</small></div>

@@ -14,7 +14,7 @@ import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
-import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation } from "./public-community-leave.mjs";
+import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories, publicLeaveAllCategoryIds } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
@@ -4635,7 +4635,7 @@ async function loadCommunityJoinSummary(config) {
 async function loadCommunityStockCategories(config) {
   const [categoryResult, summary] = await Promise.all([
     pool.query(
-      `SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+      `SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, updated_at
        FROM community_stock_categories AS category
        WHERE guild_id = $1
          AND NOT EXISTS (
@@ -4655,6 +4655,7 @@ async function loadCommunityStockCategories(config) {
     isPeriodic: row.is_periodic === true,
     checkReplacementEnabled: row.check_replacement_enabled !== false,
     reactionUseEnabled: row.reaction_use_enabled === true,
+    publicLeaveAllEnabled: row.public_leave_all_enabled === true,
     iconName: row.icon_name,
     colorKey: row.color_key,
     createdAt: row.created_at,
@@ -4668,8 +4669,8 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
 
   await queryable.query(
     `INSERT INTO community_stock_categories
-       (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at)
-     SELECT $2, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, NOW()
+       (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, updated_at)
+     SELECT $2, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, NOW()
      FROM community_stock_categories AS category
      WHERE guild_id = $1
        AND NOT EXISTS (
@@ -8979,6 +8980,7 @@ async function initializeDatabase() {
       is_periodic BOOLEAN NOT NULL DEFAULT FALSE,
       check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE,
       reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+      public_leave_all_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       icon_name TEXT NOT NULL DEFAULT 'Users',
       color_key TEXT NOT NULL DEFAULT 'violet',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -8992,6 +8994,7 @@ async function initializeDatabase() {
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS color_key TEXT");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS check_replacement_enabled BOOLEAN NOT NULL DEFAULT TRUE");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS reaction_use_enabled BOOLEAN NOT NULL DEFAULT FALSE");
+  await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS public_leave_all_enabled BOOLEAN NOT NULL DEFAULT FALSE");
   await pool.query("ALTER TABLE community_stock_categories ADD COLUMN IF NOT EXISTS join_methods TEXT[] NOT NULL DEFAULT ARRAY['create_invite', 'experimental_join', 'directly']::TEXT[]");
   await pool.query("UPDATE community_stock_categories SET join_methods = ARRAY['create_invite', 'experimental_join', 'directly']::TEXT[] WHERE join_methods IS NULL OR CARDINALITY(join_methods) = 0");
   await pool.query("UPDATE community_stock_categories SET icon_name = CASE WHEN id = 'online' THEN 'Timer' ELSE 'Users' END WHERE icon_name IS NULL OR BTRIM(icon_name) = ''");
@@ -10350,6 +10353,7 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
+    const publicLeaveAllEnabled = req.body?.publicLeaveAllEnabled === true;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -10360,10 +10364,10 @@ app.post("/api/community/categories", requireSession, async (req, res, next) => 
     if (!colorKey) return res.status(400).json({ message: "Choose a valid category color." });
     const id = createCommunityCategoryId();
     const inserted = await pool.query(
-      `INSERT INTO community_stock_categories (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key)
-       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9)
-       RETURNING id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at`,
-      [config.guildId, id, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      `INSERT INTO community_stock_categories (guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, public_leave_all_enabled)
+       VALUES ($1, $2, $3, $4::text[], $5, $6, $7, $8, $9, $10)
+       RETURNING id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, updated_at`,
+      [config.guildId, id, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey, publicLeaveAllEnabled]
     );
     invalidateCommunityCategoryDisplayCache();
     res.status(201).json(inserted.rows[0]);
@@ -10384,6 +10388,7 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const isPeriodic = req.body?.isPeriodic === true;
     const checkReplacementEnabled = req.body?.checkReplacementEnabled !== false;
     const reactionUseEnabled = req.body?.reactionUseEnabled === true;
+    const publicLeaveAllEnabled = req.body?.publicLeaveAllEnabled === true;
     const iconName = parseCommunityCategoryIconName(req.body?.iconName);
     const colorKey = parseCommunityCategoryColorKey(req.body?.colorKey);
     if (!name || name.length > 60) {
@@ -10395,19 +10400,19 @@ app.patch("/api/community/categories/:categoryId", requireSession, async (req, r
     const updated = await pool.query(
       `WITH updated AS (
          UPDATE community_stock_categories
-         SET name = $3, join_methods = $4::text[], is_periodic = $5, check_replacement_enabled = $6, reaction_use_enabled = $7, icon_name = $8, color_key = $9, updated_at = NOW()
+         SET name = $3, join_methods = $4::text[], is_periodic = $5, check_replacement_enabled = $6, reaction_use_enabled = $7, icon_name = $8, color_key = $9, public_leave_all_enabled = $10, updated_at = NOW()
          WHERE id = $2
            AND NOT EXISTS (
              SELECT 1
              FROM community_stock_category_tombstones AS tombstone
              WHERE tombstone.id = community_stock_categories.id
            )
-         RETURNING guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+         RETURNING guild_id, id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, updated_at
        )
-       SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, icon_name, color_key, created_at, updated_at
+       SELECT id, name, join_methods, is_periodic, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled, icon_name, color_key, created_at, updated_at
        FROM updated
        WHERE guild_id = $1`,
-      [config.guildId, categoryId, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey]
+      [config.guildId, categoryId, name, joinMethods, isPeriodic, checkReplacementEnabled, reactionUseEnabled, iconName, colorKey, publicLeaveAllEnabled]
     );
     if (!updated.rowCount) return res.status(404).json({ message: "Category not found." });
     invalidateCommunityCategoryDisplayCache();
@@ -12586,18 +12591,14 @@ function invalidateCommunityCategoryDisplayCache() {
 
 async function hydrateCommunityOrderCategories(order) {
   if (!order || order.provider !== "community") return order;
-  const categoryIds = Array.from(new Set([
-    String(order.categoryId ?? "").trim(),
-    ...(Array.isArray(order.categoryAllocations) ? order.categoryAllocations.map((item) => String(item?.categoryId ?? "").trim()) : []),
-    ...(Array.isArray(order.communityResults) ? order.communityResults.map((item) => String(item?.categoryId ?? "").trim()) : [])
-  ].filter(Boolean)));
+  const categoryIds = publicLeaveAllCategoryIds(order);
   if (!categoryIds.length) return order;
 
   const config = await getCommunityOAuthConfig();
-  if (!config.guildId) return order;
+  if (!config.guildId) return { ...order, publicLeaveAllEnabled: false };
   if (communityCategoryDisplayCache.guildId !== config.guildId || communityCategoryDisplayCache.expiresAt <= Date.now()) {
     const result = await pool.query(
-      "SELECT id, name, color_key, check_replacement_enabled, reaction_use_enabled FROM community_stock_categories WHERE guild_id = $1",
+      "SELECT id, name, color_key, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled FROM community_stock_categories WHERE guild_id = $1",
       [config.guildId]
     );
     communityCategoryDisplayCache.guildId = config.guildId;
@@ -12621,6 +12622,7 @@ async function hydrateCommunityOrderCategories(order) {
   const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
   return {
     ...order,
+    publicLeaveAllEnabled: publicLeaveAllAllowedByCategories(order, currentCategories),
     categoryName: Array.isArray(categoryAllocations) && categoryAllocations.length
       ? getCommunityCategoryName(categoryAllocations, order.categoryName)
       : primaryCategory?.name ?? order.categoryName,
@@ -12707,7 +12709,9 @@ app.post("/api/public/orders/:uniqid/leave-all", async (req, res, next) => {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     if (communityOrderLeaveAllActive.has(uniqid)) return res.status(409).json({ message: "Leave all is already running for this order." });
-    const order = await claimPublicLeaveAll(pool, uniqid);
+    const config = await getCommunityOAuthConfig();
+    if (!config.configured) return res.status(503).json({ message: "Configure the Members integration before using Leave all." });
+    const order = await claimPublicLeaveAll(pool, uniqid, config.guildId);
     const result = await leaveAllCommunityOrderMembers(order);
     res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });
   } catch (error) {

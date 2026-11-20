@@ -1116,10 +1116,10 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
+                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
-                        </Button>
+                        </Button> : null}
                         <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
                       </span>
                     </div>

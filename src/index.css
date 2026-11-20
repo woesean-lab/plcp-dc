@@ -7800,7 +7800,7 @@
   background: linear-gradient(180deg, var(--app-accent), rgba(155,140,255,0));
   content: "";
 }
-.monitor-reaction-panel.is-collapsible.is-side { grid-column: auto; min-height: 0; align-self: start; }
+.monitor-reaction-panel.is-collapsible { grid-column: auto; min-height: 0; align-self: start; container-name: customer-reactions; }
 .monitor-reaction-collapse-toggle { display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle::-webkit-details-marker { display: none; }
 .monitor-reaction-collapse-toggle::marker { content: ""; }
@@ -11953,6 +11953,35 @@
   .monitor-reaction-history-row { grid-template-columns: auto minmax(0, 1fr) 32px 30px; }
   .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
+/* Customer reaction content follows its card width, including beside Join delay. */
+@container customer-reactions (min-width: 721px) {
+  .is-collapsible > .monitor-reaction-dashboard { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); }
+}
+@container customer-reactions (min-width: 441px) {
+  .is-collapsible .monitor-reaction-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .is-collapsible .monitor-reaction-metrics > div:nth-child(n) { border-top: 0; border-right: 1px solid var(--app-divider); }
+  .is-collapsible .monitor-reaction-metrics > div:last-child { border-right: 0; }
+}
+@container customer-reactions (max-width: 1050px) {
+  .is-collapsible > .monitor-reaction-form { grid-template-columns: minmax(0, 1fr) 100px minmax(130px, .6fr) auto; }
+  .is-collapsible .monitor-reaction-form-copy { grid-column: 1 / -1; }
+  .is-collapsible .monitor-reaction-url-field,
+  .is-collapsible .monitor-reaction-emoji-field,
+  .is-collapsible .monitor-reaction-form .monitor-reaction-submit { grid-column: auto; grid-row: auto; }
+}
+@container customer-reactions (max-width: 720px) {
+  .is-collapsible > .monitor-reaction-dashboard { grid-template-columns: minmax(0, 1fr); }
+  .is-collapsible > .monitor-reaction-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .is-collapsible .monitor-reaction-url-field,
+  .is-collapsible .monitor-reaction-form .monitor-reaction-submit { grid-column: 1 / -1; }
+}
+@container customer-reactions (max-width: 440px) {
+  .is-collapsible .monitor-reaction-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .is-collapsible .monitor-reaction-metrics > div:nth-child(2n) { border-right: 0; }
+  .is-collapsible .monitor-reaction-metrics > div:nth-child(n+3) { border-top: 1px solid var(--app-divider); }
+  .is-collapsible > .monitor-reaction-form { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* Rotating stock transfer dialog. */
 .rotating-stock-panel { overflow: hidden; }
 .rotating-stock-modal { width: min(100%, 640px); }

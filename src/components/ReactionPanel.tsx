@@ -254,7 +254,7 @@ export function ReactionPanel({
 
   const Panel = collapsible ? "details" : "section";
   return (
-    <Panel className={`monitor-reaction-panel ${collapsible ? "monitor-control-panel is-side is-collapsible" : ""} ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
+    <Panel className={`monitor-reaction-panel ${collapsible ? "monitor-control-panel is-collapsible" : ""} ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
       {collapsible ? <>
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>

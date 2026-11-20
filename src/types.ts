@@ -180,6 +180,7 @@ export interface OrderStatusResponse {
   };
   canManageCommunityMembers?: boolean;
   canPublicLeaveAll?: boolean;
+  publicLeaveAllEnabled?: boolean;
   publicLeaveAllUsed?: boolean;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;

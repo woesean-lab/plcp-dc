@@ -69,6 +69,15 @@ npm install --prefix output/category-transfer-test --no-save --package-lock=fals
 node --test server/community-order-category-guard.test.mjs
 ```
 
+## Kategoriye gore monitor Leave all izni
+
+Kategori ayarlarindaki **Monitor Leave all > Enabled** secenegi musteriye bu
+butonu acar. Yeni ve mevcut kategorilerde varsayilan kapalidir; ayar mevcut
+siparislere de uygulanir. Karma siparislerde tum kategoriler izin vermelidir.
+API her tiklamada guncel izinleri kontrol eder; kapali kategorilerdeki uyeler bu
+aksiyonla cikarilamaz. Siparis basina tek kullanim kurali korunur. Admin islemleri
+ve otomatik suresi dolan uyeleri cikarma bu ayardan bagimsizdir.
+
 ## Musteri monitorunde reaction
 
 Kategori yonetiminde reaction iznini ve destek suresini acin. Siparis olustururken
