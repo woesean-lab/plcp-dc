@@ -7984,15 +7984,11 @@
 .monitor-reaction-progress-ring strong { display: block; color: var(--app-text); font-size: 20px; font-weight: 750; letter-spacing: -.04em; }
 .monitor-reaction-progress-ring small { display: block; margin-top: 1px; color: var(--app-subtle); font-size: 7px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
 .monitor-reaction-overview-copy { min-width: 0; flex: 1; }
-.monitor-reaction-overview-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .monitor-reaction-overview-copy > strong { display: block; margin-top: 5px; color: var(--app-text); font-size: 14px; font-weight: 680; }
+.is-collapsible .monitor-reaction-overview-copy > .monitor-reaction-progress-track { margin-top: 10px; }
 .monitor-reaction-overview-copy p { margin: 4px 0 10px; color: var(--app-muted); font-size: 10px; line-height: 1.45; }
 .monitor-reaction-progress-track { display: block; height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
 .monitor-reaction-progress-track i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8070ed, #b2a7ff); box-shadow: 0 0 12px rgba(155,140,255,.45); transition: width .35s ease; }
-.reaction-allowance-indicator { display: flex; flex-wrap: wrap; align-items: center; column-gap: 8px; row-gap: 4px; width: 100%; max-width: 150px; min-width: 0; }
-.reaction-allowance-numbers { display: inline-flex; align-items: baseline; gap: 4px; color: var(--app-muted); font-size: 11px; line-height: 18px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.reaction-allowance-numbers b { color: var(--app-accent-bright); font-size: 15px; font-weight: 700; }
-.reaction-allowance-indicator .reaction-allowance-track { flex: 1 1 40px; min-width: 24px; max-width: 64px; height: 4px; }
 
 .monitor-reaction-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--app-border); border-radius: 15px; background: rgba(5,6,14,.32); }
 .monitor-reaction-metrics > div { min-width: 0; padding: 15px 13px; border-right: 1px solid var(--app-divider); }
