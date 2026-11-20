@@ -412,6 +412,11 @@ export function ReactionPanel({
         </div>
       ) : null}
 
+      <div className="monitor-safety-note monitor-reaction-verification-note">
+        <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
+        <p>Reactions cannot be used in verification channels.</p>
+      </div>
+
       {remaining > 0 || workspaceSummary ? (
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
           <div className="monitor-reaction-form-copy">
