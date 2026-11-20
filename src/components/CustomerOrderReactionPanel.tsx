@@ -50,7 +50,7 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate }: {
   }
 
   if (!summary.enabled || (summary.expiresAt && new Date(summary.expiresAt).getTime() <= Date.now())) return null;
-  return <ReactionPanel
+  return <ReactionPanel collapsible
     description={`${summary.dailyLimit} reactions per day during your support period. Resets at 00:00 Türkiye time.${summary.ready ? "" : " Available after member delivery."}`}
     lockReason={cancelling ? "Cancelling queued reactions…" : summary.ready && !summary.eligibleMembers ? "No members are currently available to react." : undefined}
     limit={summary.dailyLimit} completed={summary.completed} failed={summary.failed}

@@ -1065,8 +1065,6 @@ export default function PublicOrderPage() {
                 </div>
               </section>
 
-              {isCommunityOrder && status?.customerReactions?.enabled ? <CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /> : null}
-
               {isInvitesPaused && !isCommunityOrder ? (
                 <div className="monitor-restart-warning" role="alert">
                   <span className="monitor-warning-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
@@ -1084,7 +1082,10 @@ export default function PublicOrderPage() {
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`.trim()}>
                 {boostDeliveryControl}
-                {delayUpdatePanel}
+                {delayUpdatePanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel && isCommunityOrder && status?.customerReactions?.enabled ? "is-paired" : ""}`.trim()}>
+                  {delayUpdatePanel}
+                  {isCommunityOrder && status?.customerReactions?.enabled ? <CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /> : null}
+                </div> : null}
 
                 {isCommunityOrder ? (
                   <div className="monitor-token-panel community-order-log">

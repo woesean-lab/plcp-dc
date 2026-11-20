@@ -23,9 +23,10 @@ export function ListPagination({ page, pageCount, total, pageSize = 50, onChange
           showLabel={false}
           placement="top"
           portal
+          disabled={total < 50}
           value={String(pageSize)}
           options={[50, 100, 200, 500].map((size) => ({ value: String(size), label: String(size) }))}
-          onChange={(value) => { onPageSizeChange(Number(value)); onChange(1); }}
+          onChange={(value) => { if (total < 50) return; onPageSizeChange(Number(value)); onChange(1); }}
         />
       </div>
       <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page"><ChevronLeft className="h-3.5 w-3.5" />{showNavigationLabels ? "Back" : null}</Button>

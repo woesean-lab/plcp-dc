@@ -98,7 +98,7 @@ function ReactionExample() {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
-  return <ReactionPanel description="50 reactions per day during your support period. Resets at 00:00 Türkiye time."
+  return <ReactionPanel collapsible description="50 reactions per day during your support period. Resets at 00:00 Türkiye time."
     limit={50} completed={15} failed={0} remaining={35} eligibleMembers={50}
     messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={[]}
     onMessageChange={setMessage} onCountChange={setCount} onEmojiSelectionChange={setEmojis}

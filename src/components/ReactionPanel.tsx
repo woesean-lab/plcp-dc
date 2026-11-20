@@ -59,6 +59,7 @@ type ReactionPanelProps = {
   className?: string;
   description?: string;
   lockReason?: string;
+  collapsible?: boolean;
   limit: number;
   completed: number;
   failed: number;
@@ -113,6 +114,7 @@ export function ReactionPanel({
   className = "",
   description,
   lockReason,
+  collapsible = false,
   limit,
   completed,
   failed,
@@ -250,9 +252,17 @@ export function ReactionPanel({
     setCustomEmojiUrlDraft("");
   }
 
+  const Panel = collapsible ? "details" : "section";
   return (
-    <section className={`monitor-reaction-panel ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
-      <div className="monitor-reaction-heading">
+    <Panel className={`monitor-reaction-panel ${collapsible ? "monitor-control-panel is-side is-collapsible" : ""} ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
+      {collapsible ? <>
+        <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
+          <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
+          <span><strong id={titleId}>Reactions</strong><small>{remaining} / {limit} available today</small></span>
+          <ChevronDown aria-hidden="true" />
+        </summary>
+        {description ? <p className="monitor-reaction-collapse-description">{description}</p> : null}
+      </> : <div className="monitor-reaction-heading">
         <div className="monitor-reaction-identity">
           <span className="monitor-reaction-icon" aria-hidden="true"><Sparkles /></span>
           <div>
@@ -269,7 +279,7 @@ export function ReactionPanel({
             </button>
           ) : null}
         </div>
-      </div>
+      </div>}
 
       <div className="monitor-reaction-dashboard">
         <div className="monitor-reaction-overview">
@@ -624,6 +634,6 @@ export function ReactionPanel({
         </div>
       ), document.body) : null}
 
-    </section>
+    </Panel>
   );
 }
