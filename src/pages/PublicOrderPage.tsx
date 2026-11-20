@@ -1082,7 +1082,7 @@ export default function PublicOrderPage() {
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`.trim()}>
                 {boostDeliveryControl}
-                {delayUpdatePanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel && isCommunityOrder && status?.customerReactions?.enabled ? "is-paired" : ""}`.trim()}>
+                {delayUpdatePanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel ? (isCommunityOrder && status?.customerReactions?.enabled ? "is-paired" : "is-delay-only") : ""}`.trim()}>
                   {delayUpdatePanel}
                   {isCommunityOrder && status?.customerReactions?.enabled ? <CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /> : null}
                 </div> : null}

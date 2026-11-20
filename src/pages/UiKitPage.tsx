@@ -95,6 +95,24 @@ function MembersList() {
   </div>;
 }
 
+function MonitorControlsExample() {
+  const [paired, setPaired] = useState(false);
+  const [delay, setDelay] = useState("700");
+  return <div className="ui-ref-stack">
+    <div className="stock-duration-filter" role="group" aria-label="Monitor controls layout">
+      <button type="button" className={!paired ? "is-active" : ""} aria-pressed={!paired} onClick={() => setPaired(false)}>Without reactions</button>
+      <button type="button" className={paired ? "is-active" : ""} aria-pressed={paired} onClick={() => setPaired(true)}>With reactions</button>
+    </div>
+    <div className={`monitor-order-controls ${paired ? "is-paired" : "is-delay-only"}`}>
+      <div className="monitor-control-panel">
+        <div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Timer className="h-4 w-4" /></span><div><p className="app-kicker">Delivery control</p><h2>Join delay</h2></div></div>
+        <div className="monitor-delay-controls"><Input type="number" min={1} max={1200} aria-label="Sample delay in seconds" value={delay} onChange={(event) => setDelay(event.target.value)} /><Button type="button" variant="secondary" onClick={() => toast.success("Sample delay previewed")}><Timer className="h-4 w-4" />Apply custom</Button></div>
+      </div>
+      {paired ? <ReactionExample /> : null}
+    </div>
+  </div>;
+}
+
 function ReactionOptionExample() {
   const [enabled, setEnabled] = useState(true);
   const [limit, setLimit] = useState(50);
@@ -176,7 +194,7 @@ export default function UiKitPage() {
           <Example title="Option card" source="src/index.css · boost-proxy-toggle" code={'<label className={`boost-proxy-toggle ${enabled ? "is-enabled" : ""}`}>\n  <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />\n  <span><Star className="h-4 w-4" /></span><strong>Eldorado sale?</strong>\n  <small>Show the promotion on the customer monitor.</small>\n</label>'}>
             <label className={`boost-proxy-toggle ${promotion ? "is-enabled" : ""}`}><input type="checkbox" checked={promotion} onChange={(event) => setPromotion(event.target.checked)} /><span><Star className="h-4 w-4" aria-hidden="true" /></span><strong>Eldorado sale?</strong><small>Show the promotion on the customer monitor.</small></label>
           </Example>
-          <Example title="Order reaction option" source="src/components/OrderReactionOption.tsx · boost-proxy-toggle · FilterDropdown" code={'<OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit}\n  onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />'}><ReactionOptionExample /></Example>
+          <Example title="Order reaction option" source="src/components/OrderReactionOption.tsx · boost-proxy-toggle · stock-duration-filter" code={'<OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit}\n  onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />'}><ReactionOptionExample /></Example>
         </Section> : null}
 
         {visible("badges") ? <Section id="badges">
@@ -200,6 +218,7 @@ export default function UiKitPage() {
         {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
+          <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// With reactions, both cards share the row equally.\n<div className="monitor-order-controls is-paired">\n  {delayPanel}{reactionPanel}\n</div>\n// Both layouts use full-width cards below 900px.'}><MonitorControlsExample /></Example>
           <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.'}><ReactionExample /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
