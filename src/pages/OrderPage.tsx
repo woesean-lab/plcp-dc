@@ -1128,8 +1128,8 @@ export default function OrderPage() {
       ? [
           "✨ MESSAGE REACTIONS",
           ...(reactions.enabled ? [
+            `Today's limit: ${formatReactionCount(reactions.todayLimit)} reactions.`,
             `Daily limit: ${formatReactionCount(reactions.dailyLimit)} reactions.`,
-            ...(reactions.todayLimit !== reactions.dailyLimit ? [`Today's limit: ${formatReactionCount(reactions.todayLimit)} reactions.`] : []),
             `Used today: ${formatReactionCount(reactions.used)} · Remaining today: ${formatReactionCount(reactions.remaining)}`,
             "Open Reactions on your order monitor and paste a Discord message link to send reactions.",
             "Available during your support period. Resets daily at 00:00.",
