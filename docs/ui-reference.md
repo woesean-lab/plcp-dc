@@ -26,7 +26,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Dropdowns | `src/components/ui/filter-dropdown.tsx` | Use themed FilterDropdown; `portal` in clipped/scrolling containers; no native select replacement |
 | Selection | `community-member-checkbox`, `community-member-select-all` | Members Stock checkboxes |
 | Option cards | `boost-proxy-toggle`, `is-enabled` | Create order's Eldorado checkbox card |
-| Create order reactions | `src/components/OrderReactionOption.tsx` | Compact option card sized to its content. Checkbox/title and a short first-day/support hint sit beside the existing `stock-duration-filter` daily presets (50 / 100 / 200 / 500). Uses existing option-card colors and monitor heading icon. Presets move below the toggle below 560px, stay outside the checkbox label and become disabled/dim while off. |
+| Create order reactions | `src/components/OrderReactionOption.tsx` | Full-width option card with compact height. Checkbox/title and a short first-day/support hint sit beside the existing `stock-duration-filter` daily presets (50 / 100 / 200 / 500), aligned to the right. Uses existing option-card colors and monitor heading icon. Presets move below the toggle below 560px, stay outside the checkbox label and become disabled/dim while off. |
 | Badges | `src/components/ui/badge.tsx`, `badge.css` | All statuses keep the shared `status-badge` geometry |
 | Account chips | `community-onliner-chip`, `community-rich-presence-chip`, `community-server-count-chip` | Members Stock; include `status-badge` |
 | Cards | `src/components/ui/card.tsx` | Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter |

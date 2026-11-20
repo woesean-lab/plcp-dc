@@ -2571,7 +2571,7 @@
   }
 
   .community-reaction-option-field { grid-column: 1 / -1; min-width: 0; container: order-reaction-option / inline-size; }
-  .boost-proxy-toggle.community-reaction-option { width: fit-content; max-width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; cursor: default; }
+  .boost-proxy-toggle.community-reaction-option { width: 100%; max-width: 100%; grid-template-columns: minmax(0, 1fr) auto; gap: 20px; cursor: default; }
   .community-reaction-option:focus-within { border-color: var(--app-accent-border); }
   .community-reaction-option-toggle { display: grid; grid-template-columns: 16px 28px minmax(0, 1fr); align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
   .community-reaction-option-toggle input:focus-visible { outline: 2px solid var(--app-accent-bright); outline-offset: 3px; }
