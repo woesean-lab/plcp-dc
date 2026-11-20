@@ -7802,6 +7802,8 @@
   background: radial-gradient(circle at 92% 10%, rgba(155,140,255,.07), transparent 25rem);
 }
 
+.lookup-reaction-section > .lookup-reaction-inactive { min-height: 0; }
+
 .monitor-reaction-panel {
   position: relative;
   grid-column: 1 / -1;

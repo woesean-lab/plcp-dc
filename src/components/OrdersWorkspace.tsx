@@ -98,7 +98,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
       <td className="od-reaction-cell">
         <span className="od-mobile-caption">Reactions</span>
         {boost ? <span className="od-order-context">—</span> : reactions?.dailyLimit ? <>
-          <div className="od-status" data-tone={reactions.enabled ? "live" : "muted"}><i aria-hidden="true" />{reactions.enabled ? reactions.firstDay ? "First day" : "Daily allowance" : "Unavailable"}</div>
+          <div className="od-status" data-tone={reactions.enabled ? "live" : "muted"}><i aria-hidden="true" />{reactions.disabled ? "Disabled" : reactions.enabled ? reactions.firstDay ? "First day" : "Daily allowance" : "Unavailable"}</div>
           <div className="od-reaction-numbers">
             <span><small>Today limit</small><b>{number(reactions.todayLimit)}</b></span>
             <span title="Total usage across all days, including queued reactions"><small>Total used</small><b>{number(reactions.totalUsed)}</b></span>
@@ -128,7 +128,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
             <div className="od-action-popover">
               {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
               <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
-              {!boost ? <button type="button" onClick={(event) => { closeMenu(event); onReactionSettings(order); }}><Sparkles />{reactions?.dailyLimit ? "Manage reactions" : "Enable reactions"}</button> : null}
+              {!boost ? <button type="button" onClick={(event) => { closeMenu(event); onReactionSettings(order); }}><Sparkles />{reactions?.dailyLimit && !reactions.disabled ? "Manage reactions" : "Enable reactions"}</button> : null}
               <button type="button" className="od-delete-action" disabled={runningLeave} title={runningLeave ? "Wait for member removal to finish" : undefined} onClick={(event) => { closeMenu(event); actions.onDelete(order); }}><Trash2 />Delete order</button>
             </div>
           </details>

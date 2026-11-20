@@ -10,6 +10,8 @@ export const CUSTOMER_REACTION_SAVE_FIELDS_SQL = `CASE
     'reactionDailyLimit', tracked_orders.payload->'reactionDailyLimit',
     'reactionCapacity', tracked_orders.payload->'reactionCapacity',
     'reactionEnabledAt', tracked_orders.payload->'reactionEnabledAt',
+    'reactionDisabled', tracked_orders.payload->'reactionDisabled',
+    'reactionDisabledAt', tracked_orders.payload->'reactionDisabledAt',
     'reactionFirstDayLimit', tracked_orders.payload->'reactionFirstDayLimit',
     'reactionLimitUpdates', tracked_orders.payload->'reactionLimitUpdates',
     'reactionRequests', tracked_orders.payload->'reactionRequests'
@@ -74,9 +76,10 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
         completedCount, failedCount, cancelledCount };
     });
   const used = requests.reduce((total, request) => total + request.assignedCount - request.failedCount - request.cancelledCount, 0);
-  const enabled = order?.provider === "community" && limit > 0 && active.length > 0;
+  const disabled = order?.reactionDisabled === true;
+  const enabled = order?.provider === "community" && !disabled && limit > 0 && active.length > 0;
   return {
-    enabled,
+    enabled, disabled,
     canConfigure: order?.provider === "community" && active.length > 0,
     ready: ["PARTIAL", "COMPLETED"].includes(String(order?.status).toUpperCase()),
     dailyLimit: limit, todayLimit, firstDay, firstDayLimit, enabledAt: enabledAt || null, totalUsed,
@@ -94,8 +97,10 @@ export function getCustomerReactionOverview(order, now = Date.now()) {
   return overview;
 }
 
-export function planCustomerReactionSettings(order, dailyLimit, now = Date.now()) {
+export function planCustomerReactionSettings(order, dailyLimit, now = Date.now(), { enabled = true } = {}) {
   if (order?.provider !== "community") throw Object.assign(new Error("Members order could not be found."), { statusCode: 404 });
+  if (typeof enabled !== "boolean") throw Object.assign(new Error("Choose whether customer reactions are enabled."), { statusCode: 400 });
+  if (!enabled) return { ...order, reactionDisabled: true, reactionDisabledAt: order.reactionDisabled === true && order.reactionDisabledAt ? order.reactionDisabledAt : new Date(now).toISOString() };
   if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) throw Object.assign(new Error("Enter a positive whole number for the daily limit."), { statusCode: 400 });
   const summary = getCustomerReactionSummary(order, now);
   if (!summary.canConfigure) throw Object.assign(new Error("Reactions require an enabled category with active support."), { statusCode: 409 });
@@ -104,7 +109,7 @@ export function planCustomerReactionSettings(order, dailyLimit, now = Date.now()
   const previousStart = order.reactionEnabledAt || (summary.dailyLimit > 0 ? order.createdAt : null);
   const enabledAt = previousStart && Number.isFinite(new Date(previousStart).getTime()) ? new Date(previousStart).toISOString() : updatedAt;
   const firstDayLimit = order.reactionFirstDayLimit || (Number.isSafeInteger(order.amount) && order.amount > 0 ? order.amount : dailyLimit);
-  return { ...order, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit,
+  return { ...order, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit, reactionDisabled: false,
     reactionEnabledAt: enabledAt, reactionFirstDayLimit: firstDayLimit,
     reactionLimitUpdates: [...(Array.isArray(order.reactionLimitUpdates) ? order.reactionLimitUpdates : []),
       ...(dailyLimit !== summary.dailyLimit ? [{ dailyLimit, updatedAt }] : [])]

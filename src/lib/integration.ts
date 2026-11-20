@@ -355,7 +355,7 @@ export function cancelCommunityOrderReactions(uniqid: string, options: { request
   });
 }
 
-export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number, options: { customerAllowance?: boolean } = {}) {
+export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number, options: { customerAllowance?: boolean; enabled?: boolean } = {}) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-limit`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },

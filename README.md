@@ -93,6 +93,10 @@ Sonradan acilinca ilk gun yine uye sayisi kadar hak verilir; limit artirmak bu
 gunu yeniden baslatmaz ve onceki kullanimi silmez. Orders'in Reactions sutunu
 bugunku limiti, tum gunlerin toplam kullanimini ve bugun kalani gosterir.
 
+**Manage reactions → Disable reactions** musteri erisimini kapatir. Gecmis,
+gunluk limit ve ilk acilis tarihi korunur. Tekrar acmak yeni bir ilk gun hakki
+vermez; kapali siparisler Orders'ta **Disabled** olarak gorunur.
+
 Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
 kullanir. Orders detayinda da ayni panel vardir; iki ekran ayni gunluk hakki ve
 gecmisi gosterir. Basliktaki geri sayim saniyelik guncellenir; sifirlaninca haklar

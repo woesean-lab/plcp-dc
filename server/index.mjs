@@ -7499,6 +7499,8 @@ async function runCommunityOrder(order, members, config) {
         reactionCapacity: currentPayload.reactionCapacity ?? payload.reactionCapacity ?? 0,
         reactionDailyLimit: currentPayload.reactionDailyLimit ?? payload.reactionDailyLimit ?? 0,
         reactionEnabledAt: currentPayload.reactionEnabledAt ?? payload.reactionEnabledAt ?? null,
+        reactionDisabled: currentPayload.reactionDisabled ?? payload.reactionDisabled ?? false,
+        reactionDisabledAt: currentPayload.reactionDisabledAt ?? payload.reactionDisabledAt ?? null,
         reactionFirstDayLimit: currentPayload.reactionFirstDayLimit ?? payload.reactionFirstDayLimit ?? null,
         reactionLimitUpdates: currentPayload.reactionLimitUpdates ?? payload.reactionLimitUpdates ?? [],
         reactionRequests: Array.isArray(currentPayload.reactionRequests) ? currentPayload.reactionRequests : (payload.reactionRequests ?? []),
@@ -13505,7 +13507,7 @@ app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (r
 
     if (req.body?.customerAllowance === true) {
       const hydrated = await hydrateCommunityOrderCategories(order);
-      const updatedOrder = planCustomerReactionSettings(hydrated, req.body.reactionLimit);
+      const updatedOrder = planCustomerReactionSettings(hydrated, req.body.reactionLimit, Date.now(), { enabled: req.body.enabled });
       await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
       await client.query("COMMIT");
       return res.set("Cache-Control", "no-store").json({ ...updatedOrder, customerReactions: getCustomerReactionSummary(updatedOrder) });

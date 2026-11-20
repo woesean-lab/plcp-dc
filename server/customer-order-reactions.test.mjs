@@ -104,6 +104,35 @@ test("increasing a later day's daily limit does not clear the reactions already 
   assert.equal(summary.firstDay, false);
 });
 
+test("disabling and re-enabling keep history, daily limits and the original first-day allowance", () => {
+  const original = { ...base, amount: 500, createdAt: "2026-09-01", reactionEnabledAt: new Date(now - 1000).toISOString(), reactionFirstDayLimit: 500, reactionRequests: [request(["completed", "pending"])] };
+  const disabled = planCustomerReactionSettings(original, undefined, now, { enabled: false });
+  const summary = getCustomerReactionSummary(disabled, now);
+  assert.equal(summary.enabled, false);
+  assert.equal(summary.disabled, true);
+  assert.equal(summary.remaining, 0);
+  assert.equal(summary.used, 2);
+  assert.equal(summary.dailyLimit, 50);
+  assert.deepEqual(disabled.reactionRequests, original.reactionRequests);
+  const enabled = planCustomerReactionSettings(disabled, 50, now + 200);
+  assert.equal(getCustomerReactionSummary(enabled, now + 200).remaining, 498);
+  assert.equal(getCustomerReactionSummary(enabled, now + 200).disabled, false);
+  assert.equal(enabled.reactionEnabledAt, original.reactionEnabledAt);
+  const nextDay = planCustomerReactionSettings(disabled, 50, now + 2000);
+  assert.equal(getCustomerReactionSummary(nextDay, now + 2000).firstDay, false);
+  assert.equal(getCustomerReactionSummary(nextDay, now + 2000).todayLimit, 50);
+  assert.equal(getCustomerReactionSummary(nextDay, now + 2000).totalUsed, 2);
+});
+
+test("disabling is allowed after support ends, but re-enabling still requires active access", () => {
+  const expired = { ...base, categoryAllocations: [{ ...base.categoryAllocations[0], expiredAt: "2000-01-01" }] };
+  const disabled = planCustomerReactionSettings(expired, undefined, now, { enabled: false });
+  assert.equal(disabled.reactionDisabled, true);
+  assert.throws(() => planCustomerReactionSettings(disabled, 50, now), { statusCode: 409 });
+  assert.throws(() => planCustomerReactionSettings(base, 50, now, { enabled: "false" }), { statusCode: 400 });
+  assert.throws(() => planCustomerReactionSettings({ ...base, provider: "dcord" }, undefined, now, { enabled: false }), { statusCode: 404 });
+});
+
 test("the Orders overview separates all-time usage from today's limit and excludes raw history", () => {
   const order = { ...base, reactionRequests: [request(["completed", "pending", "failed", "cancelled"]), request(["completed", "completed"], "2026-11-19T20:00:00Z")] };
   const overview = getCustomerReactionOverview(order, now);
@@ -155,10 +184,11 @@ function endpoint(initial = base, hydrate = (order) => order) {
 }
 
 test("direct customer API calls cannot bypass disabled categories, support expiry or order opt-in", async () => {
-  for (const order of [{ ...base, reactionDailyLimit: 0 }, { ...base, categoryAllocations: [{ ...base.categoryAllocations[0], expiredAt: "2000-01-01" }] }]) {
+  for (const order of [{ ...base, reactionDailyLimit: 0 }, { ...base, reactionDisabled: true }, { ...base, categoryAllocations: [{ ...base.categoryAllocations[0], expiredAt: "2000-01-01" }] }]) {
     const api = endpoint(order);
     assert.equal((await api.send(1)).statusCode, 403);
     assert.equal(api.jobs.length, 0);
+    assert.equal((await endpoint(order).send(1, { admin: true, customerAllowance: true })).statusCode, 403);
   }
   const disabled = endpoint(base, (order) => ({ ...order, categoryAllocations: [{ ...order.categoryAllocations[0], reactionUseEnabled: false }] }));
   assert.equal((await disabled.send(1)).statusCode, 403, "current category settings override the saved snapshot");
@@ -227,7 +257,7 @@ test("member-check upserts preserve current reaction reservations and their prog
   const db = new PGlite();
   try {
     await db.exec("CREATE TABLE tracked_orders (uniqid text PRIMARY KEY, payload jsonb NOT NULL)");
-    const current = { ...structuredClone(base), reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 500, reactionLimitUpdates: [{ dailyLimit: 50, updatedAt: "2026-11-20T10:00:00Z" }], reactionRequests: [request(["completed", "pending"])] };
+    const current = { ...structuredClone(base), reactionDisabled: true, reactionDisabledAt: "2026-11-20T12:00:00Z", reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 500, reactionLimitUpdates: [{ dailyLimit: 50, updatedAt: "2026-11-20T10:00:00Z" }], reactionRequests: [request(["completed", "pending"])] };
     await db.query("INSERT INTO tracked_orders VALUES ($1, $2::jsonb)", [current.uniqid, JSON.stringify(current)]);
     const stale = { ...structuredClone(base), added: 99, reactionDailyLimit: 0, reactionRequests: [] };
     const saved = await db.query(`INSERT INTO tracked_orders VALUES ($1, $2::jsonb)
@@ -237,6 +267,11 @@ test("member-check upserts preserve current reaction reservations and their prog
     assert.deepEqual(saved.rows[0].payload.reactionRequests, current.reactionRequests);
     assert.equal(saved.rows[0].payload.reactionEnabledAt, current.reactionEnabledAt);
     assert.equal(saved.rows[0].payload.reactionFirstDayLimit, 500);
+    assert.equal(saved.rows[0].payload.reactionDisabled, true);
+    assert.equal(saved.rows[0].payload.reactionDisabledAt, current.reactionDisabledAt);
     assert.deepEqual(saved.rows[0].payload.reactionLimitUpdates, current.reactionLimitUpdates);
+    await db.query("UPDATE tracked_orders SET payload = jsonb_set(payload, '{reactionDisabled}', 'false'::jsonb) WHERE uniqid = $1", [current.uniqid]);
+    const reenabled = await db.query(`INSERT INTO tracked_orders VALUES ($1, $2::jsonb) ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload || ${CUSTOMER_REACTION_SAVE_FIELDS_SQL} RETURNING payload`, [current.uniqid, JSON.stringify(current)]);
+    assert.equal(reenabled.rows[0].payload.reactionDisabled, false, "stale disabled snapshots cannot undo re-enabling");
   } finally { await db.close(); }
 });
