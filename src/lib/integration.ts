@@ -141,8 +141,10 @@ export function updatePublicCommunityOrderReactionMessage(uniqid: string, messag
   });
 }
 
-export function cancelPublicCommunityOrderReactions(uniqid: string) {
-  return requestPublicOrderApi<{ order: OrderStatusResponse; cancelledCount: number }>(uniqid, "reaction-cancel", { method: "POST" });
+export function cancelPublicCommunityOrderReactions(uniqid: string, requestId?: string) {
+  return requestPublicOrderApi<{ order: OrderStatusResponse; cancelledCount: number }>(uniqid, "reaction-cancel", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ requestId })
+  });
 }
 
 export function replaceDcordBoostToken(uniqid: string, resultIndex: number) {

@@ -18,6 +18,8 @@ import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation }
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
+import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
+import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, customerReactionMemberEligible, validateCustomerReactionLimit } from "./customer-order-reactions.mjs";
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
 import { getCommunityResultAllocation, communityResultMatchesAllocation, getCommunityCategoryName } from "../shared/community-order-allocations.mjs";
 
@@ -3563,6 +3565,20 @@ async function processCommunityReactionJobsUnlocked() {
       [job.order_id, job.request_id, job.discord_user_id, job.emoji]
     );
     if (!claimed.rowCount) continue;
+    const reactionOrderResult = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1", [job.order_id]);
+    const reactionOrder = reactionOrderResult.rows[0]?.payload;
+    const reactionRequest = reactionOrder?.reactionRequests?.find((request) => request?.id === job.request_id);
+    const customerOrder = reactionRequest?.source === "customer" ? await hydrateCommunityOrderCategories(reactionOrder) : null;
+    if (customerOrder) {
+      const currentOrder = customerOrder;
+      const member = currentOrder.communityResults?.find((item) => String(item?.discordUserId) === String(job.discord_user_id));
+      if (!getCustomerReactionSummary(currentOrder).enabled || !customerReactionMemberEligible(currentOrder, member)) {
+        const reason = "Reaction access ended before delivery.";
+        await pool.query("UPDATE community_reaction_jobs SET status = 'cancelled', completed_at = NOW(), last_error = $5 WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4", [job.order_id, job.request_id, job.discord_user_id, job.emoji, reason]);
+        await updateCommunityReactionResult(job, { reactionState: "cancelled", reactionDetails: reason, reactionCompletedAt: new Date().toISOString() });
+        continue;
+      }
+    }
     const runtimeAccountId = [...discordOnlinerRuntimes.entries()].find(([, item]) =>
       String(item?.bot?.id ?? "") === String(job.discord_user_id)
     )?.[0];
@@ -3586,13 +3602,23 @@ async function processCommunityReactionJobsUnlocked() {
       continue;
     }
     try {
-      const sendReaction = () => sendHumanizerDiscordRequest(
+      const sendReaction = async () => {
+        // Connecting the account can take time. Recheck the member's deadline
+        // immediately before sending through the existing reaction engine.
+        if (customerOrder) {
+          const fresh = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1", [job.order_id]);
+          const current = fresh.rows[0]?.payload ? await hydrateCommunityOrderCategories(fresh.rows[0].payload) : null;
+          const member = current?.communityResults?.find((item) => String(item?.discordUserId) === String(job.discord_user_id));
+          if (!current || !getCustomerReactionSummary(current).enabled || !customerReactionMemberEligible(current, member)) throw Object.assign(new Error("Reaction access ended before delivery."), { code: "CUSTOMER_REACTION_EXPIRED" });
+        }
+        return sendHumanizerDiscordRequest(
           `channels/${encodeURIComponent(job.channel_id)}/messages/${encodeURIComponent(job.message_id)}/reactions/${encodeURIComponent(job.emoji)}/@me`,
           account.proxyUrl,
           account.botToken,
           "PUT",
           undefined
         );
+      };
       let result;
       if (localGatewayConnected || persistedGatewayConnected) {
         result = await sendReaction();
@@ -3635,6 +3661,11 @@ async function processCommunityReactionJobsUnlocked() {
       }
     } catch (error) {
       const message = String(error instanceof Error ? error.message : error).slice(0, 400);
+      if (error?.code === "CUSTOMER_REACTION_EXPIRED") {
+        await pool.query("UPDATE community_reaction_jobs SET status = 'cancelled', completed_at = NOW(), last_error = $5 WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4", [job.order_id, job.request_id, job.discord_user_id, job.emoji, message]);
+        await updateCommunityReactionResult(job, { reactionState: "cancelled", reactionDetails: message, reactionCompletedAt: new Date().toISOString() });
+        continue;
+      }
       const terminal = Number(job.attempts) >= 5;
       await pool.query(
         `UPDATE community_reaction_jobs SET status = $5, account_id = $6, attempts = attempts + 1,
@@ -5885,12 +5916,14 @@ function createCommunityOrderId() {
 }
 
 async function saveTrackedOrderPayload(payload) {
-  await pool.query(
+  const saved = await pool.query(
     `INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at)
      VALUES ($1, $2::jsonb, COALESCE(($2::jsonb->>'createdAt')::timestamptz, NOW()), NOW())
-     ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload, updated_at = NOW()`,
+     ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload || ${CUSTOMER_REACTION_SAVE_FIELDS_SQL}, updated_at = NOW()
+     RETURNING payload`,
     [payload.uniqid, JSON.stringify(payload)]
   );
+  if (saved.rows[0]?.payload) Object.assign(payload, saved.rows[0].payload);
   if (payload.boostStockPool === "rotating") await rotatingBoostStock.sync(payload);
 }
 
@@ -11877,6 +11910,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     if (hasPeriodicCategory && (!Number.isInteger(durationMonths) || durationMonths < 1 || durationMonths > 6)) {
       return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
     }
+    const reactionDailyLimit = validateCustomerReactionLimit(categoryResult.rows, req.body?.reactionLimit);
     const uniqid = createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
@@ -11928,6 +11962,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryIsPeriodic: categoryAllocations.some((allocation) => allocation.isPeriodic),
       categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
       reactionRequests: [],
+      reactionDailyLimit,
+      reactionCapacity: reactionDailyLimit,
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -12493,7 +12529,11 @@ async function reconcileCommunityPendingJoinResults(order) {
 function sanitizePublicCommunityOrder(order) {
   if (!order || typeof order !== "object" || Array.isArray(order)) return order;
   const canLeaveAll = canPublicLeaveAll(order);
+  const customerReactions = getCustomerReactionSummary(order);
   order = hideCommunityLeaveInformation(order);
+  // Customer history has counts only; raw assignments belong to the admin view.
+  const { reactionRequests: _reactionRequests, ...publicOrder } = order;
+  order = { ...publicOrder, customerReactions };
   if (!Array.isArray(order.communityResults)) return { ...order, canPublicLeaveAll: canLeaveAll };
   const generatedBotInvite = getCommunityOrderJoinMethod(order) !== "directly" && !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
     ? createCommunityBotInvite({ clientId: String(order.botApplicationId) }, String(order.serverId), getCommunityOrderJoinMethod(order))
@@ -13435,130 +13475,7 @@ app.post("/api/reactions/requests/:requestId/cancel", requireSession, async (req
   }
 });
 
-async function updateCommunityReactionMessage(req, res, next) {
-  const client = await pool.connect();
-  try {
-    const uniqid = String(req.params.uniqid ?? "").trim();
-    const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
-    const requestedCount = Number.parseInt(req.body?.reactionCount, 10);
-    const requestedEmojis = [...new Set((Array.isArray(req.body?.emojis) ? req.body.emojis : [])
-      .map((emoji) => String(emoji ?? "").trim())
-      .filter(Boolean))];
-    const mixedEmojiMode = requestedEmojis.length === 1 && requestedEmojis[0] === "mixed";
-    if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
-    if (!reactionMessage) return res.status(400).json({ message: "Enter a valid Discord message link." });
-
-    await client.query("BEGIN");
-    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
-    const order = tracked.rows[0]?.payload;
-    if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Members order could not be found." });
-    }
-    if (!["PARTIAL", "COMPLETED"].includes(String(order.status ?? "").toUpperCase())) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Reaction requests become available after member delivery is completed or partial." });
-    }
-    if (reactionMessage.guildId !== String(order.serverId ?? "")) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });
-    }
-    const hasExplicitReactionCapacity = Number.isInteger(Number(order.reactionCapacity));
-    const reactionCapacity = hasExplicitReactionCapacity
-      ? Math.max(0, Number(order.reactionCapacity))
-      : order.communityResults.filter((item) => item?.reactionAvailable === true).length;
-    const existingRequests = Array.isArray(order.reactionRequests) ? order.reactionRequests : [];
-    const assignedCount = existingRequests.reduce((total, request) => {
-      const assignments = Array.isArray(request?.assignments) ? request.assignments : [];
-      if (assignments.length) {
-        return total + assignments.filter((assignment) => !["failed", "cancelled"].includes(String(assignment?.reactionState ?? "pending").toLowerCase())).length;
-      }
-      return total + Math.max(0, Number(request?.assignedCount) || 0);
-    }, 0);
-    const remainingCount = Math.max(0, reactionCapacity - assignedCount);
-    if (!reactionCapacity) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: "Reaction use is not enabled for this order." });
-    }
-    if (!Number.isInteger(requestedCount) || requestedCount < 1 || requestedCount > remainingCount) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: remainingCount > 0
-        ? `Choose a reaction amount between 1 and ${remainingCount}.`
-        : "This order's reaction limit has been used." });
-    }
-    if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji) && !isCommunityCustomReactionSelector(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: `Choose Mixed or between 1 and ${Math.min(communityReactionEmojiLimit, requestedCount)} supported emojis.` });
-    }
-
-    let assignmentEmojis = requestedEmojis;
-    const deliveredMembers = order.communityResults.filter((item) =>
-      item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
-    );
-    const customEmojiSelectors = requestedEmojis.filter(isCommunityCustomReactionSelector);
-    if (customEmojiSelectors.length) {
-      assignmentEmojis = requestedEmojis.map((emoji) => {
-        if (!isCommunityCustomReactionSelector(emoji)) return emoji;
-        const match = emoji.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
-        return `${match[1]}:${match[2]}`;
-      });
-    }
-
-    const maximumRequestSize = deliveredMembers.length * (mixedEmojiMode ? communityReactionEmojiLimit : assignmentEmojis.length);
-    if (!deliveredMembers.length || requestedCount > maximumRequestSize) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: deliveredMembers.length
-        ? `With ${mixedEmojiMode ? "Mixed" : requestedEmojis.length} emojis, this delivered member pool can add at most ${maximumRequestSize} reactions to one message.`
-        : "No delivered members are available for reactions yet." });
-    }
-
-    const requestId = crypto.randomUUID();
-    const usedPairs = new Set(existingRequests
-      .filter((request) => request?.messageLink === reactionMessage.url)
-      .flatMap((request) => Array.isArray(request?.assignments) ? request.assignments : [])
-      .filter((assignment) => String(assignment?.reactionState ?? "pending").toLowerCase() !== "failed")
-      .map((assignment) => `${assignment?.discordUserId}:${assignment?.reactionEmoji}`));
-    const assignments = createNaturalCommunityReactionAssignments(deliveredMembers, requestedCount, usedPairs, mixedEmojiMode ? null : assignmentEmojis);
-    if (assignments.length !== requestedCount) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: "This delivered member pool does not have enough unused member and emoji combinations for that message." });
-    }
-    for (const assignment of assignments) {
-      await client.query(
-        `INSERT INTO community_reaction_jobs (order_id, request_id, discord_user_id, channel_id, message_id, emoji)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT DO NOTHING`,
-        [uniqid, requestId, assignment.discordUserId, reactionMessage.channelId, reactionMessage.messageId, assignment.reactionEmoji]
-      );
-    }
-    const updatedOrder = {
-      ...order,
-      reactionCapacity,
-      reactionMessageLink: reactionMessage.url,
-      reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId },
-      reactionRequests: [...existingRequests, {
-        id: requestId,
-        messageLink: reactionMessage.url,
-        requestedCount,
-        emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
-        emojis: requestedEmojis,
-        assignedCount: assignments.length,
-        assignments,
-        createdAt: new Date().toISOString()
-      }],
-      communityResults: order.communityResults
-    };
-    await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
-    await client.query("COMMIT");
-    const isPublicRequest = req.path.startsWith("/api/public/");
-    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : updatedOrder);
-  } catch (error) {
-    await client.query("ROLLBACK").catch(() => {});
-    next(error);
-  } finally {
-    client.release();
-  }
-}
+const updateCommunityReactionMessage = createCommunityReactionMessageHandler({ pool, parseDiscordMessageLink, communityReactionEmojiLimit, isCommunityReactionEmoji, isCommunityCustomReactionSelector, createNaturalCommunityReactionAssignments, sanitizePublicCommunityOrder, hydrateCommunityOrderCategories });
 
 app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (req, res, next) => {
   const client = await pool.connect();
@@ -13625,6 +13542,7 @@ async function cancelPendingCommunityReactions(req, res, next) {
   const client = await pool.connect();
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
+    const isPublicRequest = req.path.startsWith("/api/public/");
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
@@ -13636,9 +13554,10 @@ async function cancelPendingCommunityReactions(req, res, next) {
     const cancelledJobs = await client.query(
       `UPDATE community_reaction_jobs
        SET status = 'cancelled', completed_at = NOW(), last_error = 'Cancelled by request.'
-       WHERE order_id = $1 AND status = 'pending'
+       WHERE order_id = $1 AND status = 'pending' AND ($2::text[] IS NULL OR request_id = ANY($2::text[]))
        RETURNING request_id, discord_user_id, emoji`,
-      [uniqid]
+      [uniqid, isPublicRequest ? order.reactionRequests.filter((request) => request?.source === "customer"
+        && (!req.body?.requestId || request.id === req.body.requestId)).map((request) => request.id) : null]
     );
     const cancelledKeys = new Set(cancelledJobs.rows.map((job) => `${job.request_id}:${job.discord_user_id}:${job.emoji}`));
     const cancelledAt = new Date().toISOString();
@@ -13653,7 +13572,6 @@ async function cancelPendingCommunityReactions(req, res, next) {
     const updatedOrder = { ...order, reactionRequests };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
-    const isPublicRequest = req.path.startsWith("/api/public/");
     const responseOrder = isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : updatedOrder;
     res.set("Cache-Control", "no-store").json({ order: responseOrder, cancelledCount: cancelledJobs.rowCount });
   } catch (error) {

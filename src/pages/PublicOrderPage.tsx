@@ -13,6 +13,7 @@ import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckPro
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
+import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -1063,6 +1064,8 @@ export default function PublicOrderPage() {
                   ) : null}
                 </div>
               </section>
+
+              {isCommunityOrder && status?.customerReactions?.enabled ? <CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /> : null}
 
               {isInvitesPaused && !isCommunityOrder ? (
                 <div className="monitor-restart-warning" role="alert">

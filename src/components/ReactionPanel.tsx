@@ -57,6 +57,8 @@ export type ReactionPanelRequest = {
 
 type ReactionPanelProps = {
   className?: string;
+  description?: string;
+  lockReason?: string;
   limit: number;
   completed: number;
   failed: number;
@@ -109,6 +111,8 @@ function formatReactionDate(value: string) {
 
 export function ReactionPanel({
   className = "",
+  description,
+  lockReason,
   limit,
   completed,
   failed,
@@ -254,7 +258,7 @@ export function ReactionPanel({
           <div>
             <span className="monitor-reaction-kicker">{workspaceSummary ? "Members-powered reactions" : "Reaction delivery"}</span>
             <h2 id={titleId}>{workspaceSummary ? "Reaction workspace" : "Message reactions"}</h2>
-            <p>{workspaceSummary ? "Use members already delivered to this Discord server." : "Send real account reactions to a Discord message."}</p>
+            <p>{description ?? (workspaceSummary ? "Use members already delivered to this Discord server." : "Send real account reactions to a Discord message.")}</p>
           </div>
         </div>
 
@@ -539,7 +543,7 @@ export function ReactionPanel({
               <span aria-hidden="true"><LockKeyhole /></span>
               <div>
                 <strong>Reaction requests are locked</strong>
-                <small>Waiting for member delivery. You can queue reactions as soon as the order is partially or fully delivered.</small>
+                <small>{lockReason ?? "Waiting for member delivery. You can queue reactions as soon as the order is partially or fully delivered."}</small>
               </div>
             </div>
           ) : null}

@@ -69,6 +69,18 @@ npm install --prefix output/category-transfer-test --no-save --package-lock=fals
 node --test server/community-order-category-guard.test.mjs
 ```
 
+## Musteri monitorunde reaction
+
+Kategori yonetiminde reaction iznini ve destek suresini acin. Siparis olustururken
+**Customer reactions** secenegini isaretleyip **50 / 100 / 200 / 500** gunluk limit
+secin. Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
+kullanir. Limit Turkiye saatiyle 00:00'da yenilenir; basarisiz/iptal edilmis
+gonderimler hakki geri verir. Yalnizca o siparisteki, izinli ve destek suresi devam
+eden bolumlerin uyeleri kullanilir. Sure dolunca panel kapanir; kuyruktaki musteri
+reaction'lari da gonderilmeden once kontrol edilir. Eski siparisler otomatik acilmaz.
+
+Kontroller: `node --test server/customer-order-reactions.test.mjs`.
+
 ## EasyPanel servis rolleri
 
 Ayni image iki ayri EasyPanel App servisinde calistirilabilir:

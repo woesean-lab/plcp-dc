@@ -20,6 +20,32 @@ export interface CommunityCategoryAllocation {
   expiredAt?: string | null;
 }
 
+export interface CustomerOrderReactions {
+  enabled: boolean;
+  ready: boolean;
+  dailyLimit: number;
+  used: number;
+  remaining: number;
+  completed: number;
+  failed: number;
+  eligibleMembers: number;
+  expiresAt: string | null;
+  quotaDay: string;
+  resetsAt: string;
+  requests: Array<{
+    id: string;
+    messageLink: string;
+    requestedCount: number;
+    assignedCount: number;
+    emojiCount?: number;
+    emojis?: string[];
+    createdAt: string;
+    completedCount: number;
+    failedCount: number;
+    cancelledCount: number;
+  }>;
+}
+
 export interface CommunityAutoLeaveJob {
   id: string;
   status: "running" | "completed" | "completed_with_errors" | string;
@@ -88,6 +114,7 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  customerReactions?: CustomerOrderReactions;
   boostStockPool?: BoostStockPool;
   uniqid: string;
   status?: OrderStatus;

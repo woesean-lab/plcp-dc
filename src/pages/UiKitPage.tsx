@@ -10,6 +10,7 @@ import { FilterDropdown } from "../components/ui/filter-dropdown";
 import { Skeleton } from "../components/ui/skeleton";
 import { ListPagination, paginate } from "../components/ListPagination";
 import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
+import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel";
 import "../components/OrdersWorkspace.css";
 import "./UiKitPage.css";
 
@@ -20,7 +21,7 @@ const SECTIONS = [
   { id: "badges", title: "Status badges", tags: "active inactive onliner presence servers" },
   { id: "panels", title: "Cards & surfaces", tags: "panel card background" },
   { id: "lists", title: "Lists & pagination", tags: "members stock select rows per page back next" },
-  { id: "feedback", title: "Alerts & feedback", tags: "warning danger progress loading skeleton empty" },
+  { id: "feedback", title: "Alerts & feedback", tags: "warning danger progress loading skeleton empty reaction daily monitor" },
   { id: "overlays", title: "Dialogs & tooltips", tags: "modal confirmation help popup" },
   { id: "tokens", title: "Colors & typography", tags: "theme text accent border variables" }
 ] as const;
@@ -91,6 +92,17 @@ function MembersList() {
     </div>)}</div></div>
     <ListPagination {...pagination} onChange={setPage} onPageSizeChange={setSize} label="Sample member pages" showNavigationLabels />
   </div>;
+}
+
+function ReactionExample() {
+  const [message, setMessage] = useState("");
+  const [count, setCount] = useState(1);
+  const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
+  return <ReactionPanel description="50 reactions per day during your support period. Resets at 00:00 Türkiye time."
+    limit={50} completed={15} failed={0} remaining={35} eligibleMembers={50}
+    messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={[]}
+    onMessageChange={setMessage} onCountChange={setCount} onEmojiSelectionChange={setEmojis}
+    onSubmit={() => toast.success("Sample reaction request previewed")} />;
 }
 
 export default function UiKitPage() {
@@ -175,6 +187,7 @@ export default function UiKitPage() {
         {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
+          <Example title="Customer reactions" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx" code={'// Reuse the existing panel; the customer wrapper connects it to the order.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />'}><ReactionExample /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
           </Example>

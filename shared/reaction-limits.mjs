@@ -1,0 +1,1 @@
+export const CUSTOMER_REACTION_LIMITS = [50, 100, 200, 500];

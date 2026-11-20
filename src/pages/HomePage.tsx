@@ -159,6 +159,7 @@ import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUs
 import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
+import { CUSTOMER_REACTION_LIMITS } from "../../shared/reaction-limits.mjs";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
 
 const EMPTY_FORM = {
@@ -174,6 +175,8 @@ const EMPTY_FORM = {
   communityMultiCategory: false,
   communityCategoryAmounts: { offline: 100 } as Record<string, number>,
   communityDurationMonths: 1,
+  communityReactions: false,
+  communityReactionLimit: 50,
   communityCustomDelay: 1,
   communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
@@ -767,6 +770,7 @@ export default function HomePage() {
     : communityCategories.flatMap((category) => category.id === form.communityCategoryId ? [{ category, amount: form.amount }] : []);
   const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
+  const selectedCommunityHasReactions = selectedCommunityAllocations.some(({ category }) => category.isPeriodic && category.reactionUseEnabled);
   const defaultCommunitySupportMonths = form.amount >= 500 ? 2 : 1;
   useEffect(() => {
     if (!selectedIsCommunity || !selectedCommunityHasPeriodic) return;
@@ -2962,6 +2966,7 @@ export default function HomePage() {
       durationMonths: selectedIsCommunity && selectedCommunityHasPeriodic ? form.communityDurationMonths : undefined,
       speedProfile: selectedIsCommunity ? form.communitySpeedProfile : undefined,
       joinMethod: selectedIsCommunity ? effectiveCommunityJoinMethod : undefined,
+      reactionLimit: selectedIsCommunity && selectedCommunityHasReactions && form.communityReactions ? form.communityReactionLimit : undefined,
       isEldoradoSale: form.isEldoradoSale
     };
 
@@ -4098,6 +4103,21 @@ export default function HomePage() {
                               </div>
                             </div>
                           ) : null}
+
+                          {selectedIsCommunity && selectedCommunityHasReactions ? <div className="col-span-full flex flex-wrap items-stretch gap-3">
+                            <label className={`boost-proxy-toggle min-w-0 w-full sm:flex-1 ${form.communityReactions ? "is-enabled" : ""}`}>
+                              <input type="checkbox" checked={form.communityReactions} onChange={(event) => setForm((current) => ({ ...current, communityReactions: event.target.checked }))} />
+                              <span><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
+                              <strong>Customer reactions</strong>
+                              <small>Support period only.</small>
+                            </label>
+                            <div className="boost-order-field w-[180px] max-sm:w-full">
+                              <span className="boost-order-label">Daily reactions</span>
+                              <FilterDropdown label="Daily reactions" showLabel={false} value={String(form.communityReactionLimit)} disabled={!form.communityReactions}
+                                options={CUSTOMER_REACTION_LIMITS.map((limit) => ({ value: String(limit), label: `${limit} / day` }))}
+                                onChange={(value) => setForm((current) => ({ ...current, communityReactionLimit: Number(value) }))} />
+                            </div>
+                          </div> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
@@ -5492,6 +5512,7 @@ export default function HomePage() {
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
+                  {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.reactionLimit} reactions / day</span> : null}
                 </div>
               ) : null}
             </div>
