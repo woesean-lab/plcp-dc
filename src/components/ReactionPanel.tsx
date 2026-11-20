@@ -2,7 +2,7 @@ import { PaginatedList } from "./ListPagination";
 import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
-import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
+import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, Settings2, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 import { ReactionResetCountdown } from "./ReactionResetCountdown";
@@ -291,7 +291,7 @@ export function ReactionPanel({
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
           <span><span className="app-kicker">Reaction control</span><strong id={titleId}>Reactions</strong></span>
-          {onEditLimit ? <Button type="button" size="xs" variant="secondary" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditLimit(); }}>{limitActionLabel}</Button> : null}
+          {onEditLimit ? <Button type="button" size="xs" variant="secondary" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditLimit(); }}><Settings2 className="h-3.5 w-3.5" aria-hidden="true" />{limitActionLabel}</Button> : null}
           {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
