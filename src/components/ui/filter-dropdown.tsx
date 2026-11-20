@@ -35,9 +35,12 @@ export function FilterDropdown({
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuPosition, setMenuPosition] = useState<CSSProperties>({ position: "fixed", top: 0, left: 0, right: "auto", bottom: "auto", width: 88, visibility: "hidden" });
   const selected = options.find((option) => option.value === value) ?? options[0];
+  const isOpen = open && !disabled;
+
+  useEffect(() => { if (disabled) setOpen(false); }, [disabled]);
 
   useLayoutEffect(() => {
-    if (!open || !portal || !triggerRef.current || !menuRef.current) return;
+    if (!isOpen || !portal || !triggerRef.current || !menuRef.current) return;
     const trigger = triggerRef.current.getBoundingClientRect();
     menuRef.current.style.width = `${Math.max(trigger.width, 88)}px`;
     const menu = menuRef.current.getBoundingClientRect();
@@ -48,10 +51,10 @@ export function FilterDropdown({
       left: Math.max(8, Math.min(trigger.left, window.innerWidth - menu.width - 8)),
       width: Math.max(trigger.width, 88)
     });
-  }, [open, portal, placement]);
+  }, [isOpen, portal, placement]);
 
   useEffect(() => {
-    if (!open || !portal) return;
+    if (!isOpen || !portal) return;
     const close = () => setOpen(false);
     const closeOutside = (event: PointerEvent) => {
       if (!triggerRef.current?.contains(event.target as Node) && !menuRef.current?.contains(event.target as Node)) close();
@@ -64,9 +67,9 @@ export function FilterDropdown({
       window.removeEventListener("scroll", close, true);
       document.removeEventListener("pointerdown", closeOutside);
     };
-  }, [open, portal]);
+  }, [isOpen, portal]);
 
-  const menu = open ? (
+  const menu = isOpen ? (
     <div ref={menuRef} className={`filter-dropdown-menu${portal ? " filter-dropdown-portal" : ""}`} role="listbox" aria-label={label} tabIndex={-1} style={portal ? menuPosition : undefined}
       onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } }}
       onBlur={(event) => {
@@ -89,10 +92,10 @@ export function FilterDropdown({
       <button
         ref={triggerRef}
         type="button"
-        className={`filter-dropdown-trigger ${open ? "is-open" : ""}`}
+        className={`filter-dropdown-trigger ${isOpen ? "is-open" : ""}`}
         aria-label={label}
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={isOpen}
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
         onBlur={(event) => {
