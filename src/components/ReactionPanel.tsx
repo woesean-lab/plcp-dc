@@ -149,6 +149,7 @@ export function ReactionPanel({
   workspaceSummary
 }: ReactionPanelProps) {
   const titleId = useId();
+  const [expanded, setExpanded] = useState(false);
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
@@ -260,12 +261,13 @@ export function ReactionPanel({
 
   const Panel = collapsible ? "details" : "section";
   return (
-    <Panel className={`monitor-reaction-panel ${collapsible ? "monitor-control-panel is-collapsible" : ""} ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}>
+    <Panel className={`monitor-reaction-panel ${collapsible ? "monitor-control-panel is-collapsible" : ""} ${className}`.trim()} data-state={statusState} aria-labelledby={titleId}
+      onToggle={collapsible ? (event) => setExpanded((event.currentTarget as HTMLDetailsElement).open) : undefined}>
       {collapsible ? <>
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
-          <span><strong id={titleId}>Reactions</strong><ReactionAllowanceIndicator remaining={remaining} limit={limit} /></span>
-          {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
+          <span><strong id={titleId}>Reactions</strong>{!expanded ? <ReactionAllowanceIndicator remaining={remaining} limit={limit} /> : null}</span>
+          {!expanded && resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
         {onEditLimit ? <div className="monitor-reaction-collapse-meta">
@@ -292,12 +294,19 @@ export function ReactionPanel({
       </div>}
 
       <div className="monitor-reaction-dashboard">
-        {!collapsible ? <div className="monitor-reaction-overview">
+        <div className="monitor-reaction-overview">
           <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${workspaceSummary.checkedMembers} of ${workspaceSummary.deliveredMembers} members checked` : `${completed} of ${limit} reactions completed`}>
             <span><strong>{progress}%</strong><small>{workspaceSummary ? "checked" : "complete"}</small></span>
           </div>
 
           <div className="monitor-reaction-overview-copy">
+            {collapsible ? <>
+              <span className="monitor-reaction-overline">Daily reactions</span>
+              <div className="monitor-reaction-overview-status">
+                {expanded ? <ReactionAllowanceIndicator remaining={remaining} limit={limit} /> : null}
+                {expanded && resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
+              </div>
+            </> : <>
             <span className="monitor-reaction-overline">{workspaceSummary ? "Matched Discord server" : "Delivery progress"}</span>
             <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : assigned > limit ? `${completed} reactions delivered · ${limit} daily limit` : `${completed} of ${limit} reactions delivered`}</strong>
             <p>{workspaceSummary
@@ -306,8 +315,9 @@ export function ReactionPanel({
                 : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} reaction slots are available with the selected emojis.`}`
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : assigned > limit && resetsAt ? "Daily limit reached. New requests are available after reset." : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
+            </>}
           </div>
-        </div> : null}
+        </div>
 
         <div className="monitor-reaction-metrics" aria-label="Reaction delivery summary">
           <div data-tone="success">

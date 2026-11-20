@@ -7984,6 +7984,7 @@
 .monitor-reaction-progress-ring strong { display: block; color: var(--app-text); font-size: 20px; font-weight: 750; letter-spacing: -.04em; }
 .monitor-reaction-progress-ring small { display: block; margin-top: 1px; color: var(--app-subtle); font-size: 7px; font-weight: 750; letter-spacing: .07em; text-transform: uppercase; }
 .monitor-reaction-overview-copy { min-width: 0; flex: 1; }
+.monitor-reaction-overview-status { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }
 .monitor-reaction-overview-copy > strong { display: block; margin-top: 5px; color: var(--app-text); font-size: 14px; font-weight: 680; }
 .monitor-reaction-overview-copy p { margin: 4px 0 10px; color: var(--app-muted); font-size: 10px; line-height: 1.45; }
 .monitor-reaction-progress-track { display: block; height: 6px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.07); }
@@ -11997,7 +11998,9 @@
   .monitor-reaction-history-progress { grid-column: 2 / -1; grid-row: 2; }
 }
 /* Customer reaction content follows its card width, including beside Join delay. */
-.is-collapsible > .monitor-reaction-dashboard { grid-template-columns: minmax(0, 1fr); }
+@container customer-reactions (min-width: 721px) {
+  .is-collapsible > .monitor-reaction-dashboard { grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); }
+}
 @container customer-reactions (min-width: 441px) {
   .is-collapsible .monitor-reaction-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .is-collapsible .monitor-reaction-metrics > div:nth-child(n) { border-top: 0; border-right: 1px solid var(--app-divider); }

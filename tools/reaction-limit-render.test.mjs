@@ -38,13 +38,16 @@ test("the manually raised first-day limit appears as 1000 with 950 left after 50
   assert.ok(html.includes('aria-valuetext="950 of 1000 reactions available today"'));
 });
 
-test("customer summary omits the duplicate paragraph and progress card while retaining metrics and timer", () => {
+test("customer summary keeps its progress block and countdown without the repeated allowance paragraphs", () => {
   const html = render({ limit: 100, used: 0, completed: 0, remaining: 100, description: "Duplicate allowance description", resetsAt: "2099-01-01T21:00:00Z" });
   assert.equal(html.includes("Duplicate allowance description"), false);
-  assert.equal(html.includes('class="monitor-reaction-overview"'), false);
+  assert.ok(html.includes('class="monitor-reaction-overview"'));
+  assert.equal(html.includes("0 of 100 reactions delivered"), false);
+  assert.ok(html.includes("Daily reactions"));
   assert.ok(html.includes('aria-label="Reaction delivery summary"'));
   assert.ok(html.includes('class="reaction-reset-countdown"'));
   assert.ok(html.includes('aria-label="Daily reactions remaining"'));
+  assert.equal((html.match(/class="reaction-reset-countdown"/g) || []).length, 1);
   const workspace = render({ collapsible: false, limit: 100, completed: 0, remaining: 100 });
   assert.ok(workspace.includes('class="monitor-reaction-overview"'), "the full admin workspace keeps its overview");
 });
