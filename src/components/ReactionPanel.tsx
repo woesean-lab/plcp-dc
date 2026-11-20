@@ -291,12 +291,10 @@ export function ReactionPanel({
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
           <span><span className="app-kicker">Reaction control</span><strong id={titleId}>Reactions</strong></span>
+          {onEditLimit ? <Button type="button" size="xs" variant="secondary" onClick={(event) => { event.preventDefault(); event.stopPropagation(); onEditLimit(); }}>{limitActionLabel}</Button> : null}
           {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
-        {onEditLimit ? <div className="monitor-reaction-collapse-meta">
-          <Button type="button" size="xs" variant="secondary" onClick={onEditLimit}>{limitActionLabel}</Button>
-        </div> : null}
       </> : <div className="monitor-reaction-heading">
         <div className="monitor-reaction-identity">
           <span className="monitor-reaction-icon" aria-hidden="true"><Sparkles /></span>

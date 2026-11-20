@@ -7842,7 +7842,13 @@
 .monitor-reaction-collapse-toggle > svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--app-subtle); transition: transform .18s ease; }
 .monitor-reaction-panel.is-collapsible[open] > .monitor-reaction-collapse-toggle { border-bottom: 1px solid var(--app-divider); }
 .monitor-reaction-panel.is-collapsible[open] > .monitor-reaction-collapse-toggle > svg { transform: rotate(180deg); }
-.monitor-reaction-collapse-meta { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 20px 0; }
+.monitor-reaction-collapse-toggle > .ui-button { flex: 0 0 auto; }
+@container customer-reactions (max-width: 600px) {
+  .monitor-reaction-collapse-toggle:has(> .ui-button) { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; }
+  .monitor-reaction-collapse-toggle > .ui-button { grid-column: 2 / -1; grid-row: 2; justify-self: end; }
+  .monitor-reaction-collapse-toggle:has(> .ui-button) > .reaction-reset-countdown { grid-column: 3; grid-row: 1; }
+  .monitor-reaction-collapse-toggle:has(> .ui-button) > svg { grid-column: 4; grid-row: 1; }
+}
 .reaction-reset-countdown { display: grid; flex: 0 0 auto; gap: 3px; padding: 7px 10px; border: 1px solid var(--app-border); border-radius: 10px; background: var(--app-input-bg); text-align: left; }
 .reaction-reset-countdown .reaction-reset-label { display: flex; align-items: center; gap: 4px; color: var(--app-muted); font-size: 8px; font-weight: 650; line-height: 1.2; }
 .reaction-reset-label > svg { width: 11px; height: 11px; color: var(--app-accent-bright); }

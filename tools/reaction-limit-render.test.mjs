@@ -39,7 +39,7 @@ test("the manually raised first-day limit appears as 1000 with 950 left after 50
 });
 
 test("customer summary keeps its progress block and countdown without the repeated allowance paragraphs", () => {
-  const html = render({ limit: 100, used: 0, completed: 0, remaining: 100, description: "Duplicate allowance description", resetsAt: "2099-01-01T21:00:00Z" });
+  const html = render({ limit: 100, used: 0, completed: 0, remaining: 100, description: "Duplicate allowance description", resetsAt: "2099-01-01T21:00:00Z", onEditLimit: noop, limitActionLabel: "Manage reactions" });
   assert.equal(html.includes("Duplicate allowance description"), false);
   assert.ok(html.includes('class="monitor-reaction-overview"'));
   assert.ok(html.includes("0 of 100 reactions delivered"));
@@ -48,6 +48,9 @@ test("customer summary keeps its progress block and countdown without the repeat
   assert.equal(html.includes('aria-label="Daily reactions remaining"'), false);
   const heading = html.match(/<summary[\s\S]*?<\/summary>/)?.[0] || "";
   assert.ok(heading.includes('class="reaction-reset-countdown"'), "countdown remains in the summary independently of open state");
+  assert.ok(heading.includes("Manage reactions"), "manage belongs to the header");
+  assert.ok(heading.indexOf("Manage reactions") < heading.indexOf('class="reaction-reset-countdown"'));
+  assert.equal(html.includes("monitor-reaction-collapse-meta"), false);
   assert.equal((html.match(/class="reaction-reset-countdown"/g) || []).length, 1);
   const workspace = render({ collapsible: false, limit: 100, completed: 0, remaining: 100 });
   assert.ok(workspace.includes('class="monitor-reaction-overview"'), "the full admin workspace keeps its overview");
