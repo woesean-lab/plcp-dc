@@ -265,7 +265,10 @@ export function ReactionPanel({
           {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
-        {description ? <p className="monitor-reaction-collapse-description">{description}</p> : null}
+        {description || onEditLimit ? <div className="monitor-reaction-collapse-meta">
+          {description ? <p className="monitor-reaction-collapse-description">{description}</p> : null}
+          {onEditLimit ? <Button type="button" size="xs" variant="secondary" onClick={onEditLimit}>{limitActionLabel}</Button> : null}
+        </div> : null}
       </> : <div className="monitor-reaction-heading">
         <div className="monitor-reaction-identity">
           <span className="monitor-reaction-icon" aria-hidden="true"><Sparkles /></span>

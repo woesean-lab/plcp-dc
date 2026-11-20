@@ -13,6 +13,7 @@ import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
+import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -409,6 +410,7 @@ export default function OrderPage() {
   const [cancellingCommunityOrder, setCancellingCommunityOrder] = useState(false);
   const [showCancelCommunityModal, setShowCancelCommunityModal] = useState(false);
   const [showExtendCommunityModal, setShowExtendCommunityModal] = useState(false);
+  const [reactionSettingsOrder, setReactionSettingsOrder] = useState<string | null>(null);
   const [communityExtensionMonths, setCommunityExtensionMonths] = useState(1);
   const [extendingCommunityOrder, setExtendingCommunityOrder] = useState(false);
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
@@ -1447,8 +1449,10 @@ export default function OrderPage() {
             ) : null}
           </div>
 
-          {isCommunityProvider && result.customerReactions?.enabled ? <div className="lookup-reaction-section">
-            <CustomerOrderReactionPanel key={result.uniqid} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
+          {isCommunityProvider && result.customerReactions ? <div className="lookup-reaction-section">
+            {result.customerReactions.enabled ? <CustomerOrderReactionPanel key={result.uniqid} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onEditSettings={() => setReactionSettingsOrder(result.uniqid)} onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
+              : <div className="monitor-control-panel"><div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Sparkles className="h-4 w-4" /></span><div><h2>Reactions</h2><p className="text-xs text-[var(--app-muted)]">{result.customerReactions.dailyLimit ? "Reactions are currently unavailable." : "Not enabled for this order."}</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setReactionSettingsOrder(result.uniqid)}><Sparkles className="h-4 w-4" />{result.customerReactions.dailyLimit ? "Manage reactions" : "Enable reactions"}</Button></div></div>}
+            {reactionSettingsOrder ? <OrderReactionSettingsDialog key={reactionSettingsOrder} uniqid={reactionSettingsOrder} onClose={() => setReactionSettingsOrder(null)} onSaved={(order) => setResult((current) => mergeOrderStatus(current, order))} /> : null}
           </div> : null}
 
           {isDcordProvider ? (

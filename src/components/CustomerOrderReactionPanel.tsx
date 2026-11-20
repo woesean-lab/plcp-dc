@@ -4,11 +4,12 @@ import { ReactionPanel, REACTION_MIXED_VALUE } from "./ReactionPanel";
 import { cancelCommunityOrderReactions, cancelPublicCommunityOrderReactions, getOrderStatus, getPublicOrderStatus, updateCommunityOrderReactionMessage, updatePublicCommunityOrderReactionMessage } from "../lib/integration";
 import type { CustomerOrderReactions, OrderStatusResponse } from "../types";
 
-export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access = "public" }: {
+export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access = "public", onEditSettings }: {
   uniqid: string;
   summary: CustomerOrderReactions;
   onUpdate: (order: OrderStatusResponse) => void;
   access?: "public" | "admin";
+  onEditSettings?: () => void;
 }) {
   const [message, setMessage] = useState("");
   const [amount, setAmount] = useState(1);
@@ -66,9 +67,10 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access =
   if (!summary.enabled || (summary.expiresAt && new Date(summary.expiresAt).getTime() <= Date.now())) return null;
   return <ReactionPanel collapsible
     resetsAt={summary.resetsAt}
-    description={`${summary.dailyLimit} reactions per day during your support period.${summary.ready ? "" : " Available after member delivery."}`}
+    description={`${summary.firstDay ? `First day: ${summary.todayLimit} reactions. Then ` : ""}${summary.dailyLimit} reactions per day during your support period.${summary.ready ? "" : " Available after member delivery."}`}
+    onEditLimit={access === "admin" ? onEditSettings : undefined} limitActionLabel="Manage reactions"
     lockReason={cancelling ? "Cancelling queued reactions…" : summary.ready && !summary.eligibleMembers ? "No members are currently available to react." : undefined}
-    limit={summary.dailyLimit} completed={summary.completed} failed={summary.failed}
+    limit={summary.todayLimit} completed={summary.completed} failed={summary.failed}
     remaining={summary.remaining} eligibleMembers={summary.eligibleMembers}
     messageDraft={message} countDraft={Math.min(amount, Math.max(1, summary.remaining))}
     selectedEmojis={emojis} saving={saving}

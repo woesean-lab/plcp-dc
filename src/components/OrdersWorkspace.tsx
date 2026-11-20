@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpRight, Check, ChevronRight, Clock3, Copy, ExternalLink, Gem, Layers3, LoaderCircle, MoreHorizontal, Plus, RefreshCw, RotateCcw, Search, ShieldCheck, Sparkles, Timer, Trash2, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "./ui/button";
 import { FilterDropdown } from "./ui/filter-dropdown";
 import { Skeleton } from "./ui/skeleton";
@@ -9,7 +9,9 @@ import { AutoLeaveActionButton, type AutoLeaveActionState } from "./AutoLeaveAct
 import { getOrderPeriod } from "../lib/order-period";
 import { canStartOrderLeave, EMPTY_ORDERS_FILTERS, filterWorkspaceOrders, hasFailedLeave, orderDelivery, orderIsBoost, orderStatus, type OrdersFilters } from "../lib/orders-workspace";
 import { extractBotInvite } from "../lib/bot-invite";
-import type { TrackedOrder } from "../types";
+import { getOrderReactionOverviews } from "../lib/integration";
+import { OrderReactionSettingsDialog } from "./OrderReactionSettingsDialog";
+import type { OrderReactionOverview, OrderStatusResponse, TrackedOrder } from "../types";
 import "./OrdersWorkspace.css";
 
 type Props = {
@@ -25,6 +27,7 @@ type Props = {
   onAutoLeave: (order: TrackedOrder) => void;
   onDelete: (order: TrackedOrder) => void;
   onResume: (order: TrackedOrder) => void;
+  onReactionUpdated: (order: OrderStatusResponse) => void;
 };
 
 const number = (value: number) => new Intl.NumberFormat("en-US").format(value);
@@ -44,7 +47,7 @@ function relativePeriod(expiresAt: number, now: number) {
 
 function closeMenu(event: MouseEvent<HTMLElement>) { event.currentTarget.closest("details")?.removeAttribute("open"); }
 
-function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number } & Pick<Props, "autoLeavingId" | "resumingId" | "onCopyMonitor" | "onCopyInvite" | "onAutoLeave" | "onDelete" | "onResume">) {
+function OrderRow({ order, now, onReactionSettings, ...actions }: { order: TrackedOrder; now: number; onReactionSettings: (order: TrackedOrder) => void } & Pick<Props, "autoLeavingId" | "resumingId" | "onCopyMonitor" | "onCopyInvite" | "onAutoLeave" | "onDelete" | "onResume">) {
   const navigate = useNavigate();
   const boost = orderIsBoost(order);
   const status = orderStatus(order.status);
@@ -64,6 +67,7 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
   const joinMethod = order.joinMethod === "directly" ? "Direct join" : order.joinMethod === "experimental_join" ? "Experimental join" : "Create invite";
   const delay = order.statusDelay ?? order.delay;
   const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
+  const reactions = order.customerReactions;
 
   function openOrder(event: MouseEvent<HTMLTableRowElement>) {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -91,6 +95,19 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
         <div className="od-progress" data-tone={status.tone} role="progressbar" aria-label={`Delivery for ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={delivery.total ? Math.round(delivery.percent) : undefined}><span style={{ width: `${delivery.percent}%` }} /></div>
         {!boost && typeof delay === "number" && delivery.remaining !== 0 ? <span className="od-delivery-delay">{delay}s between members</span> : null}
       </td>
+      <td className="od-reaction-cell">
+        <span className="od-mobile-caption">Reactions</span>
+        {boost ? <span className="od-order-context">—</span> : reactions?.dailyLimit ? <>
+          <div className="od-status" data-tone={reactions.enabled ? "live" : "muted"}><i aria-hidden="true" />{reactions.enabled ? reactions.firstDay ? "First day" : "Daily allowance" : "Unavailable"}</div>
+          <div className="od-reaction-numbers">
+            <span><small>Today limit</small><b>{number(reactions.todayLimit)}</b></span>
+            <span title="Total usage across all days, including queued reactions"><small>Total used</small><b>{number(reactions.totalUsed)}</b></span>
+            <span><small>Left today</small><b>{number(reactions.remaining)}</b></span>
+          </div>
+          <div className="od-progress" role="progressbar" aria-label={`Today's reaction usage for ${name}`} aria-valuemin={0} aria-valuemax={reactions.todayLimit || 1} aria-valuenow={Math.min(reactions.used, reactions.todayLimit)}><span style={{ width: `${reactions.todayLimit ? Math.min(100, reactions.used / reactions.todayLimit * 100) : 0}%` }} /></div>
+          <span className="od-delivery-delay">{number(reactions.dailyLimit)} / day{reactions.firstDay ? " after first day" : ""}</span>
+        </> : <div className="od-reaction-disabled"><span className="od-order-context">Not enabled</span>{reactions?.canConfigure ? <Button type="button" variant="secondary" size="xs" onClick={() => onReactionSettings(order)}><Sparkles className="h-3 w-3" />Enable</Button> : null}</div>}
+      </td>
       <td className="od-support-cell">
         <span className="od-period-label" data-state={period.state}>{period.state === "expired" ? <><Clock3 /> Expired</> : period.state === "soon" ? <><Clock3 /> Expiring soon</> : period.state === "active" ? <><ShieldCheck /> Active support</> : <><span className="od-no-period">—</span> No expiry</>}</span>
         {period.state !== "none" ? <span className="od-period-relative" title={`${date(period.expiresAt)} at ${date(period.expiresAt, true)}`}>{relativePeriod(period.expiresAt, now)}</span> : null}
@@ -111,6 +128,7 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
             <div className="od-action-popover">
               {!boost ? <button type="button" onClick={(event) => { closeMenu(event); actions.onCopyMonitor(order); }}><Copy />Copy monitor link</button> : null}
               <Link to={orderUrl} onClick={closeMenu}><ExternalLink />Order details</Link>
+              {!boost ? <button type="button" onClick={(event) => { closeMenu(event); onReactionSettings(order); }}><Sparkles />{reactions?.dailyLimit ? "Manage reactions" : "Enable reactions"}</button> : null}
               <button type="button" className="od-delete-action" disabled={runningLeave} title={runningLeave ? "Wait for member removal to finish" : undefined} onClick={(event) => { closeMenu(event); actions.onDelete(order); }}><Trash2 />Delete order</button>
             </div>
           </details>
@@ -119,7 +137,7 @@ function OrderRow({ order, now, ...actions }: { order: TrackedOrder; now: number
         </div>
       </td>
     </tr>
-    {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={5}><div className="od-order-alert" data-tone={invitesPaused ? "danger" : "waiting"}>
+    {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={6}><div className="od-order-alert" data-tone={invitesPaused ? "danger" : "waiting"}>
       <TriangleAlert aria-hidden="true" />
       <div className="od-alert-copy"><strong>{botInvite ? "Bot invite required" : "Invites paused"}</strong><span>{botInvite ? "Add the bot to start delivery." : "Check the invite before continuing."}</span></div>
       <div className="od-alert-actions">{botInvite ? <><Button type="button" variant="secondary" size="xs" onClick={() => actions.onCopyInvite(botInvite)}><Copy />Copy invite</Button><Button asChild size="xs"><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></Button></> : <Button type="button" variant="destructive" size="xs" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue"}</Button>}</div>
@@ -132,6 +150,9 @@ export default function OrdersWorkspace(props: Props) {
   const [filters, setFilters] = useState<OrdersFilters>(EMPTY_ORDERS_FILTERS);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
+  const [reactionSettingsOrder, setReactionSettingsOrder] = useState<string | null>(null);
+  const [reactionOverviews, setReactionOverviews] = useState<Record<string, OrderReactionOverview>>({});
+  const reactionRevision = useRef(0);
   const [now, setNow] = useState(() => Date.now());
   const hasRunningLeave = orders.some((order) => order.autoLeaveJob?.status === "running");
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), hasRunningLeave ? 1000 : 60_000); return () => window.clearInterval(timer); }, [hasRunningLeave]);
@@ -144,6 +165,27 @@ export default function OrdersWorkspace(props: Props) {
   }), [orders, now]);
   const filtered = useMemo(() => filterWorkspaceOrders(orders, filters, now), [orders, filters, now]);
   const pagination = paginate(filtered, page, pageSize);
+  const visibleReactionIds = pagination.items.filter((order) => order.provider === "community").map((order) => order.uniqid).join("|");
+  useEffect(() => {
+    if (loading || !visibleReactionIds) return;
+    let active = true;
+    let inFlight = false;
+    const refresh = async () => {
+      if (inFlight || document.hidden) return;
+      inFlight = true;
+      const revision = reactionRevision.current;
+      try {
+        const rows = await getOrderReactionOverviews(visibleReactionIds.split("|"));
+        if (active && revision === reactionRevision.current) setReactionOverviews((current) => ({ ...current, ...Object.fromEntries(rows.map((row) => [row.uniqid, row.customerReactions])) }));
+      } catch { /* Keep the last overview and retry on the next cycle. */ }
+      finally { inFlight = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 15_000);
+    const onVisibility = () => { if (!document.hidden) void refresh(); };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => { active = false; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisibility); };
+  }, [loading, visibleReactionIds]);
   const changeFilter = (patch: Partial<OrdersFilters>) => { setFilters((current) => ({ ...current, ...patch })); setPage(1); };
   const reset = () => { setFilters(EMPTY_ORDERS_FILTERS); setPage(1); };
   const filteredView = Boolean(filters.search || filters.status !== "all" || filters.service !== "all" || filters.period !== "all");
@@ -181,16 +223,21 @@ export default function OrdersWorkspace(props: Props) {
         <div><ArrowDownWideNarrow aria-hidden="true" /><FilterDropdown label="Order sorting" showLabel={false} portal value={filters.sort} onChange={(value) => changeFilter({ sort: value })} options={[{ value: "newest", label: "Newest first" }, { value: "oldest", label: "Oldest first" }, { value: "expiry_asc", label: "Expiring soonest" }, { value: "expiry_desc", label: filters.period === "expired" ? "Recently expired" : "Latest expiry first" }]} /></div>
       </div>
 
-      <table className="od-table"><colgroup><col className="od-col-order" /><col className="od-col-delivery" /><col className="od-col-support" /><col className="od-col-created" /><col className="od-col-actions" /></colgroup>
-        <thead><tr><th scope="col">Order & service</th><th scope="col">Delivery</th><th scope="col">Support period</th><th scope="col">Created</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
-        {loading ? <tbody>{Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>)}</tbody> : pagination.items.map((order) => <OrderRow key={order.uniqid} order={order} now={now} {...props} />)}
+      <table className="od-table"><colgroup><col className="od-col-order" /><col className="od-col-delivery" /><col className="od-col-reaction" /><col className="od-col-support" /><col className="od-col-created" /><col className="od-col-actions" /></colgroup>
+        <thead><tr><th scope="col">Order & service</th><th scope="col">Delivery</th><th scope="col">Reactions</th><th scope="col">Support period</th><th className="od-created-heading" scope="col">Created</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+        {loading ? <tbody>{Array.from({ length: 6 }, (_, index) => <tr className="od-skeleton-row" key={index}><td><Skeleton className="h-4 w-40" /><Skeleton className="mt-3 h-3 w-28" /></td><td><Skeleton className="h-3 w-24" /><Skeleton className="mt-3 h-1 w-32" /></td><td><Skeleton className="h-4 w-28" /></td><td><Skeleton className="h-4 w-20" /></td><td><Skeleton className="h-3 w-20" /></td><td><Skeleton className="h-7 w-16" /></td></tr>)}</tbody> : pagination.items.map((order) => <OrderRow key={order.uniqid} order={{ ...order, customerReactions: reactionOverviews[order.uniqid] ?? order.customerReactions }} now={now} onReactionSettings={(selected) => setReactionSettingsOrder(selected.uniqid)} {...props} />)}
       </table>
       {!loading && !filtered.length ? <div className="od-empty"><span><Search /></span><h3>{orders.length ? "No orders found" : "Your orders start here"}</h3><p>{orders.length ? "Try another search or clear the filters to see your orders." : "Create your first order to follow its delivery and support period."}</p>{orders.length ? <Button type="button" variant="secondary" size="sm" onClick={reset}>Clear filters</Button> : <Button asChild size="sm"><Link to="/manage?tab=create"><Plus />Create an order</Link></Button>}</div> : null}
       {!loading ? <div className="od-board-footer"><ListPagination {...pagination} onChange={setPage} onPageSizeChange={setPageSize} label="Orders pages" showNavigationLabels />{stats.failedLeave > 0 ? <button className="od-failed-shortcut" type="button" onClick={() => { setFilters({ ...EMPTY_ORDERS_FILTERS, period: "leave_failed", sort: "expiry_desc" }); setPage(1); }}><TriangleAlert />{stats.failedLeave} orders need a removal check<ChevronRight /></button> : null}</div> : null}
     </div>
+    {reactionSettingsOrder ? <OrderReactionSettingsDialog key={reactionSettingsOrder} uniqid={reactionSettingsOrder} onClose={() => setReactionSettingsOrder(null)} onSaved={(order) => {
+      reactionRevision.current += 1;
+      if (order.customerReactions) { const { requests, ...overview } = order.customerReactions; setReactionOverviews((current) => ({ ...current, [order.uniqid]: overview })); }
+      props.onReactionUpdated(order);
+    }} /> : null}
   </section>;
 }
 
 export function OrdersWorkspaceLoading() {
-  return <OrdersWorkspace orders={[]} loading syncing={false} canSync={false} autoLeavingId={null} resumingId={null} onSync={() => {}} onCopyMonitor={() => {}} onCopyInvite={() => {}} onAutoLeave={() => {}} onDelete={() => {}} onResume={() => {}} />;
+  return <OrdersWorkspace orders={[]} loading syncing={false} canSync={false} autoLeavingId={null} resumingId={null} onSync={() => {}} onCopyMonitor={() => {}} onCopyInvite={() => {}} onAutoLeave={() => {}} onDelete={() => {}} onResume={() => {}} onReactionUpdated={() => {}} />;
 }

@@ -2750,6 +2750,7 @@ export default function HomePage() {
       details: typeof status.details === "string" ? status.details : order.details,
       reactionMessageLink: typeof status.reactionMessageLink === "string" ? status.reactionMessageLink : order.reactionMessageLink,
       reactionCapacity: typeof status.reactionCapacity === "number" ? status.reactionCapacity : order.reactionCapacity,
+      customerReactions: status.customerReactions ?? order.customerReactions,
       reactionRequests: Array.isArray(status.reactionRequests) ? status.reactionRequests : order.reactionRequests,
       communityResults: Array.isArray(status.communityResults) ? status.communityResults as Array<Record<string, unknown>> : order.communityResults
     };
@@ -2773,7 +2774,8 @@ export default function HomePage() {
       a.duration === b.duration &&
       a.boostStockPool === b.boostStockPool &&
       a.expiredAt === b.expiredAt &&
-      JSON.stringify(a.autoLeaveJob ?? null) === JSON.stringify(b.autoLeaveJob ?? null)
+      JSON.stringify(a.autoLeaveJob ?? null) === JSON.stringify(b.autoLeaveJob ?? null) &&
+      JSON.stringify(a.customerReactions ?? null) === JSON.stringify(b.customerReactions ?? null)
     );
   }
 
@@ -4116,6 +4118,7 @@ export default function HomePage() {
                             </label>
                             <div className="boost-order-field w-[180px] max-sm:w-full">
                               <span className="boost-order-label">Daily reactions</span>
+                              <small className="text-[var(--app-muted)]">First day: {form.amount}</small>
                               <FilterDropdown label="Daily reactions" showLabel={false} value={String(form.communityReactionLimit)} disabled={!form.communityReactions}
                                 options={CUSTOMER_REACTION_LIMITS.map((limit) => ({ value: String(limit), label: `${limit} / day` }))}
                                 onChange={(value) => setForm((current) => ({ ...current, communityReactionLimit: Number(value) }))} />
@@ -4180,6 +4183,7 @@ export default function HomePage() {
             onAutoLeave={setOrderPendingAutoLeave}
             onDelete={setOrderPendingDeletion}
             onResume={(order) => void handleRestartOrder(order)}
+            onReactionUpdated={(updated) => setOrders((current) => current.map((order) => order.uniqid === updated.uniqid ? mergeTrackedOrder(order, updated) : order))}
           />
         ) : null}
 
@@ -5526,7 +5530,7 @@ export default function HomePage() {
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
-                  {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.reactionLimit} reactions / day</span> : null}
+                  {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.amount} first day · {orderConfirmationPayload.reactionLimit} / day after</span> : null}
                 </div>
               ) : null}
             </div>

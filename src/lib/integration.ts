@@ -355,11 +355,17 @@ export function cancelCommunityOrderReactions(uniqid: string, options: { request
   });
 }
 
-export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number) {
+export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number, options: { customerAllowance?: boolean } = {}) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-limit`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ reactionLimit })
+    body: JSON.stringify({ reactionLimit, ...options })
+  });
+}
+
+export function getOrderReactionOverviews(ids: string[]) {
+  return requestJson<Array<{ uniqid: string; customerReactions: import("../types").OrderReactionOverview }>>("/api/orders/reactions", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
   });
 }
 

@@ -82,7 +82,18 @@ ve otomatik suresi dolan uyeleri cikarma bu ayardan bagimsizdir.
 
 Kategori yonetiminde reaction iznini ve destek suresini acin. Siparis olustururken
 **Customer reactions** secenegini isaretleyip **50 / 100 / 200 / 500** gunluk limit
-secin. Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
+secin. Ilk gun hak siparisin uye sayisidir: 500 uyede 500, 100 uyede 100 reaction.
+Sonraki gunler secilen gunluk limitle devam eder. Ilk gun, etkinlestirmeden sonraki
+ilk Turkiye gece yarisina kadardir.
+
+Orders listesinin satir aksiyonlarindaki **Enable reactions / Manage reactions**
+veya siparis detayindaki ayni kontrol ile sonradan acilabilir; gunluk limit
+artirilabilir. Hazir degerler veya ozel pozitif bir tam sayi kullanilabilir.
+Sonradan acilinca ilk gun yine uye sayisi kadar hak verilir; limit artirmak bu
+gunu yeniden baslatmaz ve onceki kullanimi silmez. Orders'in Reactions sutunu
+bugunku limiti, tum gunlerin toplam kullanimini ve bugun kalani gosterir.
+
+Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
 kullanir. Orders detayinda da ayni panel vardir; iki ekran ayni gunluk hakki ve
 gecmisi gosterir. Basliktaki geri sayim saniyelik guncellenir; sifirlaninca haklar
 yeniden alinir. Limit Turkiye saatiyle 00:00'da yenilenir; basarisiz/iptal edilmis

@@ -22,8 +22,14 @@ export interface CommunityCategoryAllocation {
 
 export interface CustomerOrderReactions {
   enabled: boolean;
+  canConfigure: boolean;
   ready: boolean;
   dailyLimit: number;
+  todayLimit: number;
+  firstDay: boolean;
+  firstDayLimit: number;
+  enabledAt: string | number | null;
+  totalUsed: number;
   used: number;
   remaining: number;
   completed: number;
@@ -45,6 +51,8 @@ export interface CustomerOrderReactions {
     cancelledCount: number;
   }>;
 }
+
+export type OrderReactionOverview = Omit<CustomerOrderReactions, "requests">;
 
 export interface CommunityAutoLeaveJob {
   id: string;
@@ -199,6 +207,7 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  customerReactions?: OrderReactionOverview;
   boostStockPool?: BoostStockPool;
   uniqid: string;
   provider?: OrderProvider;

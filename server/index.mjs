@@ -14,12 +14,12 @@ import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
-import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories, publicLeaveAllCategoryIds } from "./public-community-leave.mjs";
+import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
-import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, customerReactionMemberEligible, validateCustomerReactionLimit } from "./customer-order-reactions.mjs";
+import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, planCustomerReactionSettings } from "./customer-order-reactions.mjs";
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
 import { getCommunityResultAllocation, communityResultMatchesAllocation, getCommunityCategoryName } from "../shared/community-order-allocations.mjs";
 
@@ -7497,6 +7497,10 @@ async function runCommunityOrder(order, members, config) {
         reactionMessageLink: currentPayload.reactionMessageLink ?? payload.reactionMessageLink ?? null,
         reactionMessage: currentPayload.reactionMessage ?? payload.reactionMessage ?? null,
         reactionCapacity: currentPayload.reactionCapacity ?? payload.reactionCapacity ?? 0,
+        reactionDailyLimit: currentPayload.reactionDailyLimit ?? payload.reactionDailyLimit ?? 0,
+        reactionEnabledAt: currentPayload.reactionEnabledAt ?? payload.reactionEnabledAt ?? null,
+        reactionFirstDayLimit: currentPayload.reactionFirstDayLimit ?? payload.reactionFirstDayLimit ?? null,
+        reactionLimitUpdates: currentPayload.reactionLimitUpdates ?? payload.reactionLimitUpdates ?? [],
         reactionRequests: Array.isArray(currentPayload.reactionRequests) ? currentPayload.reactionRequests : (payload.reactionRequests ?? []),
         added: mergedAdded,
         status: deliveryPaused ? "PAUSED" : status,
@@ -11969,6 +11973,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       reactionRequests: [],
       reactionDailyLimit,
       reactionCapacity: reactionDailyLimit,
+      ...(reactionDailyLimit > 0 ? { reactionEnabledAt: createdAt.toISOString(), reactionFirstDayLimit: amount } : {}),
       durationMonths,
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -12589,13 +12594,9 @@ function invalidateCommunityCategoryDisplayCache() {
   communityCategoryDisplayCache.expiresAt = 0;
 }
 
-async function hydrateCommunityOrderCategories(order) {
-  if (!order || order.provider !== "community") return order;
-  const categoryIds = publicLeaveAllCategoryIds(order);
-  if (!categoryIds.length) return order;
-
+async function loadCommunityCategoryDisplayContext() {
   const config = await getCommunityOAuthConfig();
-  if (!config.guildId) return { ...order, publicLeaveAllEnabled: false };
+  if (!config.guildId) return null;
   if (communityCategoryDisplayCache.guildId !== config.guildId || communityCategoryDisplayCache.expiresAt <= Date.now()) {
     const result = await pool.query(
       "SELECT id, name, color_key, check_replacement_enabled, reaction_use_enabled, public_leave_all_enabled FROM community_stock_categories WHERE guild_id = $1",
@@ -12606,7 +12607,13 @@ async function hydrateCommunityOrderCategories(order) {
     communityCategoryDisplayCache.categories = new Map(result.rows.map((category) => [category.id, category]));
   }
 
-  const currentCategories = communityCategoryDisplayCache.categories;
+  return { categories: communityCategoryDisplayCache.categories };
+}
+
+async function hydrateCommunityOrderCategories(order, context = undefined) {
+  if (!order || order.provider !== "community") return order;
+  const displayContext = context === undefined ? await loadCommunityCategoryDisplayContext() : context;
+  const currentCategories = displayContext?.categories ?? new Map();
   const categoryAllocations = Array.isArray(order.categoryAllocations)
     ? order.categoryAllocations.map((allocation) => {
         const current = currentCategories.get(String(allocation?.categoryId ?? ""));
@@ -12616,7 +12623,7 @@ async function hydrateCommunityOrderCategories(order) {
           colorKey: current.color_key,
           checkReplacementEnabled: current.check_replacement_enabled !== false,
           reactionUseEnabled: current.reaction_use_enabled === true
-        } : allocation;
+        } : { ...allocation, reactionUseEnabled: false };
       })
     : order.categoryAllocations;
   const primaryCategory = currentCategories.get(String(order.categoryId ?? ""));
@@ -12632,7 +12639,7 @@ async function hydrateCommunityOrderCategories(order) {
       : order.categoryCheckReplacementEnabled,
     categoryReactionUseEnabled: primaryCategory
       ? primaryCategory.reaction_use_enabled === true
-      : order.categoryReactionUseEnabled,
+      : false,
     categoryAllocations,
     communityResults: Array.isArray(order.communityResults)
       ? order.communityResults.map((item) => {
@@ -13494,6 +13501,14 @@ app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (r
     if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
+    }
+
+    if (req.body?.customerAllowance === true) {
+      const hydrated = await hydrateCommunityOrderCategories(order);
+      const updatedOrder = planCustomerReactionSettings(hydrated, req.body.reactionLimit);
+      await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
+      await client.query("COMMIT");
+      return res.set("Cache-Control", "no-store").json({ ...updatedOrder, customerReactions: getCustomerReactionSummary(updatedOrder) });
     }
 
     const reactionCategoryEnabled = (Array.isArray(order.categoryAllocations)
@@ -15381,7 +15396,8 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
 app.get("/api/orders", requireSession, async (_req, res, next) => {
   try {
     const result = await pool.query("SELECT payload FROM tracked_orders WHERE payload->>'provider' IN ('community', 'dcord') ORDER BY created_at DESC");
-    const orders = result.rows.map((row) => row.payload);
+    const categoryContext = result.rows.some((row) => row.payload?.provider === "community") ? await loadCommunityCategoryDisplayContext() : null;
+    const orders = await Promise.all(result.rows.map((row) => hydrateCommunityOrderCategories(row.payload, categoryContext)));
     const missingNameOrder = orders.find((order) =>
       !normalizeDiscordGuildName(order?.serverName) && extractDiscordInviteCode(order?.serverInvite)
     );
@@ -15416,7 +15432,8 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
       const compact = {
         ...order,
         serverName: normalizeDiscordGuildName(order?.serverName),
-        autoLeaveCandidateCount
+        autoLeaveCandidateCount,
+        ...(order.provider === "community" ? { customerReactions: getCustomerReactionOverview(order) } : {})
       };
       delete compact.communityResults;
       delete compact.dcordResults;
@@ -15428,6 +15445,17 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/orders/reactions", requireSession, async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? [...new Set(req.body.ids)] : [];
+    if (!ids.length || ids.length > 500 || ids.some((id) => typeof id !== "string" || !id.trim() || id.length > 160)) return res.status(400).json({ message: "Choose up to 500 valid orders." });
+    const result = await pool.query("SELECT uniqid, payload FROM tracked_orders WHERE uniqid = ANY($1::text[]) AND payload->>'provider' = 'community'", [ids]);
+    const context = await loadCommunityCategoryDisplayContext();
+    const overviews = await Promise.all(result.rows.map(async (row) => ({ uniqid: row.uniqid, customerReactions: getCustomerReactionOverview(await hydrateCommunityOrderCategories(row.payload, context)) })));
+    res.set("Cache-Control", "no-store").json(overviews);
+  } catch (error) { next(error); }
 });
 
 app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {

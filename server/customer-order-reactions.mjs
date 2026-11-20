@@ -9,6 +9,9 @@ export const CUSTOMER_REACTION_SAVE_FIELDS_SQL = `CASE
   THEN jsonb_strip_nulls(jsonb_build_object(
     'reactionDailyLimit', tracked_orders.payload->'reactionDailyLimit',
     'reactionCapacity', tracked_orders.payload->'reactionCapacity',
+    'reactionEnabledAt', tracked_orders.payload->'reactionEnabledAt',
+    'reactionFirstDayLimit', tracked_orders.payload->'reactionFirstDayLimit',
+    'reactionLimitUpdates', tracked_orders.payload->'reactionLimitUpdates',
     'reactionRequests', tracked_orders.payload->'reactionRequests'
   )) ELSE '{}'::jsonb END`;
 
@@ -50,8 +53,16 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
   const limit = Number.isSafeInteger(order?.reactionDailyLimit) && order.reactionDailyLimit > 0 ? order.reactionDailyLimit : 0;
   const active = portions(order).filter((portion) => activePortion(portion, now));
   const day = customerReactionDay(now);
-  const requests = (Array.isArray(order?.reactionRequests) ? order.reactionRequests : [])
-    .filter((request) => request?.source === "customer" && (request.quotaDay || customerReactionDay(new Date(request.createdAt).getTime())) === day)
+  const enabledAt = order?.reactionEnabledAt || order?.createdAt;
+  const firstDay = limit > 0 && customerReactionDay(new Date(enabledAt).getTime()) === day;
+  const firstDayLimit = Number.isSafeInteger(order?.reactionFirstDayLimit) && order.reactionFirstDayLimit > 0
+    ? order.reactionFirstDayLimit : Number.isSafeInteger(order?.amount) && order.amount > 0 ? order.amount : limit;
+  const todayLimit = firstDay ? firstDayLimit : limit;
+  const allRequests = (Array.isArray(order?.reactionRequests) ? order.reactionRequests : []).filter((request) => request?.source === "customer");
+  const totalUsed = allRequests.reduce((total, request) => total + (Array.isArray(request.assignments) && request.assignments.length
+    ? request.assignments.filter((assignment) => !["failed", "cancelled"].includes(assignment.reactionState)).length : Math.max(0, Number(request.assignedCount) || 0)), 0);
+  const requests = allRequests
+    .filter((request) => (request.quotaDay || customerReactionDay(new Date(request.createdAt).getTime())) === day)
     .map((request) => {
       const assignments = Array.isArray(request.assignments) ? request.assignments : [];
       const completedCount = assignments.filter((assignment) => assignment.reactionState === "completed").length;
@@ -63,14 +74,39 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
         completedCount, failedCount, cancelledCount };
     });
   const used = requests.reduce((total, request) => total + request.assignedCount - request.failedCount - request.cancelledCount, 0);
+  const enabled = order?.provider === "community" && limit > 0 && active.length > 0;
   return {
-    enabled: order?.provider === "community" && limit > 0 && active.length > 0,
+    enabled,
+    canConfigure: order?.provider === "community" && active.length > 0,
     ready: ["PARTIAL", "COMPLETED"].includes(String(order?.status).toUpperCase()),
-    dailyLimit: limit, used, remaining: Math.max(0, limit - used),
+    dailyLimit: limit, todayLimit, firstDay, firstDayLimit, enabledAt: enabledAt || null, totalUsed,
+    used, remaining: enabled ? Math.max(0, todayLimit - used) : 0,
     completed: requests.reduce((total, request) => total + request.completedCount, 0),
     failed: requests.reduce((total, request) => total + request.failedCount, 0),
     eligibleMembers: (Array.isArray(order?.communityResults) ? order.communityResults : []).filter((member) => customerReactionMemberEligible(order, member, now)).length,
     expiresAt: active.length ? new Date(Math.max(...active.map((portion) => new Date(portion.expiredAt).getTime()))).toISOString() : null,
     quotaDay: day, resetsAt: new Date(Date.parse(`${day}T00:00:00+03:00`) + dayMs).toISOString(), requests
+  };
+}
+
+export function getCustomerReactionOverview(order, now = Date.now()) {
+  const { requests, ...overview } = getCustomerReactionSummary(order, now);
+  return overview;
+}
+
+export function planCustomerReactionSettings(order, dailyLimit, now = Date.now()) {
+  if (order?.provider !== "community") throw Object.assign(new Error("Members order could not be found."), { statusCode: 404 });
+  if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) throw Object.assign(new Error("Enter a positive whole number for the daily limit."), { statusCode: 400 });
+  const summary = getCustomerReactionSummary(order, now);
+  if (!summary.canConfigure) throw Object.assign(new Error("Reactions require an enabled category with active support."), { statusCode: 409 });
+  if (dailyLimit < summary.dailyLimit) throw Object.assign(new Error(`The daily limit must be at least ${summary.dailyLimit}.`), { statusCode: 400 });
+  const updatedAt = new Date(now).toISOString();
+  const previousStart = order.reactionEnabledAt || (summary.dailyLimit > 0 ? order.createdAt : null);
+  const enabledAt = previousStart && Number.isFinite(new Date(previousStart).getTime()) ? new Date(previousStart).toISOString() : updatedAt;
+  const firstDayLimit = order.reactionFirstDayLimit || (Number.isSafeInteger(order.amount) && order.amount > 0 ? order.amount : dailyLimit);
+  return { ...order, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit,
+    reactionEnabledAt: enabledAt, reactionFirstDayLimit: firstDayLimit,
+    reactionLimitUpdates: [...(Array.isArray(order.reactionLimitUpdates) ? order.reactionLimitUpdates : []),
+      ...(dailyLimit !== summary.dailyLimit ? [{ dailyLimit, updatedAt }] : [])]
   };
 }

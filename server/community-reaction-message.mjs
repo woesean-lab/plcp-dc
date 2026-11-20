@@ -39,7 +39,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
       return res.status(403).json({ message: "Reactions are available only for enabled orders during their support period." });
     }
     const hasExplicitReactionCapacity = Number.isInteger(Number(order.reactionCapacity));
-    const reactionCapacity = useCustomerAllowance ? customerSummary.dailyLimit : hasExplicitReactionCapacity
+    const reactionCapacity = useCustomerAllowance ? customerSummary.todayLimit : hasExplicitReactionCapacity
       ? Math.max(0, Number(order.reactionCapacity))
       : order.communityResults.filter((item) => item?.reactionAvailable === true).length;
     const existingRequests = Array.isArray(order.reactionRequests) ? order.reactionRequests : [];
