@@ -107,15 +107,15 @@ export function planCustomerReactionSettings(order, dailyLimit, now = Date.now()
   if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) throw Object.assign(new Error("Enter a positive whole number for the daily limit."), { statusCode: 400 });
   const summary = getCustomerReactionSummary(order, now);
   if (!summary.canConfigure) throw Object.assign(new Error("Reactions require an enabled category with active support."), { statusCode: 409 });
-  if (dailyLimit < summary.dailyLimit) throw Object.assign(new Error(`The daily limit must be at least ${summary.dailyLimit}.`), { statusCode: 400 });
   const updatedAt = new Date(now).toISOString();
   const previousStart = order.reactionEnabledAt || (summary.dailyLimit > 0 ? order.createdAt : null);
   const enabledAt = previousStart && Number.isFinite(new Date(previousStart).getTime()) ? new Date(previousStart).toISOString() : updatedAt;
-  const firstDayLimit = order.reactionFirstDayLimit || (Number.isSafeInteger(order.amount) && order.amount > 0 ? order.amount : dailyLimit);
+  const firstDayLimit = summary.enabled && summary.firstDay ? dailyLimit
+    : order.reactionFirstDayLimit || (Number.isSafeInteger(order.amount) && order.amount > 0 ? order.amount : dailyLimit);
   return { ...order, reactionSettingsRevision: revision, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit, reactionDisabled: false,
     reactionEnabledAt: enabledAt, reactionFirstDayLimit: firstDayLimit,
     reactionLimitUpdates: [...(Array.isArray(order.reactionLimitUpdates) ? order.reactionLimitUpdates : []),
-      ...(dailyLimit !== summary.dailyLimit ? [{ dailyLimit, updatedAt }] : [])]
+      ...(dailyLimit !== summary.dailyLimit || firstDayLimit !== summary.firstDayLimit ? [{ dailyLimit, firstDayLimit, updatedAt }] : [])]
   };
 }
 
@@ -128,7 +128,8 @@ export async function saveCustomerReactionSettings(client, order, dailyLimit, no
   );
   const saved = result.rows[0]?.payload;
   if (!saved || saved.reactionSettingsRevision !== planned.reactionSettingsRevision
-    || saved.reactionDailyLimit !== planned.reactionDailyLimit || saved.reactionDisabled !== planned.reactionDisabled) {
+    || saved.reactionDailyLimit !== planned.reactionDailyLimit || saved.reactionDisabled !== planned.reactionDisabled
+    || getCustomerReactionSummary(saved, now).todayLimit !== getCustomerReactionSummary(planned, now).todayLimit) {
     throw Object.assign(new Error("Reaction settings were not saved. Refresh the order and try again."), { statusCode: 409 });
   }
   return saved;

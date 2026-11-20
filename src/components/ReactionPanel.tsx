@@ -67,6 +67,7 @@ type ReactionPanelProps = {
   completed: number;
   failed: number;
   remaining: number;
+  used?: number;
   eligibleMembers: number;
   onRefreshEligibleMembers?: () => void;
   refreshingEligibleMembers?: boolean;
@@ -123,6 +124,7 @@ export function ReactionPanel({
   completed,
   failed,
   remaining,
+  used,
   eligibleMembers,
   onRefreshEligibleMembers,
   refreshingEligibleMembers = false,
@@ -155,7 +157,7 @@ export function ReactionPanel({
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiPickerStageRef = useRef<HTMLDivElement>(null);
-  const assigned = Math.max(0, limit - remaining);
+  const assigned = Math.max(0, used ?? limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const requestAmountLimit = Math.max(1, remaining);
   const memberCheckLimit = workspaceSummary
@@ -298,12 +300,12 @@ export function ReactionPanel({
 
           <div className="monitor-reaction-overview-copy">
             <span className="monitor-reaction-overline">{workspaceSummary ? "Matched Discord server" : "Delivery progress"}</span>
-            <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : `${completed} of ${limit} reactions delivered`}</strong>
+            <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : assigned > limit ? `${completed} reactions delivered · ${limit} daily limit` : `${completed} of ${limit} reactions delivered`}</strong>
             <p>{workspaceSummary
               ? workspaceSummary.membersCheckRequired
                 ? "Choose how many delivered members to check for reaction availability."
                 : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} reaction slots are available with the selected emojis.`}`
-              : remaining > 0 ? `${remaining} reactions are still available for new requests.` : "The full reaction allowance has been assigned."}</p>
+              : remaining > 0 ? `${remaining} reactions are still available for new requests.` : assigned > limit && resetsAt ? "Daily limit reached. New requests are available after reset." : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
         </div>
@@ -570,7 +572,7 @@ export function ReactionPanel({
       ) : (
         <div className="monitor-reaction-allowance-complete">
           <CheckCircle2 aria-hidden="true" />
-          <span><strong>Reaction allowance assigned</strong><small>All available reactions are already connected to requests.</small></span>
+          <span><strong>{assigned > limit && resetsAt ? "Daily limit reached" : "Reaction allowance assigned"}</strong><small>{assigned > limit && resetsAt ? "Previous usage is kept. New requests are available after reset." : "All available reactions are already connected to requests."}</small></span>
         </div>
       )}
 

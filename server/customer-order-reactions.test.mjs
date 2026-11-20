@@ -72,7 +72,7 @@ test("100/500 member orders receive their member amount on the first day, then t
   }
 });
 
-test("late activation grants the first-day allowance once; increases preserve its anchor and usage", () => {
+test("late activation grants the initial allowance once; manual changes apply today without resetting usage", () => {
   const disabled = { ...base, amount: 500, createdAt: "2026-09-01", reactionDailyLimit: 0 };
   const enabled = planCustomerReactionSettings(disabled, 50, now);
   assert.equal(enabled.reactionEnabledAt, new Date(now).toISOString());
@@ -81,17 +81,43 @@ test("late activation grants the first-day allowance once; increases preserve it
   const used = { ...enabled, reactionRequests: [request(["completed", "pending"])] };
   const increased = planCustomerReactionSettings(used, 100, now + 200);
   assert.equal(increased.reactionEnabledAt, enabled.reactionEnabledAt);
-  assert.equal(increased.reactionFirstDayLimit, 500);
-  assert.equal(getCustomerReactionSummary(increased, now + 200).remaining, 498);
+  assert.equal(increased.reactionFirstDayLimit, 100);
+  assert.equal(getCustomerReactionSummary(increased, now + 200).remaining, 98);
   assert.equal(getCustomerReactionSummary(increased, now + 1000).todayLimit, 100);
   const laterIncrease = planCustomerReactionSettings(increased, 1000, now + 2000);
   assert.equal(getCustomerReactionSummary(laterIncrease, now + 2000).firstDay, false);
   assert.equal(getCustomerReactionSummary(laterIncrease, now + 2000).todayLimit, 1000);
   assert.equal(laterIncrease.reactionEnabledAt, enabled.reactionEnabledAt);
   assert.equal(laterIncrease.reactionRequests.length, 1);
-  assert.throws(() => planCustomerReactionSettings(laterIncrease, 50, now + 2000), { statusCode: 400 });
+  assert.equal(getCustomerReactionSummary(planCustomerReactionSettings(laterIncrease, 50, now + 2000), now + 2000).todayLimit, 50);
   for (const value of [0, -1, 2.5, "100"]) assert.throws(() => planCustomerReactionSettings(used, value, now), { statusCode: 400 });
   assert.throws(() => planCustomerReactionSettings({ ...used, categoryAllocations: [{ ...used.categoryAllocations[0], reactionUseEnabled: false }] }, 100, now), { statusCode: 409 });
+});
+
+test("saving an already-configured 1000 applies it to a 50-reaction first day and keeps 50 used", () => {
+  const order = { ...base, amount: 50, reactionDailyLimit: 1000, reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 50, reactionRequests: [request(Array(50).fill("completed"))] };
+  const changed = planCustomerReactionSettings(order, 1000, now);
+  const summary = getCustomerReactionSummary(changed, now);
+  assert.equal(summary.todayLimit, 1000);
+  assert.equal(summary.used, 50);
+  assert.equal(summary.remaining, 950);
+  assert.equal(Date.parse(changed.reactionEnabledAt), Date.parse(order.reactionEnabledAt));
+  assert.equal(changed.reactionLimitUpdates.at(-1).firstDayLimit, 1000);
+});
+
+test("reducing a first-day or regular limit below previous usage leaves zero without deleting history", () => {
+  for (const enabledAt of ["2026-11-20T10:00:00Z", "2026-09-01"]) {
+    const order = { ...base, amount: 50, reactionDailyLimit: 1000, reactionEnabledAt: enabledAt, reactionFirstDayLimit: 1000, reactionRequests: [request(Array(50).fill("completed"))] };
+    const changed = planCustomerReactionSettings(order, 20, now);
+    const summary = getCustomerReactionSummary(changed, now);
+    assert.equal(summary.dailyLimit, 20);
+    assert.equal(summary.todayLimit, 20);
+    assert.equal(summary.used, 50);
+    assert.equal(summary.completed, 50);
+    assert.equal(summary.remaining, 0);
+    assert.deepEqual(changed.reactionRequests, order.reactionRequests);
+    assert.equal(getCustomerReactionSummary(planCustomerReactionSettings(changed, 100, now), now).remaining, 50);
+  }
 });
 
 test("increasing a later day's daily limit does not clear the reactions already used that day", () => {
@@ -182,6 +208,20 @@ function endpoint(initial = base, hydrate = (order) => order) {
   }
   return { send, jobs, payload: () => payload, assignedMembers: () => assignedMembers };
 }
+
+test("customer requests use a manually raised first-day cap and respect a subsequent decrease", async (t) => {
+  t.mock.method(Date, "now", () => now);
+  const order = { ...base, amount: 50, reactionDailyLimit: 1000, reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 50,
+    communityResults: Array.from({ length: 50 }, (_, index) => ({ ...base.communityResults[0], discordUserId: String(index) })), reactionRequests: [request(Array(50).fill("completed"))] };
+  const increased = planCustomerReactionSettings(order, 1000, now);
+  const api = endpoint(increased);
+  assert.equal((await api.send(950)).statusCode, 200);
+  assert.equal(api.jobs.length, 950);
+  assert.equal((await api.send(1)).statusCode, 400);
+  const decreased = endpoint(planCustomerReactionSettings(order, 20, now));
+  assert.equal((await decreased.send(1)).statusCode, 400);
+  assert.equal(decreased.jobs.length, 0);
+});
 
 test("direct customer API calls cannot bypass disabled categories, support expiry or order opt-in", async () => {
   for (const order of [{ ...base, reactionDailyLimit: 0 }, { ...base, reactionDisabled: true }, { ...base, categoryAllocations: [{ ...base.categoryAllocations[0], expiredAt: "2000-01-01" }] }]) {

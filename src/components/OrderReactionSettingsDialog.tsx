@@ -33,8 +33,10 @@ export function OrderReactionSettingsDialog({ uniqid, onClose, onSaved }: {
   }, [uniqid]);
   const summary = order?.customerReactions;
   const enabled = Boolean(summary && summary.dailyLimit > 0 && !summary.disabled);
-  const minimum = Math.max(1, summary?.dailyLimit || 1);
+  const minimum = 1;
   const amount = Number(limit);
+  const previewTodayLimit = !summary?.dailyLimit ? Number(order?.amount) || amount
+    : summary.firstDay && !enabled ? summary.todayLimit : amount;
   async function save(event: FormEvent) {
     event.preventDefault();
     await saveSettings(false);
@@ -44,7 +46,7 @@ export function OrderReactionSettingsDialog({ uniqid, onClose, onSaved }: {
     inFlight.current = true; setSaving(true); setDisabling(disable); setError("");
     try {
       const updated = await updateCommunityOrderReactionLimit(uniqid, disable ? summary.dailyLimit : amount, { customerAllowance: true, enabled: !disable });
-      if (!updated.customerReactions || updated.customerReactions.disabled !== disable || (!disable && updated.customerReactions.dailyLimit !== amount)) {
+      if (!updated.customerReactions || updated.customerReactions.disabled !== disable || (!disable && (updated.customerReactions.dailyLimit !== amount || (enabled && updated.customerReactions.todayLimit !== amount)))) {
         throw new Error("Reaction settings were not saved. Refresh the order and try again.");
       }
       onSaved(updated); toast.success(disable ? "Customer reactions disabled." : enabled ? "Daily reaction limit updated." : "Customer reactions enabled."); dialogRef.current?.close();
@@ -62,8 +64,8 @@ export function OrderReactionSettingsDialog({ uniqid, onClose, onSaved }: {
           <label className="grid gap-2"><span className="field-label">Daily limit</span><Input type="number" inputMode="numeric" min={minimum} step={1} required disabled={saving} value={limit} onChange={(event) => setLimit(event.target.value)} /></label>
           <div className="stock-duration-filter flex-wrap" role="group" aria-label="Daily reaction presets">{[...CUSTOMER_REACTION_LIMITS, 1000].map((value) => <button type="button" key={value} disabled={saving || value < minimum} className={`${amount === value ? "is-active" : ""} disabled:pointer-events-none disabled:opacity-45`} aria-pressed={amount === value} onClick={() => setLimit(String(value))}>{value}</button>)}</div>
           <div className="app-panel-soft p-3 text-xs leading-6">
-            <strong>{summary.dailyLimit > 0 ? `Today: ${summary.todayLimit} limit · ${summary.used} used · ${Math.max(0, summary.todayLimit - summary.used)} available when enabled` : `First day: ${Number(order?.amount) || amount} reactions`}</strong>
-            <p className="text-[var(--app-muted)]">{summary.dailyLimit > 0 ? "Changes keep previous usage and the original first day." : "From the next day, the selected daily limit applies."} Resets daily at 00:00.</p>
+            <strong>{Number.isSafeInteger(previewTodayLimit) && previewTodayLimit > 0 ? `After saving: ${previewTodayLimit} today · ${summary.used} used · ${Math.max(0, previewTodayLimit - summary.used)} left` : "Enter a positive whole number."}</strong>
+            <p className="text-[var(--app-muted)]">{enabled ? "Changes apply immediately and each day. Previous usage is kept." : summary.dailyLimit > 0 ? "Re-enabling keeps previous usage and the original first day." : "The first day matches the order amount. From tomorrow, the daily limit applies."} Resets daily at 00:00.</p>
           </div>
         </> : <p className="text-sm text-[var(--app-muted)]">Reactions require an enabled category and active support.</p>}
         {enabled ? <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--app-border)] pt-3"><p className="max-w-[240px] text-xs leading-5 text-[var(--app-muted)]">Turn off customer reactions. History and limits are kept.</p><Button type="button" variant="dangerGhost" size="sm" disabled={saving} onClick={() => void saveSettings(true)}>{disabling ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Power className="h-4 w-4" />}{disabling ? "Disabling…" : "Disable reactions"}</Button></div> : null}

@@ -74,3 +74,19 @@ test("the save helper rejects a database result that did not persist the request
   const client = { query: async () => ({ rows: [{ payload: original }] }) };
   await assert.rejects(saveCustomerReactionSettings(client, original, 100, now), { statusCode: 409 });
 });
+
+test("first-day increases and decreases persist across reopening and stale worker updates", pgOptions, async () => {
+  await database(async (db, write, read) => {
+    const firstDay = { ...original, amount: 50, reactionDailyLimit: 1000, reactionEnabledAt: new Date(now).toISOString(), reactionFirstDayLimit: 50 };
+    await write(firstDay);
+    const increased = await saveCustomerReactionSettings(db, firstDay, 1000, now);
+    await write(firstDay);
+    assert.equal(getCustomerReactionSummary(await read(), now).todayLimit, 1000);
+    const decreased = await saveCustomerReactionSettings(db, await read(), 20, now + 1000);
+    await write(increased);
+    const reopened = await read();
+    assert.equal(reopened.reactionDailyLimit, 20);
+    assert.equal(getCustomerReactionSummary(reopened, now + 1000).todayLimit, 20);
+    assert.equal(reopened.reactionSettingsRevision, decreased.reactionSettingsRevision);
+  });
+});

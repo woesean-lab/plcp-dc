@@ -71,7 +71,7 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access =
     onEditLimit={access === "admin" ? onEditSettings : undefined} limitActionLabel="Manage reactions"
     lockReason={cancelling ? "Cancelling queued reactions…" : summary.ready && !summary.eligibleMembers ? "No members are currently available to react." : undefined}
     limit={summary.todayLimit} completed={summary.completed} failed={summary.failed}
-    remaining={summary.remaining} eligibleMembers={summary.eligibleMembers}
+    remaining={summary.remaining} used={summary.used} eligibleMembers={summary.eligibleMembers}
     messageDraft={message} countDraft={Math.min(amount, Math.max(1, summary.remaining))}
     selectedEmojis={emojis} saving={saving}
     requestEnabled={summary.ready && !cancelling && summary.eligibleMembers > 0}

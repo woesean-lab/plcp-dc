@@ -88,9 +88,11 @@ ilk Turkiye gece yarisina kadardir.
 
 Orders listesinin satir aksiyonlarindaki **Enable reactions / Manage reactions**
 veya siparis detayindaki ayni kontrol ile sonradan acilabilir; gunluk limit
-artirilabilir. Hazir degerler veya ozel pozitif bir tam sayi kullanilabilir.
-Sonradan acilinca ilk gun yine uye sayisi kadar hak verilir; limit artirmak bu
-gunu yeniden baslatmaz ve onceki kullanimi silmez. Orders'in Reactions sutunu
+artirilabilir veya dusurulebilir. Hazir degerler veya ozel pozitif bir tam sayi kullanilabilir.
+Sonradan ilk kez acilinca ilk gun yine uye sayisi kadar hak verilir. Acik bir
+sipariste **Save limit**, ilk gun dahil bugunku hakki ve sonraki gunluk limiti
+hemen degistirir; onceki kullanimi silmez veya gunu yeniden baslatmaz. Kullanimin
+altina dusurulurse kalan hak 0 olur. Orders'in Reactions sutunu
 bugunku limiti, tum gunlerin toplam kullanimini ve bugun kalani gosterir.
 
 **Manage reactions → Disable reactions** musteri erisimini kapatir. Gecmis,
