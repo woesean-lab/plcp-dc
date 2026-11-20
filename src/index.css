@@ -2577,12 +2577,12 @@
   .community-reaction-option-toggle input:focus-visible { outline: 2px solid var(--app-accent-bright); outline-offset: 3px; }
   .community-reaction-option-copy { display: grid; gap: 3px; }
   .community-reaction-option small { white-space: normal; font-weight: 500; }
-  .community-reaction-option-copy b { color: var(--app-text-secondary); font-variant-numeric: tabular-nums; }
+  .community-reaction-option-copy small { font-size: 11px; line-height: 1.4; }
   .community-reaction-option-limits { display: flex; align-items: center; gap: 10px; }
-  .community-reaction-option-limits > .boost-order-label { font-size: 10px; white-space: nowrap; }
+  .community-reaction-option-limits > .boost-order-label { white-space: nowrap; }
   .community-reaction-option-limits .stock-duration-filter[aria-disabled="true"] { opacity: .45; }
 
-  @container order-reaction-option (max-width: 560px) {
+  @container order-reaction-option (max-width: 680px) {
     .boost-proxy-toggle.community-reaction-option { grid-template-columns: minmax(0, 1fr); gap: 10px; }
     .community-reaction-option-limits { flex-wrap: wrap; }
   }
