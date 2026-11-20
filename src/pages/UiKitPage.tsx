@@ -11,6 +11,7 @@ import { Skeleton } from "../components/ui/skeleton";
 import { ListPagination, paginate } from "../components/ListPagination";
 import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel";
+import { OrderReactionOption } from "../components/OrderReactionOption";
 import "../components/OrdersWorkspace.css";
 import "./UiKitPage.css";
 
@@ -94,6 +95,12 @@ function MembersList() {
   </div>;
 }
 
+function ReactionOptionExample() {
+  const [enabled, setEnabled] = useState(true);
+  const [limit, setLimit] = useState(50);
+  return <OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit} onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />;
+}
+
 function ReactionExample() {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
@@ -169,6 +176,7 @@ export default function UiKitPage() {
           <Example title="Option card" source="src/index.css · boost-proxy-toggle" code={'<label className={`boost-proxy-toggle ${enabled ? "is-enabled" : ""}`}>\n  <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />\n  <span><Star className="h-4 w-4" /></span><strong>Eldorado sale?</strong>\n  <small>Show the promotion on the customer monitor.</small>\n</label>'}>
             <label className={`boost-proxy-toggle ${promotion ? "is-enabled" : ""}`}><input type="checkbox" checked={promotion} onChange={(event) => setPromotion(event.target.checked)} /><span><Star className="h-4 w-4" aria-hidden="true" /></span><strong>Eldorado sale?</strong><small>Show the promotion on the customer monitor.</small></label>
           </Example>
+          <Example title="Order reaction option" source="src/components/OrderReactionOption.tsx · boost-proxy-toggle · FilterDropdown" code={'<OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit}\n  onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />'}><ReactionOptionExample /></Example>
         </Section> : null}
 
         {visible("badges") ? <Section id="badges">

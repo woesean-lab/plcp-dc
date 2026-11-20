@@ -159,7 +159,7 @@ import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUs
 import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
-import { CUSTOMER_REACTION_LIMITS } from "../../shared/reaction-limits.mjs";
+import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
 
 const EMPTY_FORM = {
@@ -4109,21 +4109,9 @@ export default function HomePage() {
                             </div>
                           ) : null}
 
-                          {selectedIsCommunity && selectedCommunityHasReactions ? <div className="col-span-full flex flex-wrap items-stretch gap-3">
-                            <label className={`boost-proxy-toggle min-w-0 w-full sm:flex-1 ${form.communityReactions ? "is-enabled" : ""}`}>
-                              <input type="checkbox" checked={form.communityReactions} onChange={(event) => setForm((current) => ({ ...current, communityReactions: event.target.checked }))} />
-                              <span><Sparkles className="h-4 w-4" aria-hidden="true" /></span>
-                              <strong>Customer reactions</strong>
-                              <small>Support period only.</small>
-                            </label>
-                            <div className="boost-order-field w-[180px] max-sm:w-full">
-                              <span className="boost-order-label">Daily reactions</span>
-                              <small className="text-[var(--app-muted)]">First day: {form.amount}</small>
-                              <FilterDropdown label="Daily reactions" showLabel={false} value={String(form.communityReactionLimit)} disabled={!form.communityReactions}
-                                options={CUSTOMER_REACTION_LIMITS.map((limit) => ({ value: String(limit), label: `${limit} / day` }))}
-                                onChange={(value) => setForm((current) => ({ ...current, communityReactionLimit: Number(value) }))} />
-                            </div>
-                          </div> : null}
+                          {selectedIsCommunity && selectedCommunityHasReactions ? <OrderReactionOption enabled={form.communityReactions} memberCount={Number(form.amount)} dailyLimit={form.communityReactionLimit}
+                            onEnabledChange={(enabled) => setForm((current) => ({ ...current, communityReactions: enabled }))}
+                            onDailyLimitChange={(limit) => setForm((current) => ({ ...current, communityReactionLimit: limit }))} /> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
