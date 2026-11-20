@@ -6,6 +6,7 @@ import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyh
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 import { ReactionResetCountdown } from "./ReactionResetCountdown";
+import { ReactionAllowanceIndicator } from "./ReactionAllowanceIndicator";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
@@ -261,7 +262,7 @@ export function ReactionPanel({
       {collapsible ? <>
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
-          <span><strong id={titleId}>Reactions</strong><small>{remaining} / {limit} available today</small></span>
+          <span><strong id={titleId}>Reactions</strong><ReactionAllowanceIndicator remaining={remaining} limit={limit} /></span>
           {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
