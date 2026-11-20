@@ -1122,6 +1122,21 @@ export default function OrderPage() {
     const deliveryTiming = speedProfile === "balanced"
       ? "Balanced (variable 30–300 second delay)"
       : `${formatTemplateDelay(result?.delay)} seconds (fully customizable)`;
+    const reactions = result?.customerReactions;
+    const formatReactionCount = (count: number) => count.toLocaleString("en-US");
+    const reactionInstructions = reactions && reactions.dailyLimit > 0
+      ? [
+          "✨ MESSAGE REACTIONS",
+          ...(reactions.enabled ? [
+            `Daily limit: ${formatReactionCount(reactions.dailyLimit)} reactions.`,
+            ...(reactions.todayLimit !== reactions.dailyLimit ? [`Today's limit: ${formatReactionCount(reactions.todayLimit)} reactions.`] : []),
+            `Used today: ${formatReactionCount(reactions.used)} · Remaining today: ${formatReactionCount(reactions.remaining)}`,
+            "Open Reactions on your order monitor and paste a Discord message link to send reactions.",
+            "Available during your support period. Resets daily at 00:00.",
+            ...(!reactions.ready ? ["Reactions become available after member delivery."] : [])
+          ] : [reactions.disabled ? "Reactions are currently disabled for this order." : "Reactions are currently unavailable for this order."])
+        ]
+      : [];
     const isExperimentalJoin = result?.joinMethod === "experimental_join" || result?.experimentalJoin === true;
     const requiredPermissionLine = isExperimentalJoin
       ? "🔑 Required bot permissions: Manage Server, Kick Members, and Create Invite."
@@ -1161,6 +1176,7 @@ export default function OrderPage() {
           "",
           "🛡️ CHECK MEMBERS & REPLACEMENT",
           "If you purchased Online Members, use Check Members during the guarantee period. Offline members can be replaced within the guarantee period.",
+          ...(reactionInstructions.length ? ["", ...reactionInstructions] : []),
           "",
           `⚙️ Delivery Speed: ${deliveryTiming}`
         ].join("\n")

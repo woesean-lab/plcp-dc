@@ -3,6 +3,7 @@
 
 @layer base {
   :root {
+    --app-font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
     color-scheme: only dark;
     --app-bg: #090a12;
     --app-bg-deep: #05060b;
@@ -88,7 +89,7 @@
   body {
     margin: 0;
     overflow-x: clip;
-    font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    font-family: var(--app-font-family);
     font-synthesis: none;
     color: var(--app-text);
     background:
@@ -8163,6 +8164,10 @@
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input { height: 40px !important; border: 1px solid var(--app-border) !important; border-radius: 11px !important; padding: 0 .9rem !important; color: var(--app-text) !important; background: var(--app-input-bg) !important; font-family: inherit !important; font-size: 11px !important; font-weight: 450 !important; font-variant-numeric: tabular-nums; box-shadow: none !important; transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: var(--app-accent) !important; background: var(--app-input-focus-bg) !important; box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0,0,0,.08) !important; }
 .monitor-reaction-emoji-popover .EmojiPickerReact .epr-icn-search, .monitor-reaction-emoji-popover .EmojiPickerReact .epr-btn-clear-search { display: none !important; }
+.monitor-reaction-custom-emoji input,
+.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input,
+.monitor-reaction-custom-emoji input::placeholder,
+.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input::placeholder { font-family: var(--app-font-family) !important; font-size: 11px !important; font-weight: 450 !important; line-height: 1.4 !important; letter-spacing: normal !important; }
 .monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 58px 0 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0 9px 13px; background: rgb(10,11,22); }
 .monitor-reaction-emoji-direct-result > small { display: block; width: 100%; height: 24px; padding: 8px 7px 0; color: var(--app-muted); font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
 .monitor-reaction-emoji-direct-result button { display: grid; width: 42px; height: 42px; place-items: center; border: 0; border-radius: 9px; outline: 0; padding: 0; color: var(--app-text); background: transparent; cursor: pointer; font-family: inherit; }
@@ -8260,6 +8265,11 @@
 .monitor-reaction-panel.is-side .monitor-reaction-emoji-field,
 .monitor-reaction-panel.is-side .monitor-reaction-form .monitor-reaction-submit { grid-column: 1 / -1; grid-row: auto; }
 .monitor-reaction-panel.is-side .monitor-reaction-emoji-popover { position: absolute; top: calc(100% + 7px); right: 0; bottom: auto; width: min(360px, calc(100vw - 40px)); margin: 0; box-shadow: 0 20px 55px rgba(0,0,0,.5); }
+@media (min-width: 821px) {
+  .monitor-reaction-panel .monitor-reaction-emoji-picker[data-placement] .monitor-reaction-emoji-popover { top: calc(100% + 7px); bottom: auto; max-height: var(--reaction-emoji-available-height, calc(100dvh - 24px)); overflow-y: auto; transform: translateY(-8px) scale(.985); transform-origin: right top; }
+  .monitor-reaction-panel .monitor-reaction-emoji-picker[data-placement="top"] .monitor-reaction-emoji-popover { top: auto; bottom: calc(100% + 7px); box-shadow: 0 -20px 55px rgba(0,0,0,.5); transform: translateY(8px) scale(.985); transform-origin: right bottom; }
+  .monitor-reaction-panel .monitor-reaction-emoji-picker[data-placement][data-open="true"] .monitor-reaction-emoji-popover { transform: translateY(0) scale(1); }
+}
 .monitor-reaction-panel.is-side .monitor-reaction-heading { align-items: flex-start; flex-direction: column; }
 .monitor-reaction-panel.is-side .monitor-reaction-heading-actions { width: 100%; justify-content: space-between; }
 .monitor-reaction-panel.is-side .monitor-reaction-overview { padding: 13px; }

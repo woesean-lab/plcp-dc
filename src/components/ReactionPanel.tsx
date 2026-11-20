@@ -1,11 +1,12 @@
 import { PaginatedList } from "./ListPagination";
-import { lazy, Suspense, useEffect, useId, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 import { ReactionResetCountdown } from "./ReactionResetCountdown";
+import { getPopoverPlacement } from "../lib/popover-placement";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
@@ -150,11 +151,13 @@ export function ReactionPanel({
   const titleId = useId();
   const [failureRequest, setFailureRequest] = useState<ReactionPanelRequest | null>(null);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [emojiPopoverLayout, setEmojiPopoverLayout] = useState<{ placement: "top" | "bottom"; maxHeight?: number }>({ placement: "bottom" });
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
   const [emojiPickerContentVisible, setEmojiPickerContentVisible] = useState(false);
   const [emojiSearchMatch, setEmojiSearchMatch] = useState("");
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const emojiPopoverRef = useRef<HTMLDivElement>(null);
   const emojiPickerStageRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, used ?? limit - remaining);
   const pending = Math.max(0, assigned - completed);
@@ -176,6 +179,30 @@ export function ReactionPanel({
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/.+/i.test(messageDraft.trim());
+
+  useLayoutEffect(() => {
+    if (!emojiPickerOpen) return;
+    const trigger = emojiPickerRef.current;
+    const popover = emojiPopoverRef.current;
+    if (!trigger || !popover) return;
+    const updatePosition = () => {
+      // Narrow screens keep the existing fixed bottom sheet.
+      if (window.innerWidth <= 820) return;
+      const next = getPopoverPlacement(trigger.getBoundingClientRect(), popover.scrollHeight + 2, window.innerHeight);
+      setEmojiPopoverLayout((current) => current.placement === next.placement && current.maxHeight === next.maxHeight ? current : next);
+    };
+    updatePosition();
+    const observer = new ResizeObserver(updatePosition);
+    observer.observe(trigger);
+    observer.observe(popover);
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("scroll", updatePosition, true);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("scroll", updatePosition, true);
+    };
+  }, [emojiPickerOpen, selectedEmojis.length]);
 
   useEffect(() => {
     if (!emojiPickerOpen) return undefined;
@@ -443,7 +470,8 @@ export function ReactionPanel({
           </label>
           <div className="boost-order-field monitor-reaction-field monitor-reaction-emoji-field">
             <span className="boost-order-label">Emojis</span>
-            <div className="monitor-reaction-emoji-picker" data-open={emojiPickerOpen} ref={emojiPickerRef}>
+            <div className="monitor-reaction-emoji-picker" data-open={emojiPickerOpen} data-placement={emojiPopoverLayout.placement} ref={emojiPickerRef}
+              style={{ "--reaction-emoji-available-height": emojiPopoverLayout.maxHeight === undefined ? undefined : `${emojiPopoverLayout.maxHeight}px` } as CSSProperties}>
               <button
                 type="button"
                 className="monitor-reaction-emoji-trigger"
@@ -459,7 +487,7 @@ export function ReactionPanel({
                 <span>{selectedEmojis.includes(REACTION_MIXED_VALUE) ? <><Sparkles aria-hidden="true" /> Mixed</> : <><span>{selectedEmojis.slice(0, 4).map(formatReactionEmoji).join(" ")}</span>{selectedEmojis.length > 4 ? ` +${selectedEmojis.length - 4}` : ""}</>}</span>
                 <ChevronDown className="monitor-reaction-emoji-chevron" aria-hidden="true" />
               </button>
-              <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen}>
+              <div id={`${titleId}-emoji-picker`} className="monitor-reaction-emoji-popover" aria-hidden={!emojiPickerOpen} ref={emojiPopoverRef}>
                 <div className="monitor-reaction-emoji-selection">
                   <button
                     type="button"

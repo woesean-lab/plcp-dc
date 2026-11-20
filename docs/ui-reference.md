@@ -24,6 +24,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 | Text inputs | `src/components/ui/input.tsx` | Shared Input; visible labels and disabled state |
 | Compact search | `community-member-search` with Search icon and Input | Members Stock username / name / ID search |
 | Dropdowns | `src/components/ui/filter-dropdown.tsx` | Use themed FilterDropdown; `portal` in clipped/scrolling containers; no native select replacement |
+| Reaction emoji picker | `src/components/ReactionPanel.tsx`, `src/lib/popover-placement.ts` | Desktop opens below when it fits and flips above near the viewport bottom. Recalculate on scroll, resize and picker size changes; constrain height to available space. Narrow screens retain the fixed bottom sheet. Custom emoji URL and emoji search inputs/placeholders share the same `--app-font-family`, size and weight. |
 | Selection | `community-member-checkbox`, `community-member-select-all` | Members Stock checkboxes |
 | Option cards | `boost-proxy-toggle`, `is-enabled` | Create order's Eldorado checkbox card |
 | Create order reactions | `src/components/OrderReactionOption.tsx` | Full-width option card with compact height. Checkbox/title and a readable support note sit on the left. A shared secondary Badge shows the first-day allowance beside the existing `stock-duration-filter` daily presets (50 / 100 / 200 / 500) on the right. Uses existing option-card colors and monitor heading icon. Allowance/presets move below the toggle below 680px, stay outside the checkbox label and become disabled/dim while off. |

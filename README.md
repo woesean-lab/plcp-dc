@@ -105,6 +105,11 @@ gunluk limiti veya acik/kapali durumunu geri alamaz. Backend baslangicinda
 icin backend de guncellenip yeniden baslatilmalidir. Save limit yaniti,
 veritabanina gercekten yazilan degerden uretilir.
 
+Siparis detayindaki **Delivery template**, reaction aciksa gunluk limiti,
+bugunku kullanimi/kalani, farkliysa ilk gunun bugunku limitini ve monitor
+uzerinden nasil kullanilacagini da kopyalar. Kapali veya kullanilamayan
+reaction icin yalnizca durum yazilir; hic acilmamis siparislere bu bolum eklenmez.
+
 Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
 kullanir. Orders detayinda da ayni panel vardir; iki ekran ayni gunluk hakki ve
 gecmisi gosterir. Basliktaki geri sayim saniyelik guncellenir; sifirlaninca haklar
