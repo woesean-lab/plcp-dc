@@ -268,9 +268,8 @@ export function ReactionPanel({
           {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
-        {description || onEditLimit ? <div className="monitor-reaction-collapse-meta">
-          {description ? <p className="monitor-reaction-collapse-description">{description}</p> : null}
-          {onEditLimit ? <Button type="button" size="xs" variant="secondary" onClick={onEditLimit}>{limitActionLabel}</Button> : null}
+        {onEditLimit ? <div className="monitor-reaction-collapse-meta">
+          <Button type="button" size="xs" variant="secondary" onClick={onEditLimit}>{limitActionLabel}</Button>
         </div> : null}
       </> : <div className="monitor-reaction-heading">
         <div className="monitor-reaction-identity">
@@ -293,7 +292,7 @@ export function ReactionPanel({
       </div>}
 
       <div className="monitor-reaction-dashboard">
-        <div className="monitor-reaction-overview">
+        {!collapsible ? <div className="monitor-reaction-overview">
           <div className="monitor-reaction-progress-ring" style={progressStyle} aria-label={workspaceSummary ? `${workspaceSummary.checkedMembers} of ${workspaceSummary.deliveredMembers} members checked` : `${completed} of ${limit} reactions completed`}>
             <span><strong>{progress}%</strong><small>{workspaceSummary ? "checked" : "complete"}</small></span>
           </div>
@@ -308,7 +307,7 @@ export function ReactionPanel({
               : remaining > 0 ? `${remaining} reactions are still available for new requests.` : assigned > limit && resetsAt ? "Daily limit reached. New requests are available after reset." : "The full reaction allowance has been assigned."}</p>
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
-        </div>
+        </div> : null}
 
         <div className="monitor-reaction-metrics" aria-label="Reaction delivery summary">
           <div data-tone="success">

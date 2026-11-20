@@ -67,7 +67,6 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access =
   if (!summary.enabled || (summary.expiresAt && new Date(summary.expiresAt).getTime() <= Date.now())) return null;
   return <ReactionPanel collapsible
     resetsAt={summary.resetsAt}
-    description={`${summary.firstDay ? `First day: ${summary.todayLimit} reactions. Then ` : ""}${summary.dailyLimit} reactions per day during your support period.${summary.ready ? "" : " Available after member delivery."}`}
     onEditLimit={access === "admin" ? onEditSettings : undefined} limitActionLabel="Manage reactions"
     lockReason={cancelling ? "Cancelling queued reactions…" : summary.ready && !summary.eligibleMembers ? "No members are currently available to react." : undefined}
     limit={summary.todayLimit} completed={summary.completed} failed={summary.failed}

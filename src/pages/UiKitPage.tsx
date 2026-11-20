@@ -137,7 +137,7 @@ function ReactionExample() {
     const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
     return new Date(Date.parse(`${day}T00:00:00+03:00`) + 86_400_000).toISOString();
   });
-  return <ReactionPanel collapsible resetsAt={resetsAt} description="First day: 500 reactions. Then 50 reactions per day during your support period."
+  return <ReactionPanel collapsible resetsAt={resetsAt}
     limit={500} completed={15} used={15} failed={0} remaining={485} eligibleMembers={500}
     onEditLimit={() => toast.success("Sample reaction settings previewed")} limitActionLabel="Manage reactions"
     messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={[]}
