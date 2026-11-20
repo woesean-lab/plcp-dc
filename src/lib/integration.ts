@@ -341,16 +341,18 @@ export function extendCommunityOrderSupport(uniqid: string, months: number) {
   });
 }
 
-export function updateCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojis: string[]) {
+export function updateCommunityOrderReactionMessage(uniqid: string, messageLink: string, reactionCount: number, emojis: string[], options: { customerAllowance?: boolean } = {}) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-message`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messageLink, reactionCount, emojis })
+    body: JSON.stringify({ messageLink, reactionCount, emojis, ...options })
   });
 }
 
-export function cancelCommunityOrderReactions(uniqid: string) {
-  return requestJson<{ order: OrderStatusResponse; cancelledCount: number }>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-cancel`, { method: "POST" });
+export function cancelCommunityOrderReactions(uniqid: string, options: { requestId?: string; customerAllowance?: boolean } = {}) {
+  return requestJson<{ order: OrderStatusResponse; cancelledCount: number }>(`/api/community/orders/${encodeURIComponent(uniqid)}/reaction-cancel`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(options)
+  });
 }
 
 export function updateCommunityOrderReactionLimit(uniqid: string, reactionLimit: number) {

@@ -12664,7 +12664,7 @@ app.get("/api/community/orders/:uniqid/status", requireSession, async (req, res,
     payload = await reconcileCommunityPendingJoinResults(payload);
     payload = await hydrateCommunityOrderAvatars(payload);
     payload = await hydrateCommunityOrderCategories(payload);
-    res.set("Cache-Control", "no-store").json(payload);
+    res.set("Cache-Control", "no-store").json({ ...payload, customerReactions: getCustomerReactionSummary(payload) });
   } catch (error) {
     next(error);
   }
@@ -13547,6 +13547,7 @@ async function cancelPendingCommunityReactions(req, res, next) {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const isPublicRequest = req.path.startsWith("/api/public/");
+    const useCustomerAllowance = isPublicRequest || req.body?.customerAllowance === true;
     if (!uniqid || uniqid.length > 160) return res.status(400).json({ message: "A valid order ID is required." });
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
@@ -13560,7 +13561,7 @@ async function cancelPendingCommunityReactions(req, res, next) {
        SET status = 'cancelled', completed_at = NOW(), last_error = 'Cancelled by request.'
        WHERE order_id = $1 AND status = 'pending' AND ($2::text[] IS NULL OR request_id = ANY($2::text[]))
        RETURNING request_id, discord_user_id, emoji`,
-      [uniqid, isPublicRequest ? order.reactionRequests.filter((request) => request?.source === "customer"
+      [uniqid, useCustomerAllowance ? order.reactionRequests.filter((request) => request?.source === "customer"
         && (!req.body?.requestId || request.id === req.body.requestId)).map((request) => request.id) : null]
     );
     const cancelledKeys = new Set(cancelledJobs.rows.map((job) => `${job.request_id}:${job.discord_user_id}:${job.emoji}`));
@@ -13576,7 +13577,8 @@ async function cancelPendingCommunityReactions(req, res, next) {
     const updatedOrder = { ...order, reactionRequests };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
-    const responseOrder = isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : updatedOrder;
+    const displayOrder = useCustomerAllowance ? await hydrateCommunityOrderCategories(updatedOrder) : updatedOrder;
+    const responseOrder = isPublicRequest ? sanitizePublicCommunityOrder(displayOrder) : { ...displayOrder, customerReactions: getCustomerReactionSummary(displayOrder) };
     res.set("Cache-Control", "no-store").json({ order: responseOrder, cancelledCount: cancelledJobs.rowCount });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});

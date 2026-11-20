@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 import { ReactionPanel, REACTION_MIXED_VALUE } from "./ReactionPanel";
-import { cancelPublicCommunityOrderReactions, getPublicOrderStatus, updatePublicCommunityOrderReactionMessage } from "../lib/integration";
+import { cancelCommunityOrderReactions, cancelPublicCommunityOrderReactions, getOrderStatus, getPublicOrderStatus, updateCommunityOrderReactionMessage, updatePublicCommunityOrderReactionMessage } from "../lib/integration";
 import type { CustomerOrderReactions, OrderStatusResponse } from "../types";
 
-export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate }: {
+export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate, access = "public" }: {
   uniqid: string;
   summary: CustomerOrderReactions;
   onUpdate: (order: OrderStatusResponse) => void;
+  access?: "public" | "admin";
 }) {
   const [message, setMessage] = useState("");
   const [amount, setAmount] = useState(1);
@@ -19,22 +20,33 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate }: {
   onUpdateRef.current = onUpdate;
 
   useEffect(() => {
+    let active = true;
     const deadline = Math.min(new Date(summary.resetsAt).getTime(), new Date(summary.expiresAt || summary.resetsAt).getTime());
-    const timer = window.setTimeout(() => {
-      void getPublicOrderStatus(uniqid).then((order) => onUpdateRef.current(order)).catch(() => {});
-    }, Math.min(Math.max(0, deadline - Date.now()) + 100, 2_147_483_647));
-    return () => window.clearTimeout(timer);
-  }, [uniqid, summary.resetsAt, summary.expiresAt]);
+    let timer: number;
+    const refresh = async () => {
+      try {
+        const order = await (access === "admin" ? getOrderStatus(uniqid, "community") : getPublicOrderStatus(uniqid));
+        if (!active) return;
+        onUpdateRef.current(order);
+        if (order.customerReactions?.enabled && order.customerReactions.resetsAt === summary.resetsAt) timer = window.setTimeout(refresh, 5000);
+      } catch { if (active) timer = window.setTimeout(refresh, 5000); }
+    };
+    timer = window.setTimeout(() => void refresh(), Math.min(Math.max(0, deadline - Date.now()) + 100, 2_147_483_647));
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [uniqid, summary.resetsAt, summary.expiresAt, access]);
 
   async function submit() {
     if (busy.current || !summary.ready || !summary.remaining) return;
     busy.current = true; setSaving(true);
     try {
-      onUpdateRef.current(await updatePublicCommunityOrderReactionMessage(uniqid, message.trim(), Math.min(amount, summary.remaining), emojis));
+      const order = access === "admin"
+        ? await updateCommunityOrderReactionMessage(uniqid, message.trim(), Math.min(amount, summary.remaining), emojis, { customerAllowance: true })
+        : await updatePublicCommunityOrderReactionMessage(uniqid, message.trim(), Math.min(amount, summary.remaining), emojis);
+      onUpdateRef.current(order);
       toast.success("Reaction request added.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not send reactions.");
-      void getPublicOrderStatus(uniqid).then((order) => onUpdateRef.current(order)).catch(() => {});
+      void (access === "admin" ? getOrderStatus(uniqid, "community") : getPublicOrderStatus(uniqid)).then((order) => onUpdateRef.current(order)).catch(() => {});
     } finally { busy.current = false; setSaving(false); }
   }
 
@@ -42,7 +54,9 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate }: {
     if (busy.current) return;
     busy.current = true; setCancelling(true);
     try {
-      const result = await cancelPublicCommunityOrderReactions(uniqid, requestId);
+      const result = access === "admin"
+        ? await cancelCommunityOrderReactions(uniqid, { requestId, customerAllowance: true })
+        : await cancelPublicCommunityOrderReactions(uniqid, requestId);
       onUpdateRef.current(result.order);
       toast.success(`${result.cancelledCount} queued reactions cancelled.`);
     } catch (error) { toast.error(error instanceof Error ? error.message : "Could not cancel reactions."); }
@@ -51,7 +65,8 @@ export function CustomerOrderReactionPanel({ uniqid, summary, onUpdate }: {
 
   if (!summary.enabled || (summary.expiresAt && new Date(summary.expiresAt).getTime() <= Date.now())) return null;
   return <ReactionPanel collapsible
-    description={`${summary.dailyLimit} reactions per day during your support period. Resets at 00:00 Türkiye time.${summary.ready ? "" : " Available after member delivery."}`}
+    resetsAt={summary.resetsAt}
+    description={`${summary.dailyLimit} reactions per day during your support period.${summary.ready ? "" : " Available after member delivery."}`}
     lockReason={cancelling ? "Cancelling queued reactions…" : summary.ready && !summary.eligibleMembers ? "No members are currently available to react." : undefined}
     limit={summary.dailyLimit} completed={summary.completed} failed={summary.failed}
     remaining={summary.remaining} eligibleMembers={summary.eligibleMembers}

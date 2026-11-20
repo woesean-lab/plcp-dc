@@ -12,6 +12,7 @@ import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
+import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -514,7 +515,8 @@ export default function OrderPage() {
   const communityMemberResults = getCommunityMemberResults(result);
   const autoLeaveJob = result?.autoLeaveJob;
   const autoLeaveRunning = autoLeaveJob?.status === "running";
-  const refreshComplete = terminal && !autoLeaveRunning;
+  const reactionDeliveryRunning = result?.customerReactions?.requests.some((request) => request.assignedCount > request.completedCount + request.failedCount + request.cancelledCount) === true;
+  const refreshComplete = terminal && !autoLeaveRunning && !reactionDeliveryRunning;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -1444,6 +1446,10 @@ export default function OrderPage() {
               </section>
             ) : null}
           </div>
+
+          {isCommunityProvider && result.customerReactions?.enabled ? <div className="lookup-reaction-section">
+            <CustomerOrderReactionPanel key={result.uniqid} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
+          </div> : null}
 
           {isDcordProvider ? (
             <section className="lookup-token-panel">

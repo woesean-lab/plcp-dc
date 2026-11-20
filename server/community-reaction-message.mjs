@@ -7,6 +7,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const isPublicRequest = req.path.startsWith("/api/public/");
+    const useCustomerAllowance = isPublicRequest || req.body?.customerAllowance === true;
     const reactionMessage = parseDiscordMessageLink(req.body?.messageLink);
     const requestedCount = Number.parseInt(req.body?.reactionCount, 10);
     const requestedEmojis = [...new Set((Array.isArray(req.body?.emojis) ? req.body.emojis : [])
@@ -19,7 +20,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
     const storedOrder = tracked.rows[0]?.payload;
-    const order = isPublicRequest && storedOrder ? await hydrateCommunityOrderCategories(storedOrder) : storedOrder;
+    const order = useCustomerAllowance && storedOrder ? await hydrateCommunityOrderCategories(storedOrder) : storedOrder;
     if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Members order could not be found." });
@@ -32,13 +33,13 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
       await client.query("ROLLBACK");
       return res.status(400).json({ message: "The reaction message must belong to this order's Discord server." });
     }
-    const customerSummary = isPublicRequest ? getCustomerReactionSummary(order) : null;
-    if (isPublicRequest && !customerSummary.enabled) {
+    const customerSummary = useCustomerAllowance ? getCustomerReactionSummary(order) : null;
+    if (useCustomerAllowance && !customerSummary.enabled) {
       await client.query("ROLLBACK");
       return res.status(403).json({ message: "Reactions are available only for enabled orders during their support period." });
     }
     const hasExplicitReactionCapacity = Number.isInteger(Number(order.reactionCapacity));
-    const reactionCapacity = isPublicRequest ? customerSummary.dailyLimit : hasExplicitReactionCapacity
+    const reactionCapacity = useCustomerAllowance ? customerSummary.dailyLimit : hasExplicitReactionCapacity
       ? Math.max(0, Number(order.reactionCapacity))
       : order.communityResults.filter((item) => item?.reactionAvailable === true).length;
     const existingRequests = Array.isArray(order.reactionRequests) ? order.reactionRequests : [];
@@ -49,7 +50,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
       }
       return total + Math.max(0, Number(request?.assignedCount) || 0);
     }, 0);
-    const remainingCount = isPublicRequest ? customerSummary.remaining : Math.max(0, reactionCapacity - assignedCount);
+    const remainingCount = useCustomerAllowance ? customerSummary.remaining : Math.max(0, reactionCapacity - assignedCount);
     if (!reactionCapacity) {
       await client.query("ROLLBACK");
       return res.status(409).json({ message: "Reaction use is not enabled for this order." });
@@ -58,7 +59,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
       await client.query("ROLLBACK");
       return res.status(400).json({ message: remainingCount > 0
         ? `Choose a reaction amount between 1 and ${remainingCount}.`
-        : isPublicRequest ? "Today's reaction limit has been used. It resets at midnight (Türkiye time)." : "This order's reaction limit has been used." });
+        : useCustomerAllowance ? "Today's reaction limit has been used. It resets at midnight (Türkiye time)." : "This order's reaction limit has been used." });
     }
     if (!requestedEmojis.length || (!mixedEmojiMode && requestedEmojis.length > Math.min(communityReactionEmojiLimit, requestedCount)) || requestedEmojis.some((emoji) => emoji !== "mixed" && !isCommunityReactionEmoji(emoji) && !isCommunityCustomReactionSelector(emoji)) || requestedEmojis.includes("mixed") && !mixedEmojiMode) {
       await client.query("ROLLBACK");
@@ -67,7 +68,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
 
     let assignmentEmojis = requestedEmojis;
     const deliveredMembers = order.communityResults.filter((item) =>
-      isPublicRequest ? customerReactionMemberEligible(order, item) : item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
+      useCustomerAllowance ? customerReactionMemberEligible(order, item) : item?.discordUserId && ["joined", "already_member"].includes(String(item?.state ?? "").toLowerCase())
     );
     const customEmojiSelectors = requestedEmojis.filter(isCommunityCustomReactionSelector);
     if (customEmojiSelectors.length) {
@@ -112,7 +113,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
       reactionMessage: { channelId: reactionMessage.channelId, messageId: reactionMessage.messageId },
       reactionRequests: [...existingRequests, {
         id: requestId,
-        ...(isPublicRequest ? { source: "customer", quotaDay: customerSummary.quotaDay } : {}),
+        ...(useCustomerAllowance ? { source: "customer", quotaDay: customerSummary.quotaDay } : {}),
         messageLink: reactionMessage.url,
         requestedCount,
         emojiCount: new Set(assignments.map((assignment) => assignment.reactionEmoji)).size,
@@ -125,7 +126,7 @@ export function createCommunityReactionMessageHandler({ pool, parseDiscordMessag
     };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
     await client.query("COMMIT");
-    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : updatedOrder);
+    res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(updatedOrder) : { ...updatedOrder, customerReactions: getCustomerReactionSummary(updatedOrder) });
   } catch (error) {
     await client.query("ROLLBACK").catch(() => {});
     next(error);

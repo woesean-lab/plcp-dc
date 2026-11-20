@@ -85,10 +85,10 @@ function endpoint(initial = base, hydrate = (order) => order) {
       return Array.from({ length: count }, (_, i) => ({ discordUserId: members[i % members.length].discordUserId, reactionEmoji: `emoji-${i}`, reactionState: "pending" }));
     }, sanitizePublicCommunityOrder: (order) => ({ customerReactions: getCustomerReactionSummary(order) })
   });
-  async function send(count, { admin = false, messageLink = "message" } = {}) {
+  async function send(count, { admin = false, messageLink = "message", customerAllowance = false } = {}) {
     const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, set() { return this; }, json(body) { this.body = body; return this; } };
     await handler({ params: { uniqid: payload.uniqid }, path: admin ? "/api/community/orders/sample/reaction-message" : "/api/public/orders/sample/reaction-message",
-      body: { messageLink, reactionCount: count, emojis: ["mixed"] } }, response, (error) => { response.error = error; });
+      body: { messageLink, reactionCount: count, emojis: ["mixed"], customerAllowance } }, response, (error) => { response.error = error; });
     assert.equal(response.error, undefined);
     return response;
   }
@@ -127,6 +127,26 @@ test("customer assignments stay within their active order portion; admin flow st
   const admin = endpoint({ ...base, reactionDailyLimit: 0 });
   assert.equal((await admin.send(1, { admin: true })).statusCode, 200);
   assert.equal(admin.payload().reactionRequests[0].source, undefined);
+});
+
+test("Orders details uses the same daily allowance as the monitor while retaining admin member data", async () => {
+  const api = endpoint({ ...base, communityResults: Array.from({ length: 3 }, (_, i) => ({ ...base.communityResults[0], discordUserId: String(i) })) });
+  const admin = await api.send(30, { admin: true, customerAllowance: true });
+  assert.equal(admin.statusCode, 200);
+  assert.equal(admin.body.customerReactions.remaining, 20);
+  assert.equal(admin.body.communityResults[0].discordUserId, "0", "authenticated responses retain the full member identity");
+  assert.equal(api.payload().reactionRequests[0].source, "customer");
+  assert.equal((await api.send(30)).statusCode, 400, "monitor cannot reuse allowance already reserved in Orders details");
+  assert.equal((await api.send(20)).statusCode, 200);
+  assert.equal((await api.send(1, { admin: true, customerAllowance: true })).statusCode, 400);
+});
+
+test("the Orders customer-allowance mode enforces current category and support permissions", async () => {
+  const disabled = endpoint(base, (order) => ({ ...order, categoryAllocations: [{ ...order.categoryAllocations[0], reactionUseEnabled: false }] }));
+  assert.equal((await disabled.send(1, { admin: true, customerAllowance: true })).statusCode, 403);
+  const expired = endpoint({ ...base, categoryAllocations: [{ ...base.categoryAllocations[0], expiredAt: "2000-01-01" }] });
+  assert.equal((await expired.send(1, { admin: true, customerAllowance: true })).statusCode, 403);
+  assert.equal(disabled.jobs.length + expired.jobs.length, 0);
 });
 
 const pgRuntime = new URL("../output/category-transfer-test/node_modules/@electric-sql/pglite/dist/index.js", import.meta.url);

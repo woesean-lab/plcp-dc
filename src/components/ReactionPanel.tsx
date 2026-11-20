@@ -5,6 +5,7 @@ import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } fr
 import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
+import { ReactionResetCountdown } from "./ReactionResetCountdown";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
@@ -60,6 +61,7 @@ type ReactionPanelProps = {
   description?: string;
   lockReason?: string;
   collapsible?: boolean;
+  resetsAt?: string;
   limit: number;
   completed: number;
   failed: number;
@@ -115,6 +117,7 @@ export function ReactionPanel({
   description,
   lockReason,
   collapsible = false,
+  resetsAt,
   limit,
   completed,
   failed,
@@ -259,6 +262,7 @@ export function ReactionPanel({
         <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
           <span className="monitor-panel-icon" aria-hidden="true"><MessageSquareText className="h-4 w-4" /></span>
           <span><strong id={titleId}>Reactions</strong><small>{remaining} / {limit} available today</small></span>
+          {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           <ChevronDown aria-hidden="true" />
         </summary>
         {description ? <p className="monitor-reaction-collapse-description">{description}</p> : null}
@@ -273,6 +277,7 @@ export function ReactionPanel({
         </div>
 
         <div className="monitor-reaction-heading-actions">
+          {resetsAt ? <ReactionResetCountdown resetsAt={resetsAt} /> : null}
           {onEditLimit ? (
             <button className={`monitor-reaction-message-link${limitActionVariant === "purchase" ? " is-purchase" : ""}`} type="button" onClick={onEditLimit}>
               {limitActionVariant === "purchase" ? <ShoppingCart aria-hidden="true" /> : <MessageSquareText aria-hidden="true" />} {limitActionLabel}

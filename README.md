@@ -83,7 +83,9 @@ ve otomatik suresi dolan uyeleri cikarma bu ayardan bagimsizdir.
 Kategori yonetiminde reaction iznini ve destek suresini acin. Siparis olustururken
 **Customer reactions** secenegini isaretleyip **50 / 100 / 200 / 500** gunluk limit
 secin. Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
-kullanir. Limit Turkiye saatiyle 00:00'da yenilenir; basarisiz/iptal edilmis
+kullanir. Orders detayinda da ayni panel vardir; iki ekran ayni gunluk hakki ve
+gecmisi gosterir. Basliktaki geri sayim saniyelik guncellenir; sifirlaninca haklar
+yeniden alinir. Limit Turkiye saatiyle 00:00'da yenilenir; basarisiz/iptal edilmis
 gonderimler hakki geri verir. Yalnizca o siparisteki, izinli ve destek suresi devam
 eden bolumlerin uyeleri kullanilir. Sure dolunca panel kapanir; kuyruktaki musteri
 reaction'lari da gonderilmeden once kontrol edilir. Eski siparisler otomatik acilmaz.

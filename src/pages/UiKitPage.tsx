@@ -98,7 +98,11 @@ function ReactionExample() {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
-  return <ReactionPanel collapsible description="50 reactions per day during your support period. Resets at 00:00 Türkiye time."
+  const [resetsAt] = useState(() => {
+    const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
+    return new Date(Date.parse(`${day}T00:00:00+03:00`) + 86_400_000).toISOString();
+  });
+  return <ReactionPanel collapsible resetsAt={resetsAt} description="50 reactions per day during your support period."
     limit={50} completed={15} failed={0} remaining={35} eligibleMembers={50}
     messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={[]}
     onMessageChange={setMessage} onCountChange={setCount} onEmojiSelectionChange={setEmojis}
@@ -187,7 +191,7 @@ export default function UiKitPage() {
         {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
-          <Example title="Customer reactions" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx" code={'// Reuse the existing panel; the customer wrapper connects it to the order.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />'}><ReactionExample /></Example>
+          <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.'}><ReactionExample /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
           </Example>
