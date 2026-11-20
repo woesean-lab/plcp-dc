@@ -19,7 +19,8 @@ import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/o
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
-import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, planCustomerReactionSettings } from "./customer-order-reactions.mjs";
+import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, saveCustomerReactionSettings } from "./customer-order-reactions.mjs";
+import { CUSTOMER_REACTION_SETTINGS_GUARD_SQL } from "./customer-order-reaction-settings-guard.mjs";
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from "./community-order-category-guard.mjs";
 import { getCommunityResultAllocation, communityResultMatchesAllocation, getCommunityCategoryName } from "../shared/community-order-allocations.mjs";
 
@@ -7503,6 +7504,7 @@ async function runCommunityOrder(order, members, config) {
         reactionDisabledAt: currentPayload.reactionDisabledAt ?? payload.reactionDisabledAt ?? null,
         reactionFirstDayLimit: currentPayload.reactionFirstDayLimit ?? payload.reactionFirstDayLimit ?? null,
         reactionLimitUpdates: currentPayload.reactionLimitUpdates ?? payload.reactionLimitUpdates ?? [],
+        reactionSettingsRevision: currentPayload.reactionSettingsRevision ?? payload.reactionSettingsRevision ?? 0,
         reactionRequests: Array.isArray(currentPayload.reactionRequests) ? currentPayload.reactionRequests : (payload.reactionRequests ?? []),
         added: mergedAdded,
         status: deliveryPaused ? "PAUSED" : status,
@@ -8915,6 +8917,7 @@ async function initializeDatabase() {
     )
   `);
   await pool.query(COMMUNITY_ORDER_CATEGORY_GUARD_SQL);
+  await pool.query(CUSTOMER_REACTION_SETTINGS_GUARD_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -11974,6 +11977,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       categoryCheckReplacementEnabled: categoryAllocations.some((allocation) => allocation.checkReplacementEnabled !== false),
       reactionRequests: [],
       reactionDailyLimit,
+      reactionSettingsRevision: reactionDailyLimit > 0 ? 1 : 0,
       reactionCapacity: reactionDailyLimit,
       ...(reactionDailyLimit > 0 ? { reactionEnabledAt: createdAt.toISOString(), reactionFirstDayLimit: amount } : {}),
       durationMonths,
@@ -13507,8 +13511,7 @@ app.put("/api/community/orders/:uniqid/reaction-limit", requireSession, async (r
 
     if (req.body?.customerAllowance === true) {
       const hydrated = await hydrateCommunityOrderCategories(order);
-      const updatedOrder = planCustomerReactionSettings(hydrated, req.body.reactionLimit, Date.now(), { enabled: req.body.enabled });
-      await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [uniqid, JSON.stringify(updatedOrder)]);
+      const updatedOrder = await saveCustomerReactionSettings(client, hydrated, req.body.reactionLimit, Date.now(), { enabled: req.body.enabled });
       await client.query("COMMIT");
       return res.set("Cache-Control", "no-store").json({ ...updatedOrder, customerReactions: getCustomerReactionSummary(updatedOrder) });
     }

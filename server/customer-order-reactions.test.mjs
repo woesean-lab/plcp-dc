@@ -257,13 +257,14 @@ test("member-check upserts preserve current reaction reservations and their prog
   const db = new PGlite();
   try {
     await db.exec("CREATE TABLE tracked_orders (uniqid text PRIMARY KEY, payload jsonb NOT NULL)");
-    const current = { ...structuredClone(base), reactionDisabled: true, reactionDisabledAt: "2026-11-20T12:00:00Z", reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 500, reactionLimitUpdates: [{ dailyLimit: 50, updatedAt: "2026-11-20T10:00:00Z" }], reactionRequests: [request(["completed", "pending"])] };
+    const current = { ...structuredClone(base), reactionSettingsRevision: 5, reactionDisabled: true, reactionDisabledAt: "2026-11-20T12:00:00Z", reactionEnabledAt: "2026-11-20T10:00:00Z", reactionFirstDayLimit: 500, reactionLimitUpdates: [{ dailyLimit: 50, updatedAt: "2026-11-20T10:00:00Z" }], reactionRequests: [request(["completed", "pending"])] };
     await db.query("INSERT INTO tracked_orders VALUES ($1, $2::jsonb)", [current.uniqid, JSON.stringify(current)]);
     const stale = { ...structuredClone(base), added: 99, reactionDailyLimit: 0, reactionRequests: [] };
     const saved = await db.query(`INSERT INTO tracked_orders VALUES ($1, $2::jsonb)
       ON CONFLICT (uniqid) DO UPDATE SET payload = EXCLUDED.payload || ${CUSTOMER_REACTION_SAVE_FIELDS_SQL} RETURNING payload`, [stale.uniqid, JSON.stringify(stale)]);
     assert.equal(saved.rows[0].payload.added, 99, "member-check/delivery changes still save");
     assert.equal(saved.rows[0].payload.reactionDailyLimit, 50);
+    assert.equal(saved.rows[0].payload.reactionSettingsRevision, 5);
     assert.deepEqual(saved.rows[0].payload.reactionRequests, current.reactionRequests);
     assert.equal(saved.rows[0].payload.reactionEnabledAt, current.reactionEnabledAt);
     assert.equal(saved.rows[0].payload.reactionFirstDayLimit, 500);

@@ -44,6 +44,9 @@ export function OrderReactionSettingsDialog({ uniqid, onClose, onSaved }: {
     inFlight.current = true; setSaving(true); setDisabling(disable); setError("");
     try {
       const updated = await updateCommunityOrderReactionLimit(uniqid, disable ? summary.dailyLimit : amount, { customerAllowance: true, enabled: !disable });
+      if (!updated.customerReactions || updated.customerReactions.disabled !== disable || (!disable && updated.customerReactions.dailyLimit !== amount)) {
+        throw new Error("Reaction settings were not saved. Refresh the order and try again.");
+      }
       onSaved(updated); toast.success(disable ? "Customer reactions disabled." : enabled ? "Daily reaction limit updated." : "Customer reactions enabled."); dialogRef.current?.close();
     } catch (error) { setError(error instanceof Error ? error.message : "Could not save reaction settings."); }
     finally { inFlight.current = false; setSaving(false); setDisabling(false); }

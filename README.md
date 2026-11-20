@@ -97,6 +97,12 @@ bugunku limiti, tum gunlerin toplam kullanimini ve bugun kalani gosterir.
 gunluk limit ve ilk acilis tarihi korunur. Tekrar acmak yeni bir ilk gun hakki
 vermez; kapali siparisler Orders'ta **Disabled** olarak gorunur.
 
+Reaction ayarlari kayit surumuyle korunur: eski teslimat snapshot'lari yeni
+gunluk limiti veya acik/kapali durumunu geri alamaz. Backend baslangicinda
+`pulcip_order_reaction_settings_guard` veritabani korumasi kurulur. Bu duzeltme
+icin backend de guncellenip yeniden baslatilmalidir. Save limit yaniti,
+veritabanina gercekten yazilan degerden uretilir.
+
 Monitor, mevcut admin ReactionPanel bilesenini ve ayni gonderim motorunu
 kullanir. Orders detayinda da ayni panel vardir; iki ekran ayni gunluk hakki ve
 gecmisi gosterir. Basliktaki geri sayim saniyelik guncellenir; sifirlaninca haklar

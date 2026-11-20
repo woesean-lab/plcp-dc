@@ -14,6 +14,7 @@ export const CUSTOMER_REACTION_SAVE_FIELDS_SQL = `CASE
     'reactionDisabledAt', tracked_orders.payload->'reactionDisabledAt',
     'reactionFirstDayLimit', tracked_orders.payload->'reactionFirstDayLimit',
     'reactionLimitUpdates', tracked_orders.payload->'reactionLimitUpdates',
+    'reactionSettingsRevision', tracked_orders.payload->'reactionSettingsRevision',
     'reactionRequests', tracked_orders.payload->'reactionRequests'
   )) ELSE '{}'::jsonb END`;
 
@@ -80,6 +81,7 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
   const enabled = order?.provider === "community" && !disabled && limit > 0 && active.length > 0;
   return {
     enabled, disabled,
+    settingsRevision: Number.isSafeInteger(order?.reactionSettingsRevision) && order.reactionSettingsRevision >= 0 ? order.reactionSettingsRevision : 0,
     canConfigure: order?.provider === "community" && active.length > 0,
     ready: ["PARTIAL", "COMPLETED"].includes(String(order?.status).toUpperCase()),
     dailyLimit: limit, todayLimit, firstDay, firstDayLimit, enabledAt: enabledAt || null, totalUsed,
@@ -100,7 +102,8 @@ export function getCustomerReactionOverview(order, now = Date.now()) {
 export function planCustomerReactionSettings(order, dailyLimit, now = Date.now(), { enabled = true } = {}) {
   if (order?.provider !== "community") throw Object.assign(new Error("Members order could not be found."), { statusCode: 404 });
   if (typeof enabled !== "boolean") throw Object.assign(new Error("Choose whether customer reactions are enabled."), { statusCode: 400 });
-  if (!enabled) return { ...order, reactionDisabled: true, reactionDisabledAt: order.reactionDisabled === true && order.reactionDisabledAt ? order.reactionDisabledAt : new Date(now).toISOString() };
+  const revision = (Number.isSafeInteger(order.reactionSettingsRevision) && order.reactionSettingsRevision >= 0 ? order.reactionSettingsRevision : 0) + 1;
+  if (!enabled) return { ...order, reactionSettingsRevision: revision, reactionDisabled: true, reactionDisabledAt: order.reactionDisabled === true && order.reactionDisabledAt ? order.reactionDisabledAt : new Date(now).toISOString() };
   if (!Number.isSafeInteger(dailyLimit) || dailyLimit < 1) throw Object.assign(new Error("Enter a positive whole number for the daily limit."), { statusCode: 400 });
   const summary = getCustomerReactionSummary(order, now);
   if (!summary.canConfigure) throw Object.assign(new Error("Reactions require an enabled category with active support."), { statusCode: 409 });
@@ -109,9 +112,24 @@ export function planCustomerReactionSettings(order, dailyLimit, now = Date.now()
   const previousStart = order.reactionEnabledAt || (summary.dailyLimit > 0 ? order.createdAt : null);
   const enabledAt = previousStart && Number.isFinite(new Date(previousStart).getTime()) ? new Date(previousStart).toISOString() : updatedAt;
   const firstDayLimit = order.reactionFirstDayLimit || (Number.isSafeInteger(order.amount) && order.amount > 0 ? order.amount : dailyLimit);
-  return { ...order, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit, reactionDisabled: false,
+  return { ...order, reactionSettingsRevision: revision, reactionDailyLimit: dailyLimit, reactionCapacity: dailyLimit, reactionDisabled: false,
     reactionEnabledAt: enabledAt, reactionFirstDayLimit: firstDayLimit,
     reactionLimitUpdates: [...(Array.isArray(order.reactionLimitUpdates) ? order.reactionLimitUpdates : []),
       ...(dailyLimit !== summary.dailyLimit ? [{ dailyLimit, updatedAt }] : [])]
   };
+}
+
+// The caller holds the order row lock and commits only after this succeeds.
+export async function saveCustomerReactionSettings(client, order, dailyLimit, now = Date.now(), options = {}) {
+  const planned = planCustomerReactionSettings(order, dailyLimit, now, options);
+  const result = await client.query(
+    "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1 RETURNING payload",
+    [order.uniqid, JSON.stringify(planned)]
+  );
+  const saved = result.rows[0]?.payload;
+  if (!saved || saved.reactionSettingsRevision !== planned.reactionSettingsRevision
+    || saved.reactionDailyLimit !== planned.reactionDailyLimit || saved.reactionDisabled !== planned.reactionDisabled) {
+    throw Object.assign(new Error("Reaction settings were not saved. Refresh the order and try again."), { statusCode: 409 });
+  }
+  return saved;
 }

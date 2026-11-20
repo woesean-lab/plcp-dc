@@ -124,6 +124,9 @@ export function mergeOrderStatus(
   const currentCommunityResults = Array.isArray(current.communityResults) ? current.communityResults : [];
   const incomingCommunityResults = Array.isArray(incoming.communityResults) ? incoming.communityResults : [];
   const mergedOrder: OrderStatusResponse = { ...current, ...incoming };
+  if (current.uniqid === incoming.uniqid && (current.customerReactions?.settingsRevision ?? 0) > (incoming.customerReactions?.settingsRevision ?? 0)) {
+    mergedOrder.customerReactions = current.customerReactions;
+  }
   if (currentCommunityResults.length && incomingCommunityResults.length) {
     const resultCount = Math.max(currentCommunityResults.length, incomingCommunityResults.length);
     mergedOrder.communityResults = Array.from({ length: resultCount }, (_, index) =>

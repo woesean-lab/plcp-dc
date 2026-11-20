@@ -23,6 +23,7 @@ export interface CommunityCategoryAllocation {
 export interface CustomerOrderReactions {
   enabled: boolean;
   disabled: boolean;
+  settingsRevision: number;
   canConfigure: boolean;
   ready: boolean;
   dailyLimit: number;
