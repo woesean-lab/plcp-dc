@@ -14,6 +14,7 @@ import { getCommunityResultAllocation } from "../../shared/community-order-alloc
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
+import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { OrderProvider, OrderStatusResponse } from "../types";
@@ -1451,7 +1452,7 @@ export default function OrderPage() {
 
           {isCommunityProvider && result.customerReactions ? <div className="lookup-reaction-section">
             {result.customerReactions.enabled ? <CustomerOrderReactionPanel key={result.uniqid} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onEditSettings={() => setReactionSettingsOrder(result.uniqid)} onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
-              : <div className="monitor-control-panel lookup-reaction-inactive"><div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Sparkles className="h-4 w-4" /></span><div><h2>Reactions</h2><p className="text-xs text-[var(--app-muted)]">{result.customerReactions.disabled ? "Disabled for this order." : result.customerReactions.dailyLimit ? "Reactions are currently unavailable." : "Not enabled for this order."}</p></div><Button type="button" variant="secondary" size="sm" onClick={() => setReactionSettingsOrder(result.uniqid)}><Sparkles className="h-4 w-4" />{result.customerReactions.dailyLimit && !result.customerReactions.disabled ? "Manage reactions" : "Enable reactions"}</Button></div></div>}
+              : <OrderReactionAccessCard disabled={result.customerReactions.disabled} configured={result.customerReactions.dailyLimit > 0} onManage={() => setReactionSettingsOrder(result.uniqid)} />}
             {reactionSettingsOrder ? <OrderReactionSettingsDialog key={reactionSettingsOrder} uniqid={reactionSettingsOrder} onClose={() => setReactionSettingsOrder(null)} onSaved={(order) => setResult((current) => mergeOrderStatus(current, order))} /> : null}
           </div> : null}
 

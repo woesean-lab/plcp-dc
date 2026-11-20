@@ -6774,6 +6774,7 @@
 
 .monitor-progress-panel,
 .monitor-control-panel,
+.order-reaction-access-card,
 .monitor-token-panel {
   border: 1px solid var(--app-border);
   border-radius: 12px;
@@ -7785,6 +7786,7 @@
 .monitor-workspace.has-reaction > .monitor-control-panel { grid-column: 1 / -1; }
 .monitor-progress-panel,
 .monitor-control-panel,
+.order-reaction-access-card,
 .monitor-token-panel { border-radius: 16px; background: linear-gradient(135deg, rgba(255,255,255,.045), rgba(255,255,255,.018)); }
 .monitor-control-panel { padding: 19px; }
 .monitor-token-panel { padding: 19px; }
@@ -7802,7 +7804,8 @@
   background: radial-gradient(circle at 92% 10%, rgba(155,140,255,.07), transparent 25rem);
 }
 
-.lookup-reaction-section > .lookup-reaction-inactive { min-height: 0; }
+.order-reaction-access-card { min-width: 0; padding: 12px 16px; flex-wrap: wrap; }
+.order-reaction-access-card > div { flex: 1 1 160px; }
 
 .monitor-reaction-panel {
   position: relative;
