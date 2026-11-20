@@ -13,10 +13,10 @@ export function paginate<T>(items: readonly T[], requestedPage: number, pageSize
 export function ListPagination({ page, pageCount, total, pageSize = 50, onChange, onPageSizeChange, label = "List pages", showNavigationLabels = false }: {
   page: number; pageCount: number; total: number; pageSize?: number; onChange: (page: number) => void; onPageSizeChange: (size: number) => void; label?: string; showNavigationLabels?: boolean;
 }) {
-  const controlsDisabled = total < 50;
+  if (total < 50) return null;
   return <nav className="list-pagination" aria-label={label}>
     <span aria-live="polite">{total ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, total)} of {total}</span>
-    <div className="list-pagination-controls" data-disabled={controlsDisabled} aria-disabled={controlsDisabled}>
+    <div className="list-pagination-controls">
       <div className="list-page-size">
         <span>Per page</span>
         <FilterDropdown
@@ -24,15 +24,14 @@ export function ListPagination({ page, pageCount, total, pageSize = 50, onChange
           showLabel={false}
           placement="top"
           portal
-          disabled={controlsDisabled}
           value={String(pageSize)}
           options={[50, 100, 200, 500].map((size) => ({ value: String(size), label: String(size) }))}
-          onChange={(value) => { if (controlsDisabled) return; onPageSizeChange(Number(value)); onChange(1); }}
+          onChange={(value) => { onPageSizeChange(Number(value)); onChange(1); }}
         />
       </div>
-      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={controlsDisabled || page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page"><ChevronLeft className="h-3.5 w-3.5" />{showNavigationLabels ? "Back" : null}</Button>
+      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page"><ChevronLeft className="h-3.5 w-3.5" />{showNavigationLabels ? "Back" : null}</Button>
       <span>{page} / {pageCount}</span>
-      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={controlsDisabled || page >= pageCount} onClick={() => onChange(page + 1)} aria-label="Next page">{showNavigationLabels ? "Next" : null}<ChevronRight className="h-3.5 w-3.5" /></Button>
+      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page >= pageCount} onClick={() => onChange(page + 1)} aria-label="Next page">{showNavigationLabels ? "Next" : null}<ChevronRight className="h-3.5 w-3.5" /></Button>
     </div>
   </nav>;
 }

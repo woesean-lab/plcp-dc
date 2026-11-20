@@ -12175,8 +12175,6 @@
 .list-pagination > div { display: flex; align-items: center; gap: 10px; }
 .list-pagination button { flex-shrink: 0; }
 .list-pagination > div { flex-wrap: wrap; }
-.list-pagination-controls[data-disabled="true"] > span,
-.list-pagination-controls[data-disabled="true"] .list-page-size > span { opacity: .45; }
 .list-page-size { display: flex; align-items: center; gap: 8px; margin-right: 8px; white-space: nowrap; }
 .list-page-size .filter-dropdown-trigger {
   min-height: 32px;
