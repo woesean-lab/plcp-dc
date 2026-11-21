@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { CommunityMemberResult } from "../types";
 import { Button } from "./ui/button";
@@ -8,9 +8,9 @@ function StatusField({ label, state, value, icon, details }: {
   label: string; state?: string; value?: string; icon: ReactNode; details?: string;
 }) {
   return <div className="member-delivery-field">
-    <dt>{label}</dt>
+    <dt>{icon}<span>{label}</span></dt>
     <dd className="member-delivery-value" data-state={state} title={details}>
-      {icon}<span>{value || "—"}</span>
+      <span>{value || "—"}</span>
     </dd>
   </div>;
 }
@@ -31,8 +31,17 @@ export function MemberDeliveryRow({ item, formatTime }: {
     : leaveStatus === "already_left" ? "Already outside"
     : leaveStatus === "failed" ? "Leave failed" : leaveStatus;
   const timestamp = item.autoLeaveCompletedAt || item.autoLeaveScheduledAt || item.completedAt;
+  const toggleDetails = () => setExpanded((current) => !current);
 
-  return <article className="community-order-result member-delivery-row" data-state={item.state.toLowerCase()} aria-label={item.username}>
+  function handleRowClick(event: MouseEvent<HTMLElement>) {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target;
+    if (!(target instanceof Element) || target.closest("a, button, input, select, textarea, summary, [role='button'], [role='link'], [contenteditable='true']")) return;
+    if (window.getSelection()?.toString()) return;
+    toggleDetails();
+  }
+
+  return <article className="community-order-result member-delivery-row" data-state={item.state.toLowerCase()} aria-label={item.username} onClick={handleRowClick}>
     <div className="member-delivery-overview">
       <div className="member-delivery-identity">
         <span className="community-order-avatar" aria-hidden="true">
@@ -50,15 +59,15 @@ export function MemberDeliveryRow({ item, formatTime }: {
         <StatusField label="Delivery" state={item.state.toLowerCase()} value={item.state.replace(/_/g, " ")} icon={["failed", "blocked"].includes(item.state.toLowerCase()) ? <TriangleAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />} />
       </dl>
       <span className="community-member-row-actions">
-        <Button type="button" variant="ghost" size="icon-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.username}`} aria-expanded={expanded} aria-controls={notesId} title={expanded ? "Hide details" : "Show details"} onClick={() => setExpanded((current) => !current)}>
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.username}`} aria-expanded={expanded} aria-controls={notesId} title={expanded ? "Hide details" : "Show details"} onClick={toggleDetails}>
           <ChevronDown className="member-delivery-details-chevron h-3.5 w-3.5" aria-hidden="true" />
         </Button>
       </span>
     </div>
-      <div id={notesId} className="member-delivery-notes" hidden={!expanded}>
-        <p><span>Delivery</span>{item.details}</p>
-        {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {item.reactionDetails}</p> : null}
-        {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>Auto Leave</span>{item.autoLeaveDetails}</p> : null}
-      </div>
+    <div id={notesId} className="member-delivery-notes" hidden={!expanded}>
+      <p><span>Delivery</span>{item.details}</p>
+      {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {item.reactionDetails}</p> : null}
+      {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>Auto Leave</span>{item.autoLeaveDetails}</p> : null}
+    </div>
   </article>;
 }
