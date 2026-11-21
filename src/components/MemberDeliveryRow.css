@@ -51,11 +51,11 @@
 .community-order-result-list.member-delivery-list {
   display: block;
   gap: 0;
-  margin: .75rem 1rem 1rem;
+  margin: .75rem 0 0;
   padding: 0;
 }
 .monitor-token-panel .member-delivery-list,
-.lookup-token-panel.community-order-log .member-delivery-list { max-height: 240px; }
+.lookup-token-panel.community-order-log .member-delivery-list { max-height: min(520px, 65vh); }
 .member-delivery-list > .member-delivery-row {
   min-height: 62px;
   padding: 10px 12px;
