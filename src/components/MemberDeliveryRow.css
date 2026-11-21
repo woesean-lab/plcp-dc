@@ -2,12 +2,12 @@
   display: block;
   container-type: inline-size;
   border-color: var(--app-border);
-  background: var(--app-bg);
+  background: color-mix(in srgb, var(--app-surface-soft) 40%, transparent);
   cursor: pointer;
   transition: background-color .15s ease;
 }
 .member-delivery-row:hover,
-.member-delivery-row:focus-within { background: var(--app-surface); }
+.member-delivery-row:focus-within { background: var(--app-hover); }
 .member-delivery-row:is([data-state="failed"], [data-state="blocked"]) { border-inline-start: 2px solid var(--app-danger); }
 
 .member-delivery-overview {
