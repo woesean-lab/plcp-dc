@@ -213,6 +213,7 @@ const EMPTY_ONLINER_DRAFT = {
 };
 
 const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", richPresenceEnabled: true };
+const EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT = { ...EMPTY_ONLINER_ACCOUNT_DRAFT, proxyUrl: "" };
 
 function parseOnlinerBulkLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -659,7 +660,7 @@ export default function HomePage() {
   const [reconnectingOnlinerAccountId, setReconnectingOnlinerAccountId] = useState<string | null>(null);
   const [changingOnlinerProxyId, setChangingOnlinerProxyId] = useState<string | null>(null);
   const [editingOnlinerAccountId, setEditingOnlinerAccountId] = useState<string | null>(null);
-  const [onlinerEditDraft, setOnlinerEditDraft] = useState(EMPTY_ONLINER_ACCOUNT_DRAFT);
+  const [onlinerEditDraft, setOnlinerEditDraft] = useState(EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT);
   const [loadingOnlinerCredentials, setLoadingOnlinerCredentials] = useState(false);
   const [savingOnlinerAccount, setSavingOnlinerAccount] = useState(false);
   const [showOnlinerEditToken, setShowOnlinerEditToken] = useState(false);
@@ -991,7 +992,7 @@ export default function HomePage() {
       if (event.key === "Escape" && !savingOnlinerAccount) {
         onlinerCredentialRequestRef.current += 1;
         setEditingOnlinerAccountId(null);
-        setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+        setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT);
         setLoadingOnlinerCredentials(false);
         setShowOnlinerEditToken(false);
       }
@@ -1626,7 +1627,7 @@ export default function HomePage() {
     if (savingOnlinerAccount) return;
     onlinerCredentialRequestRef.current += 1;
     setEditingOnlinerAccountId(null);
-    setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+    setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT);
     setLoadingOnlinerCredentials(false);
     setShowOnlinerEditToken(false);
   }
@@ -1636,13 +1637,14 @@ export default function HomePage() {
     onlinerCredentialRequestRef.current = requestId;
     try {
       setEditingOnlinerAccountId(accountId);
-      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT);
       setShowOnlinerEditToken(false);
       setLoadingOnlinerCredentials(true);
       const credentials = await getDiscordOnlinerAccountCredentials(accountId);
       if (requestId !== onlinerCredentialRequestRef.current) return;
       setOnlinerEditDraft({
         botToken: credentials.botToken,
+        proxyUrl: credentials.proxyUrl,
         richPresenceEnabled: credentials.richPresenceEnabled
       });
     } catch (error) {
@@ -1671,7 +1673,7 @@ export default function HomePage() {
       onlinerCredentialRequestRef.current += 1;
       setOnlinerSnapshot(snapshot);
       setEditingOnlinerAccountId(null);
-      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_DRAFT);
+      setOnlinerEditDraft(EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT);
       setShowOnlinerEditToken(false);
       notifySuccess("Bot profile saved; the worker restarts only this bot if its credentials changed.");
     } catch (error) {
@@ -5637,6 +5639,17 @@ export default function HomePage() {
                     {showOnlinerEditToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </span>
+              </label>
+              <label className="grid gap-2">
+                <span className={fieldLabelClass}>Assigned proxy</span>
+                <Input
+                  type="text"
+                  value={loadingOnlinerCredentials ? "Loading assigned proxy..." : onlinerEditDraft.proxyUrl || "No proxy assigned"}
+                  readOnly
+                  disabled={loadingOnlinerCredentials}
+                  aria-busy={loadingOnlinerCredentials}
+                  spellCheck={false}
+                />
               </label>
               <label className="onliner-enabled-card">
                 <input
