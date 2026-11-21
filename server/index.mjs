@@ -18,6 +18,8 @@ import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.m
 import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
+import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
+import { getActiveStockHumanizerJob, getLatestStockHumanizerJob, pruneHumanizerJobs, stopHumanizerJob } from "./humanizer-job-control.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
 import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, saveCustomerReactionSettings } from "./customer-order-reactions.mjs";
@@ -621,6 +623,10 @@ function getHumanizerJobSnapshot(job) {
     completed: job.completed,
     succeeded: job.succeeded,
     failed: job.failed,
+    cancelled: job.results.filter((result) => result.state === "cancelled").length,
+    stopRequestedAt: job.stopRequestedAt ?? null,
+    canStop: job.source !== "boost-order",
+    error: job.error ?? null,
     skipped: job.unavailable ?? [],
     results: job.results
   };
@@ -1044,6 +1050,7 @@ async function sendHumanizerAccountUpdate(account, payload) {
 }
 
 async function runHumanizerJob(job, accounts, options) {
+  if (job.stopRequestedAt || job.status === "stopped") return;
   job.status = "running";
   job.startedAt = new Date().toISOString();
   const shuffle = (values) => {
@@ -1064,6 +1071,7 @@ async function runHumanizerJob(job, accounts, options) {
   const pick = (values, index) => values.length ? values[index % values.length] : null;
 
   await forEachWithConcurrency(accounts, options.concurrency, async (account, index) => {
+    if (job.stopRequestedAt) return;
     const result = job.results[index];
     result.state = "running";
     result.startedAt = new Date().toISOString();
@@ -1137,11 +1145,11 @@ async function runHumanizerJob(job, accounts, options) {
       }
 
       result.state = failures.length ? (result.changed.length ? "partial" : "failed") : "success";
-      result.error = failures.join(" ") || null;
+      result.error = [...new Set(failures)].join(" ") || null;
       if (result.state === "success") job.succeeded += 1;
       else job.failed += 1;
     } catch (error) {
-      result.state = "failed";
+      result.state = result.changed.length ? "partial" : "failed";
       result.error = error instanceof Error ? error.message : "Profile update failed.";
       job.failed += 1;
     } finally {
@@ -1153,7 +1161,7 @@ async function runHumanizerJob(job, accounts, options) {
     }
   });
 
-  job.status = "completed";
+  job.status = job.stopRequestedAt ? "stopped" : "completed";
   job.completedAt = new Date().toISOString();
   if (typeof options.onProgress === "function") {
     await options.onProgress(getHumanizerJobSnapshot(job)).catch(() => {});
@@ -1182,6 +1190,7 @@ async function runDcordOrderHumanizer(orderId, tokens, proxies, packageRow, jobI
   });
   const job = {
     id: jobId,
+    source: "boost-order",
     status: "queued",
     createdAt: new Date().toISOString(),
     startedAt: null,
@@ -6508,6 +6517,9 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
   const orderId = String(order?.uniqid ?? "").trim();
   const guildId = String(order?.serverId ?? "").trim();
   const results = Array.isArray(order?.communityResults) ? order.communityResults : [];
+  if (!isCommunityDeliverySettled(order)) {
+    throw Object.assign(new Error("Wait for member delivery and replacements to finish before using Leave all."), { statusCode: 409 });
+  }
   if (!orderId || !isDiscordGuildId(guildId) || !results.length) {
     const error = new Error("This Members order has no accounts that can leave the server.");
     error.statusCode = 409;
@@ -6628,6 +6640,9 @@ async function scheduleExpiredCommunityAutoLeave(orderId) {
       const error = new Error("Members order could not be found.");
       error.statusCode = 404;
       throw error;
+    }
+    if (!isCommunityDeliverySettled(current)) {
+      throw Object.assign(new Error("Wait for member delivery and replacements to finish before using Leave all."), { statusCode: 409 });
     }
     if (current.autoLeaveJob?.status === "running") {
       await client.query("ROLLBACK");
@@ -9393,7 +9408,7 @@ app.delete("/api/humanizer/packages/:packageId", requireSession, async (req, res
 });
 
 app.get("/api/humanizer/jobs/latest", requireSession, (_req, res) => {
-  const latest = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  const latest = getLatestStockHumanizerJob(humanizerJobs);
   res.set("Cache-Control", "no-store").json(latest ? getHumanizerJobSnapshot(latest) : null);
 });
 
@@ -9403,16 +9418,27 @@ app.get("/api/humanizer/jobs/:jobId", requireSession, (req, res) => {
   res.set("Cache-Control", "no-store").json(getHumanizerJobSnapshot(job));
 });
 
+app.post("/api/humanizer/jobs/:jobId/stop", requireSession, (req, res) => {
+  const job = humanizerJobs.get(String(req.params.jobId ?? ""));
+  if (!job) return res.status(404).json({ message: "Humanizer job was not found." });
+  if (job.source === "boost-order") return res.status(409).json({ message: "This Humanizer run is managed by its boost order." });
+  stopHumanizerJob(job);
+  res.set("Cache-Control", "no-store").json(getHumanizerJobSnapshot(job));
+});
+
 app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
   try {
+    const activeJob = getActiveStockHumanizerJob(humanizerJobs);
+    if (activeJob) return res.status(409).json({ message: "A Humanizer run is already active. Stop it or wait for it to finish.", job: getHumanizerJobSnapshot(activeJob) });
     const requestedAccountIds = [...new Set(
       (Array.isArray(req.body?.accountIds) ? req.body.accountIds : [])
         .map((value) => String(value ?? "").trim())
         .filter(isDiscordGuildId)
-    )].slice(0, 500);
+    )];
     if (!requestedAccountIds.length) {
       return res.status(400).json({ message: "Select at least one Members Stock account." });
     }
+    if (requestedAccountIds.length > 500) return res.status(400).json({ message: "Select up to 500 accounts per Humanizer run." });
 
     const enabledFields = new Set(normalizeHumanizerEnabledFields(req.body?.enabledFields));
     const usernames = enabledFields.has("username") ? cleanHumanizerLines(req.body?.usernames, 1000, 32) : [];
@@ -9498,8 +9524,12 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       return res.status(409).json({ message: unavailable[0] ?? "None of the selected accounts can use Humanizer." });
     }
 
+    // Recheck after asynchronous account validation: another session may have started a run.
+    const concurrentJob = getActiveStockHumanizerJob(humanizerJobs);
+    if (concurrentJob) return res.status(409).json({ message: "A Humanizer run is already active. Stop it or wait for it to finish.", job: getHumanizerJobSnapshot(concurrentJob) });
     const job = {
       id: crypto.randomUUID(),
+      source: "members-stock",
       status: "queued",
       createdAt: new Date().toISOString(),
       startedAt: null,
@@ -9524,10 +9554,10 @@ app.post("/api/humanizer/jobs", requireSession, async (req, res, next) => {
       unavailable
     };
     humanizerJobs.set(job.id, job);
-    const staleJobs = [...humanizerJobs.values()].sort((left, right) => right.createdAt.localeCompare(left.createdAt)).slice(20);
-    for (const stale of staleJobs) humanizerJobs.delete(stale.id);
+    pruneHumanizerJobs(humanizerJobs);
     void runHumanizerJob(job, accounts, { usernames, displayNames, bios, pronouns, avatarIds, hypesquad, concurrency }).catch((error) => {
       job.status = "failed";
+      job.error = error instanceof Error ? error.message : "Humanizer run failed.";
       job.completedAt = new Date().toISOString();
       console.error("Humanizer job failed:", error instanceof Error ? error.message : error);
     });
@@ -12713,6 +12743,7 @@ app.post("/api/community/orders/:uniqid/leave-all", requireSession, async (req, 
     const tracked = await pool.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 LIMIT 1", [uniqid]);
     const order = tracked.rows[0]?.payload;
     if (!order || order.provider !== "community") return res.status(404).json({ message: "Members order could not be found." });
+    if (!isCommunityDeliverySettled(order)) return res.status(409).json({ message: "Wait for member delivery and replacements to finish before using Leave all." });
     const expiredOnly = String(req.query?.expiredOnly ?? "").toLowerCase() === "true";
     if (!expiredOnly && order.autoLeaveJob?.status === "running") {
       return res.status(409).json({ message: "Auto Leave is already running for this order." });
@@ -15436,7 +15467,7 @@ app.get("/api/orders", requireSession, async (_req, res, next) => {
       });
     }
     res.json(orders.map((order) => {
-      const autoLeaveCandidateCount = order.provider === "community" && Array.isArray(order.communityResults)
+      const autoLeaveCandidateCount = order.provider === "community" && isCommunityDeliverySettled(order) && Array.isArray(order.communityResults)
         ? order.communityResults.filter((item) =>
             String(item?.state ?? "").toLowerCase() === "joined"
             && String(item?.membershipStatus ?? "").toLowerCase() !== "removed"

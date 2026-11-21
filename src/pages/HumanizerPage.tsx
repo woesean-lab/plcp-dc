@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   AtSign,
-  BadgeCheck,
   Check,
   CircleAlert,
   FileText,
@@ -41,6 +40,7 @@ import {
   getHumanizerPackages,
   saveHumanizerPackage,
   startHumanizerJob,
+  stopHumanizerJob,
   uploadHumanizerAvatar,
   type HumanizerAccount,
   type HumanizerAvatar,
@@ -49,6 +49,8 @@ import {
   type HumanizerJob,
   type HumanizerPackage
 } from "@/lib/humanizer";
+import { isHumanizerJobActive, mergeHumanizerJob } from "@/lib/humanizer-job-state";
+import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 
 const HUMANIZER_ACCOUNT_PAGE_SIZE = 50;
 
@@ -245,6 +247,12 @@ export default function HumanizerPage() {
   const [concurrency, setConcurrency] = useState(2);
   const [starting, setStarting] = useState(false);
   const [job, setJob] = useState<HumanizerJob | null>(null);
+  const [jobLoading, setJobLoading] = useState(true);
+  const [stopping, setStopping] = useState(false);
+  const [jobRefreshError, setJobRefreshError] = useState("");
+  const [resultFilter, setResultFilter] = useState("all");
+  const startInFlightRef = useRef(false);
+  const stopInFlightRef = useRef(false);
   const [packages, setPackages] = useState<HumanizerPackage[]>([]);
   const [packagesLoading, setPackagesLoading] = useState(true);
   const [selectedPackageId, setSelectedPackageId] = useState("");
@@ -253,6 +261,7 @@ export default function HumanizerPage() {
   const [deletingPackage, setDeletingPackage] = useState(false);
   const [packageModal, setPackageModal] = useState<"save" | "delete" | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const jobActive = isHumanizerJobActive(job);
 
   async function loadCatalog(showToast = false) {
     try {
@@ -270,7 +279,7 @@ export default function HumanizerPage() {
 
   useEffect(() => {
     void loadCatalog();
-    void getLatestHumanizerJob().then(setJob).catch(() => {});
+    void refreshLatestJob();
     void getHumanizerPackages()
       .then((next) => {
         setPackages(next);
@@ -281,25 +290,33 @@ export default function HumanizerPage() {
   }, []);
 
   useEffect(() => {
-    if (!job || !["queued", "running"].includes(job.status)) return;
+    if (!job || !isHumanizerJobActive(job)) return;
     let active = true;
+    let timer: number;
+    const jobId = job.id;
     const poll = async () => {
       try {
-        const next = await getHumanizerJob(job.id);
+        const next = await getHumanizerJob(jobId);
         if (!active) return;
-        setJob(next);
-        if (next.status === "completed" || next.status === "failed") void loadCatalog();
-      } catch {
-        // Keep the last useful snapshot while a transient request fails.
+        setJob((current) => current?.id === jobId ? mergeHumanizerJob(current, next) : current);
+        setJobRefreshError("");
+        if (!isHumanizerJobActive(next)) {
+          void loadCatalog();
+          active = false;
+          return;
+        }
+      } catch (error) {
+        if (active) setJobRefreshError(error instanceof Error ? error.message : "Run status could not be refreshed.");
+      } finally {
+        if (active) timer = window.setTimeout(() => void poll(), 1_000);
       }
     };
-    const timer = window.setInterval(() => void poll(), 1_000);
     void poll();
     return () => {
       active = false;
-      window.clearInterval(timer);
+      window.clearTimeout(timer);
     };
-  }, [job?.id, job?.status]);
+  }, [job?.id, jobActive]);
 
   useEffect(() => {
     if (!packageModal) return;
@@ -338,7 +355,10 @@ export default function HumanizerPage() {
     .map((account) => account.id);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allVisibleSelected = eligibleVisibleIds.length > 0 && eligibleVisibleIds.every((id) => selectedSet.has(id));
-  const jobActive = job?.status === "queued" || job?.status === "running";
+  const jobStopping = stopping || job?.status === "stopping";
+  const jobCancelled = job?.cancelled ?? job?.results.filter((result) => result.state === "cancelled").length ?? 0;
+  const filteredResults = (job?.results ?? []).filter((result) => resultFilter === "all"
+    || (resultFilter === "attention" ? ["failed", "partial"].includes(result.state) : result.state === resultFilter));
   const fieldContent: Record<HumanizerField, boolean> = {
     username: splitLines(usernames).length > 0,
     displayName: splitLines(displayNames).length > 0,
@@ -354,7 +374,23 @@ export default function HumanizerPage() {
   const packageToOverwrite = packages.find((item) => item.name.localeCompare(packageName.trim(), undefined, { sensitivity: "accent" }) === 0) ?? null;
 
   function toggleAccount(id: string) {
+    if (jobActive || starting) return;
+    if (!selectedSet.has(id) && selectedIds.length >= 500) {
+      toast.error("Select up to 500 accounts per run.");
+      return;
+    }
     setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+  }
+
+  function toggleVisibleAccounts() {
+    if (jobActive || starting) return;
+    if (allVisibleSelected || (selectedIds.length >= 500 && eligibleVisibleIds.some((id) => selectedSet.has(id)))) {
+      setSelectedIds((current) => current.filter((id) => !eligibleVisibleIds.includes(id)));
+      return;
+    }
+    const next = [...new Set([...selectedIds, ...eligibleVisibleIds])];
+    if (next.length > 500) toast("Selected up to 500 accounts, the maximum per run.");
+    setSelectedIds(next.slice(0, 500));
   }
 
   function setFieldEnabled(field: HumanizerField, enabled: boolean) {
@@ -415,6 +451,7 @@ export default function HumanizerPage() {
   }
 
   async function handleStart() {
+    if (startInFlightRef.current || jobActive || jobLoading) return;
     if (!selectedIds.length) {
       toast.error("Select at least one eligible account.");
       return;
@@ -423,6 +460,11 @@ export default function HumanizerPage() {
       toast.error("Add at least one profile change.");
       return;
     }
+    if (selectedIds.length > 500) {
+      toast.error("Select up to 500 accounts per run.");
+      return;
+    }
+    startInFlightRef.current = true;
     try {
       setStarting(true);
       const next = await startHumanizerJob({
@@ -437,12 +479,60 @@ export default function HumanizerPage() {
         concurrency
       });
       setJob(next);
+      setResultFilter("all");
+      setJobRefreshError("");
       toast.success(`Humanizer started for ${next.total} account${next.total === 1 ? "" : "s"}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Humanizer could not be started.");
+      await refreshLatestJob();
     } finally {
+      startInFlightRef.current = false;
       setStarting(false);
     }
+  }
+
+  async function refreshLatestJob() {
+    setJobLoading(true);
+    try {
+      const next = await getLatestHumanizerJob();
+      setJob((current) => next ? mergeHumanizerJob(current, next) : null);
+      setJobRefreshError("");
+    } catch (error) {
+      setJobRefreshError(error instanceof Error ? error.message : "Run status could not be loaded.");
+    } finally {
+      setJobLoading(false);
+    }
+  }
+
+  async function handleStop() {
+    if (!job || !jobActive || jobStopping || stopInFlightRef.current) return;
+    stopInFlightRef.current = true;
+    setStopping(true);
+    const jobId = job.id;
+    try {
+      const next = await stopHumanizerJob(jobId);
+      setJob((current) => current?.id === jobId ? mergeHumanizerJob(current, next) : current);
+      setJobRefreshError("");
+      toast.success(next.status === "stopped" ? "Humanizer stopped." : isHumanizerJobActive(next) ? "Stop requested. Accounts already running will finish; queued accounts will not start." : "This Humanizer run has already finished.");
+      if (!isHumanizerJobActive(next)) void loadCatalog();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Humanizer could not be stopped.");
+    } finally {
+      stopInFlightRef.current = false;
+      setStopping(false);
+    }
+  }
+
+  function selectRunAccounts(states: string[]) {
+    if (!job || jobActive || starting) return;
+    const eligible = new Set((catalog?.accounts ?? []).filter((account) => account.hasToken && account.hasProxy).map((account) => account.id));
+    const ids = job.results.filter((result) => states.includes(result.state) && eligible.has(result.id)).map((result) => result.id).slice(0, 500);
+    if (!ids.length) { toast.error("No eligible accounts remain in this group."); return; }
+    setSelectedIds(ids);
+    setCategoryId("all");
+    setSearch("");
+    setAccountPage(1);
+    toast.success(`${ids.length} accounts selected. Review the recipe before starting a new run.`);
   }
 
   function requestSavePackage() {
@@ -568,12 +658,10 @@ export default function HumanizerPage() {
               type="button"
               size="xs"
               variant="secondary"
-              disabled={!eligibleVisibleIds.length}
-              onClick={() => setSelectedIds((current) => allVisibleSelected
-                ? current.filter((id) => !eligibleVisibleIds.includes(id))
-                : [...new Set([...current, ...eligibleVisibleIds])])}
+              disabled={!eligibleVisibleIds.length || jobActive || starting}
+              onClick={toggleVisibleAccounts}
             >
-              <Check className="h-3.5 w-3.5" /> {allVisibleSelected ? "Clear visible" : "Select eligible"}
+              <Check className="h-3.5 w-3.5" /> {allVisibleSelected || (selectedIds.length >= 500 && eligibleVisibleIds.some((id) => selectedSet.has(id))) ? "Clear visible" : "Select eligible"}
             </Button>
             </header>
 
@@ -604,7 +692,7 @@ export default function HumanizerPage() {
               const eligible = account.hasToken && account.hasProxy;
               return (
                 <label key={account.id} className={`humanizer-account-row ${selectedSet.has(account.id) ? "is-selected" : ""} ${eligible ? "" : "is-disabled"}`}>
-                  <input type="checkbox" checked={selectedSet.has(account.id)} disabled={!eligible || jobActive} onChange={() => toggleAccount(account.id)} />
+                  <input type="checkbox" checked={selectedSet.has(account.id)} disabled={!eligible || jobActive || starting} onChange={() => toggleAccount(account.id)} />
                   <span className="humanizer-avatar">
                     {account.avatarUrl ? <img src={account.avatarUrl} alt="" loading="lazy" decoding="async" /> : <Users className="h-4 w-4" />}
                   </span>
@@ -627,7 +715,7 @@ export default function HumanizerPage() {
             )}
             </div>
             <ListPagination {...accountPagination} onChange={setAccountPage} onPageSizeChange={setAccountPageSize} label="Humanizer account pages" />
-            <footer className="humanizer-pane-foot"><ListFilter className="h-3.5 w-3.5" /><span>{visibleAccounts.length} visible · {eligibleVisibleIds.length} eligible</span></footer>
+            <footer className="humanizer-pane-foot"><ListFilter className="h-3.5 w-3.5" /><span>{visibleAccounts.length} visible · {eligibleVisibleIds.length} eligible · Up to 500 per run</span></footer>
           </section>
 
           <section className="humanizer-pane humanizer-recipe-pane" aria-labelledby="humanizer-recipe-title">
@@ -789,61 +877,61 @@ export default function HumanizerPage() {
                 onChange={(value) => setConcurrency(Number(value))}
               />
             </div>
-            <Button type="button" disabled={starting || jobActive || Boolean(uploadingAvatars) || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
+            <Button type="button" disabled={starting || jobLoading || Boolean(jobRefreshError) || jobActive || Boolean(uploadingAvatars) || !selectedIds.length || !configuredChanges} onClick={() => void handleStart()}>
               {starting || jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-              {jobActive ? "Humanizer running" : `Run ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
+              {jobLoading ? "Checking run status…" : jobStopping ? "Humanizer stopping" : jobActive ? "Humanizer running" : `Run ${selectedIds.length || 0} account${selectedIds.length === 1 ? "" : "s"}`}
             </Button>
           </div>
         </footer>
       </section>
 
+      {jobRefreshError ? <div className="app-panel-soft flex flex-wrap items-center justify-between gap-3 p-4" role="alert">
+        <span className="text-sm text-[var(--app-muted)]">Run status could not be refreshed. {jobRefreshError} {jobActive ? "Automatic retry is active; the last known results are shown." : "Refresh the run status before starting."}</span>
+        <Button type="button" variant="secondary" size="sm" disabled={jobLoading} onClick={() => void refreshLatestJob()}><RefreshCw className={`h-4 w-4 ${jobLoading ? "animate-spin" : ""}`} />Refresh run status</Button>
+      </div> : null}
+
       {job ? (
         <section className="app-panel humanizer-run-panel">
-          <header className="humanizer-run-head">
-            <div className="onliner-section-heading">
-              <span className="onliner-section-icon" aria-hidden="true">{jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <BadgeCheck className="h-4 w-4" />}</span>
-              <span><strong>{jobActive ? "Updating account profiles" : "Latest run completed"}</strong><small>{jobActive ? "Results update live as each account finishes." : "Review every applied change and account requiring attention."}</small></span>
-            </div>
-            <div className="humanizer-run-outcome" data-state={jobActive ? "running" : job.failed ? "attention" : "success"} role="status">
-              <span className="humanizer-run-outcome-icon" aria-hidden="true">
-                {jobActive ? <LoaderCircle className="h-4 w-4 animate-spin" /> : job.failed ? <CircleAlert className="h-4 w-4" /> : <Check className="h-4 w-4" />}
-              </span>
-              <span className="humanizer-run-outcome-copy">
-                <strong>{jobActive ? "Run in progress" : job.failed ? "Completed with attention" : "All updates complete"}</strong>
-                <small>
-                  {jobActive
-                    ? `${job.completed} of ${job.total} processed · ${progress}%`
-                    : job.failed
-                      ? `${job.succeeded} successful · ${job.failed} need review`
-                      : `${job.succeeded} account${job.succeeded === 1 ? "" : "s"} updated successfully`}
-                </small>
-              </span>
-            </div>
-          </header>
+          <HumanizerRunHeader job={job} stopping={stopping} onStop={() => void handleStop()} />
           <div className="humanizer-run-body">
-          <div className="humanizer-progress"><span style={{ width: `${progress}%` }} /></div>
+          <div className="humanizer-progress" role="progressbar" aria-label="Humanizer progress" aria-valuemin={0} aria-valuemax={job.total} aria-valuenow={job.completed}><span style={{ width: `${progress}%` }} /></div>
+          {job.error ? <p className="mt-3 text-sm text-[var(--app-danger)]" role="alert">{job.error}</p> : null}
           {job.skipped?.length ? (
             <div className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--app-danger)_8%,transparent)] px-4 py-3 text-xs leading-5 text-[var(--app-text-secondary)]">
               <strong className="text-[var(--app-danger)]">{job.skipped.length} account skipped before start.</strong>{" "}
               {job.skipped.slice(0, 3).join(" · ")}{job.skipped.length > 3 ? ` · +${job.skipped.length - 3} more` : ""}
             </div>
           ) : null}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <FilterDropdown label="Run results" value={resultFilter} onChange={setResultFilter} options={[
+              { value: "all", label: `All results (${job.results.length})` },
+              { value: "attention", label: `Needs review (${job.results.filter((result) => ["failed", "partial"].includes(result.state)).length})` },
+              { value: "success", label: `Successful (${job.succeeded})` },
+              { value: "cancelled", label: `Not started (${jobCancelled})` }
+            ]} />
+            {!jobActive ? <div className="flex flex-wrap items-center gap-2">
+              {job.failed > 0 ? <Button type="button" variant="secondary" size="sm" disabled={starting} onClick={() => selectRunAccounts(["failed", "partial"])}>Select failed accounts</Button> : null}
+              {jobCancelled > 0 ? <Button type="button" variant="secondary" size="sm" disabled={starting} onClick={() => selectRunAccounts(["cancelled"])}>Select unprocessed accounts</Button> : null}
+            </div> : null}
+          </div>
           <div className="humanizer-results mt-4">
-            <PaginatedList key={job.id} items={job.results} label="Profile result pages">{(pageItems) => (<>
+            {!filteredResults.length ? <p className="py-6 text-center text-sm text-[var(--app-muted)]">No accounts match this result filter.</p> : null}
+            <PaginatedList key={`${job.id}:${resultFilter}`} items={filteredResults} label="Profile result pages">{(pageItems) => (<>
             {pageItems.map((result) => (
               <div key={result.id} className="humanizer-result-row">
                 <span className={`humanizer-result-state is-${result.state}`}>
-                  {result.state === "running" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : result.state === "success" ? <Check className="h-4 w-4" /> : result.state === "pending" ? <span /> : <CircleAlert className="h-4 w-4" />}
+                  {result.state === "running" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : result.state === "success" ? <Check className="h-4 w-4" /> : result.state === "pending" || result.state === "cancelled" ? <span /> : <CircleAlert className="h-4 w-4" />}
                 </span>
                 <span className="min-w-0 flex-1">
                   <strong className="block truncate text-sm">{result.displayName || result.username}</strong>
                   <small className="mt-1 block text-[11px] leading-4 text-[var(--app-muted)]">
-                    {result.error || (result.changed.length
+                    {result.changed.length
                       ? `${result.changed.join(" · ")}${result.gatewayFallback ? " · Onliner Gateway session used" : ""}`
-                      : result.state === "pending" ? "Waiting" : "No changes reported")}
+                      : result.state === "cancelled" ? "Not started — run stopped" : result.state === "running" ? "Updating profile…" : result.state === "pending" ? "Waiting" : "No changes reported"}
                   </small>
+                  {result.error ? <small className="mt-1 block text-[11px] leading-4 text-[var(--app-danger)]">{result.error}</small> : null}
                 </span>
-                <Badge variant={result.state === "success" ? "success" : result.state === "failed" || result.state === "partial" ? "destructive" : "secondary"}>{result.state}</Badge>
+                <Badge variant={result.state === "success" ? "success" : result.state === "failed" || result.state === "partial" ? "destructive" : "secondary"}>{result.state === "cancelled" ? "Not started" : result.state}</Badge>
               </div>
             ))}
             </>)}</PaginatedList>

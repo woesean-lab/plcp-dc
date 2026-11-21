@@ -2,6 +2,7 @@ import type { TrackedOrder } from "../types";
 import { isBoostService } from "./services";
 import { getOrderPeriod } from "./order-period";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
+import { isCommunityDeliverySettled } from "../../shared/community-delivery-state.mjs";
 
 export type OrdersFilters = { search: string; service: string; status: string; period: string; sort: string };
 export const EMPTY_ORDERS_FILTERS: OrdersFilters = { search: "", service: "all", status: "all", period: "all", sort: "newest" };
@@ -34,7 +35,7 @@ export function hasFailedLeave(order: TrackedOrder) {
 }
 
 export function canStartOrderLeave(order: TrackedOrder, now: number) {
-  if (order.provider !== "community" || order.autoLeaveJob || order.membersLeftAt) return false;
+  if (order.provider !== "community" || !isCommunityDeliverySettled(order) || order.autoLeaveJob || order.membersLeftAt) return false;
   if (typeof order.autoLeaveCandidateCount === "number") return order.autoLeaveCandidateCount > 0;
   const expired = getOrderPeriod(order, now).state === "expired";
   if (!order.communityResults?.length) return expired && Number(order.added) > 0;

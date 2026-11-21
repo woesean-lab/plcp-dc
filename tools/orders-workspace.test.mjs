@@ -77,3 +77,15 @@ test("leave eligibility respects separate support portions after both categories
   order.communityResults.push({ categoryId: "online", allocationId: "expired", state: "joined" });
   assert.equal(canStartOrderLeave(order, now), true);
 });
+
+
+test("Leave all stays disabled while delivery or replacement is active, even with expired candidates", () => {
+  for (const status of ["PROCESS", "RECOVERING", "WAITING", "PAUSED", "NEW"]) {
+    assert.equal(canStartOrderLeave({ ...orders[0], status, autoLeaveCandidateCount: 3 }, now), false, status);
+  }
+  for (const state of ["queued", "joining", "replacing"]) {
+    assert.equal(canStartOrderLeave({ ...orders[0], status: "PARTIAL", autoLeaveCandidateCount: 3, communityResults: [{ state: "joined" }, { state }] }, now), false, state);
+  }
+  assert.equal(canStartOrderLeave({ ...orders[0], autoLeaveCandidateCount: 0 }, now), false, "compact orders cannot expose a leave action for in-flight results");
+  assert.equal(canStartOrderLeave({ ...orders[0], autoLeaveCandidateCount: 3 }, now), true);
+});

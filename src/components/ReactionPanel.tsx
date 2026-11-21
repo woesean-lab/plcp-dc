@@ -1,7 +1,6 @@
 import { PaginatedList } from "./ListPagination";
 import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
-import type { Categories, CategoryConfig, EmojiClickData, EmojiStyle, Theme } from "emoji-picker-react";
 import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, Settings2, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
@@ -11,17 +10,7 @@ import { getPopoverPlacement } from "../lib/popover-placement";
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
 const DISCORD_POPULAR_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "💯", "✅", "👀", "😭", "🤣", "😍", "🙏", "💀", "🥰", "😎", "🤔", "👎", "😢", "🚀", "🤝"];
-const EMOJI_PICKER_CATEGORIES: CategoryConfig[] = [
-  { category: "smileys_people" as Categories, name: "Smileys & People" },
-  { category: "animals_nature" as Categories, name: "Animals & Nature" },
-  { category: "food_drink" as Categories, name: "Food & Drink" },
-  { category: "travel_places" as Categories, name: "Travel & Places" },
-  { category: "activities" as Categories, name: "Activities" },
-  { category: "objects" as Categories, name: "Objects" },
-  { category: "symbols" as Categories, name: "Symbols" },
-  { category: "flags" as Categories, name: "Flags" }
-];
-const EmojiPicker = lazy(() => import("emoji-picker-react"));
+const EmojiPicker = lazy(() => import("./VirtualReactionEmojiPicker"));
 
 function formatReactionEmoji(value: string) {
   const customEmoji = value.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
@@ -36,10 +25,6 @@ function parseDiscordEmojiId(value: string) {
   const input = value.trim();
   if (/^\d{16,22}$/.test(input)) return input;
   return input.match(/(?:cdn|media)\.discordapp\.(?:com|net)\/emojis\/(\d{16,22})(?:\.[a-z0-9]+)?(?:\?.*)?$/i)?.[1] ?? null;
-}
-
-function findEmojiInSearch(value: string) {
-  return value.match(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic}\uFE0F?)*/u)?.[0] ?? "";
 }
 
 export type ReactionPanelRequest = {
@@ -154,11 +139,9 @@ export function ReactionPanel({
   const [emojiPopoverLayout, setEmojiPopoverLayout] = useState<{ placement: "top" | "bottom"; maxHeight?: number }>({ placement: "bottom" });
   const [emojiPickerMounted, setEmojiPickerMounted] = useState(false);
   const [emojiPickerContentVisible, setEmojiPickerContentVisible] = useState(false);
-  const [emojiSearchMatch, setEmojiSearchMatch] = useState("");
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiPopoverRef = useRef<HTMLDivElement>(null);
-  const emojiPickerStageRef = useRef<HTMLDivElement>(null);
   const assigned = Math.max(0, used ?? limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const requestAmountLimit = Math.max(1, remaining);
@@ -229,29 +212,6 @@ export function ReactionPanel({
     return () => window.clearTimeout(timer);
   }, [emojiPickerMounted, emojiPickerOpen]);
 
-  useEffect(() => {
-    const stage = emojiPickerStageRef.current;
-    if (!stage || !emojiPickerContentVisible) return undefined;
-    const syncSearchValue = (event: Event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLInputElement) || !target.closest(".epr-search-container")) return;
-      setEmojiSearchMatch(findEmojiInSearch(target.value));
-    };
-    const handleClearSearch = (event: Event) => {
-      const target = event.target;
-      if (target instanceof Element && target.closest(".epr-btn-clear-search")) setEmojiSearchMatch("");
-    };
-    stage.addEventListener("input", syncSearchValue, true);
-    stage.addEventListener("change", syncSearchValue, true);
-    stage.addEventListener("keyup", syncSearchValue, true);
-    stage.addEventListener("click", handleClearSearch, true);
-    return () => {
-      stage.removeEventListener("input", syncSearchValue, true);
-      stage.removeEventListener("change", syncSearchValue, true);
-      stage.removeEventListener("keyup", syncSearchValue, true);
-      stage.removeEventListener("click", handleClearSearch, true);
-    };
-  }, [emojiPickerContentVisible]);
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -269,12 +229,6 @@ export function ReactionPanel({
     onEmojiSelectionChange(next.length ? next : [REACTION_MIXED_VALUE]);
   }
 
-  function selectSearchedEmoji(emoji: string) {
-    toggleEmoji(emoji);
-    emojiPickerStageRef.current?.querySelector<HTMLButtonElement>(".epr-btn-clear-search")?.click();
-    setEmojiSearchMatch("");
-    setEmojiPickerOpen(false);
-  }
 
   function addCustomEmoji() {
     const emojiId = parseDiscordEmojiId(customEmojiUrlDraft);
@@ -480,8 +434,8 @@ export function ReactionPanel({
                 className="monitor-reaction-emoji-trigger"
                 aria-expanded={emojiPickerOpen}
                 aria-controls={`${titleId}-emoji-picker`}
-                onPointerEnter={() => void import("emoji-picker-react")}
-                onFocus={() => void import("emoji-picker-react")}
+                onPointerEnter={() => void import("./VirtualReactionEmojiPicker")}
+                onFocus={() => void import("./VirtualReactionEmojiPicker")}
                 onClick={() => {
                   if (!emojiPickerOpen) setEmojiPickerMounted(true);
                   setEmojiPickerOpen((current) => !current);
@@ -551,7 +505,6 @@ export function ReactionPanel({
                 </div>
                 <div
                   className="monitor-reaction-emoji-picker-stage"
-                  ref={emojiPickerStageRef}
                 >
                   {!emojiPickerContentVisible ? (
                     <div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis">
@@ -561,25 +514,10 @@ export function ReactionPanel({
                     </div>
                   ) : null}
                   {emojiPickerMounted && emojiPickerContentVisible ? <Suspense fallback={<div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis"><span className="monitor-reaction-emoji-loading-search" /><span className="monitor-reaction-emoji-loading-title" /><span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span></div>}><EmojiPicker
-                      theme={"dark" as Theme}
-                      emojiStyle={"native" as EmojiStyle}
-                      width="100%"
-                      height={280}
-                      lazyLoadEmojis
-                      skinTonesDisabled
-                      searchPlaceHolder="Search by name or paste an emoji"
-                      categories={EMOJI_PICKER_CATEGORIES}
-                      previewConfig={{ showPreview: false }}
-                      onEmojiClick={({ emoji }: EmojiClickData) => toggleEmoji(emoji)}
+                      selectedEmojis={selectedEmojis}
+                      onSelect={toggleEmoji}
                     /></Suspense> : null}
-                  {emojiSearchMatch ? (
-                    <div className="monitor-reaction-emoji-direct-result">
-                      <small>Search result</small>
-                      <button type="button" onClick={() => selectSearchedEmoji(emojiSearchMatch)} aria-label={`Select ${emojiSearchMatch}`}>
-                        <span>{emojiSearchMatch}</span>
-                      </button>
-                    </div>
-                  ) : null}
+
                 </div>
               </div>
             </div>

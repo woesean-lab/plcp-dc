@@ -12,6 +12,7 @@ import { extractBotInvite, extractBotInviteFromError, getPlainDetails } from "..
 import { cancelCommunityOrder, cancelDcordBoostOrder, checkCommunityOrderMembers, extendCommunityOrderSupport, getCommunityOrderMemberCheckProgress, getOrderStatus, leaveAllCommunityOrderMembers, pauseCommunityOrder, pauseDcordBoostOrder, rejoinDcordBoostOrder, replaceAllCommunityMembers, replaceDcordBoostToken, restartCommunityOrder, retryFailedCommunityMembers, resumeCommunityOrder, resumeDcordBoostOrder, updateOrderDelay, type CommunityMemberCheckProgress } from "../lib/integration";
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
+import { isCommunityDeliverySettled } from "../../shared/community-delivery-state.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
@@ -504,6 +505,12 @@ export default function OrderPage() {
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed").length;
+  const canLeaveAllCommunityMembers = isCommunityProvider && isCommunityDeliverySettled(result)
+    && communityMembersStillInServerCount > 0 && !leavingAllCommunityMembers && !checkingCommunityMembers
+    && !autoLeaveRunning && !replacingAllCommunityMembers && !retryingFailedCommunityMembers;
+  const leaveAllUnavailableReason = !isCommunityDeliverySettled(result)
+    ? "Wait for member delivery and replacements to finish before using Leave all."
+    : "Wait for the current member operation to finish.";
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
   const failedCommunityMemberCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "failed").length;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
@@ -998,7 +1005,7 @@ export default function OrderPage() {
 
   async function handleLeaveAllCommunityMembers() {
     const target = String(result?.uniqid ?? uniqid).trim();
-    if (!target || leavingAllCommunityMembers) return;
+    if (!target || !canLeaveAllCommunityMembers) return;
     try {
       setLeavingAllCommunityMembers(true);
       const data = await leaveAllCommunityOrderMembers(target);
@@ -1554,7 +1561,7 @@ export default function OrderPage() {
                 </div>
                 <div className="public-secure-mark max-w-full flex-wrap gap-2">
                   {communityMembersStillInServerCount > 0 ? (
-                    <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || autoLeaveRunning}>
+                    <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => { if (canLeaveAllCommunityMembers) setShowLeaveAllCommunityModal(true); }} disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined}>
                       <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                       {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
                     </Button>
@@ -1726,7 +1733,7 @@ export default function OrderPage() {
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={leavingAllCommunityMembers} onClick={() => setShowLeaveAllCommunityModal(false)}>Cancel</Button>
-              <Button type="button" variant="destructive" disabled={leavingAllCommunityMembers} onClick={() => void handleLeaveAllCommunityMembers()}>
+              <Button type="button" variant="destructive" disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined} onClick={() => void handleLeaveAllCommunityMembers()}>
                 <LogOut className={`h-4 w-4 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                 {leavingAllCommunityMembers ? "Leaving..." : "Yes, leave all"}
               </Button>

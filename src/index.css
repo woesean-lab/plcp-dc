@@ -8165,7 +8165,7 @@
 .monitor-reaction-custom-emoji > span { display: block; padding: 0 7px 6px; color: var(--app-muted); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
 .monitor-reaction-custom-emoji > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; }
 .monitor-reaction-custom-emoji input { width: 100%; height: 40px; min-width: 0; border: 1px solid var(--app-border); border-radius: 11px; outline: 0; padding: 0 .9rem; color: var(--app-text); background: var(--app-input-bg); font-family: inherit; font-size: 11px; font-weight: 450; font-variant-numeric: tabular-nums; transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease; }
-.monitor-reaction-custom-emoji input::placeholder, .monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input::placeholder { color: var(--app-placeholder) !important; opacity: 1; }
+.monitor-reaction-custom-emoji input::placeholder, .reaction-emoji-search .ui-input::placeholder { color: var(--app-placeholder) !important; opacity: 1; }
 .monitor-reaction-custom-emoji input:focus-visible { border-color: var(--app-accent); background: var(--app-input-focus-bg); box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0,0,0,.08); }
 .monitor-reaction-custom-emoji button { display: inline-flex; height: 34px; align-items: center; gap: 6px; border: 1px solid var(--app-border); border-radius: 9px; padding: 0 11px; color: var(--app-text-secondary); background: var(--app-control-bg); box-shadow: inset 0 1px 0 rgba(255,255,255,.025); cursor: pointer; font-family: inherit; font-size: 10px; font-weight: 700; transition: border-color .16s ease, background-color .16s ease, color .16s ease, box-shadow .16s ease; }
 .monitor-reaction-custom-emoji button:hover:not(:disabled) { border-color: rgba(152,135,255,.32); color: var(--app-text); background: rgba(139,112,255,.08); box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 0 0 2px rgba(139,112,255,.045); }
@@ -8186,21 +8186,23 @@
 .monitor-reaction-emoji-loading-search, .monitor-reaction-emoji-loading-title, .monitor-reaction-emoji-loading-grid i { background: linear-gradient(100deg, var(--app-skeleton) 22%, var(--app-skeleton-highlight) 42%, var(--app-skeleton) 62%); background-size: 220% 100%; animation: app-shimmer 1.45s ease-in-out infinite; }
 .monitor-reaction-emoji-loading-grid i:nth-child(3n) { animation-delay: .1s; }
 .monitor-reaction-emoji-loading-grid i:nth-child(4n) { animation-delay: .18s; }
-.monitor-reaction-emoji-popover .EmojiPickerReact { --epr-bg-color: rgba(10,11,22,.99); --epr-category-label-bg-color: rgba(10,11,22,.96); --epr-picker-border-color: transparent; --epr-hover-bg-color: rgba(139,112,255,.09); --epr-hover-bg-color-reduced-opacity: rgba(139,112,255,.055); --epr-emoji-hover-color: rgba(139,112,255,.09); --epr-search-input-bg-color: rgba(255,255,255,.035); --epr-search-input-bg-color-active: rgba(255,255,255,.045); border: 0 !important; border-radius: 0 !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-category-nav { display: none !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input { height: 40px !important; border: 1px solid var(--app-border) !important; border-radius: 11px !important; padding: 0 .9rem !important; color: var(--app-text) !important; background: var(--app-input-bg) !important; font-family: inherit !important; font-size: 11px !important; font-weight: 450 !important; font-variant-numeric: tabular-nums; box-shadow: none !important; transition: border-color .15s ease, box-shadow .15s ease, background-color .15s ease !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input:focus { border-color: var(--app-accent) !important; background: var(--app-input-focus-bg) !important; box-shadow: 0 0 0 4px var(--app-accent-soft), inset 0 1px 3px rgba(0,0,0,.08) !important; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-icn-search, .monitor-reaction-emoji-popover .EmojiPickerReact .epr-btn-clear-search { display: none !important; }
+.reaction-emoji-browser { display: flex; height: 100%; min-height: 0; flex-direction: column; color: var(--app-text); }
+.reaction-emoji-search { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px; height: 58px; flex: 0 0 58px; padding: 9px; }
+.reaction-emoji-search .ui-input { width: 100%; min-width: 0; height: 40px; font-family: var(--app-font-family); font-size: 11px; font-weight: 450; }
+.reaction-emoji-search .ui-input::-webkit-search-cancel-button { display: none; }
 .monitor-reaction-custom-emoji input,
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input,
 .monitor-reaction-custom-emoji input::placeholder,
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-search-container input::placeholder { font-family: var(--app-font-family) !important; font-size: 11px !important; font-weight: 450 !important; line-height: 1.4 !important; letter-spacing: normal !important; }
-.monitor-reaction-emoji-direct-result { position: absolute; z-index: 4; inset: 58px 0 0; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 0 9px 13px; background: rgb(10,11,22); }
-.monitor-reaction-emoji-direct-result > small { display: block; width: 100%; height: 24px; padding: 8px 7px 0; color: var(--app-muted); font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif; font-size: 9px; font-weight: 750; letter-spacing: .045em; line-height: 1; text-transform: uppercase; }
-.monitor-reaction-emoji-direct-result button { display: grid; width: 42px; height: 42px; place-items: center; border: 0; border-radius: 9px; outline: 0; padding: 0; color: var(--app-text); background: transparent; cursor: pointer; font-family: inherit; }
-.monitor-reaction-emoji-direct-result button:hover { background: rgba(139,112,255,.07); }
-.monitor-reaction-emoji-direct-result button > span { font-size: 25px; line-height: 1; }
-.monitor-reaction-emoji-popover .EmojiPickerReact .epr-emoji-category-label { color: var(--app-muted) !important; font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif !important; font-size: 9px !important; font-weight: 750 !important; letter-spacing: .045em !important; line-height: 1 !important; text-transform: uppercase; }
+.reaction-emoji-search .ui-input,
+.reaction-emoji-search .ui-input::placeholder { font-family: var(--app-font-family); font-size: 11px; font-weight: 450; line-height: 1.4; letter-spacing: normal; }
+.reaction-emoji-scroll { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; padding-inline: 9px; scrollbar-gutter: stable; }
+.reaction-emoji-window { position: relative; }
+.reaction-emoji-window-row { position: absolute; inset-inline: 0; display: grid; align-items: center; }
+.reaction-emoji-window-row h3 { grid-column: 1 / -1; margin: 0; padding-inline: 6px; color: var(--app-muted); font-family: var(--app-font-family); font-size: 9px; font-weight: 750; letter-spacing: .045em; text-transform: uppercase; }
+.reaction-emoji-window-row button { display: grid; place-items: center; width: 100%; height: 36px; border: 1px solid transparent; border-radius: 8px; padding: 0; color: var(--app-text); background: transparent; cursor: pointer; font-size: 24px; line-height: 1; }
+.reaction-emoji-window-row button:hover { background: var(--app-accent-soft); }
+.reaction-emoji-window-row button[aria-pressed="true"] { border-color: var(--app-accent-border); background: var(--app-accent-soft); }
+.reaction-emoji-window-row button:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.reaction-emoji-empty { padding: 18px 6px; color: var(--app-muted); font-size: 11px; text-align: center; }
 .monitor-reaction-form .monitor-reaction-submit {
   grid-column: 5;
   grid-row: 1;
@@ -11867,6 +11869,9 @@
 
 .humanizer-run-panel { overflow: hidden; }
 .humanizer-run-head { border-bottom: 1px solid var(--app-divider); padding: 16px 20px; }
+.humanizer-run-actions { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+.humanizer-run-head > .onliner-section-heading { min-width: 0; }
+.humanizer-run-head { flex-wrap: wrap; }
 .humanizer-run-outcome {
   display: flex;
   min-width: 230px;
@@ -11978,7 +11983,8 @@
   .humanizer-command-actions { display: grid; grid-template-columns: auto minmax(0, 1fr); }
   .humanizer-command-actions .ui-button { width: 100%; }
   .humanizer-run-head { align-items: flex-start; flex-direction: column; padding: 15px; }
-  .humanizer-run-outcome { width: 100%; min-width: 0; }
+  .humanizer-run-actions { width: 100%; justify-content: flex-start; }
+  .humanizer-run-outcome { flex: 1 1 200px; min-width: 0; }
   .humanizer-run-body { padding: 15px; }
 }
 
@@ -12022,7 +12028,7 @@
   .monitor-reaction-emoji-picker[data-open="true"] .monitor-reaction-emoji-popover,
   .monitor-reaction-panel.is-workspace .monitor-reaction-emoji-picker[data-open="true"] .monitor-reaction-emoji-popover { transform: translateY(0) scale(1); }
   .monitor-reaction-emoji-selection { min-height: 54px; max-height: 138px; padding: 10px; }
-  .monitor-reaction-emoji-popover .EmojiPickerReact { height: min(280px, calc(100dvh - 270px)) !important; min-height: 170px; }
+  .monitor-reaction-emoji-picker-stage { height: min(280px, calc(100dvh - 270px)); min-height: 170px; }
   .monitor-reaction-form .ui-button { width: 100%; }
   .lookup-reaction-limit-shortcut { margin-right: 12px; margin-left: 12px; }
   .monitor-reaction-allowance-complete,

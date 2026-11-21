@@ -1,3 +1,5 @@
+import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
+
 export function publicLeaveAllCategoryIds(order) {
   const primary = order?.categoryId || order?.stockType || (order?.service === "COMMUNITY-ONLINE" ? "online" : "offline");
   return [...new Set([primary,
@@ -35,10 +37,9 @@ export function canPublicLeaveAll(order) {
   return order?.provider === "community"
     && order.publicLeaveAllEnabled === true
     && !hasCommunityLeaveAllStarted(order)
-    && ["COMPLETED", "PARTIAL", "ERROR", "TERMINATED", "CANCELLED", "CANCELED"].includes(String(order.status ?? "").toUpperCase())
+    && isCommunityDeliverySettled(order)
     && /^\d{16,22}$/.test(String(order.serverId ?? ""))
     && Array.isArray(order.communityResults)
-    && !order.communityResults.some((item) => ["joining", "replacing", "queued"].includes(String(item?.state ?? "").toLowerCase()))
     && order.communityResults.some((item) => item?.state === "joined" && item.membershipStatus !== "removed" && /^\d{16,22}$/.test(String(item.discordUserId ?? "")));
 }
 

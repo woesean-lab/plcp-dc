@@ -14,6 +14,8 @@ import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
+import type { HumanizerJob } from "../lib/humanizer";
 import type { CommunityMemberResult } from "../types";
 import "../components/OrdersWorkspace.css";
 import "./UiKitPage.css";
@@ -25,7 +27,7 @@ const SECTIONS = [
   { id: "badges", title: "Status badges", tags: "active inactive onliner presence servers" },
   { id: "panels", title: "Cards & surfaces", tags: "panel card background" },
   { id: "lists", title: "Lists & pagination", tags: "members stock select rows per page back next" },
-  { id: "feedback", title: "Alerts & feedback", tags: "warning danger progress loading skeleton empty reaction daily monitor" },
+  { id: "feedback", title: "Alerts & feedback", tags: "warning danger progress loading skeleton empty reaction daily monitor humanizer stop run stopping stopped" },
   { id: "overlays", title: "Dialogs & tooltips", tags: "modal confirmation help popup" },
   { id: "tokens", title: "Colors & typography", tags: "theme text accent border variables" }
 ] as const;
@@ -92,6 +94,12 @@ const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
 
 function MemberDeliveryExample() {
   return <div className="grid gap-2">{MEMBER_DELIVERY_SAMPLES.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</div>;
+}
+
+function HumanizerRunExample() {
+  const [status, setStatus] = useState<HumanizerJob["status"]>("running");
+  const sample: HumanizerJob = { id: "sample-run", status, createdAt: "2026-11-22T00:00:00Z", startedAt: "2026-11-22T00:00:00Z", completedAt: null, total: 10, completed: 4, succeeded: 3, failed: 1, cancelled: status === "running" ? 0 : 6, skipped: [], results: [] };
+  return <div className="grid gap-3"><div className="app-panel humanizer-run-panel"><HumanizerRunHeader job={sample} onStop={() => setStatus("stopping")} /></div><div className="ui-ref-row"><Button size="sm" variant="secondary" onClick={() => setStatus("stopped")}>Finish active accounts</Button><Button size="sm" variant="secondary" onClick={() => setStatus("failed")}>Preview failed run</Button><Button size="sm" variant="secondary" onClick={() => setStatus("running")}>Reset sample</Button></div></div>;
 }
 
 function MembersList() {
@@ -196,8 +204,8 @@ export default function UiKitPage() {
           <Example title="Members Stock actions" source="src/pages/HomePage.tsx · community-member-row-actions" code={'<span className="community-member-row-actions">\n  <Button size="icon-sm" variant="secondary" className="community-rich-presence-action" aria-label="Rich Presence">\n    <Star className="h-3.5 w-3.5 fill-current" />\n  </Button>\n  <Button size="icon-sm" variant="dangerGhost" aria-label="Disconnect"><Power className="h-3.5 w-3.5" /></Button>\n  <Button size="icon-sm" variant="dangerGhost" aria-label="Delete"><Trash2 className="h-3.5 w-3.5" /></Button>\n</span>'}>
             <div className="ui-ref-row"><StockActions /><Button asChild variant="secondary" size="icon-sm"><a href="#buttons" aria-label="Open example" title="Open example"><ExternalLink className="h-3.5 w-3.5" /></a></Button><span className="ui-ref-hint">Try hover, keyboard focus and the star / power toggles.</span></div>
           </Example>
-          <Example title="Leave all action states" source="src/components/AutoLeaveActionButton.tsx" code={'// Place after the standard row actions, with space between the groups.\n<AutoLeaveActionButton state="not-started" disabled={!canStart} onStart={openConfirmation} />\n<AutoLeaveActionButton state="running" details="10/200 processed" />\n<AutoLeaveActionButton state="completed" />\n<AutoLeaveActionButton state="failed" details="3 failed" />'}>
-            <div className="ui-ref-row">{([{ state: "not-started", label: "Not started" }, { state: "starting", label: "Starting" }, { state: "running", label: "In progress" }, { state: "completed", label: "Finished" }, { state: "failed", label: "Finished with errors" }] as const).map(({ state, label }) => <div className="ui-ref-row" key={state}><AutoLeaveActionButton state={state} onStart={previewClick} /><span className="ui-ref-hint">{label}</span></div>)}</div>
+          <Example title="Leave all action states" source="src/components/AutoLeaveActionButton.tsx" code={'// Place after the standard row actions, with space between the groups.\n<AutoLeaveActionButton state="not-started" disabled={!canStart || !deliverySettled} onStart={openConfirmation} />\n<AutoLeaveActionButton state="running" details="10/200 processed" />\n<AutoLeaveActionButton state="completed" />\n<AutoLeaveActionButton state="failed" details="3 failed" />'}>
+            <div className="ui-ref-row"><div className="ui-ref-row"><AutoLeaveActionButton state="not-started" disabled details="Delivery in progress" /><span className="ui-ref-hint">Delivery in progress</span></div>{([{ state: "not-started", label: "Not started" }, { state: "starting", label: "Starting" }, { state: "running", label: "In progress" }, { state: "completed", label: "Finished" }, { state: "failed", label: "Finished with errors" }] as const).map(({ state, label }) => <div className="ui-ref-row" key={state}><AutoLeaveActionButton state={state} onStart={previewClick} /><span className="ui-ref-hint">{label}</span></div>)}</div>
           </Example>
         </Section> : null}
 
@@ -249,11 +257,12 @@ export default function UiKitPage() {
         {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>
           <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// With reactions, both cards share the row equally.\n<div className="monitor-order-controls is-paired">\n  {delayPanel}{reactionPanel}\n</div>\n// Both layouts use full-width cards below 900px.'}><MonitorControlsExample /></Example>
-          <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.'}><ReactionExample /></Example>
+          <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.\n// Open the emoji picker and scroll: only visible rows mount; search covers all emojis.'}><ReactionExample /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
           </Example>
           <Example title="Expired support notice" source="src/index.css · monitor-expired-support-note" code={'<div className="monitor-expired-support-note">\n  <Timer className="h-4 w-4" aria-hidden="true" />\n  <strong>Support period expired</strong>\n  <p>Member checks are no longer available for this order.</p>\n</div>'}><div className="monitor-expired-support-note"><Timer className="h-4 w-4" aria-hidden="true" /><strong>Support period expired</strong><p>Member checks are no longer available for this order.</p></div></Example>
+          <Example title="Humanizer run controls" source="src/components/HumanizerRunHeader.tsx" code={'<HumanizerRunHeader job={job} stopping={requestPending} onStop={stopRun} />\n// Stop prevents queued accounts from starting; running accounts finish.\n// Stopping is disabled; stopped and failed are distinct terminal states.'}><HumanizerRunExample /></Example>
           <Example title="Progress & skeletons" source="src/index.css · monitor-live-progress-track · ui/skeleton.tsx" code={'<div className="monitor-live-progress-track" role="progressbar" aria-valuenow={65} aria-valuemin={0} aria-valuemax={100} aria-label="Delivery">\n  <span style={{ width: "65%" }} />\n</div>\n<Skeleton className="h-4 w-40" />\n<Skeleton className="mt-2 h-3 w-24" />'}>
             <div className="ui-ref-stack"><div className="ui-ref-row"><span className="ui-ref-hint">Delivered {progress}%</span><Button type="button" size="xs" variant="secondary" onClick={() => setProgress((current) => current >= 100 ? 0 : Math.min(100, current + 10))}><Plus className="h-3 w-3" />Advance</Button></div><div className="monitor-live-progress-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sample delivery"><span style={{ width: `${progress}%` }} /></div><div className="ui-ref-row"><Skeleton className="h-9 w-9 rounded-lg" /><div><Skeleton className="h-4 w-40" /><Skeleton className="mt-2 h-3 w-24" /></div></div></div>
           </Example>

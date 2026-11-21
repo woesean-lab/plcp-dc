@@ -23,7 +23,7 @@ export type HumanizerResult = {
   displayName: string | null;
   avatarUrl: string | null;
   categoryId: string;
-  state: "pending" | "running" | "success" | "partial" | "failed";
+  state: "pending" | "running" | "success" | "partial" | "failed" | "cancelled";
   changed: string[];
   error: string | null;
   gatewayFallback: boolean;
@@ -33,7 +33,7 @@ export type HumanizerResult = {
 
 export type HumanizerJob = {
   id: string;
-  status: "queued" | "running" | "completed" | "failed";
+  status: "queued" | "running" | "stopping" | "stopped" | "completed" | "failed";
   createdAt: string;
   startedAt: string | null;
   completedAt: string | null;
@@ -41,6 +41,10 @@ export type HumanizerJob = {
   completed: number;
   succeeded: number;
   failed: number;
+  cancelled?: number;
+  stopRequestedAt?: string | null;
+  canStop?: boolean;
+  error?: string | null;
   skipped: string[];
   results: HumanizerResult[];
 };
@@ -132,13 +136,19 @@ export function deleteHumanizerPackage(packageId: string) {
 }
 
 export function getLatestHumanizerJob() {
-  return fetch("/api/humanizer/jobs/latest", { cache: "no-store", credentials: "same-origin" })
+  return fetch("/api/humanizer/jobs/latest", { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(15_000) })
     .then(parseResponse<HumanizerJob | null>);
 }
 
 export function getHumanizerJob(jobId: string) {
-  return fetch(`/api/humanizer/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store", credentials: "same-origin" })
+  return fetch(`/api/humanizer/jobs/${encodeURIComponent(jobId)}`, { cache: "no-store", credentials: "same-origin", signal: AbortSignal.timeout(15_000) })
     .then(parseResponse<HumanizerJob>);
+}
+
+export function stopHumanizerJob(jobId: string) {
+  return fetch(`/api/humanizer/jobs/${encodeURIComponent(jobId)}/stop`, {
+    method: "POST", credentials: "same-origin", signal: AbortSignal.timeout(15_000)
+  }).then(parseResponse<HumanizerJob>);
 }
 
 export function startHumanizerJob(input: HumanizerJobInput) {
