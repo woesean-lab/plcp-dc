@@ -4874,8 +4874,8 @@ function isCommunityServiceType(service) {
   return service === "COMMUNITY-OFFLINE" || service === "COMMUNITY-ONLINE";
 }
 
-async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categoryId = null) {
-  const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
+async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId) {
+  // Discord membership belongs to the server, regardless of the stock category.
   const result = await queryable.query(
     `WITH member_history AS (
        SELECT
@@ -4903,12 +4903,6 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
        ) AS member_result
        WHERE payload->>'provider' = 'community'
          AND payload->>'serverId' = $1
-         AND ($2::text IS NULL OR LOWER(COALESCE(
-           NULLIF(member_result->>'categoryId', ''),
-           NULLIF(payload->>'categoryId', ''),
-           NULLIF(payload->>'stockType', ''),
-           CASE WHEN payload->>'service' = 'COMMUNITY-ONLINE' THEN 'online' ELSE 'offline' END
-         )) = $2)
          AND LOWER(COALESCE(member_result->>'state', '')) IN ('joined', 'pending_join', 'already_member')
          AND COALESCE(member_result->>'discordUserId', '') <> ''
      )
@@ -4916,7 +4910,7 @@ async function loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, categ
      FROM member_history
      GROUP BY discord_user_id
      HAVING MAX(removed_at) < MAX(delivered_at)`,
-    [guildId, normalizedCategoryId]
+    [guildId]
   );
   return result.rows.map((row) => String(row.discord_user_id ?? "").trim()).filter(isDiscordGuildId);
 }
@@ -5003,10 +4997,9 @@ async function loadCommunityAtServerCapacityUserIds() {
     .map(([discordUserId]) => discordUserId);
 }
 
-async function loadCommunityUnavailableUserIdGroups(queryable, guildId, categoryId = null) {
-  const normalizedCategoryId = categoryId ? normalizeCommunityStockType(categoryId) : null;
+async function loadCommunityUnavailableUserIdGroups(queryable, guildId) {
   const [deliveredUserIds, activeAssignments, atServerCapacityUserIds] = await Promise.all([
-    loadCommunityPreviouslyDeliveredUserIds(queryable, guildId, normalizedCategoryId),
+    loadCommunityPreviouslyDeliveredUserIds(queryable, guildId),
     queryable.query(
     `SELECT DISTINCT member_result->>'discordUserId' AS discord_user_id
      FROM tracked_orders
@@ -5018,16 +5011,10 @@ async function loadCommunityUnavailableUserIdGroups(queryable, guildId, category
      ) AS member_result
      WHERE payload->>'provider' = 'community'
        AND payload->>'serverId' = $1
-       AND ($2::text IS NULL OR LOWER(COALESCE(
-         NULLIF(member_result->>'categoryId', ''),
-         NULLIF(payload->>'categoryId', ''),
-         NULLIF(payload->>'stockType', ''),
-         CASE WHEN payload->>'service' = 'COMMUNITY-ONLINE' THEN 'online' ELSE 'offline' END
-       )) = $2)
        AND UPPER(COALESCE(payload->>'status', '')) IN ('WAITING', 'RECOVERING', 'PROCESS', 'PAUSED', 'INVITES PAUSED')
        AND LOWER(COALESCE(member_result->>'state', '')) IN ('queued', 'joining', 'replacing')
        AND COALESCE(member_result->>'discordUserId', '') <> ''`,
-      [guildId, normalizedCategoryId]
+      [guildId]
     ),
     loadCommunityAtServerCapacityUserIds()
   ]);
@@ -5040,8 +5027,8 @@ async function loadCommunityUnavailableUserIdGroups(queryable, guildId, category
   };
 }
 
-async function loadCommunityUnavailableUserIds(queryable, guildId, categoryId = null) {
-  const groups = await loadCommunityUnavailableUserIdGroups(queryable, guildId, categoryId);
+async function loadCommunityUnavailableUserIds(queryable, guildId) {
+  const groups = await loadCommunityUnavailableUserIdGroups(queryable, guildId);
   return Array.from(new Set([
     ...groups.deliveredUserIds,
     ...groups.atServerCapacityUserIds,
@@ -11855,7 +11842,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     if (!availabilityGuildId) {
       return res.status(400).json({ message: "The Discord invite could not be resolved for this server's availability." });
     }
-    const unavailableGroups = await loadCommunityUnavailableUserIdGroups(pool, availabilityGuildId, stockType);
+    const unavailableGroups = await loadCommunityUnavailableUserIdGroups(pool, availabilityGuildId);
     const result = await pool.query(
       `SELECT discord_user_id, reserved_order_id
        FROM community_oauth_joins
@@ -11970,7 +11957,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
     const categoryAllocations = [];
     for (const allocation of requestedAllocations) {
       const category = categoriesById.get(allocation.categoryId);
-      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId, allocation.categoryId);
+      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, serverInfo.guildId);
       const selected = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
          FROM community_oauth_joins
@@ -12327,7 +12314,7 @@ async function activateWaitingCommunityOrder(order) {
       for (const [categoryId, required] of requiredByCategory) {
         const categoryMissing = Math.max(0, required - (availableByCategory.get(categoryId) ?? 0));
         if (!categoryMissing) continue;
-        const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId, categoryId);
+        const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, resolved.config.guildId);
         const categoryExcludedUserIds = Array.from(new Set([...excludedUserIds, ...previouslyDeliveredUserIds]));
         const extra = await client.query(
           `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
@@ -13896,7 +13883,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       indicesByCategory.set(categoryId, [...(indicesByCategory.get(categoryId) ?? []), resultIndex]);
     }
     for (const [categoryId, categoryIndices] of indicesByCategory) {
-      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, targetGuildId, categoryId);
+      const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, targetGuildId);
       const categoryUsedUserIds = Array.from(new Set([...usedUserIds, ...previouslyDeliveredUserIds]));
       const replacements = await client.query(
         `SELECT discord_user_id, username, avatar_url, encrypted_account_token, encrypted_access_token, encrypted_refresh_token, access_token_expires_at, stock_type AS category_id
@@ -14121,7 +14108,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       failedResult.username
     ].map((value) => String(value ?? "").trim()).filter(Boolean)));
     const failedCategoryId = getCommunityResultStockType(order, failedResult);
-    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, config.guildId, failedCategoryId);
+    const previouslyDeliveredUserIds = await loadCommunityUnavailableUserIds(client, config.guildId);
     const usedUserIds = Array.from(new Set([
       ...replacementHistoryUserIds,
       ...previouslyDeliveredUserIds,
