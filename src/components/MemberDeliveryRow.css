@@ -55,7 +55,7 @@
   padding: 0;
 }
 .monitor-token-panel .member-delivery-list,
-.lookup-token-panel.community-order-log .member-delivery-list { max-height: min(520px, 65vh); }
+.lookup-token-panel.community-order-log .member-delivery-list { max-height: min(360px, 55vh); }
 .member-delivery-list > .member-delivery-row {
   min-height: 62px;
   padding: 10px 12px;
@@ -70,3 +70,7 @@
 .member-delivery-list > .member-delivery-row:is([data-state="failed"], [data-state="blocked"]) { border-inline-start-color: var(--app-danger); }
 .member-delivery-list > .member-delivery-row:hover,
 .member-delivery-list > .member-delivery-row:focus-within { background: var(--app-hover); }
+
+.monitor-token-panel .member-check-help,
+.monitor-token-panel .member-check-help:hover,
+.monitor-token-panel .member-check-help:focus-visible { border-color: transparent; }

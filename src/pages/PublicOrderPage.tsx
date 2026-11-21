@@ -14,7 +14,7 @@ import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
-import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { OrderStatusResponse } from "../types";
 
@@ -1151,12 +1151,14 @@ export default function PublicOrderPage() {
                     ) : null}
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list humanizer-results member-delivery-list">
+                        <MemberDeliveryAccordion key={uniqid}>
                         <PaginatedList key={uniqid} items={displayedCommunityMembers} label="Member result pages">{(pageItems) => (<>
-                        {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
+                        {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} audience="public" formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
                         </>)}</PaginatedList>
+                        </MemberDeliveryAccordion>
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
-                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member authorizations are inactive. Members still in the server are not replaceable.</p> : null}
+                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} members have inactive access. Members still in the server are not replaceable.</p> : null}
                   </div>
                 ) : null}
 

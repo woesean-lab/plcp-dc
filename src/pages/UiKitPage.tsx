@@ -13,7 +13,7 @@ import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
-import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
@@ -95,7 +95,14 @@ const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
 ];
 
 function MemberDeliveryExample() {
-  return <div className="community-order-result-list humanizer-results member-delivery-list">{MEMBER_DELIVERY_SAMPLES.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</div>;
+  const [publicView, setPublicView] = useState(false);
+  return <div className="grid gap-3">
+    <div className="ui-ref-row">
+      <Button type="button" size="sm" variant={publicView ? "secondary" : "default"} aria-pressed={!publicView} onClick={() => setPublicView(false)}>Admin</Button>
+      <Button type="button" size="sm" variant={publicView ? "default" : "secondary"} aria-pressed={publicView} onClick={() => setPublicView(true)}>Monitor</Button>
+    </div>
+    <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>{MEMBER_DELIVERY_SAMPLES.map(item => <MemberDeliveryRow key={item.index} item={item} audience={publicView ? "public" : "admin"} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</MemberDeliveryAccordion></div>
+  </div>;
 }
 
 function MemberAvatarExample() {
@@ -113,7 +120,7 @@ function MemberAvatarExample() {
         <span className="text-xs text-[var(--app-muted)]">{state}</span>
       </div>)}
     </div>
-    <div className="community-order-result-list humanizer-results member-delivery-list">{members.map(item => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Now"} />)}</div>
+    <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>{members.map(item => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Now"} />)}</MemberDeliveryAccordion></div>
     <div className="ui-ref-row">
       <Button type="button" size="sm" disabled={joined} onClick={() => setJoined(true)}>Complete sample</Button>
       <Button type="button" size="sm" variant="secondary" onClick={() => setJoined(false)}>Reset sample</Button>
@@ -283,7 +290,7 @@ export default function UiKitPage() {
           </Example>
         </Section> : null}
 
-        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryRow item={member} formatTime={formatTime} />\n// Shared by admin order details and public Monitor; pass masked usernames in Monitor.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// Click anywhere on the card or use its chevron to toggle full notes; closed initially.'}><MemberDeliveryExample /></Example></Section> : null}
+        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryRow item={member} formatTime={formatTime} />\n// Monitor uses audience=\"public\" for plain labels and safe notes; usernames stay masked.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// MemberDeliveryAccordion keeps only one row open; rows start collapsed.'}><MemberDeliveryExample /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>

@@ -17,7 +17,7 @@ import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
-import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -1625,9 +1625,11 @@ export default function OrderPage() {
 
               {communityMemberResults.length ? (
                 <div className="community-order-result-list humanizer-results member-delivery-list">
+                  <MemberDeliveryAccordion key={uniqid}>
                   <PaginatedList key={uniqid} items={displayedCommunityMembers} label="Member result pages">{(pageItems) => (<>
                   {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={formatTime} />)}
                   </>)}</PaginatedList>
+                  </MemberDeliveryAccordion>
                 </div>
               ) : (
                 <p className="public-token-results-empty">Waiting for member results.</p>
