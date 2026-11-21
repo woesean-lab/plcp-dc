@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, LogOut, RadioTower, ShieldCheck, TriangleAlert } from "lucide-react";
+import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { CommunityMemberResult } from "../types";
+import { Button } from "./ui/button";
 import "./MemberDeliveryRow.css";
 
 function StatusField({ label, state, value, icon, details }: {
@@ -45,10 +46,15 @@ export function MemberDeliveryRow({ item, formatTime }: {
       </dl>
       <time dateTime={timestamp}>{timestamp ? formatTime(timestamp) : "—"}</time>
     </div>
-    <div className="member-delivery-notes">
-      <p><span>Delivery</span>{item.details}</p>
-      {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {item.reactionDetails}</p> : null}
-      {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>Auto Leave</span>{item.autoLeaveDetails}</p> : null}
-    </div>
+    <details className="member-delivery-details">
+      <Button asChild variant="ghost" size="xs">
+        <summary aria-label={`Details for ${item.username}`}><ChevronDown className="member-delivery-details-chevron h-3.5 w-3.5" aria-hidden="true" />Details</summary>
+      </Button>
+      <div className="member-delivery-notes">
+        <p><span>Delivery</span>{item.details}</p>
+        {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {item.reactionDetails}</p> : null}
+        {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>Auto Leave</span>{item.autoLeaveDetails}</p> : null}
+      </div>
+    </details>
   </article>;
 }
