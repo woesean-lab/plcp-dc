@@ -115,7 +115,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
   }
   return <section className="rotating-stock-panel" aria-label="Rotating inventory">
     <div className="boost-rotating-controls">
-      <details className="boost-rotation-help"><summary><ShieldCheck className="h-3.5 w-3.5" />Pool rules</summary><p>Each account supplies 2 boosts for a 30-day delivery, with a 3-day buffer. The 90-day subscription starts on first assignment. Accounts return automatically when eligible.</p></details>
+      <details className="boost-rotation-help"><summary><ShieldCheck className="h-3.5 w-3.5" />Pool rules</summary><p>2 boosts per account for 30 days, plus a 3-day buffer. The 90-day period starts on first use.</p></details>
       <div className="boost-pool-actions">
         <span>{availableThreeMonth} accounts available to transfer</span>
         <Button size="xs" variant="secondary" disabled={!availableThreeMonth || loading} onClick={() => { setAdding(true); setCount(1); setActionError(""); }}><ArrowRightLeft className="h-3.5 w-3.5" />Transfer from 3 month</Button>
@@ -182,7 +182,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
         <span className="confirm-modal-icon is-success" aria-hidden="true"><ArrowRightLeft className="h-5 w-5" /></span>
         <p className="app-kicker text-[var(--app-accent)]">Stock</p>
         <h2 id="rotating-dialog-title">Move from 3 month stock</h2>
-        <p id="rotating-dialog-description">Move existing accounts into rotating stock for 30-day deliveries. The 90-day period starts with the first order assignment.</p>
+        <p id="rotating-dialog-description">Moves accounts to reusable 30-day stock. The 90-day period starts on first use.</p>
         <form className="mt-5 grid gap-5" onSubmit={(event) => { event.preventDefault(); void move(); }}>
           <div className="onliner-bulk-help rotating-transfer-summary">
             <span><strong>3 month stock</strong><code>{availableThreeMonth} accounts</code></span>

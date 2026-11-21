@@ -255,7 +255,7 @@ export function ReactionPanel({
           <div>
             <span className="monitor-reaction-kicker">{workspaceSummary ? "Members-powered reactions" : "Reaction delivery"}</span>
             <h2 id={titleId}>{workspaceSummary ? "Reaction workspace" : "Message reactions"}</h2>
-            <p>{description ?? (workspaceSummary ? "Use members already delivered to this Discord server." : "Send real account reactions to a Discord message.")}</p>
+            <p>{description ?? (workspaceSummary ? "Reactions from delivered server members." : "Account reactions on a Discord message.")}</p>
           </div>
         </div>
 
@@ -280,9 +280,9 @@ export function ReactionPanel({
             <strong>{workspaceSummary ? (workspaceSummary.serverName || `Server ${workspaceSummary.guildId}`) : assigned > limit ? `${completed} reactions delivered · ${limit} daily limit` : `${completed} of ${limit} reactions delivered`}</strong>
             {!collapsible ? <p>{workspaceSummary
               ? workspaceSummary.membersCheckRequired
-                ? "Choose how many delivered members to check for reaction availability."
-                : `${eligibleMembers} online members in this server can react. ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} members have not been checked yet.` : `${remaining} reaction slots are available with the selected emojis.`}`
-              : remaining > 0 ? `${remaining} reactions are still available for new requests.` : assigned > limit && resetsAt ? "Daily limit reached. New requests are available after reset." : "The full reaction allowance has been assigned."}</p> : null}
+                ? "Checks delivered members for reaction availability."
+                : `${eligibleMembers} eligible · ${workspaceSummary.remainingUncheckedMembers > 0 ? `${workspaceSummary.remainingUncheckedMembers} unchecked` : `${remaining} available reactions`}`
+              : remaining > 0 ? `${remaining} reactions available.` : assigned > limit && resetsAt ? "Daily limit reached until reset." : "All reactions are assigned."}</p> : null}
             <span className="monitor-reaction-progress-track"><i style={{ width: `${progress}%` }} /></span>
           </div>
         </div>
@@ -375,7 +375,7 @@ export function ReactionPanel({
         <form className="monitor-reaction-form" data-locked={!requestEnabled || undefined} onSubmit={handleSubmit}>
           <div className="monitor-reaction-form-copy">
             <span className="monitor-reaction-form-icon" aria-hidden="true"><MessageSquareText /></span>
-            <div><strong>Create reaction request</strong><small>Paste a Discord message link and choose the amount.</small></div>
+            <div><strong>Create reaction request</strong><small>Message reactions from available members.</small></div>
           </div>
           <div className="boost-order-field monitor-reaction-field monitor-reaction-url-field">
             <span className="boost-order-label monitor-reaction-url-label">
@@ -531,7 +531,7 @@ export function ReactionPanel({
               <span aria-hidden="true"><LockKeyhole /></span>
               <div>
                 <strong>Reaction requests are locked</strong>
-                <small>{lockReason ?? "Waiting for member delivery. You can queue reactions as soon as the order is partially or fully delivered."}</small>
+                <small>{lockReason ?? "Reactions are available after member delivery starts."}</small>
               </div>
             </div>
           ) : null}
@@ -539,7 +539,7 @@ export function ReactionPanel({
       ) : (
         <div className="monitor-reaction-allowance-complete">
           <CheckCircle2 aria-hidden="true" />
-          <span><strong>{assigned > limit && resetsAt ? "Daily limit reached" : "Reaction allowance assigned"}</strong><small>{assigned > limit && resetsAt ? "Previous usage is kept. New requests are available after reset." : "All available reactions are already connected to requests."}</small></span>
+          <span><strong>{assigned > limit && resetsAt ? "Daily limit reached" : "Reaction allowance assigned"}</strong><small>{assigned > limit && resetsAt ? "Daily limit reached. Previous usage counts." : "All available reactions are assigned."}</small></span>
         </div>
       )}
 

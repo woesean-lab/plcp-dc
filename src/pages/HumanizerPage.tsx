@@ -453,7 +453,7 @@ export default function HumanizerPage() {
   async function handleStart() {
     if (startInFlightRef.current || jobActive || jobLoading) return;
     if (!selectedIds.length) {
-      toast.error("Select at least one eligible account.");
+      toast.error("No accounts selected.");
       return;
     }
     if (!configuredChanges) {
@@ -627,7 +627,7 @@ export default function HumanizerPage() {
         <div>
           <p className="app-kicker">Account workspace</p>
           <h1 className="page-title">Humanizer</h1>
-          <p className="app-copy page-copy">Build a profile recipe, choose eligible Members Stock accounts, and apply every update through its assigned Onliner proxy.</p>
+          <p className="app-copy page-copy">Updates account profiles through their assigned proxies.</p>
         </div>
         <div className="page-heading-meta humanizer-heading-actions">
           <Button type="button" variant="secondary" size="sm" disabled={refreshing} onClick={() => void loadCatalog(true)}>
@@ -639,7 +639,7 @@ export default function HumanizerPage() {
       <section className="app-panel humanizer-overview" aria-label="Humanizer overview">
         <div className="humanizer-overview-lead">
           <span className="humanizer-overview-icon"><Workflow className="h-5 w-5" /></span>
-          <div><small>Profile operations</small><strong>{jobActive ? "Run in progress" : "Ready to compose"}</strong><span>{jobActive ? `${progress}% complete across ${job?.total ?? 0} accounts` : "One recipe, safely distributed account by account"}</span></div>
+          <div><small>Profile operations</small><strong>{jobActive ? "Run in progress" : "Ready to compose"}</strong><span>{jobActive ? `${progress}% complete across ${job?.total ?? 0} accounts` : "Profile updates across selected accounts"}</span></div>
         </div>
         <div className="humanizer-overview-metric"><small>Available</small><strong>{catalog?.accounts.length ?? 0}</strong><span>Members Stock accounts</span></div>
         <div className="humanizer-overview-metric"><small>Selected</small><strong>{selectedIds.length}</strong><span>Queued targets</span></div>
@@ -652,7 +652,7 @@ export default function HumanizerPage() {
             <header className="humanizer-pane-head">
               <div className="onliner-section-heading">
                 <span className="onliner-section-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
-                <span><strong id="humanizer-target-title">Target accounts</strong><small>Select profiles that have both a saved user token and an assigned proxy.</small></span>
+                <span><strong id="humanizer-target-title">Target accounts</strong><small>Accounts with saved tokens and assigned proxies.</small></span>
               </div>
             <Button
               type="button"
@@ -722,7 +722,7 @@ export default function HumanizerPage() {
             <header className="humanizer-pane-head">
               <div className="onliner-section-heading">
                 <span className="onliner-section-icon" aria-hidden="true"><WandSparkles className="h-4 w-4" /></span>
-                <span><strong id="humanizer-recipe-title">Profile recipe</strong><small>Each list is distributed line-by-line across the selected accounts.</small></span>
+                <span><strong id="humanizer-recipe-title">Profile recipe</strong><small>Assigns each line to an account.</small></span>
               </div>
               <Badge variant={configuredChanges ? "default" : "outline"}>{configuredChanges} active</Badge>
             </header>
@@ -730,7 +730,7 @@ export default function HumanizerPage() {
             <div className="humanizer-package-panel">
               <div className="humanizer-package-copy">
                 <span className="humanizer-package-icon"><PackageOpen className="h-4 w-4" /></span>
-                <span><strong>Ready packages</strong><small>Save this complete recipe or restore a saved setup.</small></span>
+                <span><strong>Ready packages</strong><small>Reusable profile settings.</small></span>
                 <Badge variant={packages.length ? "secondary" : "outline"}>{packages.length}</Badge>
               </div>
               <div className="humanizer-package-controls">
@@ -780,7 +780,7 @@ export default function HumanizerPage() {
                 <span className="humanizer-option-icon" aria-hidden="true"><Sparkles className="h-4 w-4" /></span>
                 <span>
                   <strong id="humanizer-hypesquad-title">HypeSquad</strong>
-                  <small>Leave unchanged or assign a specific house across selected accounts.</small>
+                  <small>HypeSquad house for selected accounts.</small>
                 </span>
               </div>
               <FilterDropdown
@@ -851,7 +851,7 @@ export default function HumanizerPage() {
                 <div className="humanizer-avatar-empty">
                   <span><Images className="h-5 w-5" /></span>
                   <strong>No avatars in this pool yet</strong>
-                  <small>Choose one or more images; previews will stay together in this panel.</small>
+                  <small>Profile images for selected accounts.</small>
                 </div>
               )}
               </div>
@@ -862,7 +862,7 @@ export default function HumanizerPage() {
         <footer className="humanizer-commandbar">
           <div className="humanizer-command-summary">
             <span className="humanizer-command-icon"><ShieldCheck className="h-4 w-4" /></span>
-            <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "Select at least one eligible account"} · {configuredChanges ? `${configuredChanges} update field${configuredChanges === 1 ? "" : "s"} selected` : "Select at least one configured field"}</small></span>
+            <span><strong>Ready to apply</strong><small>{selectedIds.length ? `${selectedIds.length} account${selectedIds.length === 1 ? "" : "s"} selected` : "No accounts selected"} · {configuredChanges ? `${configuredChanges} update field${configuredChanges === 1 ? "" : "s"} selected` : "No updates selected"}</small></span>
           </div>
           <div className="humanizer-command-actions">
             <div className="humanizer-parallel-control">
@@ -968,9 +968,9 @@ export default function HumanizerPage() {
             <p id="humanizer-package-modal-description">
               {packageModal === "save"
                 ? packageToOverwrite
-                  ? "The saved usernames, display names, bios, pronouns, avatars and Humanizer settings in this package will be replaced with the current recipe."
-                  : "The current usernames, display names, bios, pronouns, avatars and Humanizer settings will be stored together as a reusable package."
-                : "This removes the saved package. Avatars currently loaded in the editor and your account profiles will not be changed."}
+                  ? "Replaces this package with the current profile settings."
+                  : "Saves the current profile settings as a reusable package."
+                : "Deletes this package. Account profiles stay unchanged."}
             </p>
             <div className="confirm-modal-actions">
               <Button

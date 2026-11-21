@@ -92,7 +92,7 @@ export function RotatingProxyPoolPanel({ accounts, onChange }: { accounts: Rotat
       </div>
       <div className="boost-proxy-pagination"><span aria-live="polite">{page * PROXY_PAGE_SIZE + 1}–{Math.min((page + 1) * PROXY_PAGE_SIZE, pool.proxies.length)} of {pool.proxies.length} proxies</span>{pageCount > 1 ? <div className="flex items-center gap-2"><Button type="button" variant="secondary" size="icon-sm" disabled={page === 0} aria-label="Previous proxy page" onClick={() => changePage(page - 1)}><ChevronLeft className="h-3.5 w-3.5" /></Button><span>{page + 1} / {pageCount}</span><Button type="button" variant="secondary" size="icon-sm" disabled={page + 1 >= pageCount} aria-label="Next proxy page" onClick={() => changePage(page + 1)}><ChevronRight className="h-3.5 w-3.5" /></Button></div> : null}</div>
     </div> : !loading && !error ? <div className="stock-empty-state"><Globe2 className="h-5 w-5" /><strong>No fixed proxies yet</strong><span>Paste proxies above and save to start assigning Rotating accounts.</span></div> : null}
-    <p id="rotating-proxy-help" className="app-copy text-xs">Each account keeps the same proxy across orders. Saving adds new proxies and skips duplicates; existing proxies and bindings are preserved.</p>
+    <p id="rotating-proxy-help" className="app-copy text-xs">Accounts keep their proxies across orders. New entries are added; duplicates are skipped.</p>
   </section> : null}
   </details>;
 }

@@ -1663,7 +1663,6 @@ export default function OrderPage() {
           <span className="lookup-empty-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>
           <div>
             <strong>No order selected</strong>
-            <p>Open an order from the Orders page to view its operational status.</p>
           </div>
         </div>
       )}
@@ -1678,7 +1677,7 @@ export default function OrderPage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Sparkles className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Boost Humanizer</p>
             <h2 id="humanize-all-title">Humanize all tokens</h2>
-            <p>Apply a saved package to all <strong>{dcordTokenResults.length}</strong> tokens using the proxies already assigned to this order.</p>
+            <p>Updates <strong>{dcordTokenResults.length}</strong> accounts with a saved package.</p>
             <div className="boost-humanizer-package-field">
               <span className="boost-order-label">Humanizer package</span>
               {loadingHumanizerPackages ? (
@@ -1729,7 +1728,7 @@ export default function OrderPage() {
             <p className="app-kicker text-[var(--app-danger)]">Leave server</p>
             <h2 id="leave-all-members-title">Make all members leave?</h2>
             <p id="leave-all-members-description">
-              All {communityMembersStillInServerCount} remaining accounts in this order will leave server {serverId || "-"} using their saved user tokens and assigned Onliner proxies. Accounts without a working proxy or token will be reported as failed and will never fall back to the backend IP.
+              All {communityMembersStillInServerCount} remaining accounts in this order will leave server {serverId || "-"} through their assigned proxies. Missing tokens or proxies fail.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={leavingAllCommunityMembers} onClick={() => setShowLeaveAllCommunityModal(false)}>Cancel</Button>
@@ -1753,7 +1752,7 @@ export default function OrderPage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><CalendarPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Support period</p>
             <h2 id="extend-community-title">Extend this order</h2>
-            <p>Current expiration: <strong>{formatTime(expiration ?? undefined)}</strong>. Choose how many months to add.</p>
+            <p>Current expiration: <strong>{formatTime(expiration ?? undefined)}</strong>.</p>
             <div className="lookup-extension-options" aria-label="Extension duration">
               {[1, 2, 3, 4, 5, 6].map((months) => (
                 <button
@@ -1791,8 +1790,8 @@ export default function OrderPage() {
             <h2 id="cancel-dcord-title">Return reserved tokens to stock?</h2>
             <p id="cancel-dcord-description">
               {verifyingDcordTokenCount > 0
-                ? `Dcord already received ${verifyingDcordTokenCount} token${verifyingDcordTokenCount === 1 ? "" : "s"}. The upstream request cannot be cancelled and may still finish later. The token${verifyingDcordTokenCount === 1 ? "" : "s"} will be removed from Used and force-returned to stock.`
-                : `${queuedDcordTokenCount} unsubmitted token${queuedDcordTokenCount === 1 ? "" : "s"} will return to stock and automatic delivery will stop.`}
+                ? `Returns ${verifyingDcordTokenCount} submitted token${verifyingDcordTokenCount === 1 ? "" : "s"} to stock. Dcord requests cannot be cancelled and may still complete.`
+                : `Stops delivery and returns ${queuedDcordTokenCount} queued token${queuedDcordTokenCount === 1 ? "" : "s"} to stock.`}
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={cancellingDcordOrder} onClick={() => setShowCancelDcordModal(false)}>Keep waiting</Button>
@@ -1817,7 +1816,7 @@ export default function OrderPage() {
             <p className="app-kicker text-[var(--app-danger)]">Cancel Members delivery</p>
             <h2 id="cancel-community-title">Stop this order?</h2>
             <p id="cancel-community-description">
-              Automatic delivery will stop and every reserved member will be released back to Members Stock. Members already sent—or currently being sent—to Discord cannot be removed automatically.
+              Stops delivery and returns reserved members to stock. Delivered and in-flight members may remain in the server.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={cancellingCommunityOrder} onClick={() => setShowCancelCommunityModal(false)}>Keep running</Button>

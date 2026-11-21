@@ -19,7 +19,7 @@ export function OrderReactionAccessCard({ disabled = false, dailyLimit = 0, firs
             <div className="order-reaction-access-title"><h2>Message reactions</h2><Badge variant="secondary">{disabled ? "Disabled" : configured ? "Unavailable" : "Not enabled"}</Badge></div>
           </div>
         </div>
-        {!disabled ? <p className="order-reaction-access-description">Let this order’s members react to Discord messages. Choose a daily allowance to get started.</p> : null}
+        {!disabled ? <p className="order-reaction-access-description">Allows delivered members to react to Discord messages.</p> : null}
       </div>
       <dl className="order-reaction-access-limits app-panel-soft">
         <div><dt>First-day allowance</dt><dd>{firstDayLimit > 0 ? firstDayLimit.toLocaleString("en-US") : "Order amount"}</dd></div>

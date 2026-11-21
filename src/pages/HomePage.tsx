@@ -230,28 +230,28 @@ function parseOnlinerBulkTokenLines(value: string) {
 function describeCommunityAccountError(message: string) {
   const normalized = message.toLowerCase();
   if (normalized.includes("verify your account")) {
-    return { title: "Account verification required", detail: "Open Discord and complete the account verification, then retry this token." };
+    return { title: "Account verification required", detail: "Discord account verification is incomplete." };
   }
   if (normalized.includes("rate limit")) {
-    return { title: "Discord rate limit", detail: "Wait a short while before retrying this account." };
+    return { title: "Discord rate limit", detail: "Discord temporarily limited this account." };
   }
   if (normalized.includes("rejected this account token") || normalized.includes("invalid") && normalized.includes("token")) {
-    return { title: "Token was rejected", detail: "Check whether this Discord account token is current and valid." };
+    return { title: "Token was rejected", detail: "The account token is invalid or expired." };
   }
   if (normalized.includes("proxy pool")) {
-    return { title: "No proxy available", detail: "Add an available proxy to the Onliner pool, then retry this account." };
+    return { title: "No proxy available", detail: "No available Onliner proxy." };
   }
   if (normalized.includes("up to") && normalized.includes("account profile")) {
-    return { title: "Onliner capacity reached", detail: "Remove an unused Onliner account before adding another one." };
+    return { title: "Onliner capacity reached", detail: "The Onliner account limit is reached." };
   }
   if (normalized.includes("additional verification") || normalized.includes("consent")) {
-    return { title: "Additional confirmation required", detail: "Open Discord, complete the authorization confirmation, and retry." };
+    return { title: "Additional confirmation required", detail: "Discord authorization needs confirmation." };
   }
   const detail = message
     .replace(/^Discord OAuth authorization failed \(HTTP \d+\):\s*/i, "")
     .replace(/^Discord account could not be authorized:\s*/i, "")
     .trim();
-  return { title: "Authorization failed", detail: detail || "Discord could not authorize this account. Check the token and retry." };
+  return { title: "Authorization failed", detail: detail || "Discord could not authorize this account." };
 }
 
 const COMMUNITY_SPEED_PROFILES = [
@@ -3214,7 +3214,7 @@ export default function HomePage() {
       </div>
 
       {!communityStockConfigured ? (
-        <p className="community-admin-note">Add the Discord application, bot and target server settings to activate Members Stock.</p>
+        <p className="community-admin-note">Members Stock bot is not configured.</p>
       ) : null}
 
       <form onSubmit={handleImportCommunityStock} className="community-stock-import">
@@ -3593,7 +3593,7 @@ export default function HomePage() {
               <div>
                 <p className={labelClass}>Create</p>
                 <h1 className="page-title">New order</h1>
-                <p className="app-copy page-copy">Choose a service and configure the delivery details.</p>
+                <p className="app-copy page-copy">Member and Boost deliveries.</p>
               </div>
             </header>
 
@@ -3617,7 +3617,7 @@ export default function HomePage() {
                     <div className="service-selector-heading">
                       <div>
                         <span className={fieldLabelClass}>Choose service</span>
-                        <p className="service-selector-copy">Select members or boosts, then configure the order details.</p>
+                        <p className="service-selector-copy">Members or Boosts.</p>
                       </div>
                       <span className="service-selector-count">2 services</span>
                     </div>
@@ -3688,7 +3688,7 @@ export default function HomePage() {
                       <div className="service-selector-heading">
                         <div>
                           <span className={fieldLabelClass}>Stock category</span>
-                          <p className="service-selector-copy">Choose which category and its private stock will be used for this order.</p>
+                          <p className="service-selector-copy">Stock category for this order.</p>
                         </div>
                         <div className="community-category-heading-actions">
                           <span className="service-selector-count">{communityCategories.length} categories</span>
@@ -3804,7 +3804,7 @@ export default function HomePage() {
                       <div className="service-selector-heading">
                         <div>
                           <span className={fieldLabelClass}>Boost stock source</span>
-                          <p className="service-selector-copy">Choose the stock bucket used for this boost order.</p>
+                          <p className="service-selector-copy">Stock pool for this order.</p>
                         </div>
                         <span className="service-selector-count">3 stock options</span>
                       </div>
@@ -3976,7 +3976,7 @@ export default function HomePage() {
                             <div className="community-join-method-field">
                               <div className="community-speed-profile-copy">
                                 <span className="boost-order-label">Join method</span>
-                                <small>Choose how accounts join this order.</small>
+                                <small>Member delivery method.</small>
                               </div>
                               <div className="community-join-method-options" role="radiogroup" aria-label="Join method">
                                 <button
@@ -4019,19 +4019,19 @@ export default function HomePage() {
                               {!selectedCommunityJoinMethods.length ? (
                                 <p className="community-experimental-join-note">
                                   <TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" />
-                                  Selected categories do not share an enabled join method. Update their category settings or change the selection.
+                                  Selected categories have no shared join method.
                                 </p>
                               ) : null}
                               {form.communityJoinMethod === "experimental_join" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                  The bot enables Apply to Join, creates the delivery invite, and needs Manage Server, Kick Members, plus Create Invite.
+                                  Requires Manage Server, Kick Members and Create Invite permissions.
                                 </p>
                               ) : null}
                               {form.communityJoinMethod === "directly" ? (
                                 <p className="community-experimental-join-note">
                                   <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-                                  Dcord Join API delivers each saved user token through that account's assigned Onliner proxy. The bot is not used.
+                                  Proxy-based member delivery without the bot.
                                 </p>
                               ) : null}
                             </div>
@@ -4039,7 +4039,7 @@ export default function HomePage() {
                             <div className="community-speed-profile-field">
                               <div className="community-speed-profile-copy">
                                 <span className="boost-order-label">Delivery speed</span>
-                                <small>Select a profile or set an exact delay.</small>
+                                <small>Time between member joins.</small>
                               </div>
                               <div className="community-speed-profile-options" aria-label="Delivery speed profile">
                                 {COMMUNITY_SPEED_PROFILES.map((profile) => {
@@ -4451,7 +4451,7 @@ export default function HomePage() {
               <div>
                 <p className={labelClass}>Onliner</p>
                 <h1 className="page-title">Discord bot presence</h1>
-                <p className="app-copy page-copy">Keep multiple Discord bots connected to Gateway v10, each with its own proxy and reconnect loop.</p>
+                <p className="app-copy page-copy">Keeps Discord accounts online through assigned proxies.</p>
               </div>
               <div className="page-heading-meta">
                 <Badge variant={onlinerSnapshot?.worker?.status === "online" && !onlinerSnapshot.worker.connectionPaused ? "success" : onlinerSnapshot?.worker?.status === "standby" || onlinerSnapshot?.worker?.connectionPaused ? "secondary" : "destructive"}>
@@ -4469,7 +4469,6 @@ export default function HomePage() {
                     <h2 className="app-title mt-1 text-lg font-semibold">Onliner configuration</h2>
                   </div>
                 </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">Tokens and the central proxy pool are encrypted in PostgreSQL. Each Gateway connection receives a proxy automatically.</p>
 
                 <form className="mt-6 grid gap-5" onSubmit={handleSaveOnliner}>
                   <div className="onliner-account-manager">
@@ -4508,7 +4507,7 @@ export default function HomePage() {
                       </div>
                     ) : null}
                     <label className="onliner-account-delay">
-                      <span><strong>Connection delay</strong><small>Wait after each successful connection before starting the next bot.</small></span>
+                      <span><strong>Connection delay</strong><small>Time between account connections.</small></span>
                       <span><Input type="number" min={1} max={300} value={onlinerDraft.connectionDelaySeconds} onChange={(event) => setOnlinerDraft((current) => ({ ...current, connectionDelaySeconds: Math.min(300, Math.max(1, Number(event.target.value) || 1)) }))} /><b>seconds</b></span>
                     </label>
                     {onlinerNextConnectionSeconds !== null ? (
@@ -4616,7 +4615,7 @@ export default function HomePage() {
                         onChange={(event) => setOnlinerAccountDraft((current) => ({ ...current, richPresenceEnabled: event.target.checked }))}
                       />
                       <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
-                      <span><strong>Use Rich Presence</strong><small>Send the configured activities for this bot. Turn it off to keep the bot online without an activity.</small></span>
+                      <span><strong>Use Rich Presence</strong><small>Shows activities on this account.</small></span>
                     </label>
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <span className="app-copy text-xs">A proxy is selected automatically from the saved pool.</span>
@@ -4681,7 +4680,7 @@ export default function HomePage() {
                           </div>
                         </div>
                       ) : null}
-                      <p className="app-copy text-xs">Accounts are assigned the least-used saved proxy automatically. Updating this list redistributes existing profiles.</p>
+                      <p className="app-copy text-xs">Replacing the pool reassigns account proxies.</p>
                     </section>
                   </div>
 
@@ -4692,17 +4691,17 @@ export default function HomePage() {
                       onChange={(event) => setOnlinerDraft((current) => ({ ...current, enabled: event.target.checked }))}
                     />
                     <span className="stat-icon" aria-hidden="true"><Power className="h-4 w-4" /></span>
-                    <span><strong>Keep bot online</strong><small>Connect automatically when the backend starts and reconnect after interruptions.</small></span>
+                    <span><strong>Keep bot online</strong><small>Connects on startup and reconnects after interruptions.</small></span>
                   </label>
 
                   <div className="onliner-presence-panel">
                     <div className="onliner-section-heading">
                       <span className="onliner-section-icon" aria-hidden="true"><SlidersHorizontal className="h-4 w-4" /></span>
-                      <span><strong>Presence behavior</strong><small>Control how your bots appear and which activities they can display.</small></span>
+                      <span><strong>Presence behavior</strong><small>Account status and activities.</small></span>
                     </div>
                     <div className="onliner-presence-settings">
                       <div className="onliner-setting-group">
-                        <div className="onliner-setting-copy"><strong>Bot status</strong><small>Select one or mix all three statuses.</small></div>
+                        <div className="onliner-setting-copy"><strong>Bot status</strong><small>Fixed or mixed online status.</small></div>
                         <div className="onliner-status-options">
                           <label data-status="mixed">
                             <input
@@ -4743,28 +4742,28 @@ export default function HomePage() {
                   <div className="onliner-activity-section">
                     <div className="onliner-section-heading">
                       <span className="onliner-section-icon" aria-hidden="true"><RadioTower className="h-4 w-4" /></span>
-                      <span><strong>Activity content</strong><small>Add the content that bots will use for each activity type.</small></span>
+                      <span><strong>Activity content</strong><small>Content for account activities.</small></span>
                     </div>
                     <div className="onliner-source-grid">
                       <div className="onliner-source-card" data-source="playing">
                         <div className="onliner-source-head"><span aria-hidden="true"><Gamepad2 className="h-4 w-4" /></span><div><strong>Playing</strong><small>Discord games</small></div></div>
-                        <p>Use one game per line. Leave empty to use the built-in game catalog.</p>
+                        <p>Game names. Empty uses the built-in catalog.</p>
                         <label><span className={fieldLabelClass}>Game list</span><textarea className="onliner-game-textarea" value={onlinerDraft.games} onChange={(event) => setOnlinerDraft((current) => ({ ...current, games: event.target.value }))} placeholder={"Minecraft\nVALORANT\nLeague of Legends"} /></label>
                       </div>
                       <div className="onliner-source-card" data-source="listening">
                         <div className="onliner-source-head"><span aria-hidden="true"><Headphones className="h-4 w-4" /></span><div><strong>Listening</strong><small>Spotify</small></div></div>
-                        <p>Fetch real track details from a playlist, with optional fallback tracks.</p>
+                        <p>Playlist tracks for listening activity.</p>
                         <label><span className={fieldLabelClass}>Playlist ID</span><Input value={onlinerDraft.spotifyPlaylistId} maxLength={22} onChange={(event) => setOnlinerDraft((current) => ({ ...current, spotifyPlaylistId: event.target.value.trim() }))} placeholder="Spotify playlist ID" /></label>
                         <label><span className={fieldLabelClass}>Fallback tracks</span><textarea className="onliner-game-textarea" value={onlinerDraft.music} onChange={(event) => setOnlinerDraft((current) => ({ ...current, music: event.target.value }))} placeholder={"Track — Artist\nOne per line"} /></label>
                       </div>
                       <div className="onliner-source-card" data-source="watching">
                         <div className="onliner-source-head"><span aria-hidden="true"><Eye className="h-4 w-4" /></span><div><strong>Watching</strong><small>YouTube</small></div></div>
-                        <p>Pick random videos from a YouTube playlist for watching activities.</p>
+                        <p>Playlist videos for watching activity.</p>
                         <label><span className={fieldLabelClass}>Playlist</span><Input value={onlinerDraft.youtubePlaylistId} maxLength={100} onChange={(event) => setOnlinerDraft((current) => ({ ...current, youtubePlaylistId: event.target.value.trim() }))} placeholder="Playlist ID or URL" /></label>
                       </div>
                       <div className="onliner-source-card onliner-stream-card" data-source="streaming">
                         <div className="onliner-source-head"><span aria-hidden="true"><RadioTower className="h-4 w-4" /></span><div><strong>Streaming</strong><small>Twitch</small></div></div>
-                        <p>Each bot randomly combines one user, category and title from these lists.</p>
+                        <p>Random user, category and title combinations.</p>
                         <div className="onliner-stream-grid">
                           <label><span className={fieldLabelClass}>Users</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingUsers} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingUsers: event.target.value }))} placeholder={"tarik\nshroud\nxqc"} /></label>
                           <label><span className={fieldLabelClass}>Categories</span><textarea className="onliner-game-textarea" value={onlinerDraft.streamingCategories} onChange={(event) => setOnlinerDraft((current) => ({ ...current, streamingCategories: event.target.value }))} placeholder={"Just Chatting\nVALORANT\nMusic"} /></label>
@@ -4872,7 +4871,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Configure the bot used by Members Stock. Its Discord server is detected automatically. Secrets are encrypted and never shown again after saving.
+                  Bot settings for Members Stock.
                 </p>
 
                 {communityConfig?.configured ? (
@@ -4897,7 +4896,7 @@ export default function HomePage() {
                     {showCommunityGuildManager ? (
                       <div className="community-guild-manager">
                         <div className="community-guild-manager-head">
-                          <span><strong>Connected servers</strong><small>Select the servers the bot should leave.</small></span>
+                          <span><strong>Connected servers</strong><small>Bot server memberships.</small></span>
                           <span>
                             <Button type="button" size="xs" variant="secondary" disabled={loadingCommunityGuilds || !communityGuilds.length} onClick={() => setSelectedCommunityGuildIds(Object.fromEntries(communityGuilds.map((guild) => [guild.id, true])))}>Select all</Button>
                             <Button type="button" size="xs" variant="dangerGhost" disabled={loadingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => setSelectedCommunityGuildIds({})}><Trash2 className="h-3.5 w-3.5" />Clear</Button>
@@ -5004,7 +5003,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Used only for Boosts orders. The key is stored server-side and sent to Dcord with X-API-Key.
+                  API key for Boosts orders.
                 </p>
                 <form onSubmit={handleSaveDcordApiKey} className="mt-6 grid gap-5">
                   <label className="grid gap-2">
@@ -5040,7 +5039,7 @@ export default function HomePage() {
                   </div>
                 </div>
                 <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Enter a Discord user token and guild ID. The token is used only for this request and is never saved.
+                  Checks an account's access to a server. Token is not saved.
                 </p>
                 <form onSubmit={handleRequestUserGuildLeave} className="mt-6 grid gap-4">
                   <label className="grid gap-2">
@@ -5133,7 +5132,7 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">Remove bot</p>
             <h2 id="leave-community-guilds-title">Leave {communityGuildsPendingLeave.length} selected server{communityGuildsPendingLeave.length === 1 ? "" : "s"}?</h2>
             <p id="leave-community-guilds-description">
-              The Members bot will be removed from the selected servers. Deliveries, member checks, and replacements there will stop.
+              Removes the bot and stops deliveries, checks and replacements in these servers.
               {communityGuildsPendingLeave.some((guild) => guild.activeOrderCount > 0)
                 ? ` The selection contains ${communityGuildsPendingLeave.reduce((total, guild) => total + guild.activeOrderCount, 0)} PROCESS order${communityGuildsPendingLeave.reduce((total, guild) => total + guild.activeOrderCount, 0) === 1 ? "" : "s"}.`
                 : ""}
@@ -5166,7 +5165,7 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">User account</p>
             <h2 id="leave-user-guild-title">Leave server {userGuildLeaveDraft.guildId.trim()}?</h2>
             <p id="leave-user-guild-description">
-              Discord will remove this user account from the server. Rejoining later will require a valid invite, and a server owner cannot leave before transferring ownership.
+              Removes this account from the server. Server owners cannot leave.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={leavingUserGuild} onClick={() => setShowUserGuildLeaveConfirm(false)}>Cancel</Button>
@@ -5185,11 +5184,11 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><RadioTower className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · Onliner</p>
             <h2 id="connect-member-onliner-title">Connect {communityOnlinerBulkMembers ? `${communityOnlinerBulkMembers.length} selected accounts` : communityOnlinerMember?.displayName || communityOnlinerMember?.username}</h2>
-            <p>{communityOnlinerBulkMembers ? "Connect the selected accounts using their saved tokens. Proxies are assigned automatically. Accounts already on Onliner are skipped." : "The saved account token will be used automatically, and the least-used proxy will be selected from the central Onliner proxy pool."}</p>
+            <p>{communityOnlinerBulkMembers ? "Connects selected accounts. Already connected accounts are skipped." : "Connects this account through an assigned proxy."}</p>
             <label className="onliner-enabled-card mt-5 text-left">
               <input type="checkbox" checked={communityOnlinerRichPresence} disabled={communityOnlinerActionId !== null || communityBulkAction === "onliner_connect"} onChange={(event) => setCommunityOnlinerRichPresence(event.target.checked)} />
               <Star className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-              <span><strong>Use Rich Presence</strong><small>Turn it off to keep the account online without activities.</small></span>
+              <span><strong>Use Rich Presence</strong><small>Shows account activities.</small></span>
             </label>
             {communityBulkAction === "onliner_connect" ? <p className="community-account-bulk-summary" role="status"><span>{communityOnlinerBulkProgress.completed}/{communityOnlinerBulkProgress.total} processed</span></p> : null}
             {communityOnlinerBulkErrors.length ? <div className="community-account-bulk-errors" role="alert"><div className="community-account-bulk-error-heading"><span aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span><div><strong>{communityOnlinerBulkErrors.length} accounts need attention</strong><small>Only failed accounts remain selected, ready to retry.</small></div></div><ul>{communityOnlinerBulkErrors.slice(0, 12).map((failure, index) => <li key={failure.id}><span>{index + 1}</span><div><strong>{failure.name}</strong><small>{failure.message}</small></div></li>)}</ul>{communityOnlinerBulkErrors.length > 12 ? <small>And {communityOnlinerBulkErrors.length - 12} more failed accounts.</small> : null}</div> : null}
@@ -5210,7 +5209,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
-            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Accounts connect before authorization through a working proxy. Dedicated auth proxies match account lines one-to-one; otherwise the assigned Onliner proxy is used. Account tokens and resulting OAuth credentials are encrypted and saved.{communityConnectToOnliner ? " Accounts stay connected to Onliner after authorization." : " Temporary connections close after authorization; accounts are not added to Onliner."}</p>
+            <p>Authorizes Discord accounts and adds them to stock.</p>
             <div className="community-account-mode" role="group" aria-label="Account add mode">
               <Button
                 type="button"
@@ -5234,7 +5233,7 @@ export default function HomePage() {
             <label className="onliner-enabled-card mt-4 text-left">
               <input type="checkbox" checked={communityUseAuthProxies} disabled={addingCommunityAccount} onChange={event => { setCommunityUseAuthProxies(event.target.checked); setCommunityAccountBulkErrors([]); }} />
               <ShieldCheck className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-              <span><strong>Use dedicated auth proxies</strong><small>One proxy per account, matched by line. Saved in the pool while connected to Onliner and removed when disconnected.</small></span>
+              <span><strong>Use dedicated auth proxies</strong><small>One proxy per account. Removed from the pool on disconnect.</small></span>
             </label>
             <div className={communityUseAuthProxies ? "community-account-paired-fields" : ""}>
             <label className="mt-5 grid min-w-0 gap-2 text-left">
@@ -5276,7 +5275,6 @@ export default function HomePage() {
               </label>
             ) : null}
             </div>
-            {communityUseAuthProxies ? <p className="mt-2 text-left text-xs text-[var(--app-muted)]">Line 1 → proxy 1, line 2 → proxy 2. Only used for authorization unless Connect to Onliner is enabled. No proxy is saved after a failed authorization.</p> : null}
             {communityAccountMode === "bulk" ? (
               <p className="community-account-bulk-summary">
                 <span>{parseOnlinerBulkTokenLines(communityAccountToken).length} accounts{communityUseAuthProxies ? " · " + parseOnlinerBulkLines(communityAccountProxies).length + " proxies" : " ready"}</span>
@@ -5287,7 +5285,7 @@ export default function HomePage() {
               <div className="community-account-bulk-errors" role="alert">
                 <div className="community-account-bulk-error-heading">
                   <span aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
-                  <div><strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} need attention</strong><small>Only failed accounts{communityUseAuthProxies ? " and their matching proxies" : ""} remain above, ready to retry.</small></div>
+                  <div><strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} need attention</strong><small>Failed accounts{communityUseAuthProxies ? " and matching proxies" : ""} remain.</small></div>
                 </div>
                 <ul>{communityAccountBulkErrors.slice(0, 12).map((failure) => {
                   const presentation = describeCommunityAccountError(failure.message);
@@ -5304,13 +5302,13 @@ export default function HomePage() {
             <label className="onliner-enabled-card mt-4 text-left">
               <input type="checkbox" checked={communityConnectToOnliner} disabled={addingCommunityAccount} onChange={(event) => setCommunityConnectToOnliner(event.target.checked)} />
               <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-              <span><strong>Connect to Onliner</strong><small>Save this account in Onliner and start its Gateway presence after OAuth succeeds.</small></span>
+              <span><strong>Connect to Onliner</strong><small>Keeps accounts online after authorization.</small></span>
             </label>
             {communityConnectToOnliner ? (
               <label className="onliner-enabled-card mt-3 text-left">
                 <input type="checkbox" checked={communityAccountRichPresence} disabled={addingCommunityAccount} onChange={(event) => setCommunityAccountRichPresence(event.target.checked)} />
                 <Star className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
-                <span><strong>Use Rich Presence</strong><small>Turn it off to connect without activities.</small></span>
+                <span><strong>Use Rich Presence</strong><small>Shows activities while online.</small></span>
               </label>
             ) : null}
             <div className="confirm-modal-actions">
@@ -5332,7 +5330,7 @@ export default function HomePage() {
               <div>
                 <p className="app-kicker text-[var(--app-accent)]">Members Stock</p>
                 <h2 id="community-category-title">{editingCommunityCategoryId ? "Edit category" : "Create category"}</h2>
-                <p>Give this member pool a clear name and choose how orders from it behave.</p>
+                <p>Stock category and order settings.</p>
               </div>
             </header>
             <div className="community-category-modal-grid">
@@ -5366,7 +5364,7 @@ export default function HomePage() {
                 </div>
               </div>
               <div className="community-category-modal-column community-category-rules">
-                <div className="community-category-rule-heading"><strong>Join methods</strong><small>Enable every method orders in this category may use.</small></div>
+                <div className="community-category-rule-heading"><strong>Join methods</strong><small>Available delivery methods.</small></div>
                 <div className="community-join-method-options" role="group" aria-label="Enabled join methods">
                   {([
                     { key: "create_invite", label: "Create Invite", detail: "Bot creates and uses an invite", icon: Bot },
@@ -5393,7 +5391,7 @@ export default function HomePage() {
                     );
                   })}
                 </div>
-                <div className="community-category-rule-heading"><strong>Support period</strong><small>Choose whether orders have a support deadline.</small></div>
+                <div className="community-category-rule-heading"><strong>Support period</strong><small>Order support duration.</small></div>
                 <div className="community-category-period-options">
                   <label className={!communityCategoryDraft.isPeriodic ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryPeriod" checked={!communityCategoryDraft.isPeriodic} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, isPeriodic: false }))} />
@@ -5404,7 +5402,7 @@ export default function HomePage() {
                     <Timer className="h-4 w-4" /><span><strong>Period based</strong><small>Duration selected per order</small></span>
                   </label>
                 </div>
-                <div className="community-category-rule-heading"><strong>Check Members replacement</strong><small>Choose whether a Not Live result grants a replacement.</small></div>
+                <div className="community-category-rule-heading"><strong>Check Members replacement</strong><small>Replacement eligibility for Not Live members.</small></div>
                 <div className="community-category-period-options community-category-replacement-options">
                   <label className={communityCategoryDraft.checkReplacementEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryCheckReplacement" checked={communityCategoryDraft.checkReplacementEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, checkReplacementEnabled: true }))} />
@@ -5415,7 +5413,7 @@ export default function HomePage() {
                     <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Check is informational only</small></span>
                   </label>
                 </div>
-                <div className="community-category-rule-heading"><strong>Monitor Leave all</strong><small>For mixed orders, enable this for every category.</small></div>
+                <div className="community-category-rule-heading"><strong>Monitor Leave all</strong><small>Available only when all order categories allow it.</small></div>
                 <div className="community-category-period-options community-category-replacement-options">
                   <label className={communityCategoryDraft.publicLeaveAllEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryPublicLeaveAll" checked={communityCategoryDraft.publicLeaveAllEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, publicLeaveAllEnabled: true }))} />
@@ -5423,18 +5421,18 @@ export default function HomePage() {
                   </label>
                   <label className={!communityCategoryDraft.publicLeaveAllEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryPublicLeaveAll" checked={!communityCategoryDraft.publicLeaveAllEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, publicLeaveAllEnabled: false }))} />
-                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Hide Leave all on the customer monitor</small></span>
+                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Leave all is hidden on the customer monitor</small></span>
                   </label>
                 </div>
-                <div className="community-category-rule-heading"><strong>Reaction workspace</strong><small>Choose whether this category can be scanned and used for reactions.</small></div>
+                <div className="community-category-rule-heading"><strong>Reaction workspace</strong><small>Reaction availability for this category.</small></div>
                 <div className="community-category-period-options community-category-replacement-options">
                   <label className={communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryReactionUse" checked={communityCategoryDraft.reactionUseEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: true }))} />
-                    <Sparkles className="h-4 w-4" /><span><strong>Enabled</strong><small>Include this category in Check members</small></span>
+                    <Sparkles className="h-4 w-4" /><span><strong>Enabled</strong><small>Included in Check members</small></span>
                   </label>
                   <label className={!communityCategoryDraft.reactionUseEnabled ? "is-selected" : ""}>
                     <input className="sr-only" type="radio" name="categoryReactionUse" checked={!communityCategoryDraft.reactionUseEnabled} onChange={() => setCommunityCategoryDraft((current) => ({ ...current, reactionUseEnabled: false }))} />
-                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Exclude this category from reactions</small></span>
+                    <ShieldCheck className="h-4 w-4" /><span><strong>Disabled</strong><small>Excluded from reactions</small></span>
                   </label>
                 </div>
               </div>
@@ -5455,7 +5453,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Delete category</p>
             <h2 id="delete-category-title">Delete “{communityCategoryPendingDeletion.name}”?</h2>
-            <p>This removes the empty category permanently. Categories containing members cannot be deleted.</p>
+            <p>Permanently deletes this empty category.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(null)}>Keep category</Button>
               <Button type="button" variant="destructive" disabled={savingCommunityCategory} onClick={() => void handleDeleteCommunityCategory()}>{savingCommunityCategory ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{savingCommunityCategory ? "Deleting..." : "Delete category"}</Button>
@@ -5476,11 +5474,11 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">Remove order</p>
             <h2 id="delete-order-title">Stop tracking this order?</h2>
             <p id="delete-order-description">
-              This removes <strong>{orderPendingDeletion.uniqid}</strong> from your Orders list and tracked orders database. {orderPendingDeletion.provider === "community"
-                ? "A waiting delivery is cancelled and its reserved members return to stock."
+              Removes <strong>{orderPendingDeletion.uniqid}</strong> from Orders. {orderPendingDeletion.provider === "community"
+                ? "Waiting delivery is cancelled; reserved members return to stock."
                 : orderPendingDeletion.provider === "dcord"
-                  ? "Active local delivery must finish before removal."
-                  : "It does not cancel the upstream order."}
+                  ? "Active delivery prevents removal."
+                  : "The provider order stays active."}
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={deletingTrackedOrder} onClick={() => setOrderPendingDeletion(null)}>Keep order</Button>
@@ -5505,7 +5503,7 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-accent-bright)]">Expired support</p>
             <h2 id="auto-leave-order-title">Auto leave expired members?</h2>
             <p id="auto-leave-order-description">
-              Delivered members in <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} one at a time. The first attempt starts after 5 minutes, then one member is processed every 5 minutes using its saved token and assigned Onliner proxy. Progress and errors will appear in the per-member log.
+              Delivered members in <strong>{orderPendingAutoLeave.uniqid}</strong> will leave {orderPendingAutoLeave.serverName || orderPendingAutoLeave.serverId || "the Discord server"} one every 5 minutes, starting in 5 minutes.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={autoLeavingOrderId !== null} onClick={() => setOrderPendingAutoLeave(null)}>Cancel</Button>
@@ -5530,7 +5528,7 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-accent)]">Order confirmation</p>
             <h2 id="create-order-title">Create this order?</h2>
             <p id="create-order-description">
-              Check the order details before submitting. This action will reserve the required stock.
+              Creates the order and reserves its stock.
             </p>
             <div className="order-confirm-summary">
               <div className="order-confirm-primary">
@@ -5583,7 +5581,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Remove member</p>
             <h2 id="delete-member-title">Remove this user?</h2>
-            <p id="delete-member-description">This removes <strong>{communityMemberPendingDeletion.username}</strong> only from this panel. It does not revoke or modify the S2Tools authorization.</p>
+            <p id="delete-member-description">Removes <strong>{communityMemberPendingDeletion.username}</strong> from stock. S2Tools authorization stays active.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={removingCommunityUserId !== null} onClick={() => setCommunityMemberPendingDeletion(null)}>Keep user</Button>
               <Button type="button" variant="destructive" disabled={removingCommunityUserId !== null} onClick={() => void removeConnectedCommunityUser(communityMemberPendingDeletion)}>
@@ -5606,7 +5604,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-danger)]">Bulk remove</p>
             <h2 id="bulk-delete-members-title">Remove {selectedCommunityMemberIds.length} selected members?</h2>
-            <p id="bulk-delete-members-description">This removes the selected users from Members Stock. Members reserved by an active order will be kept.</p>
+            <p id="bulk-delete-members-description">Removes selected members from stock. Reserved members are kept.</p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(false)}>Keep members</Button>
               <Button type="button" variant="destructive" disabled={communityBulkAction !== null} onClick={() => void removeSelectedCommunityMembers()}>
@@ -5630,7 +5628,7 @@ export default function HomePage() {
             <p className="app-kicker text-[var(--app-danger)]">Boost warning</p>
             <h2 id="boost-screening-title">Registration form is enabled</h2>
             <p id="boost-screening-description">
-              Create a new invite with <strong>Bypass Join Application</strong> enabled and send us that new invite link.
+              Delivery requires an invite with <strong>Bypass Join Application</strong> enabled.
             </p>
             <div className="confirm-modal-actions">
               <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setBoostScreeningPendingPayload(null)}>Cancel</Button>
@@ -5657,7 +5655,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Pencil className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Bot profile</p>
             <h2 id="onliner-account-edit-title">Edit token</h2>
-            <p>The assigned proxy is managed by the central pool. Changing the token restarts only this Gateway connection.</p>
+            <p>Changing the token restarts this account's connection.</p>
 
             <form onSubmit={handleUpdateOnlinerAccount} className="mt-5 grid gap-4">
               <label className="grid gap-2">
@@ -5696,7 +5694,7 @@ export default function HomePage() {
                   disabled={loadingOnlinerCredentials || savingOnlinerAccount}
                 />
                 <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
-                <span><strong>Use Rich Presence</strong><small>Turn it off to keep this bot online without an activity.</small></span>
+                <span><strong>Use Rich Presence</strong><small>Shows account activities.</small></span>
               </label>
               <div className="onliner-edit-note">
                 <KeyRound className="h-4 w-4" aria-hidden="true" />
@@ -5725,7 +5723,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Bot className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Onliner</p>
             <h2 id="onliner-bulk-title">Bulk add bot profiles</h2>
-            <p>Paste one token per line. Proxies are assigned automatically from the central Onliner pool.</p>
+            <p>Connects accounts through automatically assigned proxies.</p>
 
             <form onSubmit={handleAddOnlinerAccountsBulk} className="mt-5 grid gap-4">
               <div className="grid gap-4">
@@ -5773,7 +5771,7 @@ export default function HomePage() {
           <div className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="remove-onliner-bots-title" onKeyDown={(event) => { if (event.key === "Escape" && !onlinerBulkAction) setOnlinerAccountsPendingRemoval([]); }}>
             <span className="confirm-modal-icon" aria-hidden="true"><Trash2 className="h-5 w-5" /></span>
             <h2 id="remove-onliner-bots-title">Remove {onlinerAccountsPendingRemoval.length} bot profiles?</h2>
-            <p>The selected bot profiles will be removed from Onliner and their Gateway connections will stop. You will need their tokens to add them again.</p>
+            <p>Removes selected accounts from Onliner and disconnects them.</p>
             <div className="mt-5 flex justify-end gap-3">
               <Button autoFocus type="button" variant="secondary" disabled={Boolean(onlinerBulkAction)} onClick={() => setOnlinerAccountsPendingRemoval([])}>Cancel</Button>
               <Button type="button" variant="destructive" disabled={Boolean(onlinerBulkAction)} onClick={() => void handleOnlinerBulkAction("remove", onlinerAccountsPendingRemoval)}>{onlinerBulkAction ? "Removing…" : `Remove ${onlinerAccountsPendingRemoval.length} bots`}</Button>
@@ -5788,12 +5786,12 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Globe2 className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Gateway routing</p>
             <h2 id="add-onliner-proxies-title">Add proxies</h2>
-            <p>New proxies are appended to the pool. Existing account assignments and active Gateway connections stay unchanged.</p>
+            <p>Adds proxies without changing active connections.</p>
             <form className="mt-5 grid gap-4" onSubmit={handleAddOnlinerProxies}>
               <label className="grid gap-2">
                 <span className={fieldLabelClass}>Proxies · one per line</span>
                 <textarea className="ui-input min-h-56 resize-y rounded-xl px-3.5 py-3 font-mono text-xs leading-6" value={onlinerProxyAddDraft} onChange={(event) => setOnlinerProxyAddDraft(event.target.value)} onBlur={() => setOnlinerProxyAddDraft((value) => normalizeOnlinerProxyImportDraft(value))} placeholder={"host:port:user:pass:old_ip\nsocks5://user:pass@host:port\nhost:port:user:pass"} autoFocus />
-                <span className="text-xs text-[var(--app-muted)]">host:port:user:pass and host:port:user:pass:old_ip are converted to SOCKS5. The old IP is ignored. Saved addresses and ports are not added again.</span>
+                <span className="text-xs text-[var(--app-muted)]">host:port:user:pass[:old_ip] → SOCKS5. Duplicates are skipped.</span>
                 <span className="text-xs text-[var(--app-muted)]">{parseProxyDraft(onlinerProxyAddDraft).length} new line(s) ready · duplicates will be skipped</span>
               </label>
               <div className="confirm-modal-actions">
@@ -5819,7 +5817,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Plus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Stock</p>
             <h2 id="add-tokens-title">Add boost tokens</h2>
-            <p>Paste one token per line. Tokens are stored in encrypted PostgreSQL and used only when a Boosts order runs.</p>
+            <p>Stores accounts for Boosts orders.</p>
 
             <form onSubmit={handleSaveBoostStock} className="mt-5 grid gap-5">
               <label className="boost-stock-format-toggle">
@@ -5830,7 +5828,7 @@ export default function HomePage() {
                 />
                 <span>
                   <strong>Remove 2FA field</strong>
-                  <small>Entries in email:pass:token:2fa format will be stored as email:pass:token.</small>
+                  <small>2FA fields are excluded from stored tokens.</small>
                 </span>
               </label>
               <div className="grid gap-4 md:grid-cols-2">

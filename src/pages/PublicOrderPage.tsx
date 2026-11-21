@@ -15,6 +15,7 @@ import { getCommunityResultAllocation } from "../../shared/community-order-alloc
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -509,7 +510,8 @@ export default function PublicOrderPage() {
   const dcordTokenResults = getDcordTokenResults(status);
   const dcordTokenCount = typeof status?.tokenCount === "number" ? status.tokenCount : "-";
   const dcordCompletedTokenCount = dcordTokenResults.filter((item) => item.state !== "pending").length;
-  const communityMemberResults = getCommunityMemberResults(status);
+  const communityMemberResults = useMemo(() => getCommunityMemberResults(status), [status]);
+  const displayedCommunityMembers = useMemberLogOrder(communityMemberResults, uniqid ?? "");
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityOrder && normalizedStatus === "PROCESS" && typeof membersRemaining === "number" && membersRemaining > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -852,7 +854,7 @@ export default function PublicOrderPage() {
       <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
         <p>
-          Delay is the wait time before the next member joins. Is your server new and below 500 members? <strong>A 700s delay is recommended.</strong>
+          Time between member joins.
         </p>
       </div>
     </div>
@@ -875,7 +877,7 @@ export default function PublicOrderPage() {
       </div>
       <div className="monitor-safety-note" role="note">
         <TriangleAlert className="h-4 w-4" aria-hidden="true" />
-        <p>Pause stops new tokens from being submitted. A token already sent to Dcord will finish its current request safely.</p>
+        <p>Pauses new joins. Submitted joins continue.</p>
       </div>
     </div>
   ) : null;
@@ -999,7 +1001,7 @@ export default function PublicOrderPage() {
                   <div>
                     <p className="app-kicker">Server access limited</p>
                     <h2>Discord has temporarily limited new members for this server</h2>
-                    <p>The delivery is paused and your member accounts remain active. Check again after Discord removes the restriction.</p>
+                    <p>Delivery paused by Discord. Member accounts remain active.</p>
                   </div>
                   <Button type="button" variant="destructive" onClick={() => void handleRestartOrder()} disabled={restartingOrder || restartCooldown > 0}>
                     <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
@@ -1027,7 +1029,7 @@ export default function PublicOrderPage() {
                     <p className="app-kicker">Live delivery</p>
                     <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
-                      {isCompleted ? "Your order has been completed successfully." : isErrorStatus ? "Review the error above for the reason." : "We keep this page updated automatically while your order is processed."}
+                      {isCompleted ? "Order completed." : isErrorStatus ? "Delivery failed." : "Delivery status updates automatically."}
                     </p>
                   </div>
                   <div className="monitor-live-progress-value">
@@ -1128,7 +1130,7 @@ export default function PublicOrderPage() {
                       <div className="monitor-expired-support-note" id="public-member-support-expired" role="note">
                         <Timer className="h-4 w-4" aria-hidden="true" />
                         <strong>Support period expired</strong>
-                        <p>Check members and replacements are disabled because this order's support period has ended.</p>
+                        <p>Support ended. Member checks and replacements are disabled.</p>
                       </div>
                     ) : null}
                     {communityCheckNeedsBot && botInvite ? (
@@ -1149,12 +1151,12 @@ export default function PublicOrderPage() {
                     ) : null}
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list">
-                        <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
-                        {pageItems.map((item) => <MemberDeliveryRow key={`${item.username}-${item.index}`} item={item} formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
+                        <PaginatedList key={uniqid} items={displayedCommunityMembers} label="Member result pages">{(pageItems) => (<>
+                        {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
                         </>)}</PaginatedList>
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
-                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive. Members still present in the server are not replaceable.</p> : null}
+                    {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member authorizations are inactive. Members still in the server are not replaceable.</p> : null}
                   </div>
                 ) : null}
 
@@ -1233,7 +1235,7 @@ export default function PublicOrderPage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><Timer className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Order extension</p>
             <h2 id="public-extension-title">Extend your order period</h2>
-            <p>Copy the order ID below, then open Eldorado and send it to Pulcip Store with your extension request.</p>
+            <p>Support extensions are handled through Eldorado.</p>
             <div className="public-extension-order-id">
               <span><small>Order ID</small><code>{uniqid}</code></span>
               <Button type="button" variant="secondary" size="sm" onClick={() => void copyOrderIdForExtension()}>

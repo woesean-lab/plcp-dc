@@ -58,7 +58,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
             </div>
             <div className="login-hero-icon" aria-hidden="true"><Sparkles className="h-6 w-6" /></div>
             <h1 className="login-headline">Everything in control.<br />Beautifully simple.</h1>
-            <p className="login-copy">Create, monitor, and manage every delivery from one secure workspace.</p>
+            <p className="login-copy">Orders, deliveries and stock in one workspace.</p>
           </div>
           <ul className="login-benefits" aria-label="Platform benefits">
             <li><Check className="h-4 w-4" /> Live delivery intelligence</li>
@@ -75,7 +75,7 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
           <div className="mt-8">
             <p className="app-kicker">Welcome back</p>
             <h2 className="app-title mt-2 text-3xl font-semibold">Sign in to continue</h2>
-            <p className="app-copy mt-3 max-w-lg text-sm leading-6">Use your dashboard credentials to open the operations suite.</p>
+            <p className="app-copy mt-3 max-w-lg text-sm leading-6">Dashboard sign-in.</p>
           </div>
         <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
           <label className="grid gap-2">

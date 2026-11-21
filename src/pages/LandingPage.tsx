@@ -30,7 +30,7 @@ export default function LandingPage() {
         <div className="landing-hero-copy">
           <div className="landing-kicker"><span aria-hidden="true" /> Discord growth, delivered with control</div>
           <h1 id="landing-title">Make your Discord server feel <span>alive.</span></h1>
-          <p className="landing-lead">Premium Discord member solutions for communities that want a stronger first impression, flexible delivery, and a clear view of every order.</p>
+          <p className="landing-lead">Discord member delivery with live order tracking.</p>
           <div className="landing-actions">
             <Button asChild size="lg" className="landing-primary-cta"><a href={STORE_URL} target="_blank" rel="noreferrer">Shop Discord members <ArrowUpRight className="h-4 w-4" /></a></Button>
             <Button asChild size="lg" variant="secondary"><a href="#services">Explore services <ArrowRight className="h-4 w-4" /></a></Button>
@@ -62,7 +62,7 @@ export default function LandingPage() {
       <section id="services" className="landing-section" aria-labelledby="services-title">
         <div className="landing-section-heading">
           <div><p className="app-kicker">Members, your way</p><h2 id="services-title">Choose the right signal for your server.</h2></div>
-          <p>From visible member count to active presence, select the delivery style that matches your community.</p>
+          <p>Discord member counts and online presence.</p>
         </div>
         <div className="landing-service-grid">
           {services.map(({ icon: Icon, label, title, copy }) => (
@@ -76,14 +76,14 @@ export default function LandingPage() {
       <section className="landing-process" aria-labelledby="process-title">
         <div className="landing-section-heading"><div><p className="app-kicker">Simple by design</p><h2 id="process-title">From checkout to live tracking.</h2></div></div>
         <ol>
-          <li><span>01</span><div><strong>Choose a package</strong><p>Open PulcipStore on Eldorado and pick the member option that fits.</p></div></li>
-          <li><span>02</span><div><strong>Share your server</strong><p>Provide the requested Discord details and preferred delivery settings.</p></div></li>
-          <li><span>03</span><div><strong>Watch it progress</strong><p>Follow delivered and remaining members from your private live monitor.</p></div></li>
+          <li><span>01</span><div><strong>Choose a package</strong><p>Discord member offers on Eldorado.</p></div></li>
+          <li><span>02</span><div><strong>Share your server</strong><p>Server details and delivery settings.</p></div></li>
+          <li><span>03</span><div><strong>Watch it progress</strong><p>Private live delivery tracking.</p></div></li>
         </ol>
       </section>
 
       <section className="landing-final-cta">
-        <div><p className="app-kicker">Ready when you are</p><h2>Give your community a stronger first impression.</h2><p>Browse PulcipStore’s Discord member offers securely through Eldorado.</p></div>
+        <div><p className="app-kicker">Ready when you are</p><h2>Give your community a stronger first impression.</h2><p>PulcipStore Discord members on Eldorado.</p></div>
         <Button asChild size="lg"><a href={STORE_URL} target="_blank" rel="noreferrer"><Store className="h-4 w-4" /> View PulcipStore <ArrowUpRight className="h-4 w-4" /></a></Button>
       </section>
 

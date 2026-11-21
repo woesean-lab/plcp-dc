@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, CheckCircle2, CircleHelp, Copy, ExternalLink, Gem, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
@@ -15,6 +15,8 @@ import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
+import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
+import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { HumanizerJob } from "../lib/humanizer";
 import type { CommunityMemberResult } from "../types";
 import "../components/OrdersWorkspace.css";
@@ -94,6 +96,29 @@ const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
 
 function MemberDeliveryExample() {
   return <div className="grid gap-2">{MEMBER_DELIVERY_SAMPLES.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</div>;
+}
+
+function MemberAvatarExample() {
+  const [joined, setJoined] = useState(false);
+  const source = useMemo<CommunityMemberResult[]>(() => {
+    const active = { index: 0, username: "Sample member", avatarUrl: "/favicon.svg", state: joined ? "joined" : "joining", details: joined ? "Member joined." : "Joining the server." };
+    const queued = { index: 1, username: "Queued member", avatarUrl: null, state: "queued", details: "Waiting for delivery." };
+    return joined ? [queued, active] : [active, queued];
+  }, [joined]);
+  const members = useMemberLogOrder(source, "ui-kit-member-avatar");
+  return <div className="grid gap-3">
+    <div className="ui-ref-row">
+      {["pending", "running", "success", "partial", "failed"].map(state => <div key={state} className="flex items-center gap-2">
+        <MemberActivityAvatar className="humanizer-avatar" src="/favicon.svg" state={state} fallback={<Users className="h-4 w-4" />} />
+        <span className="text-xs text-[var(--app-muted)]">{state}</span>
+      </div>)}
+    </div>
+    <div className="grid gap-2">{members.map(item => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Now"} />)}</div>
+    <div className="ui-ref-row">
+      <Button type="button" size="sm" disabled={joined} onClick={() => setJoined(true)}>Complete sample</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setJoined(false)}>Reset sample</Button>
+    </div>
+  </div>;
 }
 
 function HumanizerRunExample() {
@@ -268,6 +293,7 @@ export default function UiKitPage() {
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
           </Example>
           <Example title="Expired support notice" source="src/index.css · monitor-expired-support-note" code={'<div className="monitor-expired-support-note">\n  <Timer className="h-4 w-4" aria-hidden="true" />\n  <strong>Support period expired</strong>\n  <p>Member checks are no longer available for this order.</p>\n</div>'}><div className="monitor-expired-support-note"><Timer className="h-4 w-4" aria-hidden="true" /><strong>Support period expired</strong><p>Member checks are no longer available for this order.</p></div></Example>
+          <Example title="Member avatar activity" source="src/components/MemberActivityAvatar.tsx · src/lib/use-member-log-order.ts" code={'<MemberActivityAvatar className="humanizer-avatar" src={avatarUrl}\n  state={state} fallback={<Users />} />\n// Processing spinner; subtle green confirmation on success.\n// Monitor preserves a newly joined row for 200ms before reordering.'}><MemberAvatarExample /></Example>
           <Example title="Humanizer run controls" source="src/components/HumanizerRunHeader.tsx" code={'<HumanizerRunHeader job={job} stopping={requestPending} onStop={stopRun} />\n// Stop prevents queued accounts from starting; running accounts finish.\n// Stopping is disabled; stopped and failed are distinct terminal states.'}><HumanizerRunExample /></Example>
           <Example title="Live delivery motion" source="src/components/OrdersWorkspace.css · od-delivery-cell" code={'// Only delivery cells marked live animate; respects reduced motion.\n<div className="od-delivery-cell">\n  <div className="od-status" data-tone="live"><i aria-hidden="true" />In progress</div>\n  <div className="od-progress" data-tone="live"><span style={{ width: "65%" }} /></div>\n</div>'}>
             <div className="orderdesk"><div className="ui-ref-grid">{[{ tone: "live", label: "In progress", percent: 65 }, { tone: "success", label: "Completed", percent: 100 }, { tone: "warning", label: "Paused", percent: 45 }].map(({ tone, label, percent }) => <div key={tone} className="od-delivery-cell"><div className="od-status" data-tone={tone}><i aria-hidden="true" />{label}</div><div className="od-delivery-numbers"><span><b>{percent}</b><span> / 100</span></span><small>{100 - percent} left</small></div><div className="od-progress" data-tone={tone} role="progressbar" aria-label={label + " delivery example"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={{ width: percent + "%" }} /></div></div>)}</div></div>
@@ -288,8 +314,8 @@ export default function UiKitPage() {
           <Example title="Live theme colors" source="src/index.css · :root --app-* variables" code={'/* Use the current theme instead of adding literal colors. */\ncolor: var(--app-text);\nbackground: var(--app-control-bg);\nborder-color: var(--app-border);\n/* Prefer Button, Badge and existing surface classes where available. */'}>
             <div className="ui-ref-colors">{COLORS.map((token) => <div key={token}><span aria-hidden="true" style={{ background: `var(${token})` } as CSSProperties} /><code>{token}</code></div>)}</div>
           </Example>
-          <Example title="Text hierarchy" source="src/index.css · app-kicker / field-label / --app-text-*" code={'<p className="app-kicker">Section label</p>\n<span className="field-label">Field label</span>\n<p className="text-[var(--app-text)]">Primary text</p>\n<p className="text-[var(--app-text-secondary)]">Supporting text</p>\n<p className="text-[var(--app-muted)]">Muted text</p>'}>
-            <div className="ui-ref-stack"><p className="app-kicker">Section label</p><span className="field-label">Field label</span><p className="text-[var(--app-text)]">Primary text</p><p className="text-[var(--app-text-secondary)]">Supporting text</p><p className="text-[var(--app-muted)]">Muted text</p><p className="text-[var(--app-subtle)]">Subtle metadata</p></div>
+          <Example title="Text hierarchy" source="src/index.css · app-kicker / field-label / --app-text-*" code={'<p className="app-kicker">Section label</p>\n<span className="field-label">Field label</span>\n<p className="text-[var(--app-text)]">Primary text</p>\n<p className="text-[var(--app-text-secondary)]">Keeps Discord accounts online.</p>\n<p className="text-[var(--app-muted)]">Muted text</p>'}>
+            <div className="ui-ref-stack"><p className="app-kicker">Section label</p><span className="field-label">Field label</span><p className="text-[var(--app-text)]">Primary text</p><p className="text-[var(--app-text-secondary)]">Keeps Discord accounts online.</p><p className="text-[var(--app-muted)]">Muted text</p><p className="text-[var(--app-subtle)]">Subtle metadata</p></div>
           </Example>
         </Section> : null}
       </div>

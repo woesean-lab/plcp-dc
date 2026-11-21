@@ -3,6 +3,7 @@ import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAle
 import type { CommunityMemberResult } from "../types";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
+import { MemberActivityAvatar } from "./MemberActivityAvatar";
 import "./MemberDeliveryRow.css";
 
 function StatusField({ label, state, value, icon, details }: {
@@ -53,9 +54,7 @@ export function MemberDeliveryRow({ item, formatTime }: {
   return <article className="community-order-result member-delivery-row" data-state={item.state.toLowerCase()} aria-label={item.username} onClick={handleRowClick}>
     <div className="member-delivery-overview">
       <div className="member-delivery-identity">
-        <span className="community-order-avatar" aria-hidden="true">
-          {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
-        </span>
+        <MemberActivityAvatar className="community-order-avatar" src={item.avatarUrl} state={item.state} fallback={<span>{String(item.index + 1).padStart(2, "0")}</span>} />
         <div className="member-delivery-identity-copy">
           <strong>{item.username}</strong>
           <time dateTime={timestamp}>{timestamp ? formatTime(timestamp) : "—"}</time>

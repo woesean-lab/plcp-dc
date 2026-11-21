@@ -258,7 +258,7 @@ export default function ReactionsPage() {
         <div>
           <p className="app-kicker text-[var(--app-accent)]">Members-powered delivery</p>
           <h1 className="page-title">Reactions</h1>
-          <p className="page-description">Paste a Discord message link. We’ll match every Members order delivered to that server and show the accounts ready to react.</p>
+          <p className="page-description">Reactions from members delivered to the message's server.</p>
         </div>
       </div>
 
@@ -317,7 +317,7 @@ export default function ReactionsPage() {
           <span className="reactions-lookup-icon" aria-hidden="true"><Server /></span>
           <div className="reactions-lookup-copy">
             <strong>Find the server’s delivered members</strong>
-            <p>The server ID is read from the message link. Multiple Members orders for the same server are combined automatically.</p>
+            <p>Combines delivered members from the same server.</p>
           </div>
           <div className="reactions-lookup-field">
             <span className="boost-order-label monitor-reaction-url-label">
@@ -343,7 +343,7 @@ export default function ReactionsPage() {
               <span className="reactions-bot-required-icon" aria-hidden="true"><Bot /></span>
               <div className="reactions-bot-required-copy">
                 <strong>Add the bot back to continue with reactions.</strong>
-                <p>Once the bot is detected, eligible delivered members will be loaded.</p>
+                <p>Bot detection loads eligible members.</p>
               </div>
               <div className="reactions-bot-required-actions">
                 <Button asChild type="button">
