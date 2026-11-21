@@ -8924,6 +8924,14 @@
   overflow-y: auto;
 }
 
+.community-account-add-modal.has-auth-proxies { width: min(980px, calc(100vw - 32px)); }
+.community-account-paired-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.community-account-paired-fields .community-account-bulk-input { width: 100%; min-width: 0; }
+.community-account-bulk-input:disabled { opacity: .6; cursor: not-allowed; }
+@media (max-width: 680px) {
+  .community-account-paired-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}
+
 .community-account-mode {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

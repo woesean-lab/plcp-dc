@@ -1,3 +1,4 @@
+import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
@@ -711,6 +712,8 @@ export default function HomePage() {
   const [communityAccountCategory, setCommunityAccountCategory] = useState<CommunityStockCategory | null>(null);
   const [communityAccountMode, setCommunityAccountMode] = useState<"single" | "bulk">("single");
   const [communityAccountToken, setCommunityAccountToken] = useState("");
+  const [communityUseAuthProxies, setCommunityUseAuthProxies] = useState(false);
+  const [communityAccountProxies, setCommunityAccountProxies] = useState("");
   const [showCommunityAccountToken, setShowCommunityAccountToken] = useState(false);
   const [communityConnectToOnliner, setCommunityConnectToOnliner] = useState(false);
   const [communityAccountRichPresence, setCommunityAccountRichPresence] = useState(true);
@@ -2013,6 +2016,8 @@ export default function HomePage() {
     setCommunityAccountCategory(category);
     setCommunityAccountMode("single");
     setCommunityAccountToken("");
+    setCommunityAccountProxies("");
+    setCommunityUseAuthProxies(false);
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
     setCommunityAccountRichPresence(true);
@@ -2024,6 +2029,8 @@ export default function HomePage() {
     setCommunityAccountCategory(null);
     setCommunityAccountMode("single");
     setCommunityAccountToken("");
+    setCommunityAccountProxies("");
+    setCommunityUseAuthProxies(false);
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
     setCommunityAccountRichPresence(true);
@@ -2042,17 +2049,27 @@ export default function HomePage() {
       return notifyError(communityAccountMode === "bulk" ? "Enter one valid Discord account token per line." : "Enter a valid Discord account token.");
     }
     if (accountTokens.length > 500) return notifyError("You can add up to 500 accounts in one bulk operation.");
+    let accountPairs;
+    try {
+      accountPairs = communityUseAuthProxies
+        ? parseStockAccountPairs(communityAccountToken, communityAccountProxies)
+        : accountTokens.map((token, index) => ({ token, proxy: undefined, lineNumber: index + 1 }));
+    } catch (error) {
+      return notifyError(error instanceof Error ? error.message : "Check the account and proxy lines.");
+    }
+    if (communityAccountMode === "single" && accountPairs.length !== 1) return notifyError("Use bulk mode to add multiple accounts.");
     try {
       setAddingCommunityAccount(true);
       setCommunityAccountBulkErrors([]);
       setCommunityAccountProgress({ completed: 0, total: accountTokens.length });
       const successes = [];
       const failures: Array<{ lineNumber: number; message: string }> = [];
-      for (let index = 0; index < accountTokens.length; index += 1) {
+      for (let index = 0; index < accountPairs.length; index += 1) {
         try {
-          const result = await addCommunityAccount(accountTokens[index], category.id, {
+          const result = await addCommunityAccount(accountPairs[index].token, category.id, {
             connect: communityConnectToOnliner,
-            richPresenceEnabled: communityAccountRichPresence
+            richPresenceEnabled: communityAccountRichPresence,
+            authProxy: accountPairs[index].proxy
           });
           successes.push(result);
         } catch (error) {
@@ -2061,11 +2078,13 @@ export default function HomePage() {
           setCommunityAccountProgress({ completed: index + 1, total: accountTokens.length });
         }
       }
+      // Retain failed pairs together before refresh so retries cannot shift proxies.
+      setCommunityAccountToken(failures.map(failure => accountPairs[failure.lineNumber - 1].token).join("\n"));
+      if (communityUseAuthProxies) setCommunityAccountProxies(failures.map(failure => accountPairs[failure.lineNumber - 1].proxy).join("\n"));
+      setCommunityAccountBulkErrors(failures);
       setCommunityStockType(category.id);
       await refreshCommunityStatus(category.id);
       if (failures.length) {
-        setCommunityAccountBulkErrors(failures);
-        setCommunityAccountToken(failures.map((failure) => accountTokens[failure.lineNumber - 1]).join("\n"));
         notifyError(`${successes.length} account${successes.length === 1 ? "" : "s"} added; ${failures.length} failed. Check the line details in the modal.`);
       } else {
         const result = successes[0];
@@ -5187,18 +5206,18 @@ export default function HomePage() {
 
       {communityAccountCategory ? (
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !addingCommunityAccount) closeCommunityAccountModal(); }}>
-          <form className="confirm-modal community-account-modal community-account-add-modal" onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
+          <form className={"confirm-modal community-account-modal community-account-add-modal" + (communityUseAuthProxies ? " has-auth-proxies" : "")} onSubmit={handleAddCommunityAccount} role="dialog" aria-modal="true" aria-labelledby="community-account-title">
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
-            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Accounts connect before authorization through an assigned Onliner proxy. A working proxy is required for every account. Account tokens and resulting OAuth credentials are encrypted and saved.{communityConnectToOnliner ? " Accounts stay connected to Onliner after authorization." : " Temporary connections close after authorization; accounts are not added to Onliner."}</p>
+            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Accounts connect before authorization through a working proxy. Dedicated auth proxies match account lines one-to-one; otherwise the assigned Onliner proxy is used. Account tokens and resulting OAuth credentials are encrypted and saved.{communityConnectToOnliner ? " Accounts stay connected to Onliner after authorization." : " Temporary connections close after authorization; accounts are not added to Onliner."}</p>
             <div className="community-account-mode" role="group" aria-label="Account add mode">
               <Button
                 type="button"
                 size="sm"
                 variant={communityAccountMode === "single" ? "default" : "secondary"}
                 disabled={addingCommunityAccount}
-                onClick={() => { setCommunityAccountMode("single"); setCommunityAccountToken(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
+                onClick={() => { setCommunityAccountMode("single"); setCommunityAccountToken(""); setCommunityAccountProxies(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
               >
                 <UserPlus className="h-4 w-4" /> Single account
               </Button>
@@ -5207,12 +5226,18 @@ export default function HomePage() {
                 size="sm"
                 variant={communityAccountMode === "bulk" ? "default" : "secondary"}
                 disabled={addingCommunityAccount}
-                onClick={() => { setCommunityAccountMode("bulk"); setCommunityAccountToken(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
+                onClick={() => { setCommunityAccountMode("bulk"); setCommunityAccountToken(""); setCommunityAccountProxies(""); setCommunityAccountBulkErrors([]); setCommunityAccountProgress({ completed: 0, total: 0 }); }}
               >
                 <ListChecks className="h-4 w-4" /> Bulk accounts
               </Button>
             </div>
-            <label className="mt-5 grid gap-2 text-left">
+            <label className="onliner-enabled-card mt-4 text-left">
+              <input type="checkbox" checked={communityUseAuthProxies} disabled={addingCommunityAccount} onChange={event => { setCommunityUseAuthProxies(event.target.checked); setCommunityAccountBulkErrors([]); }} />
+              <ShieldCheck className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+              <span><strong>Use dedicated auth proxies</strong><small>One proxy per account, matched by line. Saved in the pool while connected to Onliner and removed when disconnected.</small></span>
+            </label>
+            <div className={communityUseAuthProxies ? "community-account-paired-fields" : ""}>
+            <label className="mt-5 grid min-w-0 gap-2 text-left">
               <span className={fieldLabelClass}>{communityAccountMode === "bulk" ? "Account tokens · one per line" : "Account token"}</span>
               {communityAccountMode === "single" ? <span className="onliner-secret-field">
                 <Input
@@ -5240,9 +5265,21 @@ export default function HomePage() {
                 />
               )}
             </label>
+            {communityUseAuthProxies ? (
+              <label className="mt-5 grid min-w-0 gap-2 text-left">
+                <span className={fieldLabelClass}>{communityAccountMode === "bulk" ? "Auth proxies · one per line" : "Auth proxy"}</span>
+                {communityAccountMode === "bulk" ? (
+                  <textarea className="community-account-bulk-input" value={communityAccountProxies} disabled={addingCommunityAccount} spellCheck={false} autoComplete="off" placeholder={"socks5://user:pass@host:1080\nhttp://user:pass@host:8080"} onChange={event => { setCommunityAccountProxies(event.target.value); setCommunityAccountBulkErrors([]); }} />
+                ) : (
+                  <Input type="password" value={communityAccountProxies} maxLength={2000} disabled={addingCommunityAccount} autoComplete="off" placeholder="socks5://user:pass@host:1080" onChange={event => setCommunityAccountProxies(event.target.value)} />
+                )}
+              </label>
+            ) : null}
+            </div>
+            {communityUseAuthProxies ? <p className="mt-2 text-left text-xs text-[var(--app-muted)]">Line 1 → proxy 1, line 2 → proxy 2. Only used for authorization unless Connect to Onliner is enabled. No proxy is saved after a failed authorization.</p> : null}
             {communityAccountMode === "bulk" ? (
               <p className="community-account-bulk-summary">
-                <span>{parseOnlinerBulkTokenLines(communityAccountToken).length} account{parseOnlinerBulkTokenLines(communityAccountToken).length === 1 ? "" : "s"} ready</span>
+                <span>{parseOnlinerBulkTokenLines(communityAccountToken).length} accounts{communityUseAuthProxies ? " · " + parseOnlinerBulkLines(communityAccountProxies).length + " proxies" : " ready"}</span>
                 {communityAccountProgress.total ? <span>{communityAccountProgress.completed}/{communityAccountProgress.total} processed</span> : <span>Maximum 500 per batch</span>}
               </p>
             ) : null}
@@ -5250,7 +5287,7 @@ export default function HomePage() {
               <div className="community-account-bulk-errors" role="alert">
                 <div className="community-account-bulk-error-heading">
                   <span aria-hidden="true"><TriangleAlert className="h-4 w-4" /></span>
-                  <div><strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} need attention</strong><small>Only failed accounts remain in the field above, ready to retry.</small></div>
+                  <div><strong>{communityAccountBulkErrors.length} account{communityAccountBulkErrors.length === 1 ? "" : "s"} need attention</strong><small>Only failed accounts{communityUseAuthProxies ? " and their matching proxies" : ""} remain above, ready to retry.</small></div>
                 </div>
                 <ul>{communityAccountBulkErrors.slice(0, 12).map((failure) => {
                   const presentation = describeCommunityAccountError(failure.message);
@@ -5278,7 +5315,7 @@ export default function HomePage() {
             ) : null}
             <div className="confirm-modal-actions">
               <Button type="button" variant="secondary" disabled={addingCommunityAccount} onClick={closeCommunityAccountModal}>Cancel</Button>
-              <Button type="submit" disabled={addingCommunityAccount || (communityAccountMode === "single" ? communityAccountToken.trim().length < 20 : !parseOnlinerBulkTokenLines(communityAccountToken).length || parseOnlinerBulkTokenLines(communityAccountToken).length > 500)}>
+              <Button type="submit" disabled={addingCommunityAccount || (communityUseAuthProxies && !communityAccountProxies.trim()) || (communityAccountMode === "single" ? communityAccountToken.trim().length < 20 : !parseOnlinerBulkTokenLines(communityAccountToken).length || parseOnlinerBulkTokenLines(communityAccountToken).length > 500)}>
                 {addingCommunityAccount ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
                 {addingCommunityAccount ? `${communityAccountProgress.completed}/${communityAccountProgress.total} authorizing...` : communityAccountMode === "bulk" ? "Authorize & add all" : "Authorize & add"}
               </Button>

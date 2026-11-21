@@ -4,7 +4,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import { EventEmitter } from "node:events";
 import ts from "typescript";
-import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey } from "./community-stock-authorization.mjs";
+import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey, pruneStockAuthProxyPool, validateStockAuthProxy } from "./community-stock-authorization.mjs";
 
 const user = { id: "123456789012345678", username: "sample" };
 const proxy = "http://assigned-proxy:8080";
@@ -137,14 +137,25 @@ test("Gateway rejection or wrong READY identity prevents auth and closes tempora
   }
 });
 
+const normalizerContext = {
+  crypto:{randomUUID:()=>"generated-profile"},normalizeDiscordOnlinerProxyUrl:value=>value||"",
+  isDiscordGuildId:value=>/^\d{17,20}$/.test(value),discordOnlinerAccountLimit:3000,pruneStockAuthProxyPool,
+  discordOnlinerStatuses:new Set(["online"]),discordOnlinerActivityTypes:new Set(["playing"]),
+  defaultDiscordOnlinerGames:[],discordOnlinerStatusValues:["online"],discordOnlinerActivityTypeValues:["playing"],
+  defaultDiscordOnlinerSpotifyPlaylistId:"",normalizeDiscordOnlinerYouTubePlaylistId:()=>"",
+  defaultDiscordOnlinerTwitchUsers:[],defaultDiscordOnlinerStreamingCategories:[],defaultDiscordOnlinerStreamingTitles:[]
+};
+vm.runInNewContext(functionCode("normalizeDiscordOnlinerConfig")+";this.normalize=normalizeDiscordOnlinerConfig;",normalizerContext);
+const normalizeConfig=normalizerContext.normalize;
 function response() { return { statusCode:200,status(code){this.statusCode=code;return this;},set(){return this;},json(value){this.body=value;return this;} }; }
-function accountRoute({connect=true,proxyAvailable=true,authFailure=false}={}) {
-  const writes=[];const stored=[];const starts=[];
+function accountRoute({connect=true,proxyAvailable=true,authFailure=false,customProxy=false,occupied=false,linked=false}={}) {
+  const writes=[];const stored=[];const starts=[];const stops=[];
   const other={id:"other-profile",botToken:"other-token",proxyUrl:"http://other-proxy:8080"};
   let handler;
   const scope={
     getCommunityOAuthConfig:async()=>({...input.config,configured:true,guildId:"guild"}),parseCommunityCategoryId:value=>value,
-    getDiscordOnlinerConfig:async()=>({enabled:true,accounts:[other],proxyPool:proxyAvailable?[proxy]:[]}),
+    getDiscordOnlinerConfig:async()=>({enabled:true,accounts:[occupied ? {...other,proxyUrl:proxy} : other, ...(linked ? [{id:"existing",botToken:token,discordUserId:user.id,proxyUrl:"http://previous-proxy:8080"}] : [])],proxyPool:[...(proxyAvailable?[proxy]:[]),...(linked?["http://previous-proxy:8080"]:[])],stockAuthProxyPool:linked?["http://previous-proxy:8080"]:[]}),
+    validateStockAuthProxy,
     discordOnlinerAccountLimit:3000,selectDiscordOnlinerProxy:()=>proxyAvailable?proxy:"",normalizeDiscordOnlinerProxyUrl:value=>value,
     pool:{query:async(sql,args)=>{
       if(sql.includes("SELECT id, name FROM community_stock_categories"))return {rowCount:1,rows:[{id:"offline",name:"Offline"}]};
@@ -160,15 +171,17 @@ function accountRoute({connect=true,proxyAvailable=true,authFailure=false}={}) {
     requestDiscordThroughProxy(){assert.fail("test helper supplies its mock proxy transport");},
     runWithHumanizerGatewaySession(){assert.fail("test helper supplies its mock Gateway");},
     getConnectedCommunityAuthorizationGatewayUser(){},exchangeCommunityOAuthAuthorizationCode(){},
-    crypto:{randomUUID:()=>"new-profile"},normalizeDiscordOnlinerConfig:value=>value,encryptCredential:()=>"encrypted",
+    crypto:{randomUUID:()=>"new-profile"},normalizeDiscordOnlinerConfig:normalizeConfig,encryptCredential:()=>"encrypted",
     discordOnlinerSettingKey:"onliner",saveEncryptedSetting:async(key,value)=>stored.push(JSON.parse(value)),
+    discordOnlinerRuntimes:new Map(linked?[["existing",{accountId:"existing"}]]:[]),
+    stopDiscordOnlinerRuntime:runtime=>stops.push(runtime.accountId),
     serviceRunsOnliner:true,startDiscordOnlinerAccounts:(config,accounts)=>starts.push({config,accounts}),discordOnlinerWorkerLockClient:null,appendDiscordOnlinerLog(){},
     requireSession(){},app:{post(_path,_auth,callback){handler=callback;}}
   };
   const route=ast.statements.find(node=>ts.isExpressionStatement(node)&&ts.isCallExpression(node.expression)&&node.expression.expression.getText(ast)==="app.post"&&node.expression.arguments[0]?.text==="/api/community/categories/:categoryId/accounts");
   vm.runInNewContext(route.getText(ast),scope);
-  const request={params:{categoryId:"offline"},body:{accountToken:token,connectToOnliner:connect},protocol:"https",get:()=>"panel.example"};
-  return {handler,request,writes,stored,starts,other};
+  const request={params:{categoryId:"offline"},body:{accountToken:token,connectToOnliner:connect,...(customProxy?{authProxy:proxy}:{})},protocol:"https",get:()=>"panel.example"};
+  return {handler,request,writes,stored,starts,stops,other};
 }
 
 test("shared single/bulk endpoint only persists stock after proxied Gateway authorization and retains its proxy in Onliner",async()=>{
@@ -193,4 +206,81 @@ test("shared single/bulk endpoint saves nothing when a proxy or ready Gateway is
     assert.equal(fixture.writes.length,0);assert.equal(fixture.stored.length,0);assert.equal(fixture.starts.length,0);
     if(options.authFailure)assert.match(error.message,/Gateway failed/);else assert.equal(res.statusCode,409);
   }
+});
+
+test("paired auth proxy works without a central pool and is saved only for persistent Onliner connections",async()=>{
+  for(const connect of [true,false]) {
+    const state=accountRoute({connect,proxyAvailable:false,customProxy:true});
+    const res=response();
+    await state.handler(state.request,res,error=>{throw error;});
+    assert.equal(res.statusCode,201);
+    assert.equal(state.writes.length,1);
+    assert.equal(state.stored.length,connect?1:0);
+    if(connect) {
+      const saved=state.stored[0];
+      assert.ok(saved.proxyPool.includes(proxy));
+      assert.ok(saved.stockAuthProxyPool.includes(proxy));
+      assert.equal(saved.accounts.find(account=>account.id==="new-profile").proxyUrl,proxy);
+      const disconnected=normalizeConfig({...saved,accounts:saved.accounts.filter(account=>account.id!=="new-profile")});
+      assert.ok(!disconnected.proxyPool.includes(proxy));
+      assert.equal(disconnected.stockAuthProxyPool.length,0);
+    }
+  }
+});
+
+test("dedicated auth failure and proxies assigned to another account save no stock or proxy",async()=>{
+  for(const options of [{authFailure:true},{occupied:true}]) {
+    const state=accountRoute({customProxy:true,...options});
+    const res=response();let error;
+    await state.handler(state.request,res,value=>{error=value;});
+    assert.match(error.message,options.occupied?/already assigned/:/Gateway failed/);
+    assert.equal(state.writes.length,0);assert.equal(state.stored.length,0);assert.equal(state.starts.length,0);
+  }
+});
+
+test("an existing account can move to its paired proxy without leaving the prior dedicated proxy behind",async()=>{
+  const state=accountRoute({customProxy:true,linked:true});
+  const res=response();
+  await state.handler(state.request,res,error=>{throw error;});
+  assert.equal(res.statusCode,201);
+  const saved=state.stored[0];
+  const account=saved.accounts.find(account=>account.id==="existing");
+  assert.equal(account.proxyUrl,proxy);
+  assert.ok(saved.stockAuthProxyPool.includes(proxy));
+  assert.ok(!saved.proxyPool.includes("http://previous-proxy:8080"));
+  assert.ok(!saved.stockAuthProxyPool.includes("http://previous-proxy:8080"));
+  assert.equal(saved.accounts.filter(account=>account.botToken===token).length,1);
+  assert.deepEqual(state.stops,["existing"],"close the previous socket before starting its new proxy route");
+});
+
+test("single and bulk profile removal prune dedicated proxies while retaining ordinary pool proxies and other accounts",()=>{
+  const general="http://general:8080",second="http://second:8080";
+  const accounts=[
+    {id:"one",botToken:token,proxyUrl:proxy},
+    {id:"two",botToken:"second-account-token",proxyUrl:second},
+    {id:"three",botToken:"ordinary-account-token",proxyUrl:general}
+  ];
+  const current=normalizeConfig({accounts,proxyPool:[general,proxy,second],stockAuthProxyPool:[proxy,second]});
+  const single=normalizeConfig({...current,accounts:current.accounts.filter(account=>account.id!=="one")});
+  assert.deepEqual(Array.from(single.proxyPool),[general,second]);
+  assert.deepEqual(Array.from(single.stockAuthProxyPool),[second]);
+  const bulk=normalizeConfig({...current,accounts:current.accounts.filter(account=>account.id==="three")});
+  assert.deepEqual(Array.from(bulk.proxyPool),[general]);
+  assert.equal(bulk.stockAuthProxyPool.length,0);
+  assert.equal(bulk.accounts[0].id,"three");
+  assert.ok(current.proxyPool.includes(proxy),"input configuration remains unchanged");
+});
+
+test("shared dedicated proxies are retained until their last referencing profile is removed",()=>{
+  const config={proxyPool:[proxy,"http://ordinary:8080"],stockAuthProxyPool:[proxy]};
+  assert.deepEqual(pruneStockAuthProxyPool(config,[{proxyUrl:proxy}]).proxyPool,config.proxyPool);
+  assert.deepEqual(pruneStockAuthProxyPool(config,[]).proxyPool,["http://ordinary:8080"]);
+});
+
+test("automatic pool assignment never lends another account's dedicated auth proxy",()=>{
+  const scope={discordOnlinerProxyHealth:new Map(),discordOnlinerProxySelectionSequence:0};
+  vm.runInNewContext(functionCode("selectDiscordOnlinerProxy")+";this.select=selectDiscordOnlinerProxy;",scope);
+  const general="http://ordinary:8080";
+  assert.equal(scope.select({accounts:[],proxyPool:[proxy],stockAuthProxyPool:[proxy]}),"");
+  assert.equal(scope.select({accounts:[],proxyPool:[proxy,general],stockAuthProxyPool:[proxy]}),general);
 });

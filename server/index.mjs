@@ -19,7 +19,7 @@ import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, 
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
-import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey } from "./community-stock-authorization.mjs";
+import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey, pruneStockAuthProxyPool, validateStockAuthProxy } from "./community-stock-authorization.mjs";
 import { getActiveStockHumanizerJob, getLatestStockHumanizerJob, pruneHumanizerJobs, stopHumanizerJob } from "./humanizer-job-control.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
@@ -1764,7 +1764,10 @@ function normalizeDiscordOnlinerConfig(value = {}) {
   ]));
   return {
     accounts,
-    proxyPool,
+    ...pruneStockAuthProxyPool({
+      proxyPool,
+      stockAuthProxyPool: (Array.isArray(value.stockAuthProxyPool) ? value.stockAuthProxyPool : []).map(normalizeDiscordOnlinerProxyUrl).filter(Boolean)
+    }, accounts),
     enabled: value.enabled !== false,
     status,
     activityType,
@@ -1809,7 +1812,7 @@ function recordDiscordOnlinerProxyHealth(proxyUrl, success) {
 }
 
 function selectDiscordOnlinerProxy(config, additionalAssignments = [], excludedProxies = []) {
-  const excluded = new Set(excludedProxies);
+  const excluded = new Set([...excludedProxies, ...(config.stockAuthProxyPool ?? [])]);
   const proxies = (Array.isArray(config?.proxyPool) ? config.proxyPool : []).filter((proxy) => !excluded.has(proxy));
   if (!proxies.length) return "";
   const usage = new Map(proxies.map((proxy) => [proxy, 0]));
@@ -10553,6 +10556,9 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const accountToken = String(req.body?.accountToken ?? "").trim();
     const connectToOnliner = req.body?.connectToOnliner === true;
     const onlinerRichPresenceEnabled = req.body?.richPresenceEnabled !== false;
+    const hasAuthProxy = req.body?.authProxy !== undefined;
+    const authProxy = hasAuthProxy ? normalizeDiscordOnlinerProxyUrl(req.body.authProxy) : "";
+    if (hasAuthProxy && !authProxy) return res.status(400).json({ message: "Enter a valid auth proxy for this account." });
     if (!categoryId || categoryId !== requestedCategoryId) return res.status(400).json({ message: "Choose a valid Members Stock category." });
     if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
 
@@ -10564,7 +10570,8 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     if (connectToOnliner && !linkedOnlinerAccount && onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
       return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
     }
-    const normalizedOnlinerProxyUrl = normalizeDiscordOnlinerProxyUrl(linkedOnlinerAccount
+    if (hasAuthProxy) validateStockAuthProxy(onlinerCurrent, accountToken, authProxy);
+    const normalizedOnlinerProxyUrl = authProxy || normalizeDiscordOnlinerProxyUrl(linkedOnlinerAccount
       ? linkedOnlinerAccount.proxyUrl : selectDiscordOnlinerProxy(onlinerCurrent));
     if (!normalizedOnlinerProxyUrl) return res.status(409).json({ message: "Add an available proxy to the Onliner proxy pool before authorizing accounts." });
 
@@ -10587,15 +10594,21 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     // Network authorization can take time; merge into the latest Onliner config.
     onlinerCurrent = await getDiscordOnlinerConfig();
     if (connectToOnliner && onlinerCurrent) {
+      if (hasAuthProxy) validateStockAuthProxy(onlinerCurrent, accountToken, authProxy);
+      const proxySettings = hasAuthProxy ? {
+        proxyPool: [...new Set([...onlinerCurrent.proxyPool, authProxy])],
+        stockAuthProxyPool: [...new Set([...(onlinerCurrent.stockAuthProxyPool ?? []), authProxy])]
+      } : {};
       const existingOnlinerAccount = onlinerCurrent.accounts.find((account) => account.botToken === accountToken);
       if (existingOnlinerAccount) {
-        if (normalizeDiscordOnlinerProxyUrl(existingOnlinerAccount.proxyUrl) !== normalizedOnlinerProxyUrl) {
+        if (!hasAuthProxy && normalizeDiscordOnlinerProxyUrl(existingOnlinerAccount.proxyUrl) !== normalizedOnlinerProxyUrl) {
           return res.status(409).json({ message: "This account's Onliner proxy changed during authorization. Retry using the current proxy." });
         }
-        onlinerAccount = { ...existingOnlinerAccount, discordUserId, richPresenceEnabled: onlinerRichPresenceEnabled };
-        if (existingOnlinerAccount.discordUserId !== discordUserId || existingOnlinerAccount.richPresenceEnabled !== onlinerRichPresenceEnabled) {
+        onlinerAccount = { ...existingOnlinerAccount, proxyUrl: normalizedOnlinerProxyUrl, discordUserId, richPresenceEnabled: onlinerRichPresenceEnabled };
+        if (hasAuthProxy || existingOnlinerAccount.discordUserId !== discordUserId || existingOnlinerAccount.richPresenceEnabled !== onlinerRichPresenceEnabled) {
           onlinerCandidate = normalizeDiscordOnlinerConfig({
             ...onlinerCurrent,
+            ...proxySettings,
             accounts: onlinerCurrent.accounts.map((account) => account.id === existingOnlinerAccount.id ? onlinerAccount : account)
           });
         }
@@ -10604,6 +10617,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
         onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl: normalizedOnlinerProxyUrl, richPresenceEnabled: onlinerRichPresenceEnabled, discordUserId };
         onlinerCandidate = normalizeDiscordOnlinerConfig({
           ...onlinerCurrent,
+          ...proxySettings,
           accounts: [...onlinerCurrent.accounts, onlinerAccount]
         });
       }
@@ -10646,7 +10660,11 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const row = saved.rows[0];
     if (onlinerCandidate && onlinerAccount) {
       await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(onlinerCandidate));
-      if (serviceRunsOnliner) startDiscordOnlinerAccounts(onlinerCandidate, [onlinerAccount]);
+      if (serviceRunsOnliner) {
+        const runtime = discordOnlinerRuntimes.get(onlinerAccount.id);
+        if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+        startDiscordOnlinerAccounts(onlinerCandidate, [onlinerAccount]);
+      }
       if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = onlinerCandidate;
       appendDiscordOnlinerLog("success", `Members Stock account ${username} was added to Onliner.`, onlinerAccount.id);
     }

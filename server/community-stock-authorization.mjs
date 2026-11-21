@@ -56,3 +56,23 @@ export async function authorizeCommunityStockAccount({ config, accountToken, pro
   if (connectedUser) return authorize(connectedUser);
   return withGatewaySession({ id: onlinerAccount?.discordUserId || null, token: accountToken, proxyUrl: proxy, onlinerAccountId: onlinerAccount?.id ?? null }, authorize);
 }
+
+// Reserve dedicated proxies while assigned; remove them with their last profile.
+export function pruneStockAuthProxyPool(config, accounts) {
+  const pool = config.proxyPool ?? [];
+  const managed = new Set(config.stockAuthProxyPool ?? []);
+  const used = new Set(accounts.map(account => account.proxyUrl));
+  return {
+    proxyPool: pool.filter(proxy => !managed.has(proxy) || used.has(proxy)),
+    stockAuthProxyPool: [...managed].filter(proxy => pool.includes(proxy) && used.has(proxy))
+  };
+}
+
+export function validateStockAuthProxy(config, token, proxy) {
+  if (config.accounts.some(account => account.botToken !== token && account.proxyUrl === proxy)) {
+    throw Object.assign(new Error("This auth proxy is already assigned to another Onliner account. Use one proxy per account."), { statusCode: 409 });
+  }
+  if (!config.proxyPool.includes(proxy) && config.proxyPool.length >= 10_000) {
+    throw Object.assign(new Error("The Onliner proxy pool is full. Remove a proxy before adding this account."), { statusCode: 409 });
+  }
+}
