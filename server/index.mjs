@@ -19,6 +19,7 @@ import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, 
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
+import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey } from "./community-stock-authorization.mjs";
 import { getActiveStockHumanizerJob, getLatestStockHumanizerJob, pruneHumanizerJobs, stopHumanizerJob } from "./humanizer-job-control.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
@@ -926,6 +927,20 @@ function isHumanizerUnknownSession(result) {
   );
 }
 
+async function getConnectedCommunityAuthorizationGatewayUser(account, proxyUrl) {
+  if (!account) return null;
+  const local = discordOnlinerRuntimes.get(account.id);
+  if (local?.state === "connected" && local.socket?.readyState === WebSocket.OPEN
+    && local.authorizationRouteKey === onlinerAuthorizationRouteKey(account.botToken, proxyUrl)
+    && (!account.discordUserId || local.bot?.id === account.discordUserId)) return local.bot;
+  if (serviceRunsOnliner) return null;
+  const [runtime, worker] = await Promise.all([
+    pool.query("SELECT payload FROM discord_onliner_runtime WHERE account_id = $1 LIMIT 1", [account.id]),
+    pool.query("SELECT status, heartbeat_at FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+  ]);
+  return getReusableAuthorizationGatewayUser(account, proxyUrl, runtime.rows[0]?.payload, worker.rows[0]);
+}
+
 async function runWithHumanizerGatewaySession(account, task) {
   const existingRuntime = account.onlinerAccountId
     ? discordOnlinerRuntimes.get(account.onlinerAccountId)
@@ -934,8 +949,9 @@ async function runWithHumanizerGatewaySession(account, task) {
     existingRuntime?.state === "connected"
     && existingRuntime.socket?.readyState === WebSocket.OPEN
     && existingRuntime.bot?.id === account.id
+    && existingRuntime.authorizationRouteKey === onlinerAuthorizationRouteKey(account.token, account.proxyUrl)
   ) {
-    return task();
+    return task(existingRuntime.bot);
   }
 
   const gatewayUrl = "wss://gateway.discord.gg/?v=10&encoding=json";
@@ -945,6 +961,7 @@ async function runWithHumanizerGatewaySession(account, task) {
 
   return new Promise((resolve, reject) => {
     let settled = false;
+    let taskStarted = false;
     let heartbeatTimer = null;
     let sequence = null;
     const finish = (error, value) => {
@@ -952,7 +969,7 @@ async function runWithHumanizerGatewaySession(account, task) {
       settled = true;
       clearTimeout(readyTimeout);
       if (heartbeatTimer) clearInterval(heartbeatTimer);
-      try { socket.close(1000, "Humanizer profile update complete"); } catch {}
+      try { socket.close(1000, "Account operation complete"); } catch {}
       if (error) reject(error);
       else resolve(value);
     };
@@ -993,8 +1010,14 @@ async function runWithHumanizerGatewaySession(account, task) {
         finish(new Error("Discord rejected the temporary Gateway session."));
         return;
       }
-      if (payload?.op === 0 && payload?.t === "READY") {
-        Promise.resolve(task()).then(
+      if (payload?.op === 0 && payload?.t === "READY" && !settled && !taskStarted) {
+        if (account.id && String(payload.d?.user?.id ?? "") !== String(account.id)) {
+          finish(new Error("Gateway session identity does not match the selected account."));
+          return;
+        }
+        taskStarted = true;
+        clearTimeout(readyTimeout);
+        Promise.resolve().then(() => task(payload.d?.user)).then(
           (value) => finish(null, value),
           (error) => finish(error instanceof Error ? error : new Error("Gateway profile retry failed."))
         );
@@ -1496,6 +1519,7 @@ function createDiscordOnlinerRuntime(accountId) {
   return {
     accountId,
     config: null,
+    authorizationRouteKey: null,
     generation: 0,
     socket: null,
     startupTimer: null,
@@ -1552,6 +1576,7 @@ function getDiscordOnlinerRuntime(accountId) {
 
 function serializeDiscordOnlinerRuntime(runtime) {
   return {
+    authorizationRouteKey: runtime.authorizationRouteKey ?? null,
     currentActivity: runtime.currentActivity,
     connectionState: runtime.state,
     bot: runtime.bot,
@@ -2709,6 +2734,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
     agent: account.proxyUrl ? createDiscordOnlinerProxyAgent(account.proxyUrl) : undefined
   });
   runtime.socket = socket;
+  runtime.authorizationRouteKey = account.proxyUrl ? onlinerAuthorizationRouteKey(account.botToken, account.proxyUrl) : null;
   let sequence = shouldResume ? runtime.sequence : null;
   const sendGatewayHeartbeat = (source) => {
     if (socket.readyState !== WebSocket.OPEN) return false;
@@ -5147,20 +5173,20 @@ async function exchangeCommunityOAuthRefreshToken(config, refreshToken) {
   };
 }
 
-async function exchangeCommunityOAuthAuthorizationCode(config, code, redirectUri) {
-  const response = await fetch(`${discordApiBase}/oauth2/token`, {
+async function exchangeCommunityOAuthAuthorizationCode(config, code, redirectUri, proxyUrl = null) {
+  const requestOptions = {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      client_id: config.clientId,
-      client_secret: config.clientSecret,
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: redirectUri
-    }),
-    signal: AbortSignal.timeout(15_000)
-  });
-  const payload = await response.json().catch(() => ({}));
+    body: new URLSearchParams({ client_id: config.clientId, client_secret: config.clientSecret, grant_type: "authorization_code", code, redirect_uri: redirectUri }).toString()
+  };
+  let response;
+  let payload;
+  if (proxyUrl !== null) {
+    ({ response, payload } = await requestDiscordThroughProxy("oauth2/token", proxyUrl, requestOptions));
+  } else {
+    response = await fetch(`${discordApiBase}/oauth2/token`, { ...requestOptions, signal: AbortSignal.timeout(15_000) });
+    payload = await response.json().catch(() => ({}));
+  }
   if (!response.ok) {
     const message = String(payload?.error_description ?? payload?.message ?? payload?.error ?? "Discord rejected the OAuth code exchange.").trim();
     const error = new Error(`OAuth token exchange failed (HTTP ${response.status}): ${message}`);
@@ -10530,22 +10556,17 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     if (!categoryId || categoryId !== requestedCategoryId) return res.status(400).json({ message: "Choose a valid Members Stock category." });
     if (accountToken.length < 20 || accountToken.length > 4096) return res.status(400).json({ message: "Enter a valid Discord account token." });
 
-    let onlinerCurrent = null;
+    let onlinerCurrent = await getDiscordOnlinerConfig();
     let onlinerCandidate = null;
     let onlinerAccount = null;
-    let normalizedOnlinerProxyUrl = "";
-    let onlinerAlreadyConnected = false;
-    if (connectToOnliner) {
-      onlinerCurrent = await getDiscordOnlinerConfig();
-      onlinerAlreadyConnected = onlinerCurrent.accounts.some((account) => account.botToken === accountToken);
-      if (!onlinerAlreadyConnected) {
-        if (onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
-          return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
-        }
-        normalizedOnlinerProxyUrl = selectDiscordOnlinerProxy(onlinerCurrent);
-        if (!normalizedOnlinerProxyUrl) return res.status(409).json({ message: "Add at least one proxy to the Onliner proxy pool first." });
-      }
+    const linkedOnlinerAccount = onlinerCurrent.accounts.find((account) => account.botToken === accountToken);
+    const onlinerAlreadyConnected = Boolean(linkedOnlinerAccount);
+    if (connectToOnliner && !linkedOnlinerAccount && onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) {
+      return res.status(409).json({ message: `The Onliner supports up to ${discordOnlinerAccountLimit} account profiles.` });
     }
+    const normalizedOnlinerProxyUrl = normalizeDiscordOnlinerProxyUrl(linkedOnlinerAccount
+      ? linkedOnlinerAccount.proxyUrl : selectDiscordOnlinerProxy(onlinerCurrent));
+    if (!normalizedOnlinerProxyUrl) return res.status(409).json({ message: "Add an available proxy to the Onliner proxy pool before authorizing accounts." });
 
     const category = await pool.query(
       "SELECT id, name FROM community_stock_categories WHERE guild_id = $1 AND id = $2 LIMIT 1",
@@ -10553,66 +10574,24 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     );
     if (!category.rowCount) return res.status(404).json({ message: "Members Stock category not found." });
 
-    const accountIdentity = await requestDiscord("users/@me", { headers: { Authorization: accountToken } });
-    if (!accountIdentity.response.ok || !isDiscordGuildId(String(accountIdentity.payload?.id ?? ""))) {
-      return res.status(accountIdentity.response.status === 429 ? 429 : 401).json({
-        message: accountIdentity.response.status === 429
-          ? "Discord is rate limiting account checks. Try again shortly."
-          : "Discord rejected this account token. Check that it is current and valid."
-      });
-    }
-
     const redirectUri = `${req.protocol}://${req.get("host")}/api/community/oauth/callback`;
-    const authorizeQuery = new URLSearchParams({
-      client_id: config.clientId,
-      response_type: "code",
-      redirect_uri: redirectUri,
-      scope: "identify guilds.join"
+    const { accountIdentity, oauth, discordUserId } = await authorizeCommunityStockAccount({
+      config, accountToken, proxyUrl: normalizedOnlinerProxyUrl, onlinerAccount: linkedOnlinerAccount, redirectUri
+    }, {
+      normalizeProxy: normalizeDiscordOnlinerProxyUrl,
+      withGatewaySession: runWithHumanizerGatewaySession,
+      getConnectedGatewayUser: getConnectedCommunityAuthorizationGatewayUser,
+      requestThroughProxy: requestDiscordThroughProxy,
+      exchangeCode: exchangeCommunityOAuthAuthorizationCode
     });
-    const authorizeResponse = await fetch(`${discordApiBase}/oauth2/authorize?${authorizeQuery.toString()}`, {
-      method: "POST",
-      headers: { Authorization: accountToken, "Content-Type": "application/json" },
-      body: JSON.stringify({ authorize: true, permissions: "0" }),
-      signal: AbortSignal.timeout(15_000)
-    });
-    const authorizePayload = await authorizeResponse.json().catch(() => ({}));
-    if (!authorizeResponse.ok) {
-      const discordMessage = String(authorizePayload?.message ?? authorizePayload?.error_description ?? "Discord rejected the application authorization.").trim();
-      const error = new Error(authorizeResponse.status === 401
-        ? "Discord rejected this account token."
-        : authorizeResponse.status === 429
-          ? "Discord is rate limiting OAuth authorizations. Try again shortly."
-          : `Discord OAuth authorization failed (HTTP ${authorizeResponse.status}): ${discordMessage}`);
-      error.statusCode = authorizeResponse.status === 429 ? 429 : authorizeResponse.status >= 500 ? 502 : 409;
-      throw error;
-    }
-
-    const authorizationLocation = String(authorizePayload?.location ?? "").trim();
-    let authorizationCode = "";
-    try {
-      authorizationCode = new URL(authorizationLocation, redirectUri).searchParams.get("code") ?? "";
-    } catch {
-      authorizationCode = "";
-    }
-    if (!authorizationCode) {
-      const error = new Error("Discord did not return an OAuth authorization code. The account may require additional verification or consent.");
-      error.statusCode = 409;
-      throw error;
-    }
-
-    const oauth = await exchangeCommunityOAuthAuthorizationCode(config, authorizationCode, redirectUri);
-    const oauthIdentity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${oauth.accessToken}` } });
-    const discordUserId = String(accountIdentity.payload.id);
-    const verifiedUserId = String(oauthIdentity.payload?.user?.id ?? "");
-    const scopes = Array.isArray(oauthIdentity.payload?.scopes) ? oauthIdentity.payload.scopes.map(String) : [];
-    if (!oauthIdentity.response.ok || verifiedUserId !== discordUserId || !scopes.includes("guilds.join")) {
-      const error = new Error("The new OAuth authorization could not be verified with the required guilds.join permission.");
-      error.statusCode = 502;
-      throw error;
-    }
+    // Network authorization can take time; merge into the latest Onliner config.
+    onlinerCurrent = await getDiscordOnlinerConfig();
     if (connectToOnliner && onlinerCurrent) {
       const existingOnlinerAccount = onlinerCurrent.accounts.find((account) => account.botToken === accountToken);
       if (existingOnlinerAccount) {
+        if (normalizeDiscordOnlinerProxyUrl(existingOnlinerAccount.proxyUrl) !== normalizedOnlinerProxyUrl) {
+          return res.status(409).json({ message: "This account's Onliner proxy changed during authorization. Retry using the current proxy." });
+        }
         onlinerAccount = { ...existingOnlinerAccount, discordUserId, richPresenceEnabled: onlinerRichPresenceEnabled };
         if (existingOnlinerAccount.discordUserId !== discordUserId || existingOnlinerAccount.richPresenceEnabled !== onlinerRichPresenceEnabled) {
           onlinerCandidate = normalizeDiscordOnlinerConfig({
@@ -10621,6 +10600,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
           });
         }
       } else {
+        if (onlinerCurrent.accounts.length >= discordOnlinerAccountLimit) return res.status(409).json({ message: "Onliner capacity reached while authorizing this account. Retry after freeing a profile." });
         onlinerAccount = { id: crypto.randomUUID(), botToken: accountToken, proxyUrl: normalizedOnlinerProxyUrl, richPresenceEnabled: onlinerRichPresenceEnabled, discordUserId };
         onlinerCandidate = normalizeDiscordOnlinerConfig({
           ...onlinerCurrent,

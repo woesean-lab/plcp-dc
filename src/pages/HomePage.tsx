@@ -5191,7 +5191,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
-            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Account tokens and resulting OAuth credentials are encrypted and saved so Onliner can be enabled later without entering tokens again.{communityConnectToOnliner ? " Proxies will be assigned automatically and evenly from the central Onliner pool." : " Account tokens are never returned to the browser after this step."}</p>
+            <p>{communityAccountMode === "bulk" ? "Each line will be authorized independently; failed lines will not stop the remaining accounts." : "The account will authorize the configured bot application."} Accounts connect before authorization through an assigned Onliner proxy. A working proxy is required for every account. Account tokens and resulting OAuth credentials are encrypted and saved.{communityConnectToOnliner ? " Accounts stay connected to Onliner after authorization." : " Temporary connections close after authorization; accounts are not added to Onliner."}</p>
             <div className="community-account-mode" role="group" aria-label="Account add mode">
               <Button
                 type="button"
