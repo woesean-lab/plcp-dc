@@ -115,10 +115,10 @@ function MonitorControlsExample() {
 }
 
 function ReactionAccessExample() {
-  const [disabled, setDisabled] = useState(false);
+  const [state, setState] = useState("not-enabled");
   return <div className="ui-ref-stack">
-    <div className="stock-duration-filter" role="group" aria-label="Reaction access state"><button type="button" className={!disabled ? "is-active" : ""} aria-pressed={!disabled} onClick={() => setDisabled(false)}>Not enabled</button><button type="button" className={disabled ? "is-active" : ""} aria-pressed={disabled} onClick={() => setDisabled(true)}>Disabled</button></div>
-    <OrderReactionAccessCard disabled={disabled} configured={disabled} onManage={() => toast.success("Sample reaction settings previewed")} />
+    <div className="stock-duration-filter flex-wrap" role="group" aria-label="Reaction access state">{[{ value: "not-enabled", label: "Not enabled" }, { value: "disabled", label: "Disabled" }, { value: "unsupported", label: "Unsupported category" }].map(({ value, label }) => <button key={value} type="button" className={state === value ? "is-active" : ""} aria-pressed={state === value} onClick={() => setState(value)}>{label}</button>)}</div>
+    {state === "unsupported" ? <p className="ui-ref-hint">No reaction card or empty section is rendered when the category has no reaction access or active support.</p> : <OrderReactionAccessCard disabled={state === "disabled"} dailyLimit={state === "disabled" ? 100 : 0} firstDayLimit={500} onManage={() => toast.success("Sample reaction settings previewed")} />}
   </div>;
 }
 
@@ -228,7 +228,7 @@ export default function UiKitPage() {
         {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
-          <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Content-height row; does not inherit the monitor control panel minimum height.\n<OrderReactionAccessCard disabled={summary.disabled}\n  configured={summary.dailyLimit > 0} onManage={openSettings} />'}><ReactionAccessExample /></Example>
+          <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>
           <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// With reactions, both cards share the row equally.\n<div className="monitor-order-controls is-paired">\n  {delayPanel}{reactionPanel}\n</div>\n// Both layouts use full-width cards below 900px.'}><MonitorControlsExample /></Example>
           <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.'}><ReactionExample /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>

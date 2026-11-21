@@ -4,6 +4,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import React from "react";
 import ts from "typescript";
+import { getCustomerReactionSummary } from "../server/customer-order-reactions.mjs";
 
 // Exercise the real section's JSX in every transition without calling live APIs.
 const filename = new URL("../src/pages/OrderPage.tsx", import.meta.url);
@@ -18,7 +19,8 @@ function find(node) {
 }
 find(source);
 assert.ok(section, "the order's reaction section exists");
-const code = ts.transpileModule(`export function render(result, reactionSettingsOrder) { return (${section.getText(source)}); }`, {
+assert.ok(ts.isConditionalExpression(section.parent), "the complete section has a visibility condition");
+const code = ts.transpileModule(`export function render(result, reactionSettingsOrder, isCommunityProvider = true) { return (${section.parent.getText(source)}); }`, {
   compilerOptions: { jsx: ts.JsxEmit.React, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 }
 }).outputText;
 const components = {
@@ -28,8 +30,24 @@ const components = {
 };
 const exports = {};
 vm.runInNewContext(code, { React, exports, ...components });
-const order = (enabled) => ({ uniqid: "same-order", customerReactions: { enabled, disabled: !enabled, dailyLimit: 50 } });
+const order = (enabled) => ({ uniqid: "same-order", customerReactions: { enabled, canConfigure: true, disabled: !enabled, dailyLimit: 50, firstDayLimit: 500 } });
 const children = (enabled, settings = null) => React.Children.toArray(exports.render(order(enabled), settings).props.children);
+
+test("unsupported categories and expired support omit the entire section, including its dialog", () => {
+  const now = Date.parse("2026-11-21T12:00:00Z");
+  const allocation = { reactionUseEnabled: true, isPeriodic: true, expiredAt: "2026-12-21T12:00:00Z" };
+  const supported = { ...order(false), provider: "community", amount: 500, categoryAllocations: [allocation] };
+  for (const patch of [{ reactionUseEnabled: false }, { isPeriodic: false }, { expiredAt: "2026-11-20T12:00:00Z" }]) {
+    const unsupported = { ...supported, categoryAllocations: [{ ...allocation, ...patch }] };
+    unsupported.customerReactions = getCustomerReactionSummary(unsupported, now);
+    assert.equal(exports.render(unsupported, "same-order"), null);
+  }
+  assert.equal(exports.render({ uniqid: "no-summary" }, null), null);
+  assert.equal(exports.render(order(true), null, false), null);
+  const mixed = { ...supported, categoryAllocations: [{ ...allocation, reactionUseEnabled: false }, allocation] };
+  mixed.customerReactions = getCustomerReactionSummary(mixed, now);
+  assert.ok(exports.render(mixed, null), "a supported active portion keeps access in mixed-category orders");
+});
 
 test("opening settings never gives the reaction panel and dialog the same sibling key", () => {
   const open = children(true, "same-order");

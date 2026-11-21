@@ -7805,8 +7805,26 @@
   background: radial-gradient(circle at 92% 10%, rgba(155,140,255,.07), transparent 25rem);
 }
 
-.order-reaction-access-card { min-width: 0; padding: 12px 16px; flex-wrap: wrap; }
-.order-reaction-access-card > div { flex: 1 1 160px; }
+.order-reaction-access-card { min-width: 0; container-type: inline-size; }
+.order-reaction-access-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, .8fr); align-items: center; gap: 24px; padding: 20px; }
+.order-reaction-access-intro { min-width: 0; }
+.order-reaction-access-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.order-reaction-access-description { max-width: 440px; margin-top: 12px; color: var(--app-muted); font-size: 12px; line-height: 1.7; }
+.order-reaction-access-limits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; margin: 0; padding: 14px 16px; gap: 16px; }
+.order-reaction-access-limits > div + div { padding-left: 16px; border-left: 1px solid var(--app-border); }
+.order-reaction-access-limits dt { color: var(--app-muted); font-size: 11px; }
+.order-reaction-access-limits dd { margin: 6px 0 0; color: var(--app-text); font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.order-reaction-access-limits small { color: var(--app-muted); font-size: 11px; font-weight: 400; }
+.order-reaction-access-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--app-border); }
+.order-reaction-access-footer > span { display: inline-flex; align-items: center; gap: 7px; color: var(--app-muted); font-size: 11px; }
+.order-reaction-access-footer > span svg { color: var(--app-accent-bright); }
+@container (max-width: 640px) {
+  .order-reaction-access-layout { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 16px; }
+  .order-reaction-access-footer { padding: 12px 16px; }
+}
+@container (max-width: 360px) {
+  .order-reaction-access-footer > button { width: 100%; }
+}
 
 .monitor-reaction-panel {
   position: relative;

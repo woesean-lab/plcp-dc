@@ -1466,9 +1466,9 @@ export default function OrderPage() {
             ) : null}
           </div>
 
-          {isCommunityProvider && result.customerReactions ? <div className="lookup-reaction-section">
+          {isCommunityProvider && result.customerReactions?.canConfigure ? <div className="lookup-reaction-section">
             {result.customerReactions.enabled ? <CustomerOrderReactionPanel key={`reaction-panel:${result.uniqid}`} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onEditSettings={() => setReactionSettingsOrder(result.uniqid)} onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
-              : <OrderReactionAccessCard key={`reaction-access:${result.uniqid}`} disabled={result.customerReactions.disabled} configured={result.customerReactions.dailyLimit > 0} onManage={() => setReactionSettingsOrder(result.uniqid)} />}
+              : <OrderReactionAccessCard key={`reaction-access:${result.uniqid}`} disabled={result.customerReactions.disabled} dailyLimit={result.customerReactions.dailyLimit} firstDayLimit={result.customerReactions.firstDayLimit} onManage={() => setReactionSettingsOrder(result.uniqid)} />}
             {reactionSettingsOrder ? <OrderReactionSettingsDialog key={`reaction-settings:${reactionSettingsOrder}`} uniqid={reactionSettingsOrder} onClose={() => setReactionSettingsOrder(null)} onSaved={(order) => setResult((current) => mergeOrderStatus(current, order))} /> : null}
           </div> : null}
 
