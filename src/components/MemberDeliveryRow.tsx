@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { CommunityMemberResult } from "../types";
 import { Button } from "./ui/button";
@@ -19,6 +19,8 @@ export function MemberDeliveryRow({ item, formatTime }: {
   item: CommunityMemberResult;
   formatTime: (value: string) => string;
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const notesId = useId();
   const leaveStatus = item.autoLeaveStatus;
   const leaveState = leaveStatus === "left" || leaveStatus === "already_left" ? "removed"
     : leaveStatus === "processing" ? "joining" : leaveStatus;
@@ -36,7 +38,10 @@ export function MemberDeliveryRow({ item, formatTime }: {
         <span className="community-order-avatar" aria-hidden="true">
           {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
         </span>
-        <strong>{item.username}</strong>
+        <div className="member-delivery-identity-copy">
+          <strong>{item.username}</strong>
+          <time dateTime={timestamp}>{timestamp ? formatTime(timestamp) : "—"}</time>
+        </div>
       </div>
       <dl className="member-delivery-statuses">
         <StatusField label="OAuth" state={item.authorizationStatus} value={item.authorizationStatus} details={item.authorizationDetails} icon={<ShieldCheck aria-hidden="true" />} />
@@ -44,17 +49,16 @@ export function MemberDeliveryRow({ item, formatTime }: {
         <StatusField label="Onliner" state={typeof item.onlinerLive === "boolean" ? item.onlinerLive ? "active" : "inactive" : undefined} value={typeof item.onlinerLive === "boolean" ? item.onlinerLive ? "Online" : "Offline" : undefined} details={item.onlinerDetails} icon={<RadioTower aria-hidden="true" />} />
         <StatusField label="Delivery" state={item.state.toLowerCase()} value={item.state.replace(/_/g, " ")} icon={["failed", "blocked"].includes(item.state.toLowerCase()) ? <TriangleAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />} />
       </dl>
-      <time dateTime={timestamp}>{timestamp ? formatTime(timestamp) : "—"}</time>
+      <span className="community-member-row-actions">
+        <Button type="button" variant="ghost" size="icon-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.username}`} aria-expanded={expanded} aria-controls={notesId} title={expanded ? "Hide details" : "Show details"} onClick={() => setExpanded((current) => !current)}>
+          <ChevronDown className="member-delivery-details-chevron h-3.5 w-3.5" aria-hidden="true" />
+        </Button>
+      </span>
     </div>
-    <details className="member-delivery-details">
-      <Button asChild variant="ghost" size="xs">
-        <summary aria-label={`Details for ${item.username}`}><ChevronDown className="member-delivery-details-chevron h-3.5 w-3.5" aria-hidden="true" />Details</summary>
-      </Button>
-      <div className="member-delivery-notes">
+      <div id={notesId} className="member-delivery-notes" hidden={!expanded}>
         <p><span>Delivery</span>{item.details}</p>
         {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {item.reactionDetails}</p> : null}
         {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>Auto Leave</span>{item.autoLeaveDetails}</p> : null}
       </div>
-    </details>
   </article>;
 }
