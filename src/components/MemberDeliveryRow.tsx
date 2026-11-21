@@ -2,6 +2,7 @@ import { useId, useState, type MouseEvent, type ReactNode } from "react";
 import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAlert } from "lucide-react";
 import type { CommunityMemberResult } from "../types";
 import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 import "./MemberDeliveryRow.css";
 
 function StatusField({ label, state, value, icon, details }: {
@@ -9,12 +10,18 @@ function StatusField({ label, state, value, icon, details }: {
 }) {
   if (!value?.trim()) return null;
 
-  return <div className="member-delivery-field">
+  const status = state?.toLowerCase();
+  const variant = status === "active" || status === "joined" ? "success"
+    : status === "failed" || status === "blocked" || status === "inactive" ? "destructive"
+    : status === "joining" || status === "replacing" || status === "processing" ? "default"
+    : "secondary";
+
+  return <Badge className="member-delivery-field" variant={variant} data-state={state} title={details ? `${value} · ${details}` : value}>
     <dt>{icon}<span>{label}</span></dt>
-    <dd className="member-delivery-value" data-state={state} title={details}>
+    <dd className="member-delivery-value">
       <span>{value}</span>
     </dd>
-  </div>;
+  </Badge>;
 }
 
 export function MemberDeliveryRow({ item, formatTime }: {
