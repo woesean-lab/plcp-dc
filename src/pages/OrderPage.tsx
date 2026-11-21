@@ -18,6 +18,7 @@ import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionP
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { useMemberLogOrder } from "../lib/use-member-log-order";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
 import type { CommunityMemberResult, OrderProvider, OrderStatusResponse } from "../types";
@@ -488,7 +489,8 @@ export default function OrderPage() {
   const replaceableDcordTokenIndices = dcordTokenResults
     .filter((item) => item.state === "error" && item.replaceable)
     .map((item) => item.index);
-  const communityMemberResults = getCommunityMemberResults(result);
+  const communityMemberResults = useMemo(() => getCommunityMemberResults(result), [result]);
+  const displayedCommunityMembers = useMemberLogOrder(communityMemberResults, uniqid ?? "");
   const autoLeaveJob = result?.autoLeaveJob;
   const autoLeaveRunning = autoLeaveJob?.status === "running";
   const reactionDeliveryRunning = result?.customerReactions?.requests.some((request) => request.assignedCount > request.completedCount + request.failedCount + request.cancelledCount) === true;
@@ -1622,9 +1624,9 @@ export default function OrderPage() {
               ) : null}
 
               {communityMemberResults.length ? (
-                <div className="community-order-result-list">
-                  <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
-                  {pageItems.map((item) => <MemberDeliveryRow key={`${item.username}-${item.index}`} item={item} formatTime={formatTime} />)}
+                <div className="community-order-result-list humanizer-results member-delivery-list">
+                  <PaginatedList key={uniqid} items={displayedCommunityMembers} label="Member result pages">{(pageItems) => (<>
+                  {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={formatTime} />)}
                   </>)}</PaginatedList>
                 </div>
               ) : (

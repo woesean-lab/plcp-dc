@@ -1150,7 +1150,7 @@ export default function PublicOrderPage() {
                       </div>
                     ) : null}
                     {communityMemberResults.length ? (
-                      <div className="community-order-result-list">
+                      <div className="community-order-result-list humanizer-results member-delivery-list">
                         <PaginatedList key={uniqid} items={displayedCommunityMembers} label="Member result pages">{(pageItems) => (<>
                         {pageItems.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
                         </>)}</PaginatedList>
