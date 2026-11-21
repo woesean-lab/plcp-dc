@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { diagnoseGuildJoinFailure, discordFailureDetails } from "./discord-join-diagnostics.mjs";
 import https from "node:https";
 import path from "node:path";
 import { execFile as execFileCallback, spawn } from "node:child_process";
@@ -533,8 +534,12 @@ async function requestDiscord(pathname, init = {}) {
     ...init,
     signal: AbortSignal.timeout(15_000)
   });
-  const payload = response.status === 204 ? null : await response.json().catch(() => ({}));
-  return { response, payload };
+  let nonJsonResponse = false;
+  const payload = response.status === 204 ? null : await response.json().catch(() => {
+    nonJsonResponse = true;
+    return {};
+  });
+  return { response, payload, nonJsonResponse };
 }
 
 async function requestDiscordThroughProxy(pathname, proxyUrl, init = {}) {
@@ -6890,7 +6895,10 @@ async function addCommunityGuildMember(config, discordUserId, accessToken) {
       body: JSON.stringify({ access_token: accessToken })
     });
   }
-  return result;
+  return diagnoseGuildJoinFailure(result, {
+    request: requestDiscord, userId: discordUserId, applicationId: config.clientId,
+    accessToken, botToken: config.botToken
+  });
 }
 
 function answerCommunityApplicationField(field) {
@@ -7086,6 +7094,7 @@ async function joinCommunityDirectly(config, inviteValue, member) {
 }
 
 function getDiscordRequestFailureDetails(label, result) {
+  if (result?.joinDiagnosis || result?.nonJsonResponse) return discordFailureDetails(label, result);
   const status = Number(result?.response?.status ?? 0);
   const code = Number(result?.payload?.code ?? 0);
   const captchaRequired = Boolean(result?.payload?.captcha_sitekey)
