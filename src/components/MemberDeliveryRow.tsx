@@ -7,10 +7,12 @@ import "./MemberDeliveryRow.css";
 function StatusField({ label, state, value, icon, details }: {
   label: string; state?: string; value?: string; icon: ReactNode; details?: string;
 }) {
+  if (!value?.trim()) return null;
+
   return <div className="member-delivery-field">
     <dt>{icon}<span>{label}</span></dt>
     <dd className="member-delivery-value" data-state={state} title={details}>
-      <span>{value || "—"}</span>
+      <span>{value}</span>
     </dd>
   </div>;
 }
