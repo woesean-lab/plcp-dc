@@ -214,6 +214,9 @@ export default function UiKitPage() {
           <Example title="Members Stock chips" source="src/index.css · community-*-chip" code={'<span className="community-onliner-chip status-badge"><RadioTower /><span>Onliner</span><b>Live</b></span>\n<span className="community-rich-presence-chip status-badge" data-enabled="true"><Star /><span>Rich Presence</span><b>On</b></span>\n<span className="community-server-count-chip status-badge"><Server /><b>98</b><span>Servers</span></span>'}>
             <div className="ui-ref-row"><span className="community-onliner-chip status-badge"><RadioTower /><span>Onliner</span><b>Live</b></span><span className="community-rich-presence-chip status-badge" data-enabled="true"><Star /><span>Rich Presence</span><b>On</b></span><span className="community-server-count-chip status-badge"><Server /><b>98</b><span>Servers</span></span></div>
           </Example>
+          <Example title="Member delivery log status" source="src/pages/OrderPage.tsx · ui/badge.tsx" code={'// Keep counts in shared Badges beside the action buttons.\n// Auto Leave: destructive for failures, default while running, success when finished.\n<Badge variant="destructive"><TriangleAlert />Auto Leave 50/50 · 50 failed</Badge>\n<Badge variant="success"><ShieldCheck />50/50 processed</Badge>'}>
+            <div className="ui-ref-row"><Badge><RefreshCw className="animate-spin" aria-hidden="true" />Auto Leave 20/50</Badge><Badge variant="destructive"><TriangleAlert aria-hidden="true" />Auto Leave 50/50 · 50 failed</Badge><Badge variant="success"><CheckCircle2 aria-hidden="true" />Auto Leave 50/50</Badge><Badge variant="secondary"><ShieldCheck aria-hidden="true" />20/50 processed</Badge><Badge variant="success"><ShieldCheck aria-hidden="true" />50/50 processed</Badge></div>
+          </Example>
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">

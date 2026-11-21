@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X, Zap } from "lucide-react";
@@ -1575,12 +1576,12 @@ export default function OrderPage() {
 
           {isCommunityProvider ? (
             <section id="member-log" className="lookup-token-panel community-order-log">
-              <div className="lookup-section-heading">
+              <div className="lookup-section-heading flex-wrap">
                 <div>
                   <p className="app-kicker">Member results</p>
                   <h3>Per-member delivery log</h3>
                 </div>
-                <span className="public-secure-mark gap-2">
+                <div className="public-secure-mark max-w-full flex-wrap gap-2">
                   {communityMembersStillInServerCount > 0 ? (
                     <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => setShowLeaveAllCommunityModal(true)} disabled={leavingAllCommunityMembers || checkingCommunityMembers || autoLeaveRunning}>
                       <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
@@ -1617,12 +1618,12 @@ export default function OrderPage() {
                       {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                     </Button>
                   ) : null}
-                  {autoLeaveJob ? <span title={autoLeaveJob.nextRunAt ? `Next attempt: ${formatTime(autoLeaveJob.nextRunAt)}` : undefined}>
-                    <LogOut className="inline h-3.5 w-3.5" /> Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}
+                  {autoLeaveJob ? <Badge variant={autoLeaveJob.failed > 0 ? "destructive" : autoLeaveRunning ? "default" : "success"} title={autoLeaveJob.nextRunAt ? `Next attempt: ${formatTime(autoLeaveJob.nextRunAt)}` : undefined}>
+                    {autoLeaveJob.failed > 0 ? <TriangleAlert aria-hidden="true" /> : autoLeaveRunning ? <RefreshCw className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />} Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}
                     {autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}
-                  </span> : null}
-                  <span><ShieldCheck className="inline h-3.5 w-3.5" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</span>
-                </span>
+                  </Badge> : null}
+                  <Badge variant={communityCompletedCount > 0 && communityCompletedCount >= (communityMemberResults.length || result.amount || 0) ? "success" : "secondary"}><ShieldCheck aria-hidden="true" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</Badge>
+                </div>
               </div>
 
               {communityCheckNeedsBot && botInvite ? (
