@@ -8,6 +8,7 @@
 }
 .member-delivery-row:hover,
 .member-delivery-row:focus-within { background: var(--app-hover); }
+.member-delivery-row[data-state="joined"] { border-inline-start: 2px solid var(--app-success); }
 .member-delivery-row:is([data-state="failed"], [data-state="blocked"]) { border-inline-start: 2px solid var(--app-danger); }
 
 .member-delivery-overview {
