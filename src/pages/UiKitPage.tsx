@@ -13,6 +13,8 @@ import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
+import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import type { CommunityMemberResult } from "../types";
 import "../components/OrdersWorkspace.css";
 import "./UiKitPage.css";
 
@@ -77,6 +79,16 @@ function StockActions() {
 }
 
 const MEMBERS = Array.from({ length: 125 }, (_, index) => ({ id: index + 1, name: `Sample member ${String(index + 1).padStart(3, "0")}` }));
+
+const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
+  { index: 0, username: "Sample member with leave error", avatarUrl: null, state: "joined", authorizationStatus: "active", onlinerLive: true, autoLeaveStatus: "failed", details: "Member joined the server and is pending Discord’s server-rules screening.", autoLeaveDetails: "Discord requires account verification before the member can leave.", completedAt: "2026-11-20T12:00:00Z" },
+  { index: 1, username: "Sample member already outside", avatarUrl: null, state: "joined", authorizationStatus: "active", onlinerLive: true, autoLeaveStatus: "already_left", details: "Member joined the server.", autoLeaveDetails: "The account was already outside the server.", completedAt: "2026-11-20T12:00:00Z" },
+  { index: 2, username: "Sample member awaiting delivery", avatarUrl: null, state: "queued", authorizationStatus: "inactive", onlinerLive: false, details: "Waiting for delivery.", reactionState: "failed", reactionEmoji: "👍", reactionDetails: "Missing permission to add reactions." }
+];
+
+function MemberDeliveryExample() {
+  return <div className="grid gap-2">{MEMBER_DELIVERY_SAMPLES.map((item) => <MemberDeliveryRow key={item.index} item={item} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</div>;
+}
 
 function MembersList() {
   const [page, setPage] = useState(1);
@@ -228,7 +240,7 @@ export default function UiKitPage() {
           </Example>
         </Section> : null}
 
-        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example></Section> : null}
+        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryRow item={member} formatTime={formatTime} />\n// All statuses and notes stay visible. Fields stack at narrow card widths.'}><MemberDeliveryExample /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>

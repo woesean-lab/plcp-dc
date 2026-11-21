@@ -16,9 +16,10 @@ import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
+import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
-import type { OrderProvider, OrderStatusResponse } from "../types";
+import type { CommunityMemberResult, OrderProvider, OrderStatusResponse } from "../types";
 
 const labelClass = "app-kicker";
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
@@ -42,36 +43,6 @@ type DcordTokenResult = {
   replaceable: boolean;
   successful: boolean;
   state: "success" | "pending" | "error";
-};
-
-type CommunityMemberResult = {
-  index: number;
-  username: string;
-  avatarUrl: string | null;
-  categoryId?: string;
-  allocationId?: string;
-  state: string;
-  details: string;
-  completedAt?: string;
-  authorizationStatus?: string;
-  authorizationDetails?: string;
-  authorizationCheckedAt?: string;
-  membershipStatus?: string;
-  membershipDetails?: string;
-  onlinerLive?: boolean;
-  onlinerConnectionState?: string;
-  onlinerDetails?: string;
-  onlinerCheckedAt?: string;
-  reactionState?: string;
-  reactionEmoji?: string;
-  reactionDetails?: string;
-  reactionEligible?: boolean;
-  reactionRequestId?: string;
-  autoLeaveStatus?: string;
-  autoLeaveDetails?: string;
-  autoLeaveScheduledAt?: string;
-  autoLeaveAttemptedAt?: string;
-  autoLeaveCompletedAt?: string;
 };
 
 function getCommunityMemberLogPriority(item: CommunityMemberResult) {
@@ -1646,58 +1617,7 @@ export default function OrderPage() {
               {communityMemberResults.length ? (
                 <div className="community-order-result-list">
                   <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
-                  {pageItems.map((item) => (
-                    <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
-                      <span className="community-order-avatar" aria-hidden="true">
-                        {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
-                      </span>
-                      <span className="community-order-result-copy">
-                        <strong>{item.username}</strong>
-                        <small>{item.details}</small>
-                        {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? (
-                          <small>{item.reactionEmoji} {item.reactionDetails}</small>
-                        ) : null}
-                        {item.autoLeaveDetails ? <small>{item.autoLeaveDetails}</small> : null}
-                      </span>
-                      <span className="community-order-result-state">
-                        {item.authorizationStatus ? (
-                          <span className="public-token-result-pill status-badge" data-state={item.authorizationStatus} title={item.authorizationDetails}>
-                            OAuth {item.authorizationStatus}
-                          </span>
-                        ) : null}
-                        {item.autoLeaveStatus ? (
-                          <span className="public-token-result-pill status-badge" data-state={item.autoLeaveStatus === "left" || item.autoLeaveStatus === "already_left" ? "removed" : item.autoLeaveStatus === "processing" ? "joining" : item.autoLeaveStatus} title={item.autoLeaveDetails}>
-                            {item.autoLeaveStatus === "waiting"
-                              ? `Leave queued${item.autoLeaveScheduledAt ? ` · ${formatTime(item.autoLeaveScheduledAt)}` : ""}`
-                              : item.autoLeaveStatus === "processing"
-                                ? "Leaving..."
-                                : item.autoLeaveStatus === "left"
-                                  ? "Auto leave"
-                                  : item.autoLeaveStatus === "already_left"
-                                    ? "Already outside"
-                                    : item.autoLeaveStatus === "failed"
-                                      ? "Leave failed"
-                                      : item.autoLeaveStatus}
-                          </span>
-                        ) : item.membershipStatus === "removed" ? (
-                          <span className="public-token-result-pill status-badge" data-state="removed" title={item.membershipDetails}>
-                            Left server
-                          </span>
-                        ) : null}
-                        {typeof item.onlinerLive === "boolean" ? (
-                          <span className="public-token-result-pill status-badge" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
-                            {item.onlinerLive ? "Online" : "Offline"}
-                          </span>
-                        ) : null}
-                        <span className="public-token-result-pill status-badge" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
-                      </span>
-                      <time dateTime={item.autoLeaveCompletedAt ?? item.autoLeaveScheduledAt ?? item.completedAt}>{item.autoLeaveCompletedAt
-                        ? formatTime(item.autoLeaveCompletedAt)
-                        : item.autoLeaveScheduledAt
-                          ? formatTime(item.autoLeaveScheduledAt)
-                          : item.completedAt ? formatTime(item.completedAt) : "-"}</time>
-                    </div>
-                  ))}
+                  {pageItems.map((item) => <MemberDeliveryRow key={`${item.username}-${item.index}`} item={item} formatTime={formatTime} />)}
                   </>)}</PaginatedList>
                 </div>
               ) : (

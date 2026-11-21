@@ -6,6 +6,36 @@ export type BoostDuration = 1 | 3;
 export type BoostStockPool = "regular" | "rotating";
 export type CommunityJoinMethod = "create_invite" | "experimental_join" | "directly";
 
+export type CommunityMemberResult = {
+  index: number;
+  username: string;
+  avatarUrl: string | null;
+  categoryId?: string;
+  allocationId?: string;
+  state: string;
+  details: string;
+  completedAt?: string;
+  authorizationStatus?: string;
+  authorizationDetails?: string;
+  authorizationCheckedAt?: string;
+  membershipStatus?: string;
+  membershipDetails?: string;
+  onlinerLive?: boolean;
+  onlinerConnectionState?: string;
+  onlinerDetails?: string;
+  onlinerCheckedAt?: string;
+  reactionState?: string;
+  reactionEmoji?: string;
+  reactionDetails?: string;
+  reactionEligible?: boolean;
+  reactionRequestId?: string;
+  autoLeaveStatus?: string;
+  autoLeaveDetails?: string;
+  autoLeaveScheduledAt?: string;
+  autoLeaveAttemptedAt?: string;
+  autoLeaveCompletedAt?: string;
+};
+
 export interface CommunityCategoryAllocation {
   allocationId?: string;
   categoryId: string;
