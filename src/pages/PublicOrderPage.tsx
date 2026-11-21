@@ -14,6 +14,7 @@ import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
+import { MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import type { OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
@@ -1089,9 +1090,9 @@ export default function PublicOrderPage() {
 
                 {isCommunityOrder ? (
                   <div className="monitor-token-panel community-order-log">
-                    <div className="monitor-token-heading">
+                    <div className="monitor-token-heading flex-wrap">
                       <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
-                      <span className="flex items-center gap-2">
+                      <span className="flex max-w-full flex-wrap items-center gap-2">
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
                             <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
@@ -1149,31 +1150,7 @@ export default function PublicOrderPage() {
                     {communityMemberResults.length ? (
                       <div className="community-order-result-list">
                         <PaginatedList key={uniqid} items={communityMemberResults} label="Member result pages">{(pageItems) => (<>
-                        {pageItems.map((item) => (
-                          <div key={`${item.username}-${item.index}`} className="community-order-result" data-state={item.state.toLowerCase()}>
-                            <span className="community-order-avatar" aria-hidden="true">
-                              {item.avatarUrl ? <img src={item.avatarUrl} alt="" /> : <span>{String(item.index + 1).padStart(2, "0")}</span>}
-                            </span>
-                            <span className="community-order-result-copy">
-                              <strong>{item.username}</strong>
-                              <small>{item.details}</small>
-                            </span>
-                            <span className="community-order-result-state">
-                              {item.authorizationStatus === "inactive" ? (
-                                <span className="public-token-result-pill status-badge" data-state="inactive">
-                                  Inactive
-                                </span>
-                              ) : null}
-                              {typeof item.onlinerLive === "boolean" ? (
-                                <span className="public-token-result-pill status-badge" data-state={item.onlinerLive ? "active" : "inactive"} title={item.onlinerDetails}>
-                                  {item.onlinerLive ? "Online" : "Offline"}
-                                </span>
-                              ) : null}
-                              <span className="public-token-result-pill status-badge" data-state={item.state.toLowerCase()}>{item.state.replace(/_/g, " ")}</span>
-                            </span>
-                            <time dateTime={item.completedAt}>{item.completedAt ? formatDateTime(parseTimestamp(item.completedAt)) : "-"}</time>
-                          </div>
-                        ))}
+                        {pageItems.map((item) => <MemberDeliveryRow key={`${item.username}-${item.index}`} item={item} formatTime={(value) => formatDateTime(parseTimestamp(value))} />)}
                         </>)}</PaginatedList>
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
