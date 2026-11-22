@@ -27,7 +27,16 @@ export function hideCommunityLeaveInformation(order) {
   if (Array.isArray(order.communityResults)) {
     sanitized.communityResults = order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
-      return Object.fromEntries(Object.entries(item).filter(([key]) => !/^autoLeave/i.test(key) && key !== "leftServerAt"));
+      const safe = Object.fromEntries(Object.entries(item).filter(([key]) => !/^autoLeave/i.test(key) && key !== "leftServerAt"));
+      delete safe.membershipLeaveSource;
+      if (item.membershipStatus === "removed") {
+        safe.membershipDetails = "Member is no longer in the server.";
+        const source = ["customer", "admin", "automatic"].includes(item.membershipLeaveSource)
+          ? item.membershipLeaveSource
+          : ["left", "already_left"].includes(item.autoLeaveStatus) ? "automatic" : "unknown";
+        safe.membershipLeaveSource = source;
+      }
+      return safe;
     });
   }
   return sanitized;

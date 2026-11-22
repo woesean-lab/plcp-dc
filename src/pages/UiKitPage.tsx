@@ -88,10 +88,10 @@ const MEMBERS = Array.from({ length: 125 }, (_, index) => ({ id: index + 1, name
 
 const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
   { index: 0, username: "Sample member with leave error", avatarUrl: null, state: "joined", authorizationStatus: "active", onlinerLive: true, autoLeaveStatus: "failed", details: "Member joined the server and is pending Discord’s server-rules screening.", autoLeaveDetails: "Discord requires account verification before the member can leave.", completedAt: "2026-11-20T12:00:00Z" },
-  { index: 1, username: "Sample member already outside", avatarUrl: null, state: "joined", authorizationStatus: "active", onlinerLive: true, autoLeaveStatus: "already_left", details: "Member joined the server.", autoLeaveDetails: "The account was already outside the server.", completedAt: "2026-11-20T12:00:00Z" },
+  { index: 1, username: "Sample member already outside", avatarUrl: null, state: "joined", authorizationStatus: "active", onlinerLive: true, autoLeaveStatus: "already_left", membershipStatus: "removed", membershipLeaveSource: "automatic", details: "Member joined the server.", autoLeaveDetails: "The account was already outside the server.", completedAt: "2026-11-20T12:00:00Z" },
   { index: 2, username: "Sample member needing verification", avatarUrl: null, state: "failed", authorizationStatus: "inactive", details: "Discord Add Guild Member failed (HTTP 403, Discord code 50178): The user account must first be verified.", reactionState: "failed", reactionEmoji: "👍", reactionDetails: "Missing permission to add reactions." },
   { index: 3, username: "Sample member with delivery status only", avatarUrl: null, state: "failed", details: "Delivery failed before account checks were available." },
-  { index: 4, username: "Sample offline member", avatarUrl: null, state: "joined", onlinerLive: false, details: "Member joined the server; its Onliner connection is offline." },
+  { index: 4, username: "Sample offline member", avatarUrl: null, state: "joined", membershipStatus: "removed", membershipLeaveSource: "customer", onlinerLive: false, details: "Member joined the server; its Onliner connection is offline." },
   { index: 5, username: "Sample member with queued leave", avatarUrl: null, state: "joined", autoLeaveStatus: "waiting", autoLeaveScheduledAt: "2026-11-21T12:00:00Z", details: "Member joined the server and is waiting for its scheduled leave." },
   { index: 6, username: "Sample member joining", avatarUrl: null, state: "joining", authorizationStatus: "active", details: "Delivery is in progress." }
 ];

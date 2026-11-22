@@ -51,3 +51,15 @@ test("an unrecognized server diagnostic is replaced with a plain failure, never 
   assert.equal(html.includes("Account verification is required."),false,"transport failures must not be called account verification");
 });
 
+
+test("departed members show the membership badge and plain departure source in both views",()=>{
+  for(const audience of ["public","admin"]){
+    for(const [source,text] of [["customer","Leave requested by the customer."],["admin","Leave requested by an administrator."],["automatic","Automatic leave after support ended."],["unknown","Departure source is unavailable."]]){
+      const html=render(audience,{state:"joined",membershipStatus:"removed",membershipLeaveSource:source,autoLeaveStatus:undefined,autoLeaveDetails:undefined});
+      assert.ok(html.includes("Membership"));
+      assert.ok(html.includes("Left server"));
+      assert.ok(html.includes(text));
+    }
+  }
+});
+

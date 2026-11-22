@@ -56,6 +56,7 @@ type CommunityMemberResult = {
   authorizationStatus?: string;
   membershipStatus?: string;
   membershipDetails?: string;
+  membershipLeaveSource?: string;
   onlinerLive?: boolean;
   onlinerConnectionState?: string;
   onlinerDetails?: string;
@@ -110,6 +111,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       authorizationStatus: typeof row.authorizationStatus === "string" ? row.authorizationStatus : undefined,
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
+      membershipLeaveSource: typeof row.membershipLeaveSource === "string" ? row.membershipLeaveSource : undefined,
       onlinerLive: typeof row.onlinerLive === "boolean" ? row.onlinerLive : undefined,
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,

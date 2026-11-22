@@ -2842,13 +2842,13 @@
   .ui-button-accent-ghost {
     border-color: transparent;
     color: var(--app-text-secondary);
-    background: transparent;
+    background: color-mix(in srgb, var(--app-accent) 5%, transparent);
     box-shadow: none;
   }
 
   .ui-button-accent-ghost:not(:disabled):hover,
   .ui-button-accent-ghost:not(:disabled):focus-visible {
-    border-color: var(--app-accent-border);
+    border-color: transparent;
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
     box-shadow: none;
@@ -2856,7 +2856,7 @@
   }
 
   .ui-button-accent-ghost:not(:disabled):active {
-    border-color: var(--app-accent-border);
+    border-color: transparent;
     color: var(--app-accent-bright);
     background: var(--app-accent-soft);
     transform: translateY(1px);

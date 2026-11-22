@@ -59,6 +59,11 @@ export function MemberDeliveryRow({ item, formatTime, audience = "admin" }: {
     : leaveStatus === "already_left" ? "Already outside"
     : leaveStatus === "failed" ? "Leave failed" : leaveStatus;
   const timestamp = item.autoLeaveCompletedAt || item.autoLeaveScheduledAt || item.completedAt;
+  const departureSource = item.membershipLeaveSource || (["left", "already_left"].includes(leaveStatus ?? "") ? "automatic" : "unknown");
+  const departureDetails = departureSource === "customer" ? "Leave requested by the customer."
+    : departureSource === "admin" ? "Leave requested by an administrator."
+    : departureSource === "automatic" ? "Automatic leave after support ended."
+    : "Departure source is unavailable.";
   const toggleDetails = () => accordion ? accordion.toggle(item.index) : setLocalExpanded(current => !current);
 
   function handleRowClick(event: MouseEvent<HTMLElement>) {
@@ -92,6 +97,7 @@ export function MemberDeliveryRow({ item, formatTime, audience = "admin" }: {
     </div>
     <div id={notesId} className="member-delivery-notes" hidden={!expanded}>
       <p><span>Delivery</span>{copy ? copy.deliveryDetails : item.details}</p>
+      {item.membershipStatus === "removed" ? <p data-state="removed"><span>Membership</span>Member is no longer in the server. {departureDetails}</p> : null}
       {item.reactionState && item.reactionState !== "completed" && item.reactionDetails ? <p data-state={item.reactionState}><span>Reaction</span>{item.reactionEmoji} {copy ? copy.reactionDetails : item.reactionDetails}</p> : null}
       {item.autoLeaveDetails ? <p data-state={item.autoLeaveStatus}><span>{copy ? "Leaving" : "Auto Leave"}</span>{copy ? copy.leaveDetails : item.autoLeaveDetails}</p> : null}
     </div>

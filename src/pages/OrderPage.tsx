@@ -87,6 +87,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       authorizationCheckedAt: typeof row.authorizationCheckedAt === "string" ? row.authorizationCheckedAt : undefined,
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
+      membershipLeaveSource: typeof row.membershipLeaveSource === "string" ? row.membershipLeaveSource : undefined,
       onlinerLive: typeof row.onlinerLive === "boolean" ? row.onlinerLive : undefined,
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,
@@ -508,10 +509,13 @@ export default function OrderPage() {
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
   const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed").length;
+  const leaveAllCommunityUsed = Boolean(result?.publicLeaveAllRequestedAt || result?.membersLeaveAllRequestedAt || result?.membersLeftAt || autoLeaveJob);
   const canLeaveAllCommunityMembers = isCommunityProvider && isCommunityDeliverySettled(result)
     && communityMembersStillInServerCount > 0 && !leavingAllCommunityMembers && !checkingCommunityMembers
     && !autoLeaveRunning && !replacingAllCommunityMembers && !retryingFailedCommunityMembers;
-  const leaveAllUnavailableReason = !isCommunityDeliverySettled(result)
+  const leaveAllUnavailableReason = communityMembersStillInServerCount === 0 && leaveAllCommunityUsed
+    ? "Leave all has already been used for this order."
+    : !isCommunityDeliverySettled(result)
     ? "Wait for member delivery and replacements to finish before using Leave all."
     : "Wait for the current member operation to finish.";
   const inactiveCommunityMemberCount = communityMemberResults.filter((item) => item.authorizationStatus === "inactive").length;
@@ -1563,10 +1567,10 @@ export default function OrderPage() {
                 operation={checkingCommunityMembers ? "checking" : leavingAllCommunityMembers || autoLeaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : retryingFailedCommunityMembers ? "retrying" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>
-                  {communityMembersStillInServerCount > 0 ? (
+                  {communityMembersStillInServerCount > 0 || leaveAllCommunityUsed ? (
                     <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => { if (canLeaveAllCommunityMembers) setShowLeaveAllCommunityModal(true); }} disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined}>
                       <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                      {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
+                      {leavingAllCommunityMembers ? "Leaving..." : communityMembersStillInServerCount === 0 && leaveAllCommunityUsed ? "Leave all used" : `Leave all (${communityMembersStillInServerCount})`}
                     </Button>
                   ) : null}
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (

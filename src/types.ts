@@ -20,6 +20,7 @@ export type CommunityMemberResult = {
   authorizationCheckedAt?: string;
   membershipStatus?: string;
   membershipDetails?: string;
+  membershipLeaveSource?: string;
   onlinerLive?: boolean;
   onlinerConnectionState?: string;
   onlinerDetails?: string;

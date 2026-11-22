@@ -6529,7 +6529,7 @@ async function leaveCommunityOrderMember(guildId, discordUserId, stockByUserId =
   }
 }
 
-async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}) {
+async function leaveAllCommunityOrderMembers(order, { expiredOnly = false, source = "admin" } = {}) {
   const orderId = String(order?.uniqid ?? "").trim();
   const guildId = String(order?.serverId ?? "").trim();
   const results = Array.isArray(order?.communityResults) ? order.communityResults : [];
@@ -6607,6 +6607,7 @@ async function leaveAllCommunityOrderMembers(order, { expiredOnly = false } = {}
           membershipStatus: "removed",
           membershipDetails: outcome.details,
           membershipCheckedAt: checkedAt,
+          membershipLeaveSource: source === "customer" ? "customer" : "admin",
           leftServerAt: checkedAt
         };
       });
@@ -6850,6 +6851,7 @@ async function finishCommunityAutoLeaveMember(claim, outcome) {
         ...base,
         membershipStatus: "removed",
         membershipDetails: outcome.details,
+        membershipLeaveSource: "automatic",
         membershipCheckedAt: completedAt,
         leftServerAt: completedAt
       };
@@ -7450,6 +7452,7 @@ function resetCommunityResultVerification(result, overrides = {}) {
   delete next.authorizationCheckedAt;
   delete next.membershipStatus;
   delete next.membershipDetails;
+  delete next.membershipLeaveSource;
   delete next.presenceStatus;
   delete next.presenceDetails;
   delete next.presenceCheckedAt;
@@ -12608,8 +12611,8 @@ function sanitizePublicCommunityOrder(order) {
       delete sanitized.replacementHistoryUserIds;
       delete sanitized.authorizationDetails;
       if (removedByOperator) {
-        delete sanitized.membershipStatus;
-        delete sanitized.membershipDetails;
+        sanitized.membershipStatus = "removed";
+        sanitized.membershipDetails = "Member is no longer in the server.";
         delete sanitized.membershipCheckedAt;
         delete sanitized.leftServerAt;
       }
@@ -12750,7 +12753,7 @@ app.post("/api/public/orders/:uniqid/leave-all", async (req, res, next) => {
     const config = await getCommunityOAuthConfig();
     if (!config.configured) return res.status(503).json({ message: "Configure the Members integration before using Leave all." });
     const order = await claimPublicLeaveAll(pool, uniqid, config.guildId);
-    const result = await leaveAllCommunityOrderMembers(order);
+    const result = await leaveAllCommunityOrderMembers(order, { source: "customer" });
     res.set("Cache-Control", "no-store").json({ order: sanitizePublicCommunityOrder(result.order), summary: result.summary });
   } catch (error) {
     next(error);
