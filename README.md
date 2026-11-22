@@ -39,6 +39,17 @@ kodlarla toplar. Ornekler gercek ortak bilesenleri kullanir; demo islemleri
 uretim API'lerine istek gondermez. Yeni UI calismalarinda
 [UI referansini](docs/ui-reference.md) ve ilgili kaynak bileseni esas alin.
 
+## Admin profili
+
+Sag ustteki **Profile**, hesap ve oturum bilgilerini ve sifre degistirme formunu
+acar. Ayrica sagdaki cikis ikonu mevcut oturumu kapatir. Yeni sifre 12–128
+karakterdir; degisiklik mevcut sifreyi dogrular ve diger oturumlari kapatir.
+Ilk kurulumda `ADMIN_USERNAME` / `ADMIN_PASSWORD` (eski `VITE_ADMIN_*` adlari da
+desteklenir) `admin_credentials` tablosunu olusturur. Sifre salt + scrypt hash
+olarak tutulur. Sonraki baslatmalarda veritabanindaki kayit esas alinir;
+ortam degiskenleri profilden degistirilen sifreyi geri almaz.
+Kontrol: `node --test server/admin-auth.test.mjs`.
+
 ## Members Stock toplu Onliner baglantisi
 
 Members Stock'ta secili hesaplar **Connect selected** ile kayitli tokenlari

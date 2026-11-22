@@ -20,6 +20,7 @@ import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
+import { ProfileDialog } from "../components/ProfileDialog";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { HumanizerJob } from "../lib/humanizer";
 import type { CommunityMemberResult } from "../types";
@@ -215,19 +216,24 @@ function OrderOverviewExample() {
   </button>)}</div></div>;
 }
 
+const sampleProfile = async () => ({ username: "admin", role: "Administrator", signedInAt: "2026-11-22T09:00:00Z", expiresAt: "2026-11-22T21:00:00Z", passwordUpdatedAt: null });
+const samplePasswordChange = async () => ({ changed: true, passwordUpdatedAt: new Date().toISOString() });
+function ProfileExample() {
+  const [open, setOpen] = useState(false);
+  return <><Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Open sample profile</Button>{open ? <ProfileDialog onClose={() => setOpen(false)} loadProfile={sampleProfile} savePassword={samplePasswordChange} /> : null}</>;
+}
+
 function SettingsExample() {
   const [config, setConfig] = useState({ configured: true, stored: true, clientId: "123456789012345678", guildId: "234567890123456789", hasClientSecret: true, hasBotToken: true, guildName: "Sample Members server", activeGuildCount: 3, activeGuildCountExact: true, botVerified: true, serverLimit: 100 });
   const [draft, setDraft] = useState({ clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" });
   const [configured, setConfigured] = useState(true);
   const [key, setKey] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
-  const [account, setAccount] = useState({ accountToken: "", guildId: "" });
   const guilds = Array.from({ length: 3 }, (_, index) => ({ id: `23456789012345678${index}`, name: `Sample server ${index + 1}`, iconUrl: null, configured: index === 0, activeOrderCount: 0, activeOrderStatuses: [] }));
   return <SettingsWorkspace loading={false} onRefresh={() => toast.success("Sample connection status refreshed")}
     members={{ config, draft, onDraftChange: setDraft, saving: false, onSave: (event) => { event.preventDefault(); setConfig({ ...config, configured: true, stored: true, clientId: draft.clientId, guildId: draft.guildId, hasClientSecret: true, hasBotToken: true }); setDraft({ ...draft, clientSecret: "", botToken: "" }); toast.success("Sample settings saved"); }, onRemove: () => { setConfig({ ...config, configured: false, stored: false, hasClientSecret: false, hasBotToken: false, clientId: "", guildId: "" }); setDraft({ clientId: "", guildId: "", clientSecret: "", botToken: "" }); } }}
     dcord={{ configured, draft: key, onDraftChange: setKey, saving: false, onSave: (event) => { event.preventDefault(); setConfigured(true); setKey(""); toast.success("Sample key saved"); }, onRemove: () => { setConfigured(false); setKey(""); } }}
     guilds={{ items: guilds, selected, onSelectionChange: setSelected, loading: false, leaving: false, progress: null, onOpen: () => {}, onRefresh: () => toast.success("Sample servers refreshed"), onLeave: () => toast.success("Sample server action previewed") }}
-    account={{ draft: account, onDraftChange: setAccount, leaving: false, onSubmit: (event) => { event.preventDefault(); toast.success("Sample account action previewed"); } }}
   />;
 }
 
@@ -355,7 +361,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">
-          <Example title="Settings workspace" source="src/components/SettingsWorkspace.tsx · SettingsWorkspace.css" code={'<SettingsWorkspace loading={loading} error={error} onRefresh={refresh}\n  members={membersSettings} dcord={dcordSettings}\n  guilds={botServerSettings} account={accountTool} />\n// Shared tab, field, button, badge and pagination styles.\n// Drafts stay in the parent; status refresh does not discard edits.\n// Server and account removal retain their confirmation flows.'}><SettingsExample /></Example>
+          <Example title="Settings workspace" source="src/components/SettingsWorkspace.tsx · SettingsWorkspace.css" code={'<SettingsWorkspace loading={loading} error={error} onRefresh={refresh}\n  members={membersSettings} dcord={dcordSettings}\n  guilds={botServerSettings} />\n// Shared tab, field, button, badge and pagination styles.\n// Drafts stay in the parent; status refresh does not discard edits.\n// Server removal retains its confirmation flow.'}><SettingsExample /></Example>
           <Example title="Orders overview cards" source="src/components/OrdersWorkspace.tsx · OrdersWorkspace.css" code={'<div className="orderdesk"><div className="od-metrics">\n  <button className="app-panel" aria-pressed={selected}>\n    <span className="od-metric-title">All orders<Layers3 /></span>\n    <strong>3,359</strong>\n    <span className="od-metric-detail">Your complete order history<ArrowUpRight /></span>\n  </button>\n</div></div>\n// Metric cards isolate their rounded surfaces and do not blur the scrolling backdrop.'}><OrderOverviewExample /></Example>
           <Example title="Existing surface styles" source="src/index.css · app-panel / app-panel-soft / payload-panel" code={'<section className="app-panel">Main panel</section>\n<div className="app-panel-soft">Nested group</div>\n<pre className="payload-panel">Code or payload</pre>'}>
             <div className="ui-ref-grid">{["app-panel", "app-panel-soft", "payload-panel"].map((className) => <div className={`${className} ui-ref-surface`} key={className}><strong>{className}</strong><span className="ui-ref-hint">Existing console surface</span></div>)}</div>
@@ -389,6 +395,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("overlays") ? <Section id="overlays">
+          <Example title="Account profile" source="src/components/ProfileDialog.tsx · ProfileDialog.css" code={'<ProfileDialog onClose={closeProfile} />\n// Native modal; password changes require the current password.\n// Header uses Profile plus a separate dangerGhost icon-sm Sign out button.'}><ProfileExample /></Example>
           <Example title="Confirmation dialog & help tooltip" source="src/index.css · confirm-modal / member-check-control" code={'<div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title">\n  <span className="confirm-modal-icon"><TriangleAlert /></span>\n  <h2 id="confirmation-title">Remove sample?</h2>\n  <p>Preview the existing confirmation style.</p>\n  <div className="confirm-modal-actions">\n    <Button variant="secondary">Cancel</Button><Button variant="destructive">Remove</Button>\n  </div>\n</div>'}>
             <div className="ui-ref-row"><Button type="button" variant="secondary" size="sm" onClick={() => dialogRef.current?.showModal()}>Open sample dialog</Button><span className="member-check-control ui-ref-help"><button type="button" className="member-check-help" aria-label="About this example" aria-describedby="ui-ref-help"><CircleHelp className="h-3.5 w-3.5" /></button><span className="member-check-tooltip" role="tooltip" id="ui-ref-help">This is the existing monitor help tooltip. Hover or focus the help button.</span></span></div>
           </Example>

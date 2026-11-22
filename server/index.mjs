@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { createAdminAuth } from "./admin-auth.mjs";
 import { diagnoseGuildJoinFailure, discordFailureDetails } from "./discord-join-diagnostics.mjs";
 import https from "node:https";
 import path from "node:path";
@@ -477,6 +478,11 @@ pool.on("error", (error) => {
   console.error("Unexpected PostgreSQL pool error:", error instanceof Error ? error.message : error);
 });
 
+const adminAuth = createAdminAuth({ pool, sessionDurationMs,
+  username: process.env.ADMIN_USERNAME ?? process.env.VITE_ADMIN_USERNAME,
+  password: process.env.ADMIN_PASSWORD ?? process.env.VITE_ADMIN_PASSWORD
+});
+
 function parseCookies(header = "") {
   return Object.fromEntries(
     header
@@ -492,12 +498,6 @@ function parseCookies(header = "") {
 
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
-}
-
-function safeEqual(value, expected) {
-  const left = Buffer.from(String(value));
-  const right = Buffer.from(String(expected));
-  return left.length === right.length && crypto.timingSafeEqual(left, right);
 }
 
 function normalizeCommunityOAuthConfig(value = {}) {
@@ -8879,6 +8879,7 @@ async function initializeDatabase() {
     )
   `);
   await pool.query("CREATE INDEX IF NOT EXISTS admin_sessions_expires_at_idx ON admin_sessions (expires_at)");
+  await adminAuth.initialize();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       setting_key TEXT PRIMARY KEY,
@@ -14323,19 +14324,7 @@ app.get("/api/healthz", handleHealthCheck);
 
 app.post("/api/auth/login", async (req, res, next) => {
   try {
-    const configuredUsername = process.env.ADMIN_USERNAME ?? process.env.VITE_ADMIN_USERNAME;
-    const configuredPassword = process.env.ADMIN_PASSWORD ?? process.env.VITE_ADMIN_PASSWORD;
-    if (!configuredUsername || !configuredPassword) {
-      return res.status(503).json({ message: "Admin credentials are not configured." });
-    }
-
-    if (!safeEqual(req.body?.username?.trim() ?? "", configuredUsername) || !safeEqual(req.body?.password ?? "", configuredPassword)) {
-      return res.status(401).json({ message: "Invalid username or password." });
-    }
-
-    const token = crypto.randomBytes(32).toString("base64url");
-    const expiresAt = new Date(Date.now() + sessionDurationMs);
-    await pool.query("INSERT INTO admin_sessions (token_hash, expires_at) VALUES ($1, $2)", [hashToken(token), expiresAt]);
+    const { token } = await adminAuth.login(req.body);
     res.cookie(sessionCookie, token, {
       httpOnly: true,
       secure: isProduction,
@@ -14351,6 +14340,18 @@ app.post("/api/auth/login", async (req, res, next) => {
 
 app.get("/api/auth/session", requireSession, (_req, res) => {
   res.json({ authenticated: true });
+});
+
+app.get("/api/auth/profile", requireSession, async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store").json(await adminAuth.profile(hashToken(parseCookies(req.headers.cookie)[sessionCookie])));
+  } catch (error) { next(error); }
+});
+
+app.put("/api/auth/password", requireSession, async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store").json(await adminAuth.changePassword(hashToken(parseCookies(req.headers.cookie)[sessionCookie]), req.body));
+  } catch (error) { next(error); }
 });
 
 app.post("/api/auth/logout", async (req, res, next) => {

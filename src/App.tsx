@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
-import { Bot, Boxes, ListChecks, LoaderCircle, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
+import { Bot, Boxes, ListChecks, LoaderCircle, LogOut, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, UserRound, WandSparkles } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -14,6 +14,8 @@ import { normalizeAdminTab } from "./lib/navigation";
 import { refreshSession, signOut } from "./lib/session-auth";
 import { getCommunityConfig } from "./lib/community";
 import { checkDcordConnection, getAdminConfig } from "./lib/integration";
+import { Button } from "./components/ui/button";
+import { ProfileDialog } from "./components/ProfileDialog";
 
 const UiKitPage = lazy(() => import("./pages/UiKitPage"));
 
@@ -33,6 +35,16 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const [dcordConfigured, setDcordConfigured] = useState(false);
   const [checkingDcord, setCheckingDcord] = useState(false);
   const [checkingMembersBot, setCheckingMembersBot] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
+
+  async function handleSignOut() {
+    if (signingOut) return;
+    setSigningOut(true);
+    try { await signOut(); onSignedOut(); navigate("/manage", { replace: true }); }
+    catch { toast.error("Could not sign out. Try again."); }
+    finally { setSigningOut(false); }
+  }
 
   useEffect(() => {
     let active = true;
@@ -188,18 +200,10 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 {checkingMembersBot ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Bot className="h-3.5 w-3.5" aria-hidden="true" />}
                 <span>{checkingMembersBot ? "Checking" : "Members check"}</span>
               </button>
-              <button
-                type="button"
-                className="session-logout"
-                onClick={() => {
-                  void signOut().finally(() => {
-                    onSignedOut();
-                    navigate("/manage", { replace: true });
-                  });
-                }}
-              >
-                Logout
-              </button>
+            </div>
+            <div className="app-header-account" aria-label="Account actions">
+              <Button type="button" size="sm" variant="secondary" className="profile-trigger" aria-label="Open profile" title="Profile" aria-haspopup="dialog" aria-expanded={profileOpen} onClick={() => setProfileOpen(true)}><UserRound className="h-4 w-4" aria-hidden="true" /><span className="profile-trigger-label">Profile</span></Button>
+              <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="dangerGhost" disabled={signingOut} aria-label="Sign out" title="Sign out" onClick={() => void handleSignOut()}>{signingOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}</Button></span>
             </div>
           </div>
         </header>
@@ -224,6 +228,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
           <Link to="/ui-kit" className="hover:text-[var(--app-accent-bright)]" aria-current={location.pathname === "/ui-kit" ? "page" : undefined}>UI Kit</Link>
         </footer>
       </div>
+      {profileOpen ? <ProfileDialog onClose={() => setProfileOpen(false)} /> : null}
     </div>
   );
 }

@@ -19,8 +19,7 @@ function render(overrides = {}) {
     loading: false, onRefresh: noop,
     members: { config, draft: { clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" }, saving: false, onDraftChange: noop, onSave: noop, onRemove: noop },
     dcord: { configured: true, draft: "", saving: false, onDraftChange: noop, onSave: noop, onRemove: noop },
-    guilds: { items: [], loading: false, leaving: false, selected: {}, onSelectionChange: noop, onOpen: noop, onRefresh: noop, onLeave: noop, progress: null },
-    account: { draft: { accountToken: "", guildId: "" }, leaving: false, onDraftChange: noop, onSubmit: noop }
+    guilds: { items: [], loading: false, leaving: false, selected: {}, onSelectionChange: noop, onOpen: noop, onRefresh: noop, onLeave: noop, progress: null }
   };
   for (const [key, value] of Object.entries(overrides)) props[key] = typeof value === "object" ? { ...props[key], ...value } : value;
   return renderToStaticMarkup(React.createElement(module.exports.SettingsWorkspace, props));
@@ -53,13 +52,6 @@ test("saving Dcord does not lock Members, while bot departure locks Members chan
   const leaving = form(render({ guilds: { leaving: true } }), "Members bot settings");
   assert.equal(submitDisabled(leaving), true);
   assert.equal((leaving.match(/<input[^>]*disabled=""/g) || []).length, 4);
-});
-
-test("account removal needs both fields and stays locked during removal", () => {
-  assert.equal(submitDisabled(form(render(), "Leave a Discord server")), true);
-  const draft = { accountToken: "sample-token", guildId: config.guildId };
-  assert.equal(submitDisabled(form(render({ account: { draft } }), "Leave a Discord server")), false);
-  assert.equal(submitDisabled(form(render({ account: { draft, leaving: true } }), "Leave a Discord server")), true);
 });
 
 test("failed server reads show a retry rather than claim the bot has no servers", () => {

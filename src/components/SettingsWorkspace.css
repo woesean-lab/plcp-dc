@@ -67,9 +67,6 @@
 .settings-leave-progress strong { display: block; font-size: 11px; }
 .settings-leave-progress small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 10px; }
 .settings-leave-progress .monitor-live-progress-track { width: 100%; margin-top: 3px; }
-.settings-account-card { max-width: 850px; }
-.settings-account-description { margin-bottom: 22px; color: var(--app-text-secondary); font-size: 12px; }
-.settings-account-note { display: inline-flex; align-items: center; gap: 6px; color: var(--app-muted); font-size: 10px; }
 @container settings (max-width: 1230px) {
   .settings-layout { grid-template-columns: 190px minmax(0, 1fr); gap: 22px; }
   .settings-connections-grid { grid-template-columns: minmax(0, 1fr); }
@@ -81,7 +78,7 @@
   .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 22px; }
   .settings-navigation { position: static; gap: 0; }
   .settings-navigation-label, .settings-storage-note { display: none; }
-  .settings-section-tabs.stock-category-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .settings-section-tabs.stock-category-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-section-tabs.stock-category-tabs button { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
   .settings-section-tabs.stock-category-tabs small { display: none; }
 }
@@ -107,8 +104,5 @@
   .settings-guild-toolbar { padding: 14px 16px; }
   .settings-guild-search { flex-basis: 100%; min-width: 0; }
   .settings-guild-list { padding: 8px; }
-  .settings-account-description { margin-bottom: 18px; }
-  .settings-account-card .settings-card-footer { align-items: stretch; }
-  .settings-account-note { flex-basis: 100%; }
   .settings-leave-progress { margin-inline: 16px; }
 }

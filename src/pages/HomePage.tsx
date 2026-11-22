@@ -91,7 +91,6 @@ import {
   getCommunityGuildLeaveProgress,
   importCommunityOAuthStock,
   leaveCommunityBotGuilds,
-  leaveDiscordUserGuild,
   removeCommunityAuthorization,
   removeCommunityAuthorizations,
   reorderCommunityAuthorizations,
@@ -588,9 +587,6 @@ export default function HomePage() {
 
   const [dcordApiKey, setDcordApiKey] = useState("");
   const [dcordConfigured, setDcordConfigured] = useState(false);
-  const [userGuildLeaveDraft, setUserGuildLeaveDraft] = useState({ accountToken: "", guildId: "" });
-  const [showUserGuildLeaveConfirm, setShowUserGuildLeaveConfirm] = useState(false);
-  const [leavingUserGuild, setLeavingUserGuild] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [rotatingAccounts, setRotatingAccounts] = useState<RotatingBoostAccount[]>([]);
   const [rotatingLoading, setRotatingLoading] = useState(false);
@@ -2509,35 +2505,6 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Dcord API key could not be removed.");
     } finally {
       setSavingDcordApiKey(false);
-    }
-  }
-
-  function handleRequestUserGuildLeave(event: FormEvent) {
-    event.preventDefault();
-    const accountToken = userGuildLeaveDraft.accountToken.trim();
-    const guildId = userGuildLeaveDraft.guildId.trim();
-    if (!accountToken) {
-      notifyError("Discord user token is required.");
-      return;
-    }
-    if (!/^\d{17,20}$/.test(guildId)) {
-      notifyError("Enter a valid Discord guild ID.");
-      return;
-    }
-    setShowUserGuildLeaveConfirm(true);
-  }
-
-  async function confirmUserGuildLeave() {
-    try {
-      setLeavingUserGuild(true);
-      const result = await leaveDiscordUserGuild(userGuildLeaveDraft.accountToken.trim(), userGuildLeaveDraft.guildId.trim());
-      setShowUserGuildLeaveConfirm(false);
-      setUserGuildLeaveDraft({ accountToken: "", guildId: "" });
-      notifySuccess(`${result.username ?? "Discord account"} left server ${result.guildId}.`);
-    } catch (error) {
-      notifyError(error instanceof Error ? error.message : "The account could not leave the server.");
-    } finally {
-      setLeavingUserGuild(false);
     }
   }
 
@@ -4888,7 +4855,6 @@ export default function HomePage() {
           dcord={{ configured: dcordConfigured, draft: dcordApiKey, onDraftChange: setDcordApiKey, saving: savingDcordApiKey, onSave: handleSaveDcordApiKey, onRemove: () => void handleClearDcordApiKey() }}
           guilds={{ items: communityGuilds, loading: loadingCommunityGuilds, error: communityGuildsError, leaving: leavingCommunityGuilds, selected: selectedCommunityGuildIds, onSelectionChange: setSelectedCommunityGuildIds,
             onOpen: () => { if (!showCommunityGuildManager) void toggleCommunityGuildManager(); }, onRefresh: () => void loadCommunityGuildList(), onLeave: handleLeaveSelectedCommunityGuilds, progress: communityGuildLeaveProgress }}
-          account={{ draft: userGuildLeaveDraft, onDraftChange: setUserGuildLeaveDraft, leaving: leavingUserGuild, onSubmit: handleRequestUserGuildLeave }}
         /> : null}
         </div>
       </TimedReveal>
@@ -4920,26 +4886,6 @@ export default function HomePage() {
               <Button type="button" variant="destructive" disabled={leavingCommunityGuilds} onClick={() => void confirmLeaveSelectedCommunityGuilds()}>
                 {leavingCommunityGuilds ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                 {leavingCommunityGuilds ? "Leaving servers..." : "Leave selected"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      {showUserGuildLeaveConfirm ? (
-        <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !leavingUserGuild) setShowUserGuildLeaveConfirm(false); }}>
-          <div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="leave-user-guild-title" aria-describedby="leave-user-guild-description">
-            <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-danger)]">User account</p>
-            <h2 id="leave-user-guild-title">Leave server {userGuildLeaveDraft.guildId.trim()}?</h2>
-            <p id="leave-user-guild-description">
-              Removes this account from the server. Server owners cannot leave.
-            </p>
-            <div className="confirm-modal-actions">
-              <Button autoFocus type="button" variant="secondary" disabled={leavingUserGuild} onClick={() => setShowUserGuildLeaveConfirm(false)}>Cancel</Button>
-              <Button type="button" variant="destructive" disabled={leavingUserGuild} onClick={() => void confirmUserGuildLeave()}>
-                {leavingUserGuild ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-                {leavingUserGuild ? "Leaving..." : "Yes, leave server"}
               </Button>
             </div>
           </div>

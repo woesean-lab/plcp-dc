@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEventHandler, type InputHTMLAttributes, type KeyboardEvent } from "react";
-import { ArrowRight, Bot, Check, CheckCircle2, Eye, EyeOff, Globe2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, Search, Settings2, ShieldCheck, Trash2, Wrench } from "lucide-react";
+import { Bot, Check, CheckCircle2, Eye, EyeOff, Globe2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -40,25 +40,18 @@ export type SettingsWorkspaceProps = {
     onLeave: () => void;
     progress: CommunityGuildLeaveProgress | null;
   };
-  account: {
-    draft: { accountToken: string; guildId: string };
-    onDraftChange: (draft: { accountToken: string; guildId: string }) => void;
-    leaving: boolean;
-    onSubmit: FormEventHandler<HTMLFormElement>;
-  };
 };
 
 const SECTIONS = [
   { id: "connections", label: "Connections", description: "Bot & API credentials", Icon: Settings2 },
-  { id: "servers", label: "Bot servers", description: "Access & memberships", Icon: Globe2 },
-  { id: "tools", label: "Account tools", description: "Individual account actions", Icon: Wrench }
+  { id: "servers", label: "Bot servers", description: "Access & memberships", Icon: Globe2 }
 ] as const;
 type Section = typeof SECTIONS[number]["id"];
 
 export function SettingsWorkspaceSkeleton() {
   return <section className="settings-workspace" role="status" aria-busy="true" aria-label="Loading settings">
     <header className="page-heading settings-page-heading"><div><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-10 w-40" /><Skeleton className="mt-3 h-4 w-64 max-w-full" /></div><Skeleton className="h-9 w-36" /></header>
-    <div className="settings-layout"><aside className="settings-navigation"><div className="stock-category-tabs settings-section-tabs">{Array.from({ length: 3 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div></aside><div className="settings-content"><Skeleton className="mb-6 h-10 w-56 max-w-full" /><div className="settings-connections-grid">{[0, 1].map((index) => <section key={index} className="app-panel settings-card"><header className="settings-card-heading"><Skeleton className="h-8 w-8" /><Skeleton className="h-7 w-36" /></header><div className="settings-card-body settings-form-skeleton">{Array.from({ length: index === 0 ? 4 : 2 }, (_, field) => <Skeleton key={field} className="h-14 w-full" />)}</div><footer className="settings-card-footer"><Skeleton className="h-9 w-28" /></footer></section>)}</div></div></div>
+    <div className="settings-layout"><aside className="settings-navigation"><div className="stock-category-tabs settings-section-tabs">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div></aside><div className="settings-content"><Skeleton className="mb-6 h-10 w-56 max-w-full" /><div className="settings-connections-grid">{[0, 1].map((index) => <section key={index} className="app-panel settings-card"><header className="settings-card-heading"><Skeleton className="h-8 w-8" /><Skeleton className="h-7 w-36" /></header><div className="settings-card-body settings-form-skeleton">{Array.from({ length: index === 0 ? 4 : 2 }, (_, field) => <Skeleton key={field} className="h-14 w-full" />)}</div><footer className="settings-card-footer"><Skeleton className="h-9 w-28" /></footer></section>)}</div></div></div>
   </section>;
 }
 
@@ -74,7 +67,7 @@ function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputEl
   </div>;
 }
 
-export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, guilds, account }: SettingsWorkspaceProps) {
+export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, guilds }: SettingsWorkspaceProps) {
   const [section, setSection] = useState<Section>("connections");
   const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
@@ -120,7 +113,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
 
   return <section ref={workspace} className="settings-workspace" aria-label="Workspace settings">
     <header className="page-heading settings-page-heading">
-      <div><p className="app-kicker">Workspace</p><h1 className="page-title">Settings</h1><p className="app-copy page-copy">Connections, server access and account tools.</p></div>
+      <div><p className="app-kicker">Workspace</p><h1 className="page-title">Settings</h1><p className="app-copy page-copy">Connections and bot server access.</p></div>
       <div className="settings-heading-actions">
         {loading ? <span className="settings-refreshing" role="status"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Refreshing</span> : <Badge variant={connectedCount === 2 ? "success" : "secondary"}>{connectedCount === 2 ? <CheckCircle2 aria-hidden="true" /> : <Settings2 aria-hidden="true" />}{connectedCount} / 2 configured</Badge>}
         <Button type="button" size="sm" variant="secondary" disabled={loading || members.saving || dcord.saving || guilds.leaving} onClick={onRefresh}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh status</Button>
@@ -190,16 +183,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
           </section>
         </div>
 
-        <div id={`${id}-tools-panel`} role="tabpanel" aria-labelledby={`${id}-tools-tab`} hidden={section !== "tools"} tabIndex={0}>
-          <div className="settings-section-heading"><div><h2>Account tools</h2><p>Actions for an individual Discord account.</p></div><span className="settings-section-index">03</span></div>
-          <section className="app-panel settings-card settings-account-card" aria-labelledby={`${id}-account-title`}>
-            <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><LogOut className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Account utility</span><h3 id={`${id}-account-title`}>Leave a server</h3></div><Badge variant="secondary">Token not saved</Badge></header>
-            <form onSubmit={account.onSubmit} aria-label="Leave a Discord server">
-              <div className="settings-card-body"><p className="settings-account-description">Removes one account from a Discord server.</p><div className="settings-field-grid"><SecretField label="User token" disabled={account.leaving} value={account.draft.accountToken} onChange={(event) => account.onDraftChange({ ...account.draft, accountToken: event.target.value })} placeholder="Discord account token" autoComplete="off" /><label className="settings-field"><span className="field-label">Server ID</span><Input disabled={account.leaving} value={account.draft.guildId} onChange={(event) => account.onDraftChange({ ...account.draft, guildId: event.target.value.trim() })} placeholder="Discord server ID" inputMode="numeric" /></label></div></div>
-              <footer className="settings-card-footer"><span className="settings-account-note"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Confirmation required</span><div>{account.draft.accountToken || account.draft.guildId ? <Button type="button" size="sm" variant="ghost" disabled={account.leaving} onClick={() => account.onDraftChange({ accountToken: "", guildId: "" })}>Clear</Button> : null}<Button type="submit" size="sm" variant="destructive" disabled={account.leaving || !account.draft.accountToken.trim() || !account.draft.guildId.trim()}>{account.leaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}{account.leaving ? "Leaving…" : "Review removal"}</Button></div></footer>
-            </form>
-          </section>
-        </div>
+
       </div>
     </div>
   </section>;

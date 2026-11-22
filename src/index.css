@@ -413,25 +413,6 @@
     white-space: nowrap;
   }
 
-  .session-logout {
-    min-height: 32px;
-    border: 1px solid var(--app-border);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.035);
-    padding: 0 0.8rem;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    color: var(--app-muted);
-    transition: color 160ms ease, border-color 160ms ease, background-color 160ms ease;
-  }
-
-  .session-logout:hover {
-    border-color: var(--app-accent-border);
-    color: var(--app-text);
-    background: var(--app-accent-soft);
-  }
-
   .header-dcord-check {
     display: inline-flex;
     min-height: 32px;
