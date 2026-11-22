@@ -31,8 +31,8 @@
 .member-delivery-panel > .member-delivery-panel-toggle {
   position: relative;
   padding-inline-end: 52px;
-  border-start-start-radius: inherit;
-  border-start-end-radius: inherit;
+  border-radius: inherit;
+  background-clip: padding-box;
   list-style: none;
   cursor: pointer;
   transition: background-color .15s ease;
@@ -43,6 +43,10 @@
 .member-delivery-panel > .member-delivery-panel-toggle:focus-visible {
   outline: 2px solid var(--app-accent-border);
   outline-offset: -2px;
+}
+.member-delivery-panel[open] > .member-delivery-panel-toggle {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
 }
 .member-delivery-panel:not([open]) > .member-delivery-panel-toggle {
   border-bottom: 0;

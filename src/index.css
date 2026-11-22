@@ -2838,6 +2838,30 @@
     transform: translateY(1px);
   }
 
+
+  .ui-button-accent-ghost {
+    border-color: transparent;
+    color: var(--app-text-secondary);
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .ui-button-accent-ghost:not(:disabled):hover,
+  .ui-button-accent-ghost:not(:disabled):focus-visible {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .ui-button-accent-ghost:not(:disabled):active {
+    border-color: var(--app-accent-border);
+    color: var(--app-accent-bright);
+    background: var(--app-accent-soft);
+    transform: translateY(1px);
+  }
+
   .ui-button-danger-ghost {
     border-color: transparent;
     color: var(--app-subtle);
@@ -7849,7 +7873,7 @@
   content: "";
 }
 .monitor-reaction-panel.is-collapsible { grid-column: auto; min-height: 0; align-self: start; container-name: customer-reactions; }
-.monitor-reaction-collapse-toggle { display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
+.monitor-reaction-collapse-toggle { border-radius: inherit; background-clip: padding-box; display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle::-webkit-details-marker { display: none; }
 .monitor-reaction-collapse-toggle::marker { content: ""; }
 .monitor-reaction-collapse-toggle:hover { background: var(--app-hover); }
@@ -7858,7 +7882,7 @@
 .monitor-reaction-collapse-toggle strong { color: var(--app-text); font-size: 16px; font-weight: 680; }
 .monitor-reaction-collapse-toggle small { color: var(--app-muted); font-size: 11px; }
 .monitor-reaction-collapse-toggle > svg { width: 16px; height: 16px; flex: 0 0 auto; color: var(--app-subtle); transition: transform .18s ease; }
-.monitor-reaction-panel.is-collapsible[open] > .monitor-reaction-collapse-toggle { border-bottom: 1px solid var(--app-divider); }
+.monitor-reaction-panel.is-collapsible[open] > .monitor-reaction-collapse-toggle { border-bottom: 1px solid var(--app-divider); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
 .monitor-reaction-panel.is-collapsible[open] > .monitor-reaction-collapse-toggle > svg { transform: rotate(180deg); }
 .monitor-reaction-collapse-toggle > .ui-button { flex: 0 0 auto; }
 @container customer-reactions (max-width: 600px) {

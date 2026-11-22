@@ -1099,7 +1099,7 @@ export default function PublicOrderPage() {
                 actions={<>
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
-                            <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                            <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                               {checkingCommunityMembers
                                 ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1116,7 +1116,7 @@ export default function PublicOrderPage() {
                           </span>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                          <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>

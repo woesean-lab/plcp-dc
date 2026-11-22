@@ -1571,7 +1571,7 @@ export default function OrderPage() {
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
                       <span className="member-check-control">
-                        <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
+                        <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
                           <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {checkingCommunityMembers
                             ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1587,13 +1587,13 @@ export default function OrderPage() {
                     </>
                   ) : null}
                   {failedCommunityMemberCount > 0 ? (
-                    <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleRetryFailedCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers || retryingFailedCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleRetryFailedCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers || retryingFailedCommunityMembers}>
                       <RotateCcw className={`h-3.5 w-3.5 ${retryingFailedCommunityMembers ? "animate-spin" : ""}`} aria-hidden="true" />
                       {retryingFailedCommunityMembers ? "Retrying..." : `Retry failed (${failedCommunityMemberCount})`}
                     </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
-                    <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
                       <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                       {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                     </Button>

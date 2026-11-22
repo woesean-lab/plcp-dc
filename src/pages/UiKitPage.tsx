@@ -38,6 +38,7 @@ const SECTIONS = [
 const BUTTONS: { variant: ButtonProps["variant"]; label: string }[] = [
   { variant: "default", label: "Primary" }, { variant: "secondary", label: "Secondary" },
   { variant: "outline", label: "Outline" }, { variant: "ghost", label: "Ghost" },
+  { variant: "accentGhost", label: "Accent ghost" },
   { variant: "destructive", label: "Destructive" }, { variant: "dangerGhost", label: "Danger ghost" },
   { variant: "link", label: "Link" }
 ];
@@ -104,7 +105,7 @@ function MemberDeliveryExample() {
     </div>
     <MemberDeliveryPanel audience={publicView ? "public" : "admin"} completed={6} total={7} status="PROCESS" attention actions={<>
       <span className="member-check-control">
-        <Button type="button" size="sm" variant="ghost" disabled onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-3.5 w-3.5" />Check members</Button>
+        <Button type="button" size="sm" variant="accentGhost" disabled onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-3.5 w-3.5" />Check members</Button>
         <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="ui-kit-member-check"><CircleHelp className="h-3.5 w-3.5" /></button>
         <span id="ui-kit-member-check" className="member-check-tooltip" role="tooltip">Checks whether members are still in the server and online.</span>
       </span>
