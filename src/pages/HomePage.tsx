@@ -731,7 +731,7 @@ export default function HomePage() {
   const [expandedCommunityMemberId, setExpandedCommunityMemberId] = useState<string | null>(null);
   const [communityImportOpen, setCommunityImportOpen] = useState(false);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
-  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_connect" | "onliner_disconnect" | null>(null);
+  const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_connect" | "onliner_reconnect" | "onliner_disconnect" | null>(null);
   const [exportingCommunityTokens, setExportingCommunityTokens] = useState<"access" | "account" | null>(null);
   const [communityTransferCategoryId, setCommunityTransferCategoryId] = useState("");
   const [orderConfirmationPayload, setOrderConfirmationPayload] = useState<CreateOrderPayload | null>(null);
@@ -2208,6 +2208,32 @@ export default function HomePage() {
     }
   }
 
+  async function reconnectSelectedCommunityOnliner() {
+    if (communityOnlinerBulkInFlightRef.current || communityBulkAction || communityOnlinerActionId || communityRichPresenceActionId) return;
+    const members = communityReconnectMembers;
+    const accountIds = [...new Set(members.map(member => member.onlinerAccountId!))];
+    if (!accountIds.length) return;
+    communityOnlinerBulkInFlightRef.current = true;
+    setCommunityBulkAction("onliner_reconnect");
+    try {
+      const result = await bulkDiscordOnlinerAccounts("reconnect", accountIds);
+      setOnlinerSnapshot(result.snapshot);
+      const queuedIds = new Set(result.succeededIds);
+      setCommunityStatus(current => current ? { ...current, recent: current.recent.map(record => record.onlinerAccountId && queuedIds.has(record.onlinerAccountId)
+        ? { ...record, onlinerConnectionState: "reconnecting", onlinerLastError: null }
+        : record) } : current);
+      const skipped = selectedCommunityMemberIds.length - members.length;
+      const summary = `${result.succeededIds.length} accounts queued for reconnect${skipped ? `; ${skipped} without an Onliner profile skipped` : ""}.`;
+      if (result.failures.length) notifyError(`${summary} ${result.failures.length} failed: ${result.failures[0].message}`);
+      else notifySuccess(summary);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Selected accounts could not be reconnected.");
+    } finally {
+      communityOnlinerBulkInFlightRef.current = false;
+      setCommunityBulkAction(null);
+    }
+  }
+
   async function disconnectSelectedCommunityOnliner() {
     if (!selectedCommunityMemberIds.length || communityBulkAction || communityOnlinerActionId || communityRichPresenceActionId) return;
     const ids = [...selectedCommunityMemberIds];
@@ -3059,6 +3085,7 @@ export default function HomePage() {
   const communityTotalUsers = communityVisibleSummary.authorized + communityVisibleSummary.failed;
   const communityCategoryRecords = (communityStatus?.recent ?? [])
     .filter((record) => record.stockType === communityStockType);
+  const communityReconnectMembers = communityCategoryRecords.filter(record => selectedCommunityMemberIds.includes(record.id) && record.onlinerConnected && record.onlinerAccountId);
   const communityMemberQuery = communityMemberSearch.trim().replace(/^@/, "").toLowerCase();
   const communityVisibleRecords = communityCategoryRecords
     .filter((record) => !communityMemberQuery || [record.username, record.displayName, record.id]
@@ -3229,6 +3256,13 @@ export default function HomePage() {
               onClick={beginConnectingSelectedCommunityMembers}>
               {communityBulkAction === "onliner_connect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RadioTower className="h-3.5 w-3.5" />}
               {communityBulkAction === "onliner_connect" ? "Connecting..." : "Connect"}
+            </Button>
+            <Button type="button" variant="secondary" size="sm"
+              title="Reconnect selected Onliner accounts using their assigned proxies"
+              disabled={!communityReconnectMembers.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
+              onClick={() => void reconnectSelectedCommunityOnliner()}>
+              {communityBulkAction === "onliner_reconnect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {communityBulkAction === "onliner_reconnect" ? "Reconnecting..." : "Re-connect"}
             </Button>
             <Button type="button" variant="dangerGhost" size="sm"
               title="Disconnect selected accounts from Onliner and keep them in Members Stock"
