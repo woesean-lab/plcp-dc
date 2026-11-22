@@ -1,6 +1,6 @@
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
-import { Bot, Boxes, ListChecks, LoaderCircle, LogOut, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, UserRound, WandSparkles } from "lucide-react";
+import { Bot, Boxes, ListChecks, LoaderCircle, LogOut, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
 import HomePage from "./pages/HomePage";
 import LoginPage from "./pages/LoginPage";
@@ -11,11 +11,11 @@ import PublicOrderPage from "./pages/PublicOrderPage";
 import HumanizerPage from "./pages/HumanizerPage";
 import ReactionsPage from "./pages/ReactionsPage";
 import { normalizeAdminTab } from "./lib/navigation";
-import { refreshSession, signOut } from "./lib/session-auth";
+import { getAdminProfile, refreshSession, signOut } from "./lib/session-auth";
 import { getCommunityConfig } from "./lib/community";
 import { checkDcordConnection, getAdminConfig } from "./lib/integration";
 import { Button } from "./components/ui/button";
-import { ProfileDialog } from "./components/ProfileDialog";
+import { ProfileAvatarButton, ProfileDialog } from "./components/ProfileDialog";
 
 const UiKitPage = lazy(() => import("./pages/UiKitPage"));
 
@@ -36,6 +36,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const [checkingDcord, setCheckingDcord] = useState(false);
   const [checkingMembersBot, setCheckingMembersBot] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileUsername, setProfileUsername] = useState("");
   const [signingOut, setSigningOut] = useState(false);
 
   async function handleSignOut() {
@@ -49,9 +50,10 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   useEffect(() => {
     let active = true;
     const loadHeaderOperations = async () => {
-      const adminResult = await getAdminConfig().catch(() => null);
+      const [adminResult, profile] = await Promise.all([getAdminConfig().catch(() => null), getAdminProfile().catch(() => null)]);
       if (!active) return;
       if (adminResult) setDcordConfigured(adminResult.dcordConfigured);
+      if (profile) setProfileUsername(profile.username);
     };
     void loadHeaderOperations();
     return () => {
@@ -202,7 +204,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
               </button>
             </div>
             <div className="app-header-account" aria-label="Account actions">
-              <Button type="button" size="sm" variant="secondary" className="profile-trigger" aria-label="Open profile" title="Profile" aria-haspopup="dialog" aria-expanded={profileOpen} onClick={() => setProfileOpen(true)}><UserRound className="h-4 w-4" aria-hidden="true" /><span className="profile-trigger-label">Profile</span></Button>
+              <ProfileAvatarButton username={profileUsername} open={profileOpen} onClick={() => setProfileOpen(true)} />
               <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="dangerGhost" disabled={signingOut} aria-label="Sign out" title="Sign out" onClick={() => void handleSignOut()}>{signingOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}</Button></span>
             </div>
           </div>

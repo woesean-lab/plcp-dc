@@ -29,7 +29,7 @@
 .profile-load-error { display: grid; justify-items: start; gap: 15px; font-size: 12px; }
 .profile-dialog-footer { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; padding: 16px 22px; border-top: 1px solid var(--app-divider); }
 .app-header-account { display: flex; align-items: center; flex-shrink: 0; gap: 5px; }
-.app-header-account .profile-trigger { max-width: 140px; }
+.profile-trigger-avatar { display: grid; width: 28px; height: 28px; flex-shrink: 0; place-items: center; border-radius: 50%; background: var(--app-accent-soft); color: var(--app-accent-bright); font-size: 10px; font-weight: 700; letter-spacing: .02em; }
 .app-header-inner:has(.app-header-account) .app-header-operations { min-width: 0; }
 .app-header-inner:has(.app-header-account) .app-brand { min-width: 0; }
 @media (max-width: 1380px) {
@@ -44,7 +44,6 @@
   .app-header-inner:has(.app-header-account) .app-nav-cluster { order: 3; flex-basis: 100%; }
 }
 @media (max-width: 400px) {
-  .profile-trigger-label { display: none; }
   .profile-dialog-heading, .profile-dialog-body { padding: 18px 16px; }
   .profile-dialog-footer { padding: 14px 16px; }
   .profile-identity > .status-badge { margin-left: 54px; }

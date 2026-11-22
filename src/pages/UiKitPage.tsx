@@ -20,7 +20,7 @@ import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
-import { ProfileDialog } from "../components/ProfileDialog";
+import { ProfileAvatarButton, ProfileDialog } from "../components/ProfileDialog";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { HumanizerJob } from "../lib/humanizer";
 import type { CommunityMemberResult } from "../types";
@@ -220,7 +220,7 @@ const sampleProfile = async () => ({ username: "admin", role: "Administrator", s
 const samplePasswordChange = async () => ({ changed: true, passwordUpdatedAt: new Date().toISOString() });
 function ProfileExample() {
   const [open, setOpen] = useState(false);
-  return <><Button size="sm" variant="secondary" onClick={() => setOpen(true)}>Open sample profile</Button>{open ? <ProfileDialog onClose={() => setOpen(false)} loadProfile={sampleProfile} savePassword={samplePasswordChange} /> : null}</>;
+  return <><ProfileAvatarButton username="admin" open={open} onClick={() => setOpen(true)} />{open ? <ProfileDialog onClose={() => setOpen(false)} loadProfile={sampleProfile} savePassword={samplePasswordChange} /> : null}</>;
 }
 
 function SettingsExample() {
@@ -395,7 +395,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("overlays") ? <Section id="overlays">
-          <Example title="Account profile" source="src/components/ProfileDialog.tsx · ProfileDialog.css" code={'<ProfileDialog onClose={closeProfile} />\n// Native modal; password changes require the current password.\n// Header uses Profile plus a separate dangerGhost icon-sm Sign out button.'}><ProfileExample /></Example>
+          <Example title="Account profile" source="src/components/ProfileDialog.tsx · ProfileDialog.css" code={'<ProfileDialog onClose={closeProfile} />\n// Native modal; password changes require the current password.\n// Header uses ProfileAvatarButton plus a separate dangerGhost icon-sm Sign out action; modal has no header X.'}><ProfileExample /></Example>
           <Example title="Confirmation dialog & help tooltip" source="src/index.css · confirm-modal / member-check-control" code={'<div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title">\n  <span className="confirm-modal-icon"><TriangleAlert /></span>\n  <h2 id="confirmation-title">Remove sample?</h2>\n  <p>Preview the existing confirmation style.</p>\n  <div className="confirm-modal-actions">\n    <Button variant="secondary">Cancel</Button><Button variant="destructive">Remove</Button>\n  </div>\n</div>'}>
             <div className="ui-ref-row"><Button type="button" variant="secondary" size="sm" onClick={() => dialogRef.current?.showModal()}>Open sample dialog</Button><span className="member-check-control ui-ref-help"><button type="button" className="member-check-help" aria-label="About this example" aria-describedby="ui-ref-help"><CircleHelp className="h-3.5 w-3.5" /></button><span className="member-check-tooltip" role="tooltip" id="ui-ref-help">This is the existing monitor help tooltip. Hover or focus the help button.</span></span></div>
           </Example>

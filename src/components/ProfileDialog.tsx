@@ -1,11 +1,15 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck, UserRound, X } from "lucide-react";
+import { CheckCircle2, Eye, EyeOff, KeyRound, LoaderCircle, ShieldCheck, UserRound } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Badge } from "./ui/badge";
 import { Skeleton } from "./ui/skeleton";
 import { changeAdminPassword, getAdminProfile, type AdminProfile } from "../lib/session-auth";
 import "./ProfileDialog.css";
+
+export function ProfileAvatarButton({ username, open, onClick }: { username?: string; open: boolean; onClick: () => void }) {
+  return <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="ghost" className="profile-trigger" aria-label="Open profile" title={username ? `${username} · Profile` : "Profile"} aria-haspopup="dialog" aria-expanded={open} onClick={onClick}><span className="profile-trigger-avatar" aria-hidden="true">{username ? username.slice(0, 2).toUpperCase() : <UserRound className="h-4 w-4" />}</span></Button></span>;
+}
 
 export function ProfileDialog({ onClose, loadProfile = getAdminProfile, savePassword = changeAdminPassword }: {
   onClose: () => void;
@@ -63,7 +67,7 @@ export function ProfileDialog({ onClose, loadProfile = getAdminProfile, savePass
   return <dialog ref={dialog} className="confirm-modal profile-dialog" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`}
     onClose={onClose} onCancel={event => { if (busy.current) event.preventDefault(); }}
     onClick={event => { if (event.target === event.currentTarget) { const r = event.currentTarget.getBoundingClientRect(); if (event.clientX < r.left || event.clientX > r.right || event.clientY < r.top || event.clientY > r.bottom) close(); } }}>
-    <header className="profile-dialog-heading"><span className="monitor-panel-icon" aria-hidden="true"><UserRound className="h-4 w-4" /></span><div><p className="app-kicker">Your account</p><h2 id={`${id}-title`}>Profile</h2><p id={`${id}-description`}>Account details and password.</p></div><span className="community-member-row-actions"><Button type="button" variant="ghost" size="icon-sm" autoFocus disabled={saving} aria-label="Close profile" onClick={close}><X className="h-4 w-4" /></Button></span></header>
+    <header className="profile-dialog-heading"><span className="monitor-panel-icon" aria-hidden="true"><UserRound className="h-4 w-4" /></span><div><p className="app-kicker">Your account</p><h2 id={`${id}-title`}>Profile</h2><p id={`${id}-description`}>Account details and password.</p></div></header>
     {loading ? <div className="profile-dialog-body" role="status" aria-label="Loading profile"><Skeleton className="h-20 w-full" /><Skeleton className="mt-5 h-12 w-full" /><Skeleton className="mt-4 h-12 w-full" /></div> : loadError ? <div className="profile-dialog-body profile-load-error" role="alert"><p>{loadError}</p><Button type="button" variant="secondary" size="sm" onClick={() => setRevision(value => value + 1)}>Retry</Button></div> : profile ? <>
       <div className="profile-dialog-body">
         <div className="app-panel-soft profile-identity"><span className="profile-avatar" aria-hidden="true">{profile.username.slice(0, 2).toUpperCase()}</span><div><span className="field-label">Username</span><strong>{profile.username}</strong></div><Badge variant="secondary"><ShieldCheck aria-hidden="true" />{profile.role}</Badge></div>
