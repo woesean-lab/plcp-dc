@@ -1,6 +1,7 @@
 import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
+import { StockWorkspace } from "../components/StockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -4199,7 +4200,7 @@ export default function HomePage() {
         ) : null}
 
         {activeTab === "stock" ? (
-          <>
+          <StockWorkspace category={stockCategory} onCategoryChange={setStockCategory} heading={
             <header className="page-heading stock-page-heading">
               <div>
                 <p className={labelClass}>Stock</p>
@@ -4217,17 +4218,7 @@ export default function HomePage() {
                 </Button>
               </div> : null}
             </header>
-
-            <div className="stock-category-tabs" role="tablist" aria-label="Stock type">
-              <button type="button" role="tab" aria-selected={stockCategory === "boosts"} className={stockCategory === "boosts" ? "is-active" : ""} onClick={() => setStockCategory("boosts")}>
-                <KeyRound className="h-4 w-4" aria-hidden="true" />
-                <span><strong>Boost Stock</strong><small>Manage boost inventory</small></span>
-              </button>
-              <button type="button" role="tab" aria-selected={stockCategory === "offline"} className={stockCategory === "offline" ? "is-active" : ""} onClick={() => setStockCategory("offline")}>
-                <Users className="h-4 w-4" aria-hidden="true" />
-                <span><strong>Members Stock</strong><small>Manage connected members</small></span>
-              </button>
-            </div>
+          }>
 
             {stockCategory === "boosts" ? <>
             <section className={`${shell} stock-workbench boost-workbench`}>
@@ -4444,7 +4435,7 @@ export default function HomePage() {
             </details> : null}
 
             </> : communityStockPanel}
-          </>
+          </StockWorkspace>
         ) : null}
 
         {activeTab === "onliner" ? (

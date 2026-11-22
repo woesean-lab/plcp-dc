@@ -20,6 +20,7 @@ import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
+import { StockWorkspace } from "../components/StockWorkspace";
 import { ProfileAvatarButton, ProfileDialog } from "../components/ProfileDialog";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { HumanizerJob } from "../lib/humanizer";
@@ -223,6 +224,11 @@ function ProfileExample() {
   return <><ProfileAvatarButton username="admin" open={open} onClick={() => setOpen(true)} />{open ? <ProfileDialog onClose={() => setOpen(false)} loadProfile={sampleProfile} savePassword={samplePasswordChange} /> : null}</>;
 }
 
+function StockNavigationExample() {
+  const [category, setCategory] = useState<"boosts" | "offline">("boosts");
+  return <StockWorkspace category={category} onCategoryChange={setCategory} heading={<h3 className="app-title">Inventory</h3>}><div className="app-panel p-5"><strong>{category === "boosts" ? "Boost inventory" : "Members Stock"}</strong><p className="ui-ref-hint">Sample inventory content</p></div></StockWorkspace>;
+}
+
 function SettingsExample() {
   const [config, setConfig] = useState({ configured: true, stored: true, clientId: "123456789012345678", guildId: "234567890123456789", hasClientSecret: true, hasBotToken: true, guildName: "Sample Members server", activeGuildCount: 3, activeGuildCountExact: true, botVerified: true, serverLimit: 100 });
   const [draft, setDraft] = useState({ clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" });
@@ -321,6 +327,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("tabs") ? <Section id="tabs">
+          <Example title="Inventory navigation" source="src/components/StockWorkspace.tsx · SettingsWorkspace.css" code={'<StockWorkspace category={stockCategory} onCategoryChange={setStockCategory}\n  heading={inventoryHeading}>\n  {stockCategory === "boosts" ? boostInventory : membersStock}\n</StockWorkspace>\n// Reuses the Settings sidebar; two tabs above content on narrow screens.'}><StockNavigationExample /></Example>
           <Example title="Compact tabs" source="src/index.css · stock-duration-filter" code={'<div className="stock-duration-filter" role="group" aria-label="Service">\n  <button type="button" className={value === "all" ? "is-active" : ""}\n    aria-pressed={value === "all"} onClick={() => setValue("all")}>All orders</button>\n  <button type="button" className={value === "members" ? "is-active" : ""}\n    aria-pressed={value === "members"} onClick={() => setValue("members")}>Members</button>\n</div>'}>
             <div className="stock-duration-filter" role="group" aria-label="Sample service filter">{[{ value: "all", label: "All orders" }, { value: "members", label: "Members" }, { value: "boosts", label: "Boosts" }].map((item) => <button key={item.value} type="button" className={tab === item.value ? "is-active" : ""} aria-pressed={tab === item.value} onClick={() => setTab(item.value)}>{item.label}</button>)}</div><p className="ui-ref-hint" role="status">Selected: {tab}</p>
           </Example>

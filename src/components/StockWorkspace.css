@@ -1,0 +1,2 @@
+.stock-workspace-content { display: grid; min-width: 0; align-content: start; gap: 20px; }
+.stock-workspace .community-stock-import-actions { min-width: 0; max-width: 100%; flex-wrap: wrap; }
