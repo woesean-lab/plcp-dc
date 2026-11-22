@@ -6,6 +6,7 @@ import { execFile as execFileCallback, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import { serveFrontend } from "./serve-frontend.mjs";
 import emojiRegex from "emoji-regex";
 import geoipCountry from "geoip-country";
 import { HttpsProxyAgent } from "https-proxy-agent";
@@ -15579,8 +15580,7 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
   }
 });
 
-app.use(express.static(distDir, { index: false }));
-app.get("/{*splat}", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
+serveFrontend(app, distDir);
 
 app.use((error, _req, res, _next) => {
   if (error?.type === "entity.too.large") {

@@ -1,16 +1,16 @@
 import { PaginatedList } from "./ListPagination";
-import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, ChevronDown, Clock3, ExternalLink, LoaderCircle, LockKeyhole, MessageSquareText, Pause, Plus, RefreshCw, Send, Settings2, ShieldCheck, ShoppingCart, Sparkles, TriangleAlert, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DiscordMessageLinkHelp } from "@/components/DiscordMessageLinkHelp";
 import { ReactionResetCountdown } from "./ReactionResetCountdown";
 import { getPopoverPlacement } from "../lib/popover-placement";
+import { ReactionEmojiPickerLoader, preloadReactionEmojiPicker } from "./ReactionEmojiPickerLoader";
 
 export const REACTION_MIXED_VALUE = "mixed";
 const REACTION_EMOJI_SELECTION_LIMIT = 20;
 const DISCORD_POPULAR_EMOJIS = ["👍", "❤️", "😂", "🔥", "🎉", "💯", "✅", "👀", "😭", "🤣", "😍", "🙏", "💀", "🥰", "😎", "🤔", "👎", "😢", "🚀", "🤝"];
-const EmojiPicker = lazy(() => import("./VirtualReactionEmojiPicker"));
 
 function formatReactionEmoji(value: string) {
   const customEmoji = value.match(/^<a?:([\w~]{1,64}):(\d{16,22})>$/);
@@ -434,8 +434,8 @@ export function ReactionPanel({
                 className="monitor-reaction-emoji-trigger"
                 aria-expanded={emojiPickerOpen}
                 aria-controls={`${titleId}-emoji-picker`}
-                onPointerEnter={() => void import("./VirtualReactionEmojiPicker")}
-                onFocus={() => void import("./VirtualReactionEmojiPicker")}
+                onPointerEnter={() => void preloadReactionEmojiPicker()}
+                onFocus={() => void preloadReactionEmojiPicker()}
                 onClick={() => {
                   if (!emojiPickerOpen) setEmojiPickerMounted(true);
                   setEmojiPickerOpen((current) => !current);
@@ -513,10 +513,10 @@ export function ReactionPanel({
                       <span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span>
                     </div>
                   ) : null}
-                  {emojiPickerMounted && emojiPickerContentVisible ? <Suspense fallback={<div className="monitor-reaction-emoji-loading" role="status" aria-label="Loading emojis"><span className="monitor-reaction-emoji-loading-search" /><span className="monitor-reaction-emoji-loading-title" /><span className="monitor-reaction-emoji-loading-grid">{Array.from({ length: 32 }, (_, index) => <i key={index} />)}</span></div>}><EmojiPicker
+                  {emojiPickerMounted && emojiPickerContentVisible ? <ReactionEmojiPickerLoader
                       selectedEmojis={selectedEmojis}
                       onSelect={toggleEmoji}
-                    /></Suspense> : null}
+                    /> : null}
 
                 </div>
               </div>

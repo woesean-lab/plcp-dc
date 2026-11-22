@@ -7872,14 +7872,11 @@
   background: linear-gradient(180deg, var(--app-accent), rgba(155,140,255,0));
   content: "";
 }
-.monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 12px; border-radius: var(--monitor-disclosure-radius); grid-column: auto; min-height: 0; padding: 0; align-self: start; container-name: customer-reactions; transition: background-color .15s ease; }
+.monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 12px; border-radius: var(--monitor-disclosure-radius); grid-column: auto; min-height: 0; padding: 0; align-self: start; container-name: customer-reactions; }
 .monitor-reaction-collapse-toggle { border-radius: calc(var(--monitor-disclosure-radius) - 1px); background-clip: padding-box; display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle::-webkit-details-marker { display: none; }
 .monitor-reaction-collapse-toggle::marker { content: ""; }
 .monitor-reaction-collapse-toggle:hover { background: transparent; }
-@media (hover: hover) {
-  .monitor-reaction-panel.is-collapsible:hover { background-color: var(--app-hover); }
-}
 .monitor-reaction-collapse-toggle:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
 .monitor-reaction-collapse-toggle > span:nth-child(2) { display: grid; min-width: 0; gap: 4px; margin-right: auto; }
 .monitor-reaction-collapse-toggle strong { color: var(--app-text); font-size: 16px; font-weight: 680; }
