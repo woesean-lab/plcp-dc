@@ -4,12 +4,13 @@ import "./MemberDeliveryPanel.css";
 
 type Operation = "checking" | "leaving" | "replacing" | "retrying";
 
-export function MemberDeliveryPanel({ id, completed, total, status, operation, attention = false, audience = "admin", actions, children }: {
+export function MemberDeliveryPanel({ id, completed, total, status, operation, checkingProgress, attention = false, audience = "admin", actions, children }: {
   id?: string;
   completed: number;
   total: number;
   status: string;
   operation?: Operation;
+  checkingProgress?: { checked: number; total: number } | null;
   attention?: boolean;
   audience?: "admin" | "public";
   actions?: ReactNode;
@@ -17,7 +18,12 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
 }) {
   const count = Number.isFinite(total) ? Math.max(0, total) : 0;
   const processed = Math.min(count, Number.isFinite(completed) ? Math.max(0, completed) : 0);
-  const progress = count ? Math.round(processed / count * 100) : 0;
+  const checking = operation === "checking";
+  const progressTotal = checking && checkingProgress?.total && Number.isFinite(checkingProgress.total) ? Math.max(0, checkingProgress.total) : count;
+  const progressCompleted = checking
+    ? Math.min(progressTotal, Math.max(0, Number.isFinite(checkingProgress?.checked) ? checkingProgress!.checked : 0))
+    : processed;
+  const progress = progressTotal ? Math.round(progressCompleted / progressTotal * 100) : 0;
   const normalized = status.toUpperCase();
   const done = count > 0 && processed >= count;
   const paused = normalized.includes("PAUSED");
@@ -28,7 +34,8 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
   const label = operation ? operationLabel[operation] : paused ? "Delivery paused" : stopped ? "Delivery stopped"
     : done ? needsReview ? "Completed with issues" : "Delivery complete" : active ? "Delivery in progress" : "Waiting for delivery";
   const Icon = active ? LoaderCircle : paused ? Pause : needsReview ? CircleAlert : done ? Check : Users;
-  const summary = count ? processed + " of " + count + " processed · " + progress + "%" : processed + " processed";
+  const progressVerb = checking ? "checked" : "processed";
+  const summary = progressTotal ? progressCompleted + " of " + progressTotal + " " + progressVerb + " · " + progress + "%" : progressCompleted + " " + progressVerb;
   function handleSummaryClick(event: MouseEvent<HTMLElement>) {
     const target = event.target;
     if (target instanceof Element && target.closest("button, input, select, textarea, [role=button]")) event.preventDefault();
@@ -38,16 +45,16 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
       <span className="monitor-panel-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
       <span><span className="app-kicker">Member results</span><strong>Per-member delivery log</strong></span>
       <div className="humanizer-run-actions">
+        {actions ? <div className="member-delivery-panel-actions">{actions}</div> : null}
         <div className="humanizer-run-outcome" data-state={active ? "running" : needsReview ? "attention" : done && !paused && !stopped ? "success" : "stopped"} role="status">
           <span className="humanizer-run-outcome-icon" aria-hidden="true"><Icon className={"h-4 w-4" + (active ? " animate-spin" : "")} /></span>
           <span className="humanizer-run-outcome-copy"><strong>{label}</strong><small>{summary}</small></span>
         </div>
-        {actions ? <div className="member-delivery-panel-actions">{actions}</div> : null}
       </div>
       <ChevronDown className="member-delivery-panel-chevron h-4 w-4" aria-hidden="true" />
     </summary>
     <div className="humanizer-run-body">
-      <div className="humanizer-progress" role="progressbar" aria-label="Member delivery progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={summary}>
+      <div className="humanizer-progress" role="progressbar" aria-label={checking ? "Member check progress" : "Member delivery progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={summary}>
         <span style={{ width: progress + "%" }} />
       </div>
       {children}

@@ -71,3 +71,29 @@ test("member panel uses a native disclosure that starts open with controls and c
   assert.ok(html.includes("Member rows"));
   assert.ok(html.includes('disabled="" aria-label="Leave all"'));
 });
+
+test("checking outcome and bar follow the current check instead of the completed delivery",()=>{
+  const html=render({completed:25,total:25,status:"COMPLETED",operation:"checking",checkingProgress:{checked:10,total:25}});
+  assert.ok(html.includes("10 of 25 checked · 40%"));
+  assert.ok(html.includes('aria-label="Member check progress"'));
+  assert.ok(html.includes('aria-valuenow="40"'));
+  assert.ok(html.includes('style="width:40%"'));
+  assert.equal(html.includes("25 of 25 processed"),false);
+});
+test("check startup begins at zero and completion restores delivery totals",()=>{
+  const starting=render({completed:25,total:25,status:"COMPLETED",operation:"checking",checkingProgress:null});
+  assert.ok(starting.includes("0 of 25 checked · 0%"));
+  const finished=render({completed:25,total:25,status:"COMPLETED",checkingProgress:{checked:10,total:25}});
+  assert.ok(finished.includes("25 of 25 processed · 100%"));
+  assert.ok(finished.includes('aria-label="Member delivery progress"'));
+});
+test("check progress stays within the current check total",()=>{
+  const html=render({completed:25,total:25,status:"COMPLETED",operation:"checking",checkingProgress:{checked:99,total:10}});
+  assert.ok(html.includes("10 of 10 checked · 100%"));
+});
+
+
+test("toolbar actions precede the right-hand outcome card in reading and focus order",()=>{
+  const html=render({});
+  assert.ok(html.indexOf('aria-label="Leave all"') < html.indexOf('class="humanizer-run-outcome"'));
+});

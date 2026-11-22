@@ -14,7 +14,12 @@
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
 }
-.member-delivery-panel .humanizer-run-actions { flex: 0 1 auto; }
+.member-delivery-panel .humanizer-run-actions {
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+  margin-inline-end: 0;
+  justify-content: flex-end;
+}
 .member-delivery-panel-actions {
   display: flex;
   min-width: 0;

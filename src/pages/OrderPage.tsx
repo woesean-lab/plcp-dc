@@ -1559,6 +1559,7 @@ export default function OrderPage() {
             <div className="lookup-reaction-section lookup-member-section">
               <MemberDeliveryPanel key={uniqid} id="member-log"
                 completed={communityCompletedCount} total={communityMemberResults.length || result.amount || 0} status={normalizedStatus}
+                checkingProgress={communityMemberCheckProgress}
                 operation={checkingCommunityMembers ? "checking" : leavingAllCommunityMembers || autoLeaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : retryingFailedCommunityMembers ? "retrying" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>

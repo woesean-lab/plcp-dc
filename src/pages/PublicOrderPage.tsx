@@ -1094,6 +1094,7 @@ export default function PublicOrderPage() {
                 {isCommunityOrder ? (
                   <MemberDeliveryPanel key={uniqid} audience="public"
                 completed={communityCompletedCount} total={communityMemberResults.length || totalMembers || 0} status={normalizedStatus}
+                checkingProgress={communityMemberCheckProgress}
                 operation={checkingCommunityMembers ? "checking" : leavingAllMembers ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>
