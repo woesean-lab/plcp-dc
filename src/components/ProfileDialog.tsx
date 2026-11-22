@@ -8,7 +8,7 @@ import { changeAdminPassword, getAdminProfile, type AdminProfile } from "../lib/
 import "./ProfileDialog.css";
 
 export function ProfileAvatarButton({ username, open, onClick }: { username?: string; open: boolean; onClick: () => void }) {
-  return <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="ghost" className="profile-trigger" aria-label="Open profile" title={username ? `${username} · Profile` : "Profile"} aria-haspopup="dialog" aria-expanded={open} onClick={onClick}><span className="profile-trigger-avatar" aria-hidden="true">{username ? username.slice(0, 2).toUpperCase() : <UserRound className="h-4 w-4" />}</span></Button></span>;
+  return <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="accentGhost" className="profile-trigger" aria-label="Open profile" title={username ? `${username} · Profile` : "Profile"} aria-haspopup="dialog" aria-expanded={open} onClick={onClick}><span className="profile-trigger-avatar" aria-hidden="true">{username ? username.slice(0, 2).toUpperCase() : <UserRound className="h-4 w-4" />}</span></Button></span>;
 }
 
 export function ProfileDialog({ onClose, loadProfile = getAdminProfile, savePassword = changeAdminPassword }: {
