@@ -1,5 +1,5 @@
 import type { MouseEvent, ReactNode } from "react";
-import { BadgeCheck, Check, ChevronDown, CircleAlert, LoaderCircle, Pause, Users } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, LoaderCircle, Pause, Users } from "lucide-react";
 import "./MemberDeliveryPanel.css";
 
 type Operation = "checking" | "leaving" | "replacing" | "retrying";
@@ -33,12 +33,10 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
     const target = event.target;
     if (target instanceof Element && target.closest("button, input, select, textarea, [role=button]")) event.preventDefault();
   }
-  return <details open id={id} className="app-panel humanizer-run-panel community-order-log member-delivery-panel" data-audience={audience} aria-label="Per-member delivery">
-    <summary className="humanizer-run-head member-delivery-panel-toggle" onClick={handleSummaryClick}>
-      <div className="onliner-section-heading">
-        <span className="onliner-section-icon" aria-hidden="true">{active ? <LoaderCircle className="h-4 w-4 animate-spin" /> : done && !paused && !stopped && !needsReview ? <BadgeCheck className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
-        <span><strong>Per-member delivery log</strong><small>Member results update live.</small></span>
-      </div>
+  return <details open id={id} className="monitor-reaction-panel monitor-control-panel is-collapsible community-order-log member-delivery-panel" data-audience={audience} aria-label="Per-member delivery">
+    <summary className="monitor-panel-heading monitor-reaction-collapse-toggle member-delivery-panel-toggle" onClick={handleSummaryClick}>
+      <span className="monitor-panel-icon" aria-hidden="true"><Users className="h-4 w-4" /></span>
+      <span><span className="app-kicker">Member results</span><strong>Per-member delivery log</strong></span>
       <div className="humanizer-run-actions">
         <div className="humanizer-run-outcome" data-state={active ? "running" : needsReview ? "attention" : done && !paused && !stopped ? "success" : "stopped"} role="status">
           <span className="humanizer-run-outcome-icon" aria-hidden="true"><Icon className={"h-4 w-4" + (active ? " animate-spin" : "")} /></span>

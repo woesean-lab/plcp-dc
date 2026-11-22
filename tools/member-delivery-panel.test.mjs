@@ -18,10 +18,12 @@ const render=props=>renderToStaticMarkup(React.createElement(module.exports.Memb
   children:React.createElement("div",{"data-member-list":true},"Member rows"),...props
 }));
 
-test("panel reuses the Humanizer frame, shows processed progress and preserves action permissions without a run-results filter",()=>{
+test("panel reuses the Reactions frame, shows processed progress and preserves action permissions without a run-results filter",()=>{
   const html=render({id:"member-log"});
   assert.ok(html.includes('id="member-log"'));
-  assert.ok(html.includes("humanizer-run-head"));
+  assert.ok(html.includes("monitor-reaction-panel monitor-control-panel is-collapsible"));
+  assert.ok(html.includes("monitor-panel-icon"));
+  assert.ok(html.includes('class="app-kicker">Member results'));
   assert.ok(html.includes("Delivery in progress"));
   assert.ok(html.includes("12 of 50 processed · 24%"));
   assert.ok(html.includes('aria-valuenow="24"'));
@@ -64,7 +66,7 @@ test("empty and over-reported counts keep the accessible progress within its ran
 test("member panel uses a native disclosure that starts open with controls and content preserved",()=>{
   const html=render({});
   assert.match(html,/^<details open=""[^>]*>/);
-  assert.ok(html.includes('<summary class="humanizer-run-head member-delivery-panel-toggle">'));
+  assert.ok(html.includes('<summary class="monitor-panel-heading monitor-reaction-collapse-toggle member-delivery-panel-toggle">'));
   assert.ok(html.includes("member-delivery-panel-chevron"));
   assert.ok(html.includes("Member rows"));
   assert.ok(html.includes('disabled="" aria-label="Leave all"'));

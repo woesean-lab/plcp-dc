@@ -900,7 +900,7 @@ export default function PublicOrderPage() {
       <div className="app-ambient app-ambient-one" aria-hidden="true" />
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
-      <main className="monitor-frame">
+      <main className={`monitor-frame${isCommunityOrder ? " is-community" : ""}`}>
         <header className="monitor-topbar">
           <div className="monitor-brand">
             <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
@@ -1084,7 +1084,7 @@ export default function PublicOrderPage() {
                 </div>
               ) : null}
 
-              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : ""}`.trim()}>
+              <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : isCommunityOrder ? "is-community" : ""}`.trim()}>
                 {boostDeliveryControl}
                 {delayUpdatePanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel ? (isCommunityOrder && status?.customerReactions?.enabled ? "is-paired" : "is-delay-only") : ""}`.trim()}>
                   {delayUpdatePanel}

@@ -7872,12 +7872,12 @@
   background: linear-gradient(180deg, var(--app-accent), rgba(155,140,255,0));
   content: "";
 }
-.monitor-reaction-panel.is-collapsible { grid-column: auto; min-height: 0; align-self: start; container-name: customer-reactions; }
-.monitor-reaction-collapse-toggle { border-radius: inherit; background-clip: padding-box; display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
+.monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 12px; border-radius: var(--monitor-disclosure-radius); grid-column: auto; min-height: 0; align-self: start; container-name: customer-reactions; }
+.monitor-reaction-collapse-toggle { border-radius: calc(var(--monitor-disclosure-radius) - 1px); background-clip: padding-box; display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle::-webkit-details-marker { display: none; }
 .monitor-reaction-collapse-toggle::marker { content: ""; }
 .monitor-reaction-collapse-toggle:hover { background: var(--app-hover); }
-.monitor-reaction-collapse-toggle:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; border-radius: inherit; }
+.monitor-reaction-collapse-toggle:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
 .monitor-reaction-collapse-toggle > span:nth-child(2) { display: grid; min-width: 0; gap: 4px; margin-right: auto; }
 .monitor-reaction-collapse-toggle strong { color: var(--app-text); font-size: 16px; font-weight: 680; }
 .monitor-reaction-collapse-toggle small { color: var(--app-muted); font-size: 11px; }
@@ -12033,6 +12033,7 @@
   .monitor-reaction-panel > * { min-width: 0; }
   .lookup-reaction-section { padding: 10px; }
   .monitor-reaction-panel { border-radius: 15px; }
+  .monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 15px; }
   .monitor-reaction-heading { align-items: flex-start; flex-direction: column; gap: 13px; padding: 16px; }
   .monitor-reaction-heading-actions { width: 100%; justify-content: space-between; }
   .monitor-reaction-dashboard { grid-template-columns: 1fr; padding: 12px; }
@@ -12362,3 +12363,7 @@
   .onliner-account-filters > .ui-input { grid-column: 1 / -1; }
   .onliner-proxy-filters { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Community monitor cards keep their spacing when disclosures collapse. */
+.monitor-frame.is-community { min-height: 0; grid-template-rows: auto auto auto; }
+.monitor-workspace.is-community { flex: 0 0 auto; align-content: start; }
