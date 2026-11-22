@@ -1468,6 +1468,22 @@ export default function OrderPage() {
             ) : null}
           </div>
 
+          </>} footer={<>
+          <OrderDetailDisclosure title="Order & server details" hint="IDs and timestamps" icon={<Server className="h-4 w-4" />}>
+            <div className="lookup-technical-grid">
+              <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
+              <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
+              <div><span>Current members</span><strong>{formatTemplateNumber(serverMemberCount)}</strong></div>
+              <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
+              <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
+            </div>
+          </OrderDetailDisclosure>
+
+          <OrderDetailDisclosure title="Raw order payload" kind="payload" hint="JSON" icon={<FileJson className="h-4 w-4" />}>
+            <div className="payload-panel overflow-auto p-4">
+              <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
+            </div>
+          </OrderDetailDisclosure>
           </>}>
           <div className={isCommunityProvider ? "lookup-order-sections" : undefined}>
           {isCommunityProvider && result.customerReactions?.canConfigure ? <div className="lookup-reaction-section">
@@ -1663,21 +1679,6 @@ export default function OrderPage() {
             </div>
           ) : null}
 
-          <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server className="h-4 w-4" />}>
-            <div className="lookup-technical-grid">
-              <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
-              <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
-              <div><span>Current members</span><strong>{formatTemplateNumber(serverMemberCount)}</strong></div>
-              <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
-              <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
-            </div>
-          </OrderDetailDisclosure>
-
-          <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson className="h-4 w-4" />}>
-            <div className="payload-panel overflow-auto p-4">
-              <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
-            </div>
-          </OrderDetailDisclosure>
           </div>
         </OrderDetailsLayout>
       ) : (

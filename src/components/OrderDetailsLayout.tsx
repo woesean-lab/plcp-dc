@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 
-export function OrderDetailsLayout({ overview, children, standaloneSections = false }: {
+export function OrderDetailsLayout({ overview, footer, children, standaloneSections = false }: {
   overview: ReactNode;
+  footer?: ReactNode;
   children: ReactNode;
   standaloneSections?: boolean;
 }) {
@@ -9,6 +10,7 @@ export function OrderDetailsLayout({ overview, children, standaloneSections = fa
     <article className="app-panel lookup-workspace">
       {overview}
       {!standaloneSections ? children : null}
+      {footer}
     </article>
     {standaloneSections ? children : null}
   </>;

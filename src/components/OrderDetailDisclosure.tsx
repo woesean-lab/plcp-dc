@@ -1,19 +1,18 @@
 import { useId, type ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
 import "./OrderDetailDisclosure.css";
 
-export function OrderDetailDisclosure({ title, kicker, icon, children }: {
+export function OrderDetailDisclosure({ title, hint, icon, children, kind = "details" }: {
   title: string;
-  kicker: string;
+  hint?: string;
   icon: ReactNode;
   children: ReactNode;
+  kind?: "details" | "payload";
 }) {
   const titleId = useId();
-  return <details className="monitor-reaction-panel monitor-control-panel is-collapsible order-detail-disclosure" aria-labelledby={titleId}>
-    <summary className="monitor-panel-heading monitor-reaction-collapse-toggle">
-      <span className="monitor-panel-icon" aria-hidden="true">{icon}</span>
-      <span><span className="app-kicker">{kicker}</span><strong id={titleId}>{title}</strong></span>
-      <ChevronDown aria-hidden="true" />
+  return <details className={kind === "payload" ? "lookup-raw-payload" : "lookup-technical-details"} aria-labelledby={titleId}>
+    <summary>
+      <span id={titleId}>{icon}{title}</span>
+      {hint ? <small>{hint}</small> : null}
     </summary>
     {children}
   </details>;

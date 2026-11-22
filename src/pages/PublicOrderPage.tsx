@@ -276,6 +276,8 @@ export default function PublicOrderPage() {
   const [replacingTokenIndex, setReplacingTokenIndex] = useState<number | null>(null);
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [leavingAllMembers, setLeavingAllMembers] = useState(false);
+  const [showLeaveAllModal, setShowLeaveAllModal] = useState(false);
+  const leaveAllDialogRef = useRef<HTMLDialogElement>(null);
   const leaveAllInFlightRef = useRef(false);
   const leaveAttemptBeforeStart = useRef<string | undefined>();
   const leaveAttemptTotal = useRef(0);
@@ -313,6 +315,18 @@ export default function PublicOrderPage() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showExtensionModal]);
+
+  useEffect(() => {
+    if (!showLeaveAllModal) return;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    if (!leaveAllDialogRef.current?.open) leaveAllDialogRef.current?.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus instanceof HTMLElement) previousFocus.focus({ preventScroll: true });
+    };
+  }, [showLeaveAllModal]);
 
   function syncDelayUpdateCooldown(data: OrderStatusResponse) {
     const remaining = Number(data.delayUpdateCooldownSeconds);
@@ -531,6 +545,8 @@ export default function PublicOrderPage() {
   const eligibleLeaveMembers = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus !== "failed").length;
   const communityLeaveFailed = communityMemberResults.some((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus === "failed");
   const leaveRunning = ["starting", "running"].includes(status?.memberLeaveProgress?.status ?? "");
+  const canLeaveAllMembers = Boolean(uniqid && status?.canPublicLeaveAll && !status.publicLeaveAllUsed
+    && eligibleLeaveMembers > 0 && !leavingAllMembers && !leaveRunning && !checkingCommunityMembers && !replacingAllCommunityMembers);
   const leaveProgress = leavingAllMembers && status?.memberLeaveProgress?.startedAt === leaveAttemptBeforeStart.current
     ? { processed: 0, total: leaveAttemptTotal.current } : status?.memberLeaveProgress;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
@@ -711,8 +727,9 @@ export default function PublicOrderPage() {
   }
 
   async function handleLeaveAllMembers() {
-    if (!uniqid || leaveAllInFlightRef.current || !status?.canPublicLeaveAll || status.publicLeaveAllUsed) return;
+    if (!canLeaveAllMembers || leaveAllInFlightRef.current) return;
     leaveAllInFlightRef.current = true;
+    setShowLeaveAllModal(false);
     leaveAttemptBeforeStart.current = status?.memberLeaveProgress?.startedAt;
     leaveAttemptTotal.current = eligibleLeaveMembers;
     setLeavingAllMembers(true);
@@ -1136,7 +1153,7 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || leaveRunning || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "All delivered members have left." : eligibleLeaveMembers === 0 && communityLeaveFailed ? "Failed members will not be retried." : "Remove remaining members. Failed members are skipped."}>
+                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => { if (canLeaveAllMembers) setShowLeaveAllModal(true); }} disabled={!canLeaveAllMembers} title={status?.publicLeaveAllUsed ? "All delivered members have left." : eligibleLeaveMembers === 0 && communityLeaveFailed ? "Failed members will not be retried." : "Remove remaining members. Failed members are skipped."}>
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers || leaveRunning ? "Leaving..." : eligibleLeaveMembers === 0 && communityLeaveFailed ? "Leave all failed" : status?.publicLeaveAllUsed ? "Leave all used" : `Leave all (${eligibleLeaveMembers})`}
                         </Button> : null}
@@ -1248,6 +1265,25 @@ export default function PublicOrderPage() {
           <span>Order #{uniqid ? uniqid.slice(-8).toUpperCase() : "-"}</span>
         </footer>
       </main>
+      {showLeaveAllModal ? createPortal(
+        <dialog ref={leaveAllDialogRef} className="confirm-modal fixed inset-0 m-auto max-w-[calc(100vw-32px)] max-h-[calc(100dvh-32px)] overflow-y-auto text-[var(--app-text)] backdrop:bg-[var(--app-overlay-bg)] backdrop:backdrop-blur-md"
+          role="alertdialog" aria-modal="true" aria-labelledby="public-leave-all-title" aria-describedby="public-leave-all-description"
+          onCancel={(event) => { event.preventDefault(); setShowLeaveAllModal(false); }}
+          onClick={(event) => {
+            if (event.target !== event.currentTarget) return;
+            const bounds = event.currentTarget.getBoundingClientRect();
+            if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) setShowLeaveAllModal(false);
+          }}>
+          <span className="confirm-modal-icon" aria-hidden="true"><LogOut className="h-5 w-5" /></span>
+          <p className="app-kicker text-[var(--app-danger)]">Leave server</p>
+          <h2 id="public-leave-all-title">Make all members leave?</h2>
+          <p id="public-leave-all-description">{eligibleLeaveMembers} remaining members will leave the server. Failed members are skipped.</p>
+          <div className="confirm-modal-actions flex-wrap">
+            <Button autoFocus type="button" variant="secondary" onClick={() => setShowLeaveAllModal(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" disabled={!canLeaveAllMembers} onClick={() => void handleLeaveAllMembers()}><LogOut className="h-4 w-4" aria-hidden="true" />Yes, leave all</Button>
+          </div>
+        </dialog>, document.body
+      ) : null}
       {showExtensionModal && !supportExpired ? createPortal(
         <div className="confirm-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowExtensionModal(false); }}>
           <div className="confirm-modal public-extension-modal" role="dialog" aria-modal="true" aria-labelledby="public-extension-title">

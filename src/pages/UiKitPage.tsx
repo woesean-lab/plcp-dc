@@ -205,23 +205,24 @@ function ReactionOptionExample() {
 function OrderSectionsExample() {
   return <div className="grid min-w-0 gap-4"><OrderDetailsLayout standaloneSections overview={
     <header className="lookup-workspace-header"><div className="lookup-order-identity"><span className="lookup-provider-mark" aria-hidden="true"><Server className="h-4 w-4" /></span><h2>Order overview</h2></div></header>
-  }><div className="lookup-order-sections">
+  } footer={<>
+    <OrderDetailDisclosure title="Order & server details" hint="IDs and timestamps" icon={<Server className="h-4 w-4" />}>
+      <div className="lookup-technical-grid"><div><span>Order ID</span><strong>sample-order</strong></div><div><span>Server ID</span><strong>123456789012345678</strong></div></div>
+    </OrderDetailDisclosure>
+    <OrderDetailDisclosure title="Raw order payload" kind="payload" hint="JSON" icon={<FileJson className="h-4 w-4" />}>
+      <div className="payload-panel overflow-auto p-4"><pre>{JSON.stringify({ uniqid: "sample-order", status: "COMPLETED" }, null, 2)}</pre></div>
+    </OrderDetailDisclosure>
+  </>}><div className="lookup-order-sections">
     <ReactionExample />
     <MemberDeliveryPanel completed={25} total={25} status="COMPLETED" actions={<Button type="button" size="sm" variant="accentGhost" onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-4 w-4" />Check members</Button>}>
       <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>
         <MemberDeliveryRow item={MEMBER_DELIVERY_SAMPLES[0]} formatTime={() => "Nov 20, 2026, 3:00 PM"} />
       </MemberDeliveryAccordion></div>
     </MemberDeliveryPanel>
-    <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server className="h-4 w-4" />}>
-      <div className="lookup-technical-grid"><div><span>Order ID</span><strong>sample-order</strong></div><div><span>Server ID</span><strong>123456789012345678</strong></div></div>
-    </OrderDetailDisclosure>
-    <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson className="h-4 w-4" />}>
-      <div className="payload-panel overflow-auto p-4"><pre>{JSON.stringify({ uniqid: "sample-order", status: "COMPLETED" }, null, 2)}</pre></div>
-    </OrderDetailDisclosure>
   </div></OrderDetailsLayout></div>;
 }
 
-function ReactionExample() {
+function ReactionExample({ locked = false }: { locked?: boolean }) {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
@@ -231,7 +232,8 @@ function ReactionExample() {
     return new Date(Date.parse(`${day}T00:00:00+03:00`) + 86_400_000).toISOString();
   });
   return <ReactionPanel collapsible resetsAt={resetsAt}
-    limit={500} completed={15} used={15} failed={0} remaining={485} eligibleMembers={500}
+    limit={500} completed={15} used={15} failed={0} remaining={485} eligibleMembers={locked ? 0 : 500}
+    requestEnabled={!locked} lockReason={locked ? "No members are currently available to react." : undefined}
     onEditLimit={() => toast.success("Sample reaction settings previewed")} limitActionLabel="Manage reactions"
     messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={requests}
     onMessageChange={setMessage} onCountChange={setCount} onEmojiSelectionChange={setEmojis}
@@ -327,7 +329,7 @@ export default function UiKitPage() {
           <Example title="Existing surface styles" source="src/index.css · app-panel / app-panel-soft / payload-panel" code={'<section className="app-panel">Main panel</section>\n<div className="app-panel-soft">Nested group</div>\n<pre className="payload-panel">Code or payload</pre>'}>
             <div className="ui-ref-grid">{["app-panel", "app-panel-soft", "payload-panel"].map((className) => <div className={`${className} ui-ref-surface`} key={className}><strong>{className}</strong><span className="ui-ref-hint">Existing console surface</span></div>)}</div>
           </Example>
-          <Example title="Order detail sections" source="src/components/OrderDetailsLayout.tsx · OrderDetailDisclosure.tsx · lookup-order-sections" code={'<OrderDetailsLayout standaloneSections overview={orderOverview}>\n  <div className="lookup-order-sections">\n    {reactionPanel}\n    {memberDeliveryPanel}\n    <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server />}>{details}</OrderDetailDisclosure>\n    <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson />}>{payload}</OrderDetailDisclosure>\n  </div>\n</OrderDetailsLayout>'}><OrderSectionsExample /></Example>
+          <Example title="Order detail sections" source="src/components/OrderDetailsLayout.tsx · OrderDetailDisclosure.tsx · lookup-order-sections" code={'<OrderDetailsLayout standaloneSections overview={orderOverview}\n  footer={<>\n    <OrderDetailDisclosure title="Order & server details" hint="IDs and timestamps" icon={<Server />}>{details}</OrderDetailDisclosure>\n    <OrderDetailDisclosure title="Raw order payload" kind="payload" hint="JSON" icon={<FileJson />}>{payload}</OrderDetailDisclosure>\n  </>}>\n  <div className="lookup-order-sections">\n    {reactionPanel}\n    {memberDeliveryPanel}\n  </div>\n</OrderDetailsLayout>'}><OrderSectionsExample /></Example>
           <Example title="Shared Card component" source="src/components/ui/card.tsx" code={'<Card>\n  <CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader>\n  <CardContent><Badge variant="success">Ready</Badge></CardContent>\n</Card>'}>
             <Card><CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader><CardContent><Badge variant="success"><ShieldCheck className="h-3 w-3" />Ready</Badge></CardContent></Card>
           </Example>
@@ -339,6 +341,7 @@ export default function UiKitPage() {
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>
           <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// With reactions, both cards share the row equally.\n<div className="monitor-order-controls is-paired">\n  {delayPanel}{reactionPanel}\n</div>\n// Both layouts use full-width cards below 900px.'}><MonitorControlsExample /></Example>
           <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.\n// Open the emoji picker and scroll: only visible rows mount; search covers all emojis.'}><ReactionExample /></Example>
+          <Example title="Locked reaction form" source="src/components/ReactionPanel.tsx · monitor-reaction-form-lock" code={'<ReactionPanel {...props} requestEnabled={false}\n  lockReason="No members are currently available to react." />\n// The lock overlay inherits the form radius; its blur stays inside the form.'}><ReactionExample locked /></Example>
           <Example title="Order warning card" source="src/components/OrdersWorkspace.css · od-order-alert" code={'<div className="orderdesk">\n  <div className="od-order-alert" data-tone="danger">\n    <TriangleAlert aria-hidden="true" />\n    <div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div>\n    <div className="od-alert-actions"><Button variant="destructive" size="xs">Continue</Button></div>\n  </div>\n</div>'}>
             <div className="orderdesk ui-ref-order-preview"><div className="od-order-alert" data-tone="danger"><TriangleAlert aria-hidden="true" /><div className="od-alert-copy"><strong>Invites paused</strong><span>Check the invite before continuing.</span></div><div className="od-alert-actions"><Button type="button" variant="destructive" size="xs" onClick={previewClick}><RefreshCw className="h-3 w-3" />Continue</Button></div></div></div>
           </Example>

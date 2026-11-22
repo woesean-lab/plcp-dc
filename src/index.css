@@ -8097,7 +8097,7 @@
   border-radius: 15px;
   background: linear-gradient(115deg, rgba(155,140,255,.075), rgba(255,255,255,.018));
 }
-.monitor-reaction-form[data-locked="true"] { min-height: 86px; overflow: hidden; }
+.monitor-reaction-form[data-locked="true"] { min-height: 86px; overflow: hidden; isolation: isolate; }
 .monitor-reaction-form[data-locked="true"] > *:not(.monitor-reaction-form-lock) {
   filter: blur(2.5px);
   opacity: .38;
@@ -8108,6 +8108,7 @@
   position: absolute;
   z-index: 2;
   inset: 0;
+  border-radius: inherit;
   display: flex;
   align-items: center;
   justify-content: center;
