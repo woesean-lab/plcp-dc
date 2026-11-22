@@ -1,5 +1,6 @@
 import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
+import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -509,6 +510,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
   const loadingLabel = tab === "create" ? "create order" : tab === "manage" ? "order management" : tab === "stock" ? "boost stock" : tab === "onliner" ? "bot onliner" : "settings";
 
   if (tab === "manage") return <OrdersWorkspaceLoading />;
+  if (tab === "settings") return <SettingsWorkspaceSkeleton />;
 
   return (
     <section className="space-y-5 tab-slide-in" role="status" aria-live="polite" aria-busy="true" aria-label={`Loading ${loadingLabel}`}>
@@ -545,7 +547,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
         </div>
       ) : null}
 
-      {tab === "stock" || tab === "onliner" || tab === "settings" ? (
+      {tab === "stock" || tab === "onliner" ? (
         <div className="grid gap-5 lg:grid-cols-[1.08fr_0.92fr] lg:items-start" aria-hidden="true">
           <div className={`${shell} p-5 sm:p-6`}>
             <Skeleton className="h-3 w-24" />
@@ -620,6 +622,8 @@ export default function HomePage() {
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsError, setSettingsError] = useState("");
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
   const [onlinerSnapshot, setOnlinerSnapshot] = useState<DiscordOnlinerSnapshot | null>(null);
   const [onlinerAccountPage, setOnlinerAccountPage] = useState(1);
@@ -688,6 +692,7 @@ export default function HomePage() {
   const [leavingCommunityGuilds, setLeavingCommunityGuilds] = useState(false);
   const [showCommunityGuildManager, setShowCommunityGuildManager] = useState(false);
   const [loadingCommunityGuilds, setLoadingCommunityGuilds] = useState(false);
+  const [communityGuildsError, setCommunityGuildsError] = useState("");
   const [communityGuilds, setCommunityGuilds] = useState<CommunityBotGuild[]>([]);
   const [selectedCommunityGuildIds, setSelectedCommunityGuildIds] = useState<Record<string, boolean>>({});
   const [communityGuildLeaveProgress, setCommunityGuildLeaveProgress] = useState<CommunityGuildLeaveProgress | null>(null);
@@ -1027,7 +1032,7 @@ export default function HomePage() {
     if (activeTab !== "settings") return;
     void loadCommunityConfiguration();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, dcordConfigured]);
+  }, [activeTab]);
 
   useEffect(() => {
     if (activeTab !== "onliner") return;
@@ -1875,6 +1880,8 @@ export default function HomePage() {
   }
 
   async function loadCommunityConfiguration() {
+    setSettingsLoading(true);
+    setSettingsError("");
     try {
       const config = await getCommunityConfig();
       setCommunityConfig(config);
@@ -1885,8 +1892,27 @@ export default function HomePage() {
         guildId: config.guildId
       });
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "Members bot settings could not be loaded.");
+      const message = error instanceof Error ? error.message : "Members bot settings could not be loaded.";
+      setSettingsError(message);
+      notifyError(message);
+    } finally {
+      setSettingsLoading(false);
     }
+  }
+
+  async function refreshSettingsConnections() {
+    setSettingsLoading(true);
+    setSettingsError("");
+    try {
+      const [admin, config] = await Promise.all([getAdminConfig(), getCommunityConfig()]);
+      setDcordConfigured(admin.dcordConfigured);
+      setBoostStock(admin.boostStock);
+      setCommunityConfig(config);
+      if (!communityConfig) setCommunityConfigDraft((current) => ({ ...current, clientId: current.clientId || config.clientId, guildId: current.guildId || config.guildId }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Connection status could not be refreshed.";
+      setSettingsError(message);
+    } finally { setSettingsLoading(false); }
   }
 
   async function handleSaveCommunityConfig(event: FormEvent) {
@@ -1895,7 +1921,10 @@ export default function HomePage() {
       setSavingCommunityConfig(true);
       const config = await saveCommunityConfig(communityConfigDraft);
       setCommunityConfig(config);
-      setCommunityConfigDraft((current) => ({ ...current, clientSecret: "", botToken: "" }));
+      setCommunityConfigDraft({ clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" });
+      setShowCommunityGuildManager(false);
+      setCommunityGuilds([]);
+      setSelectedCommunityGuildIds({});
       await refreshCommunityStatus();
       notifySuccess(`${config.guildName ?? "Members bot"} verified and saved securely.`);
     } catch (error) {
@@ -1909,6 +1938,9 @@ export default function HomePage() {
     try {
       setSavingCommunityConfig(true);
       await clearCommunityConfig();
+      setShowCommunityGuildManager(false);
+      setCommunityGuilds([]);
+      setSelectedCommunityGuildIds({});
       await loadCommunityConfiguration();
       communityStatusRequestRef.current += 1;
       setCommunityStatus(null);
@@ -1922,13 +1954,16 @@ export default function HomePage() {
   }
 
   async function loadCommunityGuildList() {
+    setCommunityGuildsError("");
     try {
       setLoadingCommunityGuilds(true);
       const result = await getCommunityBotGuilds();
       setCommunityGuilds(result.guilds);
       setSelectedCommunityGuildIds((current) => Object.fromEntries(result.guilds.filter((guild) => current[guild.id]).map((guild) => [guild.id, true])));
     } catch (error) {
-      notifyError(error instanceof Error ? error.message : "The Members bot server list could not be loaded.");
+      const message = error instanceof Error ? error.message : "The Members bot server list could not be loaded.";
+      setCommunityGuildsError(message);
+      notifyError(message);
     } finally {
       setLoadingCommunityGuilds(false);
     }
@@ -4846,282 +4881,15 @@ export default function HomePage() {
           </>
         ) : null}
 
-        {activeTab === "settings" ? (
-          <>
-            <header className="page-heading">
-              <div>
-                <p className={labelClass}>Settings</p>
-                <h1 className="page-title">Connections</h1>
-                <p className="app-copy page-copy">Configure the Members bot and Dcord connection.</p>
-              </div>
-              <div className="page-heading-meta">
-                <Badge variant={dcordConfigured ? "success" : "destructive"}>Dcord {dcordConfigured ? "Connected" : "Missing"}</Badge>
-                <Badge variant={communityConfig?.configured ? "success" : "destructive"}>Members bot {communityConfig?.configured ? "Connected" : "Missing"}</Badge>
-              </div>
-            </header>
-
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px] xl:items-start">
-              <div className="grid gap-5">
-              <section className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
-                  <div>
-                    <p className={labelClass}>Members stock</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Discord bot & OAuth</h2>
-                  </div>
-                </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Bot settings for Members Stock.
-                </p>
-
-                {communityConfig?.configured ? (
-                  <div className="mt-5 grid gap-3">
-                    <div className="settings-status-row">
-                      <span className="stat-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span>
-                      <span>
-                        <span className="settings-status-label">Active servers</span>
-                        <strong>
-                          {communityConfig.activeGuildCount === null
-                            ? "Could not sync"
-                            : `${communityConfig.activeGuildCountExact ? "" : "At least "}${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""}`}
-                        </strong>
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="secondary" disabled={leavingCommunityGuilds || (!showCommunityGuildManager && !communityConfig.activeGuildCount)} onClick={() => void toggleCommunityGuildManager()}>
-                        <Settings2 className="h-4 w-4" />
-                        {showCommunityGuildManager ? "Close server list" : "Manage servers"}
-                      </Button>
-                    </div>
-                    {showCommunityGuildManager ? (
-                      <div className="community-guild-manager">
-                        <div className="community-guild-manager-head">
-                          <span><strong>Connected servers</strong><small>Bot server memberships.</small></span>
-                          <span>
-                            <Button type="button" size="xs" variant="secondary" disabled={loadingCommunityGuilds || !communityGuilds.length} onClick={() => setSelectedCommunityGuildIds(Object.fromEntries(communityGuilds.map((guild) => [guild.id, true])))}>Select all</Button>
-                            <Button type="button" size="xs" variant="dangerGhost" disabled={loadingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => setSelectedCommunityGuildIds({})}><Trash2 className="h-3.5 w-3.5" />Clear</Button>
-                          </span>
-                        </div>
-                        {loadingCommunityGuilds ? (
-                          <div className="community-guild-manager-loading"><LoaderCircle className="h-4 w-4 animate-spin" /> Loading servers...</div>
-                        ) : (
-                          <div className="community-guild-list">
-                            <PaginatedList items={communityGuilds} label="Bot server pages">{(pageItems) => (<>
-                            {pageItems.map((guild) => {
-                              const selected = selectedCommunityGuildIds[guild.id] === true;
-                              return (
-                                <button key={guild.id} type="button" className="community-guild-row" data-selected={selected ? "true" : "false"} role="checkbox" aria-checked={selected} onClick={() => setSelectedCommunityGuildIds((current) => ({ ...current, [guild.id]: !selected }))}>
-                                  <span className="community-guild-check">{selected ? <Check className="h-3.5 w-3.5" /> : null}</span>
-                                  <span className="community-guild-avatar">{guild.iconUrl ? <img src={guild.iconUrl} alt="" /> : <Globe2 className="h-4 w-4" />}</span>
-                                  <span className="community-guild-copy">
-                                    <strong>{guild.name}</strong>
-                                    <small>{guild.id}{guild.configured ? " · Configured server" : ""}</small>
-                                    {guild.activeOrderCount > 0 ? (
-                                      <span className="community-guild-order-statuses">
-                                        {guild.activeOrderStatuses.map((item) => (
-                                          <em key={item.status} data-status={item.status.toLowerCase().replace(/\s+/g, "-")}>
-                                            {item.count} active order{item.count === 1 ? "" : "s"} · {item.status}
-                                          </em>
-                                        ))}
-                                      </span>
-                                    ) : null}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                            </>)}</PaginatedList>
-                          </div>
-                        )}
-                        {leavingCommunityGuilds && communityGuildLeaveProgress ? (
-                          <div className="community-guild-progress" role="status" aria-live="polite">
-                            <LoaderCircle className="h-4 w-4 animate-spin" />
-                            <span>
-                              <strong>Removing servers · {communityGuildLeaveProgress.completed}/{communityGuildLeaveProgress.total}</strong>
-                              <small>
-                                {communityGuildLeaveProgress.currentGuilds.length
-                                  ? `Processing: ${communityGuildLeaveProgress.currentGuilds.map((guild) => guild.name).join(", ")}`
-                                  : "Preparing the next server..."}
-                              </small>
-                            </span>
-                          </div>
-                        ) : null}
-                        <div className="community-guild-manager-actions">
-                          <span>{Object.values(selectedCommunityGuildIds).filter(Boolean).length} selected</span>
-                          <Button type="button" size="sm" variant="destructive" disabled={leavingCommunityGuilds || !Object.values(selectedCommunityGuildIds).some(Boolean)} onClick={() => void handleLeaveSelectedCommunityGuilds()}>
-                            {leavingCommunityGuilds ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
-                            {leavingCommunityGuilds ? "Leaving..." : "Leave selected"}
-                          </Button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                <form onSubmit={handleSaveCommunityConfig} className="mt-6 grid gap-4">
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Client ID</span>
-                    <Input value={communityConfigDraft.clientId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientId: event.target.value }))} placeholder="Discord application Client ID" inputMode="numeric" />
-                  </label>
-
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Members Stock server ID</span>
-                    <Input value={communityConfigDraft.guildId} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, guildId: event.target.value }))} placeholder="Required when the bot is in multiple servers" inputMode="numeric" />
-                  </label>
-
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Client Secret</span>
-                      <Input type="password" value={communityConfigDraft.clientSecret} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, clientSecret: event.target.value }))} placeholder={communityConfig?.hasClientSecret ? "Saved - leave blank to keep" : "Discord Client Secret"} autoComplete="new-password" />
-                    </label>
-                    <label className="grid gap-2">
-                      <span className={fieldLabelClass}>Bot Token</span>
-                      <Input type="password" value={communityConfigDraft.botToken} onChange={(event) => setCommunityConfigDraft((current) => ({ ...current, botToken: event.target.value }))} placeholder={communityConfig?.hasBotToken ? "Saved - leave blank to keep" : "Discord Bot Token"} autoComplete="new-password" />
-                    </label>
-                  </div>
-
-                  <div className="flex flex-wrap gap-3 pt-1">
-                    <Button type="submit" disabled={savingCommunityConfig || !communityConfigDraft.clientId.trim() || (!communityConfig?.hasClientSecret && !communityConfigDraft.clientSecret.trim()) || (!communityConfig?.hasBotToken && !communityConfigDraft.botToken.trim())}>
-                      {savingCommunityConfig ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
-                      {savingCommunityConfig ? "Verifying..." : communityConfig?.configured ? "Update Members bot" : "Verify & save"}
-                    </Button>
-                    {communityConfig?.stored ? (
-                      <Button type="button" variant="destructive" disabled={savingCommunityConfig} onClick={() => void handleClearCommunityConfig()}>Remove saved settings</Button>
-                    ) : null}
-                  </div>
-                </form>
-
-              </section>
-
-              <section className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
-                    <KeyRound className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Dcord boosts</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Dcord API key</h2>
-                  </div>
-                </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  API key for Boosts orders.
-                </p>
-                <form onSubmit={handleSaveDcordApiKey} className="mt-6 grid gap-5">
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>{dcordConfigured ? "Replace Dcord key" : "Dcord API key"}</span>
-                    <Input
-                      type="password"
-                      value={dcordApiKey}
-                      onChange={(event) => setDcordApiKey(event.target.value)}
-                      placeholder={dcordConfigured ? "Enter a new Dcord key" : "Paste Dcord API key"}
-                      autoComplete="new-password"
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-3">
-                    <Button className="min-w-[132px] max-sm:w-full" type="submit" disabled={savingDcordApiKey || !dcordApiKey.trim()}>
-                      <ShieldCheck className="h-4 w-4" aria-hidden="true" />
-                      {savingDcordApiKey ? "Saving..." : dcordConfigured ? "Replace key" : "Save key"}
-                    </Button>
-                    {dcordConfigured ? (
-                      <Button className="min-w-[132px] max-sm:w-full" variant="destructive" type="button" disabled={savingDcordApiKey} onClick={() => void handleClearDcordApiKey()}>
-                        Remove key
-                      </Button>
-                    ) : null}
-                  </div>
-                </form>
-              </section>
-
-              <section className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true"><LogOut className="h-4 w-4" /></span>
-                  <div>
-                    <p className={labelClass}>User account utility</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Leave a Discord server</h2>
-                  </div>
-                </div>
-                <p className="app-copy mt-4 max-w-2xl text-sm leading-6">
-                  Checks an account's access to a server. Token is not saved.
-                </p>
-                <form onSubmit={handleRequestUserGuildLeave} className="mt-6 grid gap-4">
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>User token</span>
-                    <Input
-                      type="password"
-                      value={userGuildLeaveDraft.accountToken}
-                      onChange={(event) => setUserGuildLeaveDraft((current) => ({ ...current, accountToken: event.target.value }))}
-                      placeholder="Discord user token"
-                      autoComplete="off"
-                    />
-                  </label>
-                  <label className="grid gap-2">
-                    <span className={fieldLabelClass}>Guild ID</span>
-                    <Input
-                      value={userGuildLeaveDraft.guildId}
-                      onChange={(event) => setUserGuildLeaveDraft((current) => ({ ...current, guildId: event.target.value.trim() }))}
-                      placeholder="Discord server ID"
-                      inputMode="numeric"
-                    />
-                  </label>
-                  <div className="flex flex-wrap gap-3 pt-1">
-                    <Button type="submit" variant="destructive" disabled={leavingUserGuild || !userGuildLeaveDraft.accountToken.trim() || !userGuildLeaveDraft.guildId.trim()}>
-                      <LogOut className="h-4 w-4" /> Leave server
-                    </Button>
-                    {(userGuildLeaveDraft.accountToken || userGuildLeaveDraft.guildId) ? (
-                      <Button type="button" variant="secondary" disabled={leavingUserGuild} onClick={() => setUserGuildLeaveDraft({ accountToken: "", guildId: "" })}>Clear</Button>
-                    ) : null}
-                  </div>
-                </form>
-              </section>
-              </div>
-
-              <aside className={`${shell} p-5 sm:p-6`}>
-                <div className="flex items-center gap-3">
-                  <span className="stat-icon" aria-hidden="true">
-                    <Settings2 className="h-4 w-4" />
-                  </span>
-                  <div>
-                    <p className={labelClass}>Connection</p>
-                    <h2 className="app-title mt-1 text-lg font-semibold">Status</h2>
-                  </div>
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true">
-                      <KeyRound className="h-4 w-4" />
-                    </span>
-                    <span>
-                      <span className="settings-status-label">Dcord access</span>
-                      <strong>{dcordConfigured ? "Configured" : "Missing"}</strong>
-                    </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
-                      <span>
-                        <span className="settings-status-label">Members bot</span>
-                        <strong>
-                          {communityConfig?.configured
-                            ? communityConfig.activeGuildCount === null
-                              ? "Configured"
-                              : `${communityConfig.activeGuildCount}${communityConfig.serverLimit ? ` / ${communityConfig.serverLimit}` : ""} active servers`
-                            : "Missing"}
-                        </strong>
-                      </span>
-                  </div>
-                  <div className="settings-status-row">
-                    <span className="stat-icon" aria-hidden="true">
-                      <ShieldCheck className="h-4 w-4" />
-                    </span>
-                    <span>
-                      <span className="settings-status-label">Credential storage</span>
-                      <strong>Encrypted PostgreSQL</strong>
-                    </span>
-                  </div>
-                </div>
-
-              </aside>
-            </div>
-          </>
-        ) : null}
+        {activeTab === "settings" ? <SettingsWorkspace
+          loading={settingsLoading || (!communityConfig && !settingsError)} error={settingsError}
+          onRefresh={() => void refreshSettingsConnections()}
+          members={{ config: communityConfig, draft: communityConfigDraft, onDraftChange: setCommunityConfigDraft, saving: savingCommunityConfig, onSave: handleSaveCommunityConfig, onRemove: () => void handleClearCommunityConfig() }}
+          dcord={{ configured: dcordConfigured, draft: dcordApiKey, onDraftChange: setDcordApiKey, saving: savingDcordApiKey, onSave: handleSaveDcordApiKey, onRemove: () => void handleClearDcordApiKey() }}
+          guilds={{ items: communityGuilds, loading: loadingCommunityGuilds, error: communityGuildsError, leaving: leavingCommunityGuilds, selected: selectedCommunityGuildIds, onSelectionChange: setSelectedCommunityGuildIds,
+            onOpen: () => { if (!showCommunityGuildManager) void toggleCommunityGuildManager(); }, onRefresh: () => void loadCommunityGuildList(), onLeave: handleLeaveSelectedCommunityGuilds, progress: communityGuildLeaveProgress }}
+          account={{ draft: userGuildLeaveDraft, onDraftChange: setUserGuildLeaveDraft, leaving: leavingUserGuild, onSubmit: handleRequestUserGuildLeave }}
+        /> : null}
         </div>
       </TimedReveal>
 
