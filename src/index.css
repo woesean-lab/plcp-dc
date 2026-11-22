@@ -7872,11 +7872,14 @@
   background: linear-gradient(180deg, var(--app-accent), rgba(155,140,255,0));
   content: "";
 }
-.monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 12px; border-radius: var(--monitor-disclosure-radius); grid-column: auto; min-height: 0; align-self: start; container-name: customer-reactions; }
+.monitor-reaction-panel.is-collapsible { --monitor-disclosure-radius: 12px; border-radius: var(--monitor-disclosure-radius); grid-column: auto; min-height: 0; padding: 0; align-self: start; container-name: customer-reactions; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle { border-radius: calc(var(--monitor-disclosure-radius) - 1px); background-clip: padding-box; display: flex; align-items: center; gap: 10px; padding: 19px; list-style: none; cursor: pointer; transition: background-color .15s ease; }
 .monitor-reaction-collapse-toggle::-webkit-details-marker { display: none; }
 .monitor-reaction-collapse-toggle::marker { content: ""; }
-.monitor-reaction-collapse-toggle:hover { background: var(--app-hover); }
+.monitor-reaction-collapse-toggle:hover { background: transparent; }
+@media (hover: hover) {
+  .monitor-reaction-panel.is-collapsible:hover { background-color: var(--app-hover); }
+}
 .monitor-reaction-collapse-toggle:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -3px; }
 .monitor-reaction-collapse-toggle > span:nth-child(2) { display: grid; min-width: 0; gap: 4px; margin-right: auto; }
 .monitor-reaction-collapse-toggle strong { color: var(--app-text); font-size: 16px; font-weight: 680; }
@@ -8080,7 +8083,7 @@
 .monitor-reaction-check-quantity input:focus { border-color: rgba(155,140,255,.5); background: rgba(8,7,18,.82); box-shadow: 0 0 0 3px var(--app-accent-soft), inset 0 1px 2px rgba(0,0,0,.22); }
 .monitor-reaction-member-check-bar .member-log-action-button { height: 32px; }
 
-.monitor-reaction-panel > .monitor-reaction-verification-note { margin: 0 20px 12px; }
+.monitor-reaction-panel > .monitor-reaction-verification-note { width: auto; margin: 0 20px 12px; }
 @media (max-width: 820px) { .monitor-reaction-panel > .monitor-reaction-verification-note { margin-right: 12px; margin-left: 12px; } }
 
 .monitor-reaction-form {
@@ -12367,3 +12370,16 @@
 /* Community monitor cards keep their spacing when disclosures collapse. */
 .monitor-frame.is-community { min-height: 0; grid-template-rows: auto auto auto; }
 .monitor-workspace.is-community { flex: 0 0 auto; align-content: start; }
+
+@container customer-reactions (max-width: 440px) {
+  .is-collapsible > .monitor-reaction-collapse-toggle {
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr) auto 16px;
+    gap: 10px 8px;
+    padding: 14px 12px;
+  }
+  .is-collapsible > .monitor-reaction-collapse-toggle > span:nth-child(2) { margin-right: 0; }
+  .is-collapsible > .monitor-reaction-collapse-toggle > .reaction-reset-countdown { grid-column: 3; grid-row: 1; }
+  .is-collapsible > .monitor-reaction-collapse-toggle > svg { grid-column: 4; grid-row: 1; }
+  .is-collapsible > .monitor-reaction-collapse-toggle > .ui-button { grid-column: 2 / -1; grid-row: 2; justify-self: end; max-width: 100%; }
+}
