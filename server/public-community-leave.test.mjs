@@ -52,7 +52,7 @@ test("public responses hide leave schedules, outcomes and internal job identifie
     leftServerAt: "private-date"
   });
   const publicOrder = hideCommunityLeaveInformation(source);
-  assert.equal(publicOrder.publicLeaveAllUsed, true);
+  assert.equal(publicOrder.publicLeaveAllUsed, false, "a previous start does not mark members as removed");
   assert.equal(JSON.stringify(publicOrder).includes("private"), false);
   assert.equal(Object.keys(publicOrder).some((key) => key.startsWith("autoLeave")), false);
   assert.equal(Object.keys(publicOrder.communityResults[0]).some((key) => key.startsWith("autoLeave")), false);
@@ -60,24 +60,26 @@ test("public responses hide leave schedules, outcomes and internal job identifie
   assert.equal(source.autoLeaveJob.status, "running");
 });
 
-test("leave all requires finished delivery and delivered members, and excludes used orders and running auto leave", () => {
+test("leave all requires finished delivery, unattempted members and no active leave operation", () => {
   assert.equal(canPublicLeaveAll(order()), true);
   for (const overrides of [
     { provider: "dcord" }, { publicLeaveAllEnabled: false }, { publicLeaveAllEnabled: undefined }, { status: "PROCESS" }, { serverId: "bad-id" },
-    { publicLeaveAllRequestedAt: "used" }, { autoLeaveJob: { status: "running" } },
+    { membersLeaveJob: { status: "running" } }, { autoLeaveJob: { status: "running" } },
     { communityResults: [] },
     { communityResults: [{ ...order().communityResults[0], membershipStatus: "removed" }] },
+    { communityResults: [{ ...order().communityResults[0], leaveAllStatus: "failed" }] },
     { communityResults: [...order().communityResults, { state: "replacing" }] }
   ]) assert.equal(canPublicLeaveAll({ ...order(), ...overrides }), false, JSON.stringify(overrides));
 });
 
-test("concurrent requests across sessions claim only one use, persisted before Discord work", async () => {
+test("concurrent sessions reserve only one attempt before Discord work", async () => {
   const pool = fixture(order());
   const results = await Promise.allSettled([claimPublicLeaveAll(pool, "order-one", "stock"), claimPublicLeaveAll(pool, "order-one", "stock")]);
   assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
   assert.equal(results.find((result) => result.status === "rejected").reason.statusCode, 409);
   assert.ok(pool.read().publicLeaveAllRequestedAt);
-  // A new request after an interrupted/failed Discord operation still cannot run again.
+  assert.equal(pool.read().membersLeaveJob.status, "starting");
+  // Another session cannot run while the current attempt is starting.
   await assert.rejects(claimPublicLeaveAll(pool, "order-one", "stock"), { statusCode: 409 });
 });
 
@@ -88,25 +90,58 @@ test("invalid and missing orders do not consume a use", async () => {
   await assert.rejects(claimPublicLeaveAll(fixture(null), "missing", "stock"), { statusCode: 404 });
 });
 
-test("previous admin, auto leave and legacy starts disable the monitor and reject another public request", async () => {
+test("previous starts do not block unattempted members after the operation has ended", async () => {
   for (const previous of [
     { membersLeaveAllRequestedAt: "previous-admin-start" },
     { membersLeftAt: "previous-completion" },
-    { autoLeaveJob: { status: "running" } },
     { autoLeaveJob: { status: "completed" } },
     { autoLeaveJob: { status: "completed_with_errors" } },
     { communityResults: [{ ...order().communityResults[0], leftServerAt: "previous-leave" }] },
-    { communityResults: [{ ...order().communityResults[0], autoLeaveStatus: "failed" }] }
   ]) {
     const source = { ...order(), ...previous };
-    assert.equal(canPublicLeaveAll(source), false);
+    assert.equal(canPublicLeaveAll(source), true);
     const publicOrder = hideCommunityLeaveInformation(source);
-    assert.equal(publicOrder.publicLeaveAllUsed, true);
+    assert.equal(publicOrder.publicLeaveAllUsed, false);
     assert.equal(publicOrder.membersLeaveAllRequestedAt, undefined);
     const pool = fixture(source);
-    await assert.rejects(claimPublicLeaveAll(pool, source.uniqid, "stock"), { statusCode: 409, message: "Leave all has already been used for this order." });
-    assert.equal(pool.read().publicLeaveAllRequestedAt, undefined);
+    const claimed = await claimPublicLeaveAll(pool, source.uniqid, "stock");
+    assert.equal(claimed.membersLeaveJob.total, 1);
+    assert.ok(pool.read().publicLeaveAllRequestedAt);
   }
+});
+
+test("failed members stay excluded while other unattempted members remain available", async () => {
+  const source = order();
+  source.publicLeaveAllRequestedAt = "previous-attempt";
+  source.communityResults.push({ state: "joined", discordUserId: "345678901234567890", leaveAllStatus: "failed" });
+  source.communityResults.push({ state: "joined", discordUserId: "456789012345678901", membershipStatus: "removed" });
+  const pool = fixture(source);
+  assert.equal((await claimPublicLeaveAll(pool, source.uniqid, "stock")).membersLeaveJob.total, 1);
+  const failedOnly = { ...source, communityResults: source.communityResults.slice(1) };
+  assert.equal(canPublicLeaveAll(failedOnly), false);
+  assert.equal(hideCommunityLeaveInformation(failedOnly).publicLeaveAllUsed, false);
+  const removedOnly = { ...source, communityResults: source.communityResults.slice(2) };
+  assert.equal(hideCommunityLeaveInformation(removedOnly).publicLeaveAllUsed, true);
+  const legacyFailed = { ...order(), communityResults: [{ ...order().communityResults[0], autoLeaveStatus: "failed" }] };
+  assert.equal(canPublicLeaveAll(legacyFailed), false);
+  assert.equal(hideCommunityLeaveInformation(legacyFailed).communityResults[0].leaveAllStatus, "failed");
+});
+
+test("public progress exposes only safe counters and a start time", () => {
+  const source = { ...order(), membersLeaveJob: { id: "private-job", status: "running", processed: 4, total: 50, failed: 1, startedAt: "2026-11-22T01:00:00Z", updatedAt: new Date().toISOString(), error: "private proxy failure" } };
+  const safe = hideCommunityLeaveInformation(source);
+  assert.equal(safe.membersLeaveJob, undefined);
+  assert.deepEqual(safe.memberLeaveProgress, { status: "running", processed: 4, total: 50, failed: 1, startedAt: "2026-11-22T01:00:00Z" });
+  assert.equal(JSON.stringify(safe).includes("private"), false);
+});
+
+test("a stale interrupted attempt releases unattempted members without enabling failed ones", async () => {
+  const source = { ...order(), membersLeaveJob: { id: "interrupted", status: "running", processed: 0, total: 1, updatedAt: new Date(Date.now() - 6 * 60_000).toISOString() } };
+  assert.equal(canPublicLeaveAll(source), true);
+  assert.equal(hideCommunityLeaveInformation(source).memberLeaveProgress.status, "failed");
+  const claimed = await claimPublicLeaveAll(fixture(source), source.uniqid, "stock");
+  assert.notEqual(claimed.membersLeaveJob.id, "interrupted");
+  assert.equal(claimed.membersLeaveJob.status, "starting");
 });
 
 test("category permission is opt-in and requires every category in a mixed order", () => {

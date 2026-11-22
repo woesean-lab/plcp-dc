@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { serveFrontend } from "./serve-frontend.mjs";
+import { createCommunityLeaveAll } from "./community-leave-all.mjs";
 import emojiRegex from "emoji-regex";
 import geoipCountry from "geoip-country";
 import { HttpsProxyAgent } from "https-proxy-agent";
@@ -16,7 +17,7 @@ import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
 import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
-import { canPublicLeaveAll, claimPublicLeaveAll, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories } from "./public-community-leave.mjs";
+import { canPublicLeaveAll, claimPublicLeaveAll, communityLeaveRunning, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
 import { planOnlinerBulkAction } from "./onliner-bulk-actions.mjs";
 import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
@@ -3638,12 +3639,21 @@ async function processCommunityReactionJobsUnlocked() {
     const persistedGatewayConnected = persistedGatewayAvailable
       && persistedRuntime?.payload?.connectionState === "connected";
     if (!account) {
-      const waitingDetails = "The Onliner account could not be matched to this Discord member.";
+      const terminal = Number(job.attempts) >= 5;
+      const waitingDetails = terminal
+        ? "Reaction failed: this member's Onliner account is unavailable after repeated checks."
+        : "The Onliner account could not be matched to this Discord member.";
       await pool.query(
-        "UPDATE community_reaction_jobs SET status = 'pending', account_id = COALESCE($5, account_id), next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $6 WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4",
-        [job.order_id, job.request_id, job.discord_user_id, job.emoji, null, waitingDetails]
+        `UPDATE community_reaction_jobs SET status = $5, attempts = attempts + 1,
+         next_attempt_at = NOW() + INTERVAL '15 seconds', last_error = $6,
+         completed_at = CASE WHEN $5 = 'failed' THEN NOW() ELSE completed_at END
+         WHERE order_id = $1 AND request_id = $2 AND discord_user_id = $3 AND emoji = $4`,
+        [job.order_id, job.request_id, job.discord_user_id, job.emoji, terminal ? "failed" : "pending", waitingDetails]
       );
-      await updateCommunityReactionResult(job, { reactionState: "pending", reactionEmoji: job.emoji, reactionDetails: waitingDetails });
+      await updateCommunityReactionResult(job, {
+        reactionState: terminal ? "failed" : "pending", reactionEmoji: job.emoji, reactionDetails: waitingDetails,
+        ...(terminal ? { reactionCompletedAt: new Date().toISOString() } : {})
+      });
       continue;
     }
     try {
@@ -6530,123 +6540,11 @@ async function leaveCommunityOrderMember(guildId, discordUserId, stockByUserId =
   }
 }
 
-async function leaveAllCommunityOrderMembers(order, { expiredOnly = false, source = "admin" } = {}) {
-  const orderId = String(order?.uniqid ?? "").trim();
-  const guildId = String(order?.serverId ?? "").trim();
-  const results = Array.isArray(order?.communityResults) ? order.communityResults : [];
-  if (!isCommunityDeliverySettled(order)) {
-    throw Object.assign(new Error("Wait for member delivery and replacements to finish before using Leave all."), { statusCode: 409 });
-  }
-  if (!orderId || !isDiscordGuildId(guildId) || !results.length) {
-    const error = new Error("This Members order has no accounts that can leave the server.");
-    error.statusCode = 409;
-    throw error;
-  }
-  if (communityOrderLeaveAllActive.has(orderId)) {
-    const error = new Error("Leave all is already running for this order.");
-    error.statusCode = 409;
-    throw error;
-  }
-
-  communityOrderLeaveAllActive.add(orderId);
-  try {
-    const userIds = [...new Set(results
-      .filter((item) => String(item?.state ?? "").toLowerCase() === "joined")
-      .filter((item) => String(item?.membershipStatus ?? "").toLowerCase() !== "removed")
-      .filter((item) => !expiredOnly || isCommunityResultManagementExpired(order, item))
-      .map((item) => String(item?.discordUserId ?? ""))
-      .filter(isDiscordGuildId))];
-    if (!userIds.length) {
-      const error = new Error(expiredOnly
-        ? "This order has no delivered members with an expired support period."
-        : "This order has no delivered members remaining in the server.");
-      error.statusCode = 409;
-      throw error;
-    }
-    // Record admin and public starts before external requests, including attempts
-    // that later fail. Public monitor access must never initiate a second run.
-    await pool.query(
-      `UPDATE tracked_orders
-       SET payload = jsonb_set(payload, '{membersLeaveAllRequestedAt}', COALESCE(payload->'membersLeaveAllRequestedAt', to_jsonb($2::text))), updated_at = NOW()
-       WHERE uniqid = $1`,
-      [orderId, new Date().toISOString()]
-    );
-    const stock = await pool.query(
-      `SELECT discord_user_id, encrypted_account_token
-       FROM community_oauth_joins
-       WHERE guild_id = $1 AND discord_user_id = ANY($2::text[])`,
-      [guildId, userIds]
-    );
-    const stockByUserId = new Map(stock.rows.map((member) => [String(member.discord_user_id), member]));
-    const onlinerConfig = await getDiscordOnlinerConfig();
-    const outcomeByUserId = new Map();
-
-    await forEachWithConcurrency(userIds, 6, async (discordUserId) => {
-      outcomeByUserId.set(discordUserId, await leaveCommunityOrderMember(guildId, discordUserId, stockByUserId, onlinerConfig));
-    });
-
-    const checkedAt = new Date().toISOString();
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [orderId]);
-      const current = locked.rows[0]?.payload;
-      if (!current || current.provider !== "community" || !Array.isArray(current.communityResults)) {
-        await client.query("ROLLBACK");
-        const error = new Error("Members order could not be found after the leave operation.");
-        error.statusCode = 404;
-        throw error;
-      }
-      const communityResults = current.communityResults.map((item) => {
-        const outcome = outcomeByUserId.get(String(item?.discordUserId ?? ""));
-        if (!outcome) return item;
-        if (outcome.state === "failed") {
-          return { ...item, membershipDetails: outcome.details, membershipCheckedAt: checkedAt };
-        }
-        return {
-          ...item,
-          membershipStatus: "removed",
-          membershipDetails: outcome.details,
-          membershipCheckedAt: checkedAt,
-          membershipLeaveSource: source === "customer" ? "customer" : "admin",
-          leftServerAt: checkedAt
-        };
-      });
-      const outcomes = [...outcomeByUserId.values()];
-      const failedCount = outcomes.filter((item) => item.state === "failed").length;
-      const updatedOrder = {
-        ...current,
-        communityResults,
-        ...(failedCount === 0 ? { membersLeftAt: checkedAt } : {})
-      };
-      await client.query(
-        "UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1",
-        [orderId, JSON.stringify(updatedOrder)]
-      );
-      await client.query("COMMIT");
-      for (const [discordUserId, outcome] of outcomeByUserId) {
-        if (outcome.state !== "failed") updateCommunityMemberServerMembershipCache(discordUserId, guildId, false);
-      }
-      return {
-        order: updatedOrder,
-        summary: {
-          total: userIds.length,
-          left: outcomes.filter((item) => item.state === "left").length,
-          alreadyLeft: outcomes.filter((item) => item.state === "already_left").length,
-          failed: failedCount
-        }
-      };
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => {});
-      throw error;
-    } finally {
-      client.release();
-    }
-  } finally {
-    communityOrderLeaveAllActive.delete(orderId);
-  }
-}
-
+const leaveAllCommunityOrderMembers = createCommunityLeaveAll({
+  pool, active: communityOrderLeaveAllActive, getConfig: getDiscordOnlinerConfig,
+  leaveMember: leaveCommunityOrderMember, forEachWithConcurrency,
+  updateMembershipCache: updateCommunityMemberServerMembershipCache, isExpired: isCommunityResultManagementExpired
+});
 async function scheduleExpiredCommunityAutoLeave(orderId) {
   const client = await pool.connect();
   try {
@@ -6674,7 +6572,7 @@ async function scheduleExpiredCommunityAutoLeave(orderId) {
       error.statusCode = 409;
       throw error;
     }
-    if (communityOrderLeaveAllActive.has(orderId)) {
+    if (communityOrderLeaveAllActive.has(orderId) || communityLeaveRunning(current)) {
       await client.query("ROLLBACK");
       const error = new Error("A Leave all operation is already running for this order.");
       error.statusCode = 409;
@@ -6683,7 +6581,7 @@ async function scheduleExpiredCommunityAutoLeave(orderId) {
 
     const candidateIndices = current.communityResults.flatMap((item, index) => {
       const delivered = String(item?.state ?? "").toLowerCase() === "joined";
-      const stillPresent = String(item?.membershipStatus ?? "").toLowerCase() !== "removed";
+      const stillPresent = String(item?.membershipStatus ?? "").toLowerCase() !== "removed" && item.leaveAllStatus !== "failed" && item.autoLeaveStatus !== "failed";
       return delivered && stillPresent && isCommunityResultManagementExpired(current, item) ? [index] : [];
     });
     if (!candidateIndices.length) {
@@ -6845,6 +6743,7 @@ async function finishCommunityAutoLeaveMember(claim, outcome) {
       const base = {
         ...item,
         autoLeaveStatus: outcome.state,
+        leaveAllStatus: outcome.state,
         autoLeaveDetails: outcome.details,
         autoLeaveCompletedAt: completedAt
       };
@@ -7454,6 +7353,7 @@ function resetCommunityResultVerification(result, overrides = {}) {
   delete next.membershipStatus;
   delete next.membershipDetails;
   delete next.membershipLeaveSource;
+  delete next.leaveAllStatus;
   delete next.presenceStatus;
   delete next.presenceDetails;
   delete next.presenceCheckedAt;

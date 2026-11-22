@@ -97,3 +97,19 @@ test("toolbar actions precede the right-hand outcome card in reading and focus o
   const html=render({});
   assert.ok(html.indexOf('aria-label="Leave all"') < html.indexOf('class="humanizer-run-outcome"'));
 });
+
+test("Leave all follows its own processed snapshot instead of the completed delivery", () => {
+  const html = render({ completed: 50, total: 50, status: "COMPLETED", operation: "leaving", leavingProgress: { processed: 12, total: 40 } });
+  assert.ok(html.includes("Members leaving"));
+  assert.ok(html.includes("12 of 40 processed · 30%"));
+  assert.ok(html.includes('aria-label="Member leave progress"'));
+  assert.ok(html.includes('aria-valuenow="30"'));
+  assert.ok(html.includes('style="width:30%"'));
+  assert.equal(html.includes("50 of 50 processed"), false);
+});
+
+test("Leave all starts at zero, clamps counts, and returns to delivery totals after it finishes", () => {
+  assert.ok(render({ completed: 50, total: 50, operation: "leaving" }).includes("0 of 50 processed · 0%"));
+  assert.ok(render({ operation: "leaving", leavingProgress: { processed: 99, total: 10 } }).includes("10 of 10 processed · 100%"));
+  assert.ok(render({ completed: 50, total: 50, status: "COMPLETED", leavingProgress: { processed: 5, total: 10 } }).includes("50 of 50 processed · 100%"));
+});

@@ -57,6 +57,7 @@ type CommunityMemberResult = {
   membershipStatus?: string;
   membershipDetails?: string;
   membershipLeaveSource?: string;
+  leaveAllStatus?: string;
   onlinerLive?: boolean;
   onlinerConnectionState?: string;
   onlinerDetails?: string;
@@ -112,6 +113,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
       membershipLeaveSource: typeof row.membershipLeaveSource === "string" ? row.membershipLeaveSource : undefined,
+      leaveAllStatus: typeof row.leaveAllStatus === "string" ? row.leaveAllStatus : undefined,
       onlinerLive: typeof row.onlinerLive === "boolean" ? row.onlinerLive : undefined,
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,
@@ -275,6 +277,8 @@ export default function PublicOrderPage() {
   const [replacingAllCommunityMembers, setReplacingAllCommunityMembers] = useState(false);
   const [leavingAllMembers, setLeavingAllMembers] = useState(false);
   const leaveAllInFlightRef = useRef(false);
+  const leaveAttemptBeforeStart = useRef<string | undefined>();
+  const leaveAttemptTotal = useRef(0);
   const [checkingCommunityMembers, setCheckingCommunityMembers] = useState(false);
   const [communityMemberCheckProgress, setCommunityMemberCheckProgress] = useState<CommunityMemberCheckProgress | null>(null);
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
@@ -524,6 +528,11 @@ export default function PublicOrderPage() {
     ? "Next member joins in"
     : communityMemberJoining ? "Member delivery" : "Next member";
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
+  const eligibleLeaveMembers = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus !== "failed").length;
+  const communityLeaveFailed = communityMemberResults.some((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus === "failed");
+  const leaveRunning = ["starting", "running"].includes(status?.memberLeaveProgress?.status ?? "");
+  const leaveProgress = leavingAllMembers && status?.memberLeaveProgress?.startedAt === leaveAttemptBeforeStart.current
+    ? { processed: 0, total: leaveAttemptTotal.current } : status?.memberLeaveProgress;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
     if (item.onlinerLive !== false) return false;
     const allocation = getCommunityResultAllocation({ categoryAllocations, categoryId: status?.categoryId }, item);
@@ -704,6 +713,8 @@ export default function PublicOrderPage() {
   async function handleLeaveAllMembers() {
     if (!uniqid || leaveAllInFlightRef.current || !status?.canPublicLeaveAll || status.publicLeaveAllUsed) return;
     leaveAllInFlightRef.current = true;
+    leaveAttemptBeforeStart.current = status?.memberLeaveProgress?.startedAt;
+    leaveAttemptTotal.current = eligibleLeaveMembers;
     setLeavingAllMembers(true);
     try {
       const result = await leaveAllPublicCommunityOrderMembers(uniqid);
@@ -712,7 +723,7 @@ export default function PublicOrderPage() {
       else toast.success("All delivered members have left the server.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Members could not leave the server.");
-      // A lost response can still mean the server consumed the single use.
+      // A lost response can still mean the leave operation started on the server.
       try {
         const latest = await getPublicOrderStatus(uniqid);
         setStatus((current) => mergeOrderStatus(current, latest));
@@ -1097,12 +1108,13 @@ export default function PublicOrderPage() {
                   <MemberDeliveryPanel key={uniqid} audience="public"
                 completed={communityCompletedCount} total={communityMemberResults.length || totalMembers || 0} status={normalizedStatus}
                 checkingProgress={communityMemberCheckProgress}
-                operation={checkingCommunityMembers ? "checking" : leavingAllMembers ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : undefined}
+                leavingProgress={leaveProgress}
+                operation={checkingCommunityMembers ? "checking" : leavingAllMembers || leaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
-                            <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                            <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllMembers || leaveRunning || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                               {checkingCommunityMembers
                                 ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1124,9 +1136,9 @@ export default function PublicOrderPage() {
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
+                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || leaveRunning || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "All delivered members have left." : eligibleLeaveMembers === 0 && communityLeaveFailed ? "Failed members will not be retried." : "Remove remaining members. Failed members are skipped."}>
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                          {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
+                          {leavingAllMembers || leaveRunning ? "Leaving..." : eligibleLeaveMembers === 0 && communityLeaveFailed ? "Leave all failed" : status?.publicLeaveAllUsed ? "Leave all used" : `Leave all (${eligibleLeaveMembers})`}
                         </Button> : null}
 
                        </>}

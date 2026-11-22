@@ -10,12 +10,13 @@ import { FilterDropdown } from "../components/ui/filter-dropdown";
 import { Skeleton } from "../components/ui/skeleton";
 import { ListPagination, paginate } from "../components/ListPagination";
 import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
-import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel";
+import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
+import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
@@ -99,12 +100,17 @@ const MEMBER_DELIVERY_SAMPLES: CommunityMemberResult[] = [
 
 function MemberDeliveryExample() {
   const [publicView, setPublicView] = useState(false);
+  const [leaveProcessed, setLeaveProcessed] = useState<number | null>(null);
   return <div className="grid gap-3">
     <div className="ui-ref-row">
       <Button type="button" size="sm" variant={publicView ? "secondary" : "default"} aria-pressed={!publicView} onClick={() => setPublicView(false)}>Admin</Button>
       <Button type="button" size="sm" variant={publicView ? "default" : "secondary"} aria-pressed={publicView} onClick={() => setPublicView(true)}>Monitor</Button>
+      <Button type="button" size="sm" variant="secondary" onClick={() => setLeaveProcessed(0)}>Preview Leave all</Button>
+      <Button type="button" size="sm" variant="secondary" disabled={leaveProcessed === null || leaveProcessed >= 7} onClick={() => setLeaveProcessed((value) => Math.min(7, (value ?? 0) + 1))}>Process member</Button>
+      <Button type="button" size="sm" variant="ghost" disabled={leaveProcessed === null} onClick={() => setLeaveProcessed(null)}>Reset</Button>
     </div>
-    <MemberDeliveryPanel audience={publicView ? "public" : "admin"} completed={6} total={7} status="PROCESS" attention actions={<>
+    <MemberDeliveryPanel audience={publicView ? "public" : "admin"} completed={6} total={7} status="PROCESS" attention
+      operation={leaveProcessed !== null ? "leaving" : undefined} leavingProgress={leaveProcessed !== null ? { processed: leaveProcessed, total: 7 } : null} actions={<>
       <span className="member-check-control">
         <Button type="button" size="sm" variant="accentGhost" disabled onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-3.5 w-3.5" />Check members</Button>
         <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="ui-kit-member-check"><CircleHelp className="h-3.5 w-3.5" /></button>
@@ -197,7 +203,9 @@ function ReactionOptionExample() {
 }
 
 function OrderSectionsExample() {
-  return <div className="lookup-order-sections">
+  return <div className="grid min-w-0 gap-4"><OrderDetailsLayout standaloneSections overview={
+    <header className="lookup-workspace-header"><div className="lookup-order-identity"><span className="lookup-provider-mark" aria-hidden="true"><Server className="h-4 w-4" /></span><h2>Order overview</h2></div></header>
+  }><div className="lookup-order-sections">
     <ReactionExample />
     <MemberDeliveryPanel completed={25} total={25} status="COMPLETED" actions={<Button type="button" size="sm" variant="accentGhost" onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-4 w-4" />Check members</Button>}>
       <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>
@@ -210,13 +218,14 @@ function OrderSectionsExample() {
     <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson className="h-4 w-4" />}>
       <div className="payload-panel overflow-auto p-4"><pre>{JSON.stringify({ uniqid: "sample-order", status: "COMPLETED" }, null, 2)}</pre></div>
     </OrderDetailDisclosure>
-  </div>;
+  </div></OrderDetailsLayout></div>;
 }
 
 function ReactionExample() {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
   const [emojis, setEmojis] = useState<string[]>([REACTION_MIXED_VALUE]);
+  const [requests, setRequests] = useState<ReactionPanelRequest[]>([]);
   const [resetsAt] = useState(() => {
     const day = new Date(Date.now() + 3 * 3600_000).toISOString().slice(0, 10);
     return new Date(Date.parse(`${day}T00:00:00+03:00`) + 86_400_000).toISOString();
@@ -224,9 +233,13 @@ function ReactionExample() {
   return <ReactionPanel collapsible resetsAt={resetsAt}
     limit={500} completed={15} used={15} failed={0} remaining={485} eligibleMembers={500}
     onEditLimit={() => toast.success("Sample reaction settings previewed")} limitActionLabel="Manage reactions"
-    messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={[]}
+    messageDraft={message} countDraft={count} selectedEmojis={emojis} saving={false} requests={requests}
     onMessageChange={setMessage} onCountChange={setCount} onEmojiSelectionChange={setEmojis}
-    onSubmit={() => toast.success("Sample reaction request previewed")} />;
+    onCancelPending={(id) => setRequests((current) => current.map((request) => !id || request.id === id ? { ...request, cancelledCount: request.assignedCount } : request))}
+    onSubmit={() => {
+      setRequests((current) => [...current, { id: `sample-${current.length}`, messageLink: message, requestedCount: count, assignedCount: count, completedCount: 0, emojis, createdAt: new Date().toISOString() }]);
+      toast.success("Sample reaction request previewed");
+    }} />;
 }
 
 export default function UiKitPage() {
@@ -314,13 +327,13 @@ export default function UiKitPage() {
           <Example title="Existing surface styles" source="src/index.css · app-panel / app-panel-soft / payload-panel" code={'<section className="app-panel">Main panel</section>\n<div className="app-panel-soft">Nested group</div>\n<pre className="payload-panel">Code or payload</pre>'}>
             <div className="ui-ref-grid">{["app-panel", "app-panel-soft", "payload-panel"].map((className) => <div className={`${className} ui-ref-surface`} key={className}><strong>{className}</strong><span className="ui-ref-hint">Existing console surface</span></div>)}</div>
           </Example>
-          <Example title="Order detail sections" source="src/components/OrderDetailDisclosure.tsx · lookup-order-sections" code={'<div className="lookup-order-sections">\n  {reactionPanel}\n  {memberDeliveryPanel}\n  <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server />}>{details}</OrderDetailDisclosure>\n  <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson />}>{payload}</OrderDetailDisclosure>\n</div>'}><OrderSectionsExample /></Example>
+          <Example title="Order detail sections" source="src/components/OrderDetailsLayout.tsx · OrderDetailDisclosure.tsx · lookup-order-sections" code={'<OrderDetailsLayout standaloneSections overview={orderOverview}>\n  <div className="lookup-order-sections">\n    {reactionPanel}\n    {memberDeliveryPanel}\n    <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server />}>{details}</OrderDetailDisclosure>\n    <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson />}>{payload}</OrderDetailDisclosure>\n  </div>\n</OrderDetailsLayout>'}><OrderSectionsExample /></Example>
           <Example title="Shared Card component" source="src/components/ui/card.tsx" code={'<Card>\n  <CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader>\n  <CardContent><Badge variant="success">Ready</Badge></CardContent>\n</Card>'}>
             <Card><CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader><CardContent><Badge variant="success"><ShieldCheck className="h-3 w-3" />Ready</Badge></CardContent></Card>
           </Example>
         </Section> : null}
 
-        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryPanel completed={processed} total={total} status={status} actions={tools}>\n  <div className="community-order-result-list humanizer-results member-delivery-list">\n    <MemberDeliveryAccordion><MemberDeliveryRow item={member} formatTime={formatTime} /></MemberDeliveryAccordion>\n  </div>\n</MemberDeliveryPanel>\n// Monitor uses audience=\"public\" for plain labels and safe notes; usernames stay masked.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// checkingProgress={memberCheckProgress} keeps the status counter and progress bar in sync with Check members.\n// The panel starts open; its header toggles the body while toolbar buttons stay independent.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// MemberDeliveryAccordion keeps only one row open; rows start collapsed.'}><MemberDeliveryExample /></Example></Section> : null}
+        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryPanel completed={processed} total={total} status={status} actions={tools}>\n  <div className="community-order-result-list humanizer-results member-delivery-list">\n    <MemberDeliveryAccordion><MemberDeliveryRow item={member} formatTime={formatTime} /></MemberDeliveryAccordion>\n  </div>\n</MemberDeliveryPanel>\n// Monitor uses audience=\"public\" for plain labels and safe notes; usernames stay masked.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// checkingProgress={memberCheckProgress} keeps the status counter and progress bar in sync with Check members.\n// operation="leaving" leavingProgress={leaveProgress} uses the current Leave all processed/total snapshot.\n// The panel starts open; its header toggles the body while toolbar buttons stay independent.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// MemberDeliveryAccordion keeps only one row open; rows start collapsed.'}><MemberDeliveryExample /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>

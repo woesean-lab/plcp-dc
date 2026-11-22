@@ -1,4 +1,20 @@
 import { isCommunityDeliverySettled } from "../shared/community-delivery-state.mjs";
+import crypto from "node:crypto";
+
+export function remainingCommunityLeaveMembers(order) {
+  return [...new Set((Array.isArray(order?.communityResults) ? order.communityResults : [])
+    .filter((item) => String(item?.state ?? "").toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus !== "failed" && item.autoLeaveStatus !== "failed")
+    .map((item) => String(item?.discordUserId ?? ""))
+    .filter((id) => /^\d{16,22}$/.test(id)))];
+}
+
+export function communityLeaveRunning(order) {
+  const job = order?.membersLeaveJob;
+  // A crashed process must not permanently prevent a retry of the remaining members.
+  const updatedAt = Date.parse(job?.updatedAt ?? job?.startedAt ?? "");
+  return ["starting", "running"].includes(job?.status)
+    && (!Number.isFinite(updatedAt) || updatedAt > Date.now() - 5 * 60_000);
+}
 
 export function publicLeaveAllCategoryIds(order) {
   const primary = order?.categoryId || order?.stockType || (order?.service === "COMMUNITY-ONLINE" ? "online" : "offline");
@@ -21,13 +37,21 @@ export function hasCommunityLeaveAllStarted(order) {
 export function hideCommunityLeaveInformation(order) {
   const sanitized = { ...order };
   for (const key of Object.keys(sanitized)) {
-    if (/^autoLeave/i.test(key) || key === "membersLeftAt" || key === "membersLeaveAllRequestedAt" || key === "publicLeaveAllRequestedAt") delete sanitized[key];
+    if (/^autoLeave/i.test(key) || key === "membersLeaveJob" || key === "membersLeftAt" || key === "membersLeaveAllRequestedAt" || key === "publicLeaveAllRequestedAt") delete sanitized[key];
   }
-  sanitized.publicLeaveAllUsed = hasCommunityLeaveAllStarted(order);
+  sanitized.publicLeaveAllUsed = hasCommunityLeaveAllStarted(order) && !order.communityResults?.some((item) => String(item?.state).toLowerCase() === "joined" && item.membershipStatus !== "removed");
+  const manual = order.membersLeaveJob;
+  const job = communityLeaveRunning(order) ? manual : order.autoLeaveJob?.status === "running" ? order.autoLeaveJob : manual;
+  if (job) sanitized.memberLeaveProgress = {
+    status: ["starting", "running"].includes(job.status) && job === manual && !communityLeaveRunning(order) ? "failed" : job.status,
+    processed: Math.max(0, Number(job.processed) || 0), total: Math.max(0, Number(job.total) || 0),
+    failed: Math.max(0, Number(job.failed) || 0), startedAt: job.startedAt
+  };
   if (Array.isArray(order.communityResults)) {
     sanitized.communityResults = order.communityResults.map((item) => {
       if (!item || typeof item !== "object" || Array.isArray(item)) return item;
       const safe = Object.fromEntries(Object.entries(item).filter(([key]) => !/^autoLeave/i.test(key) && key !== "leftServerAt"));
+      if (item.autoLeaveStatus === "failed") safe.leaveAllStatus = "failed";
       delete safe.membershipLeaveSource;
       if (item.membershipStatus === "removed") {
         safe.membershipDetails = "Member is no longer in the server.";
@@ -45,15 +69,15 @@ export function hideCommunityLeaveInformation(order) {
 export function canPublicLeaveAll(order) {
   return order?.provider === "community"
     && order.publicLeaveAllEnabled === true
-    && !hasCommunityLeaveAllStarted(order)
+    && !communityLeaveRunning(order)
+    && order.autoLeaveJob?.status !== "running"
     && isCommunityDeliverySettled(order)
     && /^\d{16,22}$/.test(String(order.serverId ?? ""))
-    && Array.isArray(order.communityResults)
-    && order.communityResults.some((item) => item?.state === "joined" && item.membershipStatus !== "removed" && /^\d{16,22}$/.test(String(item.discordUserId ?? "")));
+    && remainingCommunityLeaveMembers(order).length > 0;
 }
 
-// Commit the single-use claim before sending any Discord requests. A failed or
-// interrupted operation stays consumed; only an administrator can retry it.
+// Reserve this attempt before Discord work. Completed/failed attempts can retry
+// only the members still present; concurrent sessions cannot reserve the same run.
 export async function claimPublicLeaveAll(pool, orderId, guildId) {
   const client = await pool.connect();
   try {
@@ -74,11 +98,15 @@ export async function claimPublicLeaveAll(pool, orderId, guildId) {
     }
     order = { ...order, publicLeaveAllEnabled: true };
     if (!canPublicLeaveAll(order)) {
-      throw Object.assign(new Error(hasCommunityLeaveAllStarted(order)
-        ? "Leave all has already been used for this order."
+      throw Object.assign(new Error(communityLeaveRunning(order) || order.autoLeaveJob?.status === "running"
+        ? "Leave all is already running for this order."
         : "Leave all is unavailable. Wait for member delivery and other member operations to finish."), { statusCode: 409 });
     }
-    const claimed = { ...order, publicLeaveAllRequestedAt: new Date().toISOString() };
+    const startedAt = new Date().toISOString();
+    const claimed = { ...order, publicLeaveAllRequestedAt: startedAt, membersLeaveJob: {
+      id: crypto.randomUUID(), status: "starting", processed: 0, total: remainingCommunityLeaveMembers(order).length,
+      left: 0, alreadyLeft: 0, failed: 0, startedAt, updatedAt: startedAt
+    } };
     await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [orderId, JSON.stringify(claimed)]);
     await client.query("COMMIT");
     return claimed;

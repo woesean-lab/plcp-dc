@@ -4,13 +4,14 @@ import "./MemberDeliveryPanel.css";
 
 type Operation = "checking" | "leaving" | "replacing" | "retrying";
 
-export function MemberDeliveryPanel({ id, completed, total, status, operation, checkingProgress, attention = false, audience = "admin", actions, children }: {
+export function MemberDeliveryPanel({ id, completed, total, status, operation, checkingProgress, leavingProgress, attention = false, audience = "admin", actions, children }: {
   id?: string;
   completed: number;
   total: number;
   status: string;
   operation?: Operation;
   checkingProgress?: { checked: number; total: number } | null;
+  leavingProgress?: { processed: number; total: number } | null;
   attention?: boolean;
   audience?: "admin" | "public";
   actions?: ReactNode;
@@ -19,10 +20,12 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, c
   const count = Number.isFinite(total) ? Math.max(0, total) : 0;
   const processed = Math.min(count, Number.isFinite(completed) ? Math.max(0, completed) : 0);
   const checking = operation === "checking";
-  const progressTotal = checking && checkingProgress?.total && Number.isFinite(checkingProgress.total) ? Math.max(0, checkingProgress.total) : count;
+  const leaving = operation === "leaving";
+  const progressTotal = leaving ? Number.isFinite(leavingProgress?.total) ? Math.max(0, leavingProgress!.total) : count
+    : checking && checkingProgress?.total && Number.isFinite(checkingProgress.total) ? Math.max(0, checkingProgress.total) : count;
   const progressCompleted = checking
     ? Math.min(progressTotal, Math.max(0, Number.isFinite(checkingProgress?.checked) ? checkingProgress!.checked : 0))
-    : processed;
+    : leaving ? Math.min(progressTotal, Math.max(0, Number.isFinite(leavingProgress?.processed) ? leavingProgress!.processed : 0)) : processed;
   const progress = progressTotal ? Math.round(progressCompleted / progressTotal * 100) : 0;
   const normalized = status.toUpperCase();
   const done = count > 0 && processed >= count;
@@ -54,7 +57,7 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, c
       <ChevronDown className="member-delivery-panel-chevron h-4 w-4" aria-hidden="true" />
     </summary>
     <div className="humanizer-run-body">
-      <div className="humanizer-progress" role="progressbar" aria-label={checking ? "Member check progress" : "Member delivery progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={summary}>
+      <div className="humanizer-progress" role="progressbar" aria-label={checking ? "Member check progress" : leaving ? "Member leave progress" : "Member delivery progress"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={summary}>
         <span style={{ width: progress + "%" }} />
       </div>
       {children}

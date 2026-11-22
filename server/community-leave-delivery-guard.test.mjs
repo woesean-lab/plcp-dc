@@ -78,10 +78,10 @@ test("detail action and already-open confirmation share the same eligibility che
   assert.equal(leaveButtons.length, 2);
   assert.ok(leaveButtons.every((disabled) => disabled === "disabled={!canLeaveAllCommunityMembers}"));
   const context = { isCommunityProvider: true, isCommunityDeliverySettled, result: order(), communityMembersStillInServerCount: 3,
-    leavingAllCommunityMembers: false, checkingCommunityMembers: false, autoLeaveRunning: false, replacingAllCommunityMembers: false, retryingFailedCommunityMembers: false };
+    leavingAllCommunityMembers: false, checkingCommunityMembers: false, autoLeaveRunning: false, manualLeaveRunning: false, replacingAllCommunityMembers: false, retryingFailedCommunityMembers: false };
   const evaluate = (patch = {}) => vm.runInNewContext(eligibility, { ...context, ...patch });
   assert.equal(evaluate(), true);
   for (const status of liveStatuses) assert.equal(evaluate({ result: order(status) }), false);
   assert.equal(evaluate({ result: order("COMPLETED", { communityResults: [{ state: "joined" }, { state: "replacing" }] }) }), false);
-  for (const flag of ["leavingAllCommunityMembers", "checkingCommunityMembers", "autoLeaveRunning", "replacingAllCommunityMembers", "retryingFailedCommunityMembers"]) assert.equal(evaluate({ [flag]: true }), false, flag);
+  for (const flag of ["leavingAllCommunityMembers", "checkingCommunityMembers", "autoLeaveRunning", "manualLeaveRunning", "replacingAllCommunityMembers", "retryingFailedCommunityMembers"]) assert.equal(evaluate({ [flag]: true }), false, flag);
 });

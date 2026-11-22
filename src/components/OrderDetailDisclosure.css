@@ -2,7 +2,7 @@
   display: grid;
   min-width: 0;
   gap: 16px;
-  padding: 18px;
+  padding: 0;
 }
 .lookup-order-sections > .lookup-reaction-section {
   min-width: 0;
@@ -15,5 +15,5 @@
 .order-detail-disclosure .lookup-technical-grid { background: transparent; }
 .order-detail-disclosure .payload-panel { max-height: 360px; margin: 18px 20px 20px; }
 @media (max-width: 820px) {
-  .lookup-order-sections { padding: 10px; gap: 12px; }
+  .lookup-order-sections { gap: 12px; }
 }

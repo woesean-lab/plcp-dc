@@ -20,6 +20,7 @@ import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
+import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -89,6 +90,7 @@ function getCommunityMemberResults(source: OrderStatusResponse | null): Communit
       membershipStatus: typeof row.membershipStatus === "string" ? row.membershipStatus : undefined,
       membershipDetails: typeof row.membershipDetails === "string" ? row.membershipDetails : undefined,
       membershipLeaveSource: typeof row.membershipLeaveSource === "string" ? row.membershipLeaveSource : undefined,
+      leaveAllStatus: row.autoLeaveStatus === "failed" ? "failed" : typeof row.leaveAllStatus === "string" ? row.leaveAllStatus : undefined,
       onlinerLive: typeof row.onlinerLive === "boolean" ? row.onlinerLive : undefined,
       onlinerConnectionState: typeof row.onlinerConnectionState === "string" ? row.onlinerConnectionState : undefined,
       onlinerDetails: typeof row.onlinerDetails === "string" ? row.onlinerDetails : undefined,
@@ -496,8 +498,16 @@ export default function OrderPage() {
   const displayedCommunityMembers = useMemberLogOrder(communityMemberResults, uniqid ?? "");
   const autoLeaveJob = result?.autoLeaveJob;
   const autoLeaveRunning = autoLeaveJob?.status === "running";
+  const leaveUpdatedAt = Date.parse(result?.membersLeaveJob?.updatedAt ?? result?.membersLeaveJob?.startedAt ?? "");
+  const manualLeaveRunning = ["starting", "running"].includes(result?.membersLeaveJob?.status ?? "")
+    && (!Number.isFinite(leaveUpdatedAt) || leaveUpdatedAt > Date.now() - 5 * 60_000);
+  const leaveAttemptBeforeStart = useRef<string | undefined>();
+  const leaveAttemptTotal = useRef(0);
+  const currentLeaveProgress = result?.membersLeaveJob;
+  const leaveProgress = autoLeaveRunning ? autoLeaveJob : leavingAllCommunityMembers && currentLeaveProgress?.startedAt === leaveAttemptBeforeStart.current
+    ? { processed: 0, total: leaveAttemptTotal.current } : currentLeaveProgress;
   const reactionDeliveryRunning = result?.customerReactions?.requests.some((request) => request.assignedCount > request.completedCount + request.failedCount + request.cancelledCount) === true;
-  const refreshComplete = terminal && !autoLeaveRunning && !reactionDeliveryRunning;
+  const refreshComplete = terminal && !autoLeaveRunning && !manualLeaveRunning && !leavingAllCommunityMembers && !reactionDeliveryRunning;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -509,13 +519,16 @@ export default function OrderPage() {
   const communityReplacementRunning = communityMemberResults.some((item) => item.state.toLowerCase() === "replacing");
   const communityReplacementStatusAllowed = ["PARTIAL", "COMPLETED", "ERROR"].includes(normalizedStatus);
   const communityCompletedCount = communityMemberResults.filter((item) => !["queued", "joining", "replacing"].includes(item.state.toLowerCase())).length;
-  const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed").length;
+  const communityMembersStillInServerCount = communityMemberResults.filter((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus !== "failed").length;
+  const communityLeaveFailed = communityMemberResults.some((item) => item.state.toLowerCase() === "joined" && item.membershipStatus !== "removed" && item.leaveAllStatus === "failed");
   const leaveAllCommunityUsed = Boolean(result?.publicLeaveAllRequestedAt || result?.membersLeaveAllRequestedAt || result?.membersLeftAt || autoLeaveJob);
   const canLeaveAllCommunityMembers = isCommunityProvider && isCommunityDeliverySettled(result)
     && communityMembersStillInServerCount > 0 && !leavingAllCommunityMembers && !checkingCommunityMembers
-    && !autoLeaveRunning && !replacingAllCommunityMembers && !retryingFailedCommunityMembers;
-  const leaveAllUnavailableReason = communityMembersStillInServerCount === 0 && leaveAllCommunityUsed
-    ? "Leave all has already been used for this order."
+    && !autoLeaveRunning && !manualLeaveRunning && !replacingAllCommunityMembers && !retryingFailedCommunityMembers;
+  const leaveAllUnavailableReason = communityMembersStillInServerCount === 0 && communityLeaveFailed
+    ? "Failed members will not be retried."
+    : communityMembersStillInServerCount === 0 && leaveAllCommunityUsed
+    ? "All delivered members have left."
     : !isCommunityDeliverySettled(result)
     ? "Wait for member delivery and replacements to finish before using Leave all."
     : "Wait for the current member operation to finish.";
@@ -1015,10 +1028,12 @@ export default function OrderPage() {
     const target = String(result?.uniqid ?? uniqid).trim();
     if (!target || !canLeaveAllCommunityMembers) return;
     try {
+      leaveAttemptBeforeStart.current = result?.membersLeaveJob?.startedAt;
+      leaveAttemptTotal.current = communityMembersStillInServerCount;
       setLeavingAllCommunityMembers(true);
+      setShowLeaveAllCommunityModal(false);
       const data = await leaveAllCommunityOrderMembers(target);
       setResult(data.order);
-      setShowLeaveAllCommunityModal(false);
       toast.success(`${data.summary.left} left, ${data.summary.alreadyLeft} already outside${data.summary.failed ? `, ${data.summary.failed} failed` : ""}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Members could not leave the server.");
@@ -1199,7 +1214,7 @@ export default function OrderPage() {
   return (
     <section className="lookup-page tab-slide-in relative grid min-w-0 gap-4">
       {result ? (
-        <article className={`${shell} lookup-workspace`}>
+        <OrderDetailsLayout standaloneSections={isCommunityProvider} overview={<>
           <header className="lookup-workspace-header">
             <div className="lookup-order-identity">
               <span className="lookup-provider-mark" aria-hidden="true">
@@ -1453,6 +1468,7 @@ export default function OrderPage() {
             ) : null}
           </div>
 
+          </>}>
           <div className={isCommunityProvider ? "lookup-order-sections" : undefined}>
           {isCommunityProvider && result.customerReactions?.canConfigure ? <div className="lookup-reaction-section">
             {result.customerReactions.enabled ? <CustomerOrderReactionPanel key={`reaction-panel:${result.uniqid}`} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onEditSettings={() => setReactionSettingsOrder(result.uniqid)} onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
@@ -1566,19 +1582,20 @@ export default function OrderPage() {
               <MemberDeliveryPanel key={uniqid} id="member-log"
                 completed={communityCompletedCount} total={communityMemberResults.length || result.amount || 0} status={normalizedStatus}
                 checkingProgress={communityMemberCheckProgress}
-                operation={checkingCommunityMembers ? "checking" : leavingAllCommunityMembers || autoLeaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : retryingFailedCommunityMembers ? "retrying" : undefined}
+                leavingProgress={leaveProgress}
+                operation={checkingCommunityMembers ? "checking" : leavingAllCommunityMembers || manualLeaveRunning || autoLeaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : retryingFailedCommunityMembers ? "retrying" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>
                   {communityMembersStillInServerCount > 0 || leaveAllCommunityUsed ? (
                     <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => { if (canLeaveAllCommunityMembers) setShowLeaveAllCommunityModal(true); }} disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined}>
                       <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
-                      {leavingAllCommunityMembers ? "Leaving..." : communityMembersStillInServerCount === 0 && leaveAllCommunityUsed ? "Leave all used" : `Leave all (${communityMembersStillInServerCount})`}
+                      {leavingAllCommunityMembers || manualLeaveRunning ? "Leaving..." : communityMembersStillInServerCount === 0 && communityLeaveFailed ? "Leave all failed" : communityMembersStillInServerCount === 0 && leaveAllCommunityUsed ? "Leave all used" : `Leave all (${communityMembersStillInServerCount})`}
                     </Button>
                   ) : null}
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
                       <span className="member-check-control">
-                        <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
+                        <Button className="member-log-action-button" type="button" variant="accentGhost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers || manualLeaveRunning || autoLeaveRunning}>
                           <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {checkingCommunityMembers
                             ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1662,7 +1679,7 @@ export default function OrderPage() {
             </div>
           </OrderDetailDisclosure>
           </div>
-        </article>
+        </OrderDetailsLayout>
       ) : (
         <div className={`${shell} lookup-empty-state`}>
           <span className="lookup-empty-icon" aria-hidden="true"><FileJson className="h-5 w-5" /></span>

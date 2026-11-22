@@ -142,6 +142,11 @@ export function ReactionPanel({
   const [customEmojiUrlDraft, setCustomEmojiUrlDraft] = useState("");
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const emojiPopoverRef = useRef<HTMLDivElement>(null);
+  const requestHistoryRef = useRef<HTMLDetailsElement>(null);
+  const previousActiveRequests = useRef(new Set<string>());
+  const activeRequestIds = JSON.stringify(requests.filter((request) =>
+    request.assignedCount > request.completedCount + (request.failedCount ?? 0) + (request.cancelledCount ?? 0)
+  ).map((request) => request.id));
   const assigned = Math.max(0, used ?? limit - remaining);
   const pending = Math.max(0, assigned - completed);
   const requestAmountLimit = Math.max(1, remaining);
@@ -162,6 +167,14 @@ export function ReactionPanel({
   const statusState = failed > 0 ? "warning" : completed >= limit && limit > 0 ? "complete" : assigned > 0 ? "active" : "ready";
   const progressStyle = { "--reaction-progress": `${progress * 3.6}deg` } as CSSProperties;
   const isValidMessageUrl = /^https:\/\/(?:www\.)?discord(?:app)?\.com\/channels\/.+/i.test(messageDraft.trim());
+
+  useEffect(() => {
+    const activeIds = JSON.parse(activeRequestIds) as string[];
+    if (activeIds.some((id) => !previousActiveRequests.current.has(id)) && requestHistoryRef.current) {
+      requestHistoryRef.current.open = true;
+    }
+    previousActiveRequests.current = new Set(activeIds);
+  }, [activeRequestIds]);
 
   useLayoutEffect(() => {
     if (!emojiPickerOpen) return;
@@ -544,7 +557,7 @@ export function ReactionPanel({
       )}
 
       {requests.length ? (
-        <details className="monitor-reaction-history">
+        <details className="monitor-reaction-history" ref={requestHistoryRef}>
           <summary>
             <span><Clock3 aria-hidden="true" /><strong>Request history</strong><small>{requests.length} total</small></span>
             <ChevronDown aria-hidden="true" />

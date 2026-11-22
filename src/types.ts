@@ -21,6 +21,7 @@ export type CommunityMemberResult = {
   membershipStatus?: string;
   membershipDetails?: string;
   membershipLeaveSource?: string;
+  leaveAllStatus?: string;
   onlinerLive?: boolean;
   onlinerConnectionState?: string;
   onlinerDetails?: string;
@@ -99,6 +100,15 @@ export interface CommunityAutoLeaveJob {
   startedAt: string;
   nextRunAt?: string | null;
   completedAt?: string | null;
+}
+
+export interface CommunityLeaveProgress {
+  status: string;
+  total: number;
+  processed: number;
+  failed: number;
+  startedAt?: string;
+  updatedAt?: string;
 }
 
 export type OrderStatus =
@@ -223,6 +233,8 @@ export interface OrderStatusResponse {
   canPublicLeaveAll?: boolean;
   publicLeaveAllEnabled?: boolean;
   publicLeaveAllUsed?: boolean;
+  memberLeaveProgress?: CommunityLeaveProgress | null;
+  membersLeaveJob?: CommunityLeaveProgress | null;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
   speedProfile?: "safe" | "balanced" | "fast" | "custom";
