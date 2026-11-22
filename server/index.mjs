@@ -7249,52 +7249,69 @@ function isDiscordGuildInviteLimited(value) {
 }
 
 async function recoverCommunityGuildRestrictionOrder(order) {
-  if (!order || order.provider !== "community" || !Array.isArray(order.communityResults)) return order;
-  const restrictedUserIds = order.communityResults
+  // This is a legacy repair, not a live restriction detector. A historical
+  // member failure must never undo a restart, manual pause or active delivery.
+  const canRecover = (value) => value?.provider === "community"
+    && ["ERROR", "PARTIAL"].includes(String(value.status ?? "").toUpperCase())
+    && !(Number(value.amount) > 0 && Number(value.added ?? 0) >= Number(value.amount))
+    && Array.isArray(value.communityResults);
+  const getRestrictedUserIds = (value) => value.communityResults
     .filter((item) => String(item?.state ?? "").toLowerCase() === "failed" && isDiscordGuildInviteLimited(item))
     .map((item) => String(item?.discordUserId ?? ""))
     .filter(isDiscordGuildId);
-  if (!restrictedUserIds.length) return order;
+  if (!canRecover(order) || !getRestrictedUserIds(order).length) return order;
 
-  await pool.query(
-    `UPDATE community_oauth_joins
-     SET status = 'authorized', details = NULL, reserved_order_id = NULL
-     WHERE guild_id = $1
-       AND discord_user_id = ANY($2::text[])
-       AND encrypted_access_token IS NOT NULL
-       AND access_token_expires_at > NOW()`,
-    [order.serverId, restrictedUserIds]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [order.uniqid]);
+    const current = tracked.rows[0]?.payload;
+    if (!canRecover(current) || !getRestrictedUserIds(current).length) {
+      await client.query("COMMIT");
+      return current ?? order;
+    }
+    order = current;
+    const restrictedUserIds = getRestrictedUserIds(order);
+    await client.query(
+      `UPDATE community_oauth_joins
+       SET status = 'authorized', details = NULL, reserved_order_id = NULL
+       WHERE guild_id = $1
+         AND discord_user_id = ANY($2::text[])
+         AND (reserved_order_id IS NULL OR reserved_order_id = $3)
+         AND encrypted_access_token IS NOT NULL
+         AND access_token_expires_at > NOW()`,
+      [order.serverId, restrictedUserIds, order.uniqid]
+    );
 
-  const currentStatus = String(order.status ?? "").toUpperCase();
-  const delivered = Number(order.added ?? 0);
-  const amount = Number(order.amount ?? 0);
-  if (["COMPLETED", "CANCELLED", "CANCELED", "TERMINATED"].includes(currentStatus) || (amount > 0 && delivered >= amount)) {
-    return order;
+    const restrictedUserIdSet = new Set(restrictedUserIds);
+    const recoveredOrder = {
+      ...order,
+      status: "INVITES PAUSED",
+      waitingCode: "discord_guild_invites_limited",
+      details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
+      pausedAt: order.pausedAt ?? new Date().toISOString(),
+      pausedFromStatus: "PROCESS",
+      communityResults: order.communityResults.map((item) => restrictedUserIdSet.has(String(item?.discordUserId ?? ""))
+        ? {
+            ...item,
+            state: "queued",
+            details: "Waiting for Discord to restore new member access for this server.",
+            completedAt: undefined,
+            authorizationStatus: "active",
+            authorizationDetails: "The account is active; delivery was blocked by a server restriction.",
+            authorizationCheckedAt: new Date().toISOString()
+          }
+        : item)
+    };
+    await client.query("UPDATE tracked_orders SET payload = $2::jsonb, updated_at = NOW() WHERE uniqid = $1", [order.uniqid, JSON.stringify(recoveredOrder)]);
+    await client.query("COMMIT");
+    return recoveredOrder;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const restrictedUserIdSet = new Set(restrictedUserIds);
-  const recoveredOrder = {
-    ...order,
-    status: "INVITES PAUSED",
-    waitingCode: "discord_guild_invites_limited",
-    details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
-    pausedAt: order.pausedAt ?? new Date().toISOString(),
-    pausedFromStatus: "PROCESS",
-    communityResults: order.communityResults.map((item) => restrictedUserIdSet.has(String(item?.discordUserId ?? ""))
-      ? {
-          ...item,
-          state: "queued",
-          details: "Waiting for Discord to restore new member access for this server.",
-          completedAt: undefined,
-          authorizationStatus: "active",
-          authorizationDetails: "The account is active; delivery was blocked by a server restriction.",
-          authorizationCheckedAt: new Date().toISOString()
-        }
-      : item)
-  };
-  await saveTrackedOrderPayload(recoveredOrder);
-  return recoveredOrder;
 }
 
 async function loadCommunityAccessToken(member, config) {
