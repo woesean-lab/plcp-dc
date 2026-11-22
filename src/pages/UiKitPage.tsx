@@ -14,6 +14,7 @@ import { ReactionPanel, REACTION_MIXED_VALUE } from "../components/ReactionPanel
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
@@ -101,7 +102,16 @@ function MemberDeliveryExample() {
       <Button type="button" size="sm" variant={publicView ? "secondary" : "default"} aria-pressed={!publicView} onClick={() => setPublicView(false)}>Admin</Button>
       <Button type="button" size="sm" variant={publicView ? "default" : "secondary"} aria-pressed={publicView} onClick={() => setPublicView(true)}>Monitor</Button>
     </div>
-    <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>{MEMBER_DELIVERY_SAMPLES.map(item => <MemberDeliveryRow key={item.index} item={item} audience={publicView ? "public" : "admin"} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</MemberDeliveryAccordion></div>
+    <MemberDeliveryPanel audience={publicView ? "public" : "admin"} completed={6} total={7} status="PROCESS" attention actions={<>
+      <span className="member-check-control">
+        <Button type="button" size="sm" variant="secondary" disabled onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-3.5 w-3.5" />Check members</Button>
+        <button type="button" className="member-check-help" aria-label="What does Check members do?" aria-describedby="ui-kit-member-check"><CircleHelp className="h-3.5 w-3.5" /></button>
+        <span id="ui-kit-member-check" className="member-check-tooltip" role="tooltip">Checks whether members are still in the server and online.</span>
+      </span>
+      <Button type="button" size="sm" variant="destructive" disabled onClick={() => toast.success("Sample leave previewed")}>Leave all</Button>
+    </>}>
+      <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>{MEMBER_DELIVERY_SAMPLES.map(item => <MemberDeliveryRow key={item.index} item={item} audience={publicView ? "public" : "admin"} formatTime={() => "Nov 20, 2026, 3:00 PM"} />)}</MemberDeliveryAccordion></div>
+    </MemberDeliveryPanel>
   </div>;
 }
 
@@ -290,7 +300,7 @@ export default function UiKitPage() {
           </Example>
         </Section> : null}
 
-        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryRow item={member} formatTime={formatTime} />\n// Monitor uses audience=\"public\" for plain labels and safe notes; usernames stay masked.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// MemberDeliveryAccordion keeps only one row open; rows start collapsed.'}><MemberDeliveryExample /></Example></Section> : null}
+        {visible("lists") ? <Section id="lists"><Example title="Members Stock rows & shared pagination" source="src/pages/HomePage.tsx · src/components/ListPagination.tsx" code={'const [page, setPage] = useState(1);\nconst [pageSize, setPageSize] = useState(50);\nconst pagination = paginate(items, page, pageSize);\n\n// Render pagination.items, then use the shared controls:\n<ListPagination {...pagination} onChange={setPage}\n  onPageSizeChange={setPageSize} label="Members pages" showNavigationLabels />'}><MembersList /></Example><Example title="Member delivery rows" source="src/components/MemberDeliveryRow.tsx" code={'<MemberDeliveryPanel completed={processed} total={total} status={status} actions={tools}>\n  <div className="community-order-result-list humanizer-results member-delivery-list">\n    <MemberDeliveryAccordion><MemberDeliveryRow item={member} formatTime={formatTime} /></MemberDeliveryAccordion>\n  </div>\n</MemberDeliveryPanel>\n// Monitor uses audience=\"public\" for plain labels and safe notes; usernames stay masked.\n// Wrap rows in community-order-result-list humanizer-results member-delivery-list.\n// The list uses one Humanizer surface with dividers; status badges stay on the right.\n// Joined rows have a green leading accent; failed/blocked rows use red.\n// Missing status fields are omitted; explicit Offline/Inactive values remain visible.\n// MemberDeliveryAccordion keeps only one row open; rows start collapsed.'}><MemberDeliveryExample /></Example></Section> : null}
 
         {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>

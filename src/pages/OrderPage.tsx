@@ -18,6 +18,7 @@ import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionP
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -1555,15 +1556,13 @@ export default function OrderPage() {
           ) : null}
 
           {isCommunityProvider ? (
-            <section id="member-log" className="lookup-token-panel community-order-log">
-              <div className="lookup-section-heading flex-wrap">
-                <div>
-                  <p className="app-kicker">Member results</p>
-                  <h3>Per-member delivery log</h3>
-                </div>
-                <div className="public-secure-mark max-w-full flex-wrap gap-2">
+            <MemberDeliveryPanel id="member-log"
+                completed={communityCompletedCount} total={communityMemberResults.length || result.amount || 0} status={normalizedStatus}
+                operation={checkingCommunityMembers ? "checking" : leavingAllCommunityMembers || autoLeaveRunning ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : retryingFailedCommunityMembers ? "retrying" : undefined}
+                attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
+                actions={<>
                   {communityMembersStillInServerCount > 0 ? (
-                    <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => { if (canLeaveAllCommunityMembers) setShowLeaveAllCommunityModal(true); }} disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined}>
+                    <Button className="member-log-action-button" type="button" variant="destructive" size="sm" onClick={() => { if (canLeaveAllCommunityMembers) setShowLeaveAllCommunityModal(true); }} disabled={!canLeaveAllCommunityMembers} title={!canLeaveAllCommunityMembers ? leaveAllUnavailableReason : undefined}>
                       <LogOut className={`h-3.5 w-3.5 ${leavingAllCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                       {leavingAllCommunityMembers ? "Leaving..." : `Leave all (${communityMembersStillInServerCount})`}
                     </Button>
@@ -1571,7 +1570,7 @@ export default function OrderPage() {
                   {["COMPLETED", "PARTIAL"].includes(normalizedStatus) ? (
                     <>
                       <span className="member-check-control">
-                        <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
+                        <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || leavingAllCommunityMembers}>
                           <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {checkingCommunityMembers
                             ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1587,13 +1586,13 @@ export default function OrderPage() {
                     </>
                   ) : null}
                   {failedCommunityMemberCount > 0 ? (
-                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleRetryFailedCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers || retryingFailedCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleRetryFailedCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers || retryingFailedCommunityMembers}>
                       <RotateCcw className={`h-3.5 w-3.5 ${retryingFailedCommunityMembers ? "animate-spin" : ""}`} aria-hidden="true" />
                       {retryingFailedCommunityMembers ? "Retrying..." : `Retry failed (${failedCommunityMemberCount})`}
                     </Button>
                   ) : null}
                   {replaceableCommunityMemberIndices.length ? (
-                    <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
+                    <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers}>
                       <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                       {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                     </Button>
@@ -1602,9 +1601,9 @@ export default function OrderPage() {
                     {autoLeaveJob.failed > 0 ? <TriangleAlert aria-hidden="true" /> : autoLeaveRunning ? <RefreshCw className="animate-spin" aria-hidden="true" /> : <Check aria-hidden="true" />} Auto Leave {autoLeaveJob.processed}/{autoLeaveJob.total}
                     {autoLeaveJob.failed ? ` · ${autoLeaveJob.failed} failed` : ""}
                   </Badge> : null}
-                  <Badge variant={communityCompletedCount > 0 && communityCompletedCount >= (communityMemberResults.length || result.amount || 0) ? "success" : "secondary"}><ShieldCheck aria-hidden="true" /> {communityCompletedCount}/{communityMemberResults.length || result.amount || "-"} processed</Badge>
-                </div>
-              </div>
+
+                 </>}
+              >
 
               {communityCheckNeedsBot && botInvite ? (
                 <div className="monitor-member-check-bot-alert" role="alert">
@@ -1635,7 +1634,7 @@ export default function OrderPage() {
                 <p className="public-token-results-empty">Waiting for member results.</p>
               )}
               {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} member OAuth authorization is inactive.</p> : null}
-            </section>
+            </MemberDeliveryPanel>
           ) : null}
 
           <details className="lookup-technical-details">

@@ -15,6 +15,7 @@ import { getCommunityResultAllocation } from "../../shared/community-order-alloc
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
+import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { OrderStatusResponse } from "../types";
 
@@ -1091,13 +1092,14 @@ export default function PublicOrderPage() {
                 </div> : null}
 
                 {isCommunityOrder ? (
-                  <div className="monitor-token-panel community-order-log">
-                    <div className="monitor-token-heading flex-wrap">
-                      <div><p className="app-kicker">Member results</p><h2>Per-member delivery log</h2></div>
-                      <span className="flex max-w-full flex-wrap items-center gap-2">
+                  <MemberDeliveryPanel audience="public"
+                completed={communityCompletedCount} total={communityMemberResults.length || totalMembers || 0} status={normalizedStatus}
+                operation={checkingCommunityMembers ? "checking" : leavingAllMembers ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : undefined}
+                attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
+                actions={<>
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
-                            <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                            <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                               {checkingCommunityMembers
                                 ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1114,18 +1116,18 @@ export default function PublicOrderPage() {
                           </span>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                          <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="destructive" size="xs" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
+                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="destructive" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
                         </Button> : null}
-                        <span>{communityCompletedCount}/{communityMemberResults.length || totalMembers || "-"} processed</span>
-                      </span>
-                    </div>
+
+                       </>}
+              >
                     {supportExpired ? (
                       <div className="monitor-expired-support-note" id="public-member-support-expired" role="note">
                         <Timer className="h-4 w-4" aria-hidden="true" />
@@ -1159,7 +1161,7 @@ export default function PublicOrderPage() {
                       </div>
                     ) : <p className="public-token-results-empty">Waiting for member results.</p>}
                     {inactiveCommunityMemberCount > 0 ? <p className="public-token-results-empty">{inactiveCommunityMemberCount} members have inactive access. Members still in the server are not replaceable.</p> : null}
-                  </div>
+                  </MemberDeliveryPanel>
                 ) : null}
 
                 {isBoostOrder && canManageDcordTokens ? (
