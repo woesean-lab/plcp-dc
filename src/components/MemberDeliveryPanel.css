@@ -1,5 +1,11 @@
-.member-delivery-panel { container-type: inline-size; }
-.member-delivery-panel.humanizer-run-panel { overflow: visible; }
+.member-delivery-panel {
+  --member-delivery-panel-radius: var(--app-radius-xl);
+  container-type: inline-size;
+  align-self: start;
+  min-height: 0;
+  height: auto;
+}
+.member-delivery-panel.humanizer-run-panel { border-radius: var(--member-delivery-panel-radius); overflow: visible; }
 .member-delivery-panel .humanizer-run-actions { flex: 1 1 auto; }
 .member-delivery-panel-actions {
   display: flex;
@@ -31,7 +37,7 @@
 .member-delivery-panel > .member-delivery-panel-toggle {
   position: relative;
   padding-inline-end: 52px;
-  border-radius: inherit;
+  border-radius: calc(var(--member-delivery-panel-radius) - 1px);
   background-clip: padding-box;
   list-style: none;
   cursor: pointer;
@@ -50,7 +56,7 @@
 }
 .member-delivery-panel:not([open]) > .member-delivery-panel-toggle {
   border-bottom: 0;
-  border-radius: inherit;
+  border-radius: calc(var(--member-delivery-panel-radius) - 1px);
 }
 .member-delivery-panel-chevron {
   position: absolute;
