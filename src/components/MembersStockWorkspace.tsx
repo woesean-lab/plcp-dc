@@ -38,7 +38,12 @@ export function MembersStockRow({ record, selected, onSelect, badges, actions, o
   open: boolean; onToggle: () => void; children: ReactNode;
 }) {
   const id = useId();
-  return <article className="members-stock-row" role="listitem" data-state={record.status} data-selected={selected}>
+  return <article className="members-stock-row" role="listitem" data-state={record.status} data-selected={selected} onClick={event => {
+    const target = event.target as HTMLElement;
+    if (target.closest("button, input, label, a, select, textarea, summary, code, time, .members-stock-metadata dd, [role='button'], [role='checkbox'], [role='combobox'], [contenteditable='true']")) return;
+    if (window.getSelection()?.toString().trim()) return;
+    onToggle();
+  }}>
     <div className="members-stock-row-heading">
       <input className="community-member-checkbox" type="checkbox" checked={selected} onChange={event => onSelect(event.target.checked)} aria-label={`Select ${record.username}`} />
       <MemberActivityAvatar className="community-recent-avatar" src={record.avatarUrl} fallback={<Users className="h-3.5 w-3.5" />} />
@@ -49,6 +54,26 @@ export function MembersStockRow({ record, selected, onSelect, badges, actions, o
     </div>
     {open ? <div id={id} className="members-stock-row-details">{children}</div> : null}
   </article>;
+}
+
+export function MembersStockBulkActions({ connection, transfer, remove, tokens, order }: {
+  connection: ReactNode; transfer: ReactNode; remove: ReactNode; tokens: ReactNode; order: ReactNode;
+}) {
+  return <div className="members-stock-bulk" role="region" aria-label="Selected member actions">
+    <div className="members-stock-bulk-main">
+      <div className="members-stock-bulk-group"><span>Onliner</span><div>{connection}</div></div>
+      <div className="members-stock-bulk-group"><span>Move to category</span><div>{transfer}</div></div>
+      <div className="members-stock-bulk-group members-stock-bulk-remove"><span>Stock</span><div>{remove}</div></div>
+    </div>
+    <details className="members-stock-bulk-more"><Button asChild size="xs" variant="ghost"><summary>More actions<ChevronDown className="h-3.5 w-3.5" /></summary></Button><div className="members-stock-bulk-extra">
+      <div className="members-stock-bulk-group members-stock-bulk-tokens"><span>Export tokens</span><div>{tokens}</div></div>
+      <div className="members-stock-bulk-group members-stock-bulk-order"><span>Reorder members</span><div>{order}</div></div>
+    </div></details>
+  </div>;
+}
+
+export function MembersStockMetadata({ accountId, authorizedAt }: { accountId: string; authorizedAt: string }) {
+  return <dl className="members-stock-metadata"><div><dt>Account ID</dt><dd>{accountId}</dd></div><div><dt>Authorized</dt><dd>{new Date(authorizedAt).toLocaleString()}</dd></div></dl>;
 }
 
 export function MembersStockSecret({ label, username, value, busy, disabled, onToggle, onCopy, expiresAt }: {

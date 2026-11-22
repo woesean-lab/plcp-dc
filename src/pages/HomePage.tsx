@@ -2,7 +2,7 @@ import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import { StockWorkspace } from "../components/StockWorkspace";
-import { MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
+import { MembersStockBulkActions, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -3237,21 +3237,24 @@ export default function HomePage() {
             />
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
           </label><span>{!selectedCommunityMemberIds.length ? communityVisibleRecords.length.toLocaleString("en-US") + " matching members" : null}{selectedCommunityMemberIds.length ? <Button type="button" size="xs" variant="ghost" disabled={communityBulkAction !== null} onClick={() => setSelectedCommunityMemberIds([])}>Clear</Button> : null}</span></div>
-        {selectedCommunityMemberIds.length > 0 ? <div className="members-stock-bulk" role="region" aria-label="Selected member actions">
-          <div className="members-stock-bulk-main">            <Button type="button" variant="secondary" size="sm"
+        {selectedCommunityMemberIds.length > 0 ? <MembersStockBulkActions
+          connection={<>
+            <Button type="button" variant="secondary" size="sm"
               title="Connect selected accounts to Onliner using their saved tokens"
               disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
               onClick={beginConnectingSelectedCommunityMembers}>
               {communityBulkAction === "onliner_connect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RadioTower className="h-3.5 w-3.5" />}
-              {communityBulkAction === "onliner_connect" ? "Connecting..." : "Connect selected"}
+              {communityBulkAction === "onliner_connect" ? "Connecting..." : "Connect"}
             </Button>
             <Button type="button" variant="dangerGhost" size="sm"
               title="Disconnect selected accounts from Onliner and keep them in Members Stock"
               disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
               onClick={() => void disconnectSelectedCommunityOnliner()}>
               {communityBulkAction === "onliner_disconnect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
-              {communityBulkAction === "onliner_disconnect" ? "Disconnecting..." : "Disconnect selected"}
+              {communityBulkAction === "onliner_disconnect" ? "Disconnecting..." : "Disconnect"}
             </Button>
+          </>}
+          transfer={<>
             <div className="community-member-transfer-actions">
               <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-filter community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
               <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
@@ -3259,19 +3262,23 @@ export default function HomePage() {
                 {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
               </Button>
             </div>
-<Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button></div>
-          <details className="members-stock-bulk-more"><Button asChild size="xs" variant="ghost"><summary>More actions<ChevronDown className="h-3.5 w-3.5" /></summary></Button><div className="members-stock-bulk-extra"><div><span className="members-stock-bulk-extra-label">Export selected tokens</span>            <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
+          </>}
+          remove={<Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>}
+          tokens={<>
+            <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
               {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
             </Button>
             <Button type="button" variant="secondary" size="sm" title="Download selected user tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("account")}>
               {exportingCommunityTokens === "account" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} User tokens
             </Button>
-</div><div><span className="members-stock-bulk-extra-label">Order selected members</span>            <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
-</div></div></details>
-        </div> : null}
+          </>}
+          order={<>
+            <Button type="button" variant="secondary" size="sm" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
+            <Button type="button" variant="secondary" size="sm" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
+            <Button type="button" variant="secondary" size="sm" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
+            <Button type="button" variant="secondary" size="sm" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
+          </>}
+        /> : null}
         {communityVisibleRecords.length ? <>
           <div className="members-stock-member-scroll" role="list" aria-label="Members">
             {visibleCommunityRecords.map(record => {
@@ -3345,8 +3352,7 @@ export default function HomePage() {
                       : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
                   </Button>
                 </>}>
-                <p>Account ID · {record.id}</p>
-                <p>Authorized · {new Date(record.authorizedAt).toLocaleString()}</p>
+                <MembersStockMetadata accountId={record.id} authorizedAt={record.authorizedAt} />
                 {record.details ? <p>{record.details}</p> : null}
                 {record.onlinerConnected && record.onlinerLastError ? <div className="community-member-onliner-error"><TriangleAlert className="h-3.5 w-3.5" /><span>{record.onlinerLastError}</span></div> : null}
                 <div className="members-stock-secrets">
