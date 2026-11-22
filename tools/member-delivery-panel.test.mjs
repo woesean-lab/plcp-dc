@@ -60,3 +60,12 @@ test("empty and over-reported counts keep the accessible progress within its ran
   }
 });
 
+
+test("member panel uses a native disclosure that starts open with controls and content preserved",()=>{
+  const html=render({});
+  assert.match(html,/^<details open=""[^>]*>/);
+  assert.ok(html.includes('<summary class="humanizer-run-head member-delivery-panel-toggle">'));
+  assert.ok(html.includes("member-delivery-panel-chevron"));
+  assert.ok(html.includes("Member rows"));
+  assert.ok(html.includes('disabled="" aria-label="Leave all"'));
+});

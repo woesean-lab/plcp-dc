@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { BadgeCheck, Check, CircleAlert, LoaderCircle, Pause, Users } from "lucide-react";
+import type { MouseEvent, ReactNode } from "react";
+import { BadgeCheck, Check, ChevronDown, CircleAlert, LoaderCircle, Pause, Users } from "lucide-react";
 import "./MemberDeliveryPanel.css";
 
 type Operation = "checking" | "leaving" | "replacing" | "retrying";
@@ -29,8 +29,12 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
     : done ? needsReview ? "Completed with issues" : "Delivery complete" : active ? "Delivery in progress" : "Waiting for delivery";
   const Icon = active ? LoaderCircle : paused ? Pause : needsReview ? CircleAlert : done ? Check : Users;
   const summary = count ? processed + " of " + count + " processed · " + progress + "%" : processed + " processed";
-  return <section id={id} className="app-panel humanizer-run-panel community-order-log member-delivery-panel" data-audience={audience} aria-label="Per-member delivery">
-    <header className="humanizer-run-head">
+  function handleSummaryClick(event: MouseEvent<HTMLElement>) {
+    const target = event.target;
+    if (target instanceof Element && target.closest("button, input, select, textarea, [role=button]")) event.preventDefault();
+  }
+  return <details open id={id} className="app-panel humanizer-run-panel community-order-log member-delivery-panel" data-audience={audience} aria-label="Per-member delivery">
+    <summary className="humanizer-run-head member-delivery-panel-toggle" onClick={handleSummaryClick}>
       <div className="onliner-section-heading">
         <span className="onliner-section-icon" aria-hidden="true">{active ? <LoaderCircle className="h-4 w-4 animate-spin" /> : done && !paused && !stopped && !needsReview ? <BadgeCheck className="h-4 w-4" /> : <Users className="h-4 w-4" />}</span>
         <span><strong>Per-member delivery log</strong><small>Member results update live.</small></span>
@@ -42,12 +46,13 @@ export function MemberDeliveryPanel({ id, completed, total, status, operation, a
         </div>
         {actions ? <div className="member-delivery-panel-actions">{actions}</div> : null}
       </div>
-    </header>
+      <ChevronDown className="member-delivery-panel-chevron h-4 w-4" aria-hidden="true" />
+    </summary>
     <div className="humanizer-run-body">
       <div className="humanizer-progress" role="progressbar" aria-label="Member delivery progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress} aria-valuetext={summary}>
         <span style={{ width: progress + "%" }} />
       </div>
       {children}
     </div>
-  </section>;
+  </details>;
 }

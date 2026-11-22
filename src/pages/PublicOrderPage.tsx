@@ -1092,14 +1092,14 @@ export default function PublicOrderPage() {
                 </div> : null}
 
                 {isCommunityOrder ? (
-                  <MemberDeliveryPanel audience="public"
+                  <MemberDeliveryPanel key={uniqid} audience="public"
                 completed={communityCompletedCount} total={communityMemberResults.length || totalMembers || 0} status={normalizedStatus}
                 operation={checkingCommunityMembers ? "checking" : leavingAllMembers ? "leaving" : communityReplacementRunning || replacingAllCommunityMembers ? "replacing" : undefined}
                 attention={communityMemberResults.some(item => ["failed", "blocked", "already_member"].includes(item.state.toLowerCase()))}
                 actions={<>
                         {isCompleted || normalizedStatus === "PARTIAL" ? (
                           <span className="member-check-control">
-                            <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
+                            <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleCheckCommunityMembers()} disabled={checkingCommunityMembers || !canManageCommunityMembers} aria-describedby={supportExpired ? "public-member-support-expired" : undefined} title={!canManageCommunityMembers ? "This order's period has expired." : undefined}>
                               <ShieldCheck className={`h-3.5 w-3.5 ${checkingCommunityMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                               {checkingCommunityMembers
                                 ? `Checking ${communityMemberCheckProgress?.checked ?? 0}/${communityMemberCheckProgress?.total || communityMemberResults.length || "..."}`
@@ -1116,12 +1116,12 @@ export default function PublicOrderPage() {
                           </span>
                         ) : null}
                         {replaceableCommunityMemberIndices.length ? (
-                          <Button className="member-log-action-button" type="button" variant="secondary" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
+                          <Button className="member-log-action-button" type="button" variant="ghost" size="sm" onClick={() => void handleReplaceAllCommunityMembers()} disabled={!canManageCommunityMembers || !communityReplacementStatusAllowed || communityReplacementRunning || replacingAllCommunityMembers} title={!canManageCommunityMembers ? "This order's period has expired." : !communityReplacementStatusAllowed ? "Wait for the current delivery to finish." : undefined}>
                             <RefreshCw className={`h-3.5 w-3.5 ${replacingAllCommunityMembers || communityReplacementRunning ? "animate-spin" : ""}`} aria-hidden="true" />
                             {replacingAllCommunityMembers || communityReplacementRunning ? "Replacing all..." : `Replace all (${replaceableCommunityMemberIndices.length})`}
                           </Button>
                         ) : null}
-                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="destructive" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
+                        {status?.publicLeaveAllEnabled === true ? <Button className="member-log-action-button" type="button" variant="dangerGhost" size="sm" onClick={() => void handleLeaveAllMembers()} disabled={leavingAllMembers || !status?.canPublicLeaveAll || status?.publicLeaveAllUsed || checkingCommunityMembers || replacingAllCommunityMembers} title={status?.publicLeaveAllUsed ? "Leave all has already been started for this order." : "Remove all delivered members from this server. Available once per order after delivery finishes."}>
                           <LogOut className={`h-3.5 w-3.5 ${leavingAllMembers ? "animate-pulse" : ""}`} aria-hidden="true" />
                           {leavingAllMembers ? "Leaving..." : status?.publicLeaveAllUsed ? "Leave all used" : "Leave all"}
                         </Button> : null}
