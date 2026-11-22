@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { FilterDropdown } from "./ui/filter-dropdown";
 
@@ -29,9 +29,13 @@ export function ListPagination({ page, pageCount, total, pageSize = 50, onChange
           onChange={(value) => { onPageSizeChange(Number(value)); onChange(1); }}
         />
       </div>
-      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page"><ChevronLeft className="h-3.5 w-3.5" />{showNavigationLabels ? "Back" : null}</Button>
-      <span>{page} / {pageCount}</span>
-      <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page >= pageCount} onClick={() => onChange(page + 1)} aria-label="Next page">{showNavigationLabels ? "Next" : null}<ChevronRight className="h-3.5 w-3.5" /></Button>
+      <div className="list-page-navigation">
+        <Button type="button" variant="secondary" size="icon-sm" disabled={page <= 1} onClick={() => onChange(1)} aria-label="First page" title="First page"><ChevronsLeft className="h-3.5 w-3.5" /></Button>
+        <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page <= 1} onClick={() => onChange(page - 1)} aria-label="Previous page" title="Previous page"><ChevronLeft className="h-3.5 w-3.5" />{showNavigationLabels ? "Back" : null}</Button>
+        <span>{page} / {pageCount}</span>
+        <Button type="button" variant="secondary" size={showNavigationLabels ? "xs" : "icon-sm"} className={showNavigationLabels ? "list-page-nav" : undefined} disabled={page >= pageCount} onClick={() => onChange(page + 1)} aria-label="Next page" title="Next page">{showNavigationLabels ? "Next" : null}<ChevronRight className="h-3.5 w-3.5" /></Button>
+        <Button type="button" variant="secondary" size="icon-sm" disabled={page >= pageCount} onClick={() => onChange(pageCount)} aria-label="Last page" title="Last page"><ChevronsRight className="h-3.5 w-3.5" /></Button>
+      </div>
     </div>
   </nav>;
 }

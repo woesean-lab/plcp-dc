@@ -12268,6 +12268,7 @@
 }
 .list-pagination > div { display: flex; align-items: center; gap: 10px; }
 .list-pagination button { flex-shrink: 0; }
+.list-page-navigation { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
 .list-pagination > div { flex-wrap: wrap; }
 .list-page-size { display: flex; align-items: center; gap: 8px; margin-right: 8px; white-space: nowrap; }
 .list-page-size .filter-dropdown-trigger {
