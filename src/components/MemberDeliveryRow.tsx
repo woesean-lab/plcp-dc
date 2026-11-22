@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronDown, LogOut, RadioTower, ShieldCheck, TriangleAle
 import type { CommunityMemberResult } from "../types";
 import { publicMemberDeliveryCopy } from "../lib/member-delivery-copy";
 import { Button } from "./ui/button";
-import { Badge } from "./ui/badge";
+import { StatusField } from "./ui/status-field";
 import { MemberActivityAvatar } from "./MemberActivityAvatar";
 import "./MemberDeliveryRow.css";
 
@@ -18,25 +18,6 @@ export function MemberDeliveryAccordion({ children }: { children: ReactNode }) {
     expandedIndex,
     toggle: index => setExpandedIndex(current => current === index ? null : index)
   }}>{children}</MemberDeliveryAccordionContext.Provider>;
-}
-
-function StatusField({ label, state, value, icon, details }: {
-  label: string; state?: string; value?: string; icon: ReactNode; details?: string;
-}) {
-  if (!value?.trim()) return null;
-
-  const status = state?.toLowerCase();
-  const variant = status === "active" || status === "joined" ? "success"
-    : status === "failed" || status === "blocked" || status === "inactive" ? "destructive"
-    : status === "joining" || status === "replacing" || status === "processing" ? "default"
-    : "secondary";
-
-  return <Badge className="member-delivery-field" variant={variant} data-state={state} title={details ? `${value} · ${details}` : value}>
-    <dt>{icon}<span>{label}</span></dt>
-    <dd className="member-delivery-value">
-      <span>{value}</span>
-    </dd>
-  </Badge>;
 }
 
 export function MemberDeliveryRow({ item, formatTime, audience = "admin" }: {
@@ -83,12 +64,12 @@ export function MemberDeliveryRow({ item, formatTime, audience = "admin" }: {
           <time dateTime={timestamp}>{timestamp ? formatTime(timestamp) : "—"}</time>
         </div>
       </div>
-      <dl className="member-delivery-statuses">
+      <div className="member-delivery-statuses" role="group" aria-label="Member statuses">
         <StatusField label={copy ? "Access" : "OAuth"} state={item.authorizationStatus} value={copy ? copy.authorizationValue : item.authorizationStatus} details={copy ? copy.authorizationDetails : item.authorizationDetails} icon={<ShieldCheck aria-hidden="true" />} />
         <StatusField label={leaveStatus ? copy ? "Leaving" : "Auto Leave" : "Membership"} state={leaveState || (item.membershipStatus === "removed" ? "removed" : undefined)} value={(copy && leaveStatus ? copy.leaveValue : leaveLabel) || (item.membershipStatus === "removed" ? "Left server" : undefined)} details={copy ? leaveStatus ? copy.leaveDetails : copy.membershipDetails : leaveStatus ? item.autoLeaveDetails : item.membershipDetails} icon={leaveStatus === "failed" ? <TriangleAlert aria-hidden="true" /> : <LogOut aria-hidden="true" />} />
         <StatusField label={copy ? "Status" : "Onliner"} state={typeof item.onlinerLive === "boolean" ? item.onlinerLive ? "active" : "inactive" : undefined} value={typeof item.onlinerLive === "boolean" ? item.onlinerLive ? "Online" : "Offline" : undefined} details={copy ? copy.onlinerDetails : item.onlinerDetails} icon={<RadioTower aria-hidden="true" />} />
         <StatusField label="Delivery" state={item.state.toLowerCase()} value={copy ? copy.deliveryValue : item.state.replace(/_/g, " ")} icon={["failed", "blocked"].includes(item.state.toLowerCase()) ? <TriangleAlert aria-hidden="true" /> : <CheckCircle2 aria-hidden="true" />} />
-      </dl>
+      </div>
       <span className="community-member-row-actions">
         <Button type="button" variant="ghost" size="icon-sm" aria-label={`${expanded ? "Hide" : "Show"} details for ${item.username}`} aria-expanded={expanded} aria-controls={notesId} title={expanded ? "Hide details" : "Show details"} onClick={toggleDetails}>
           <ChevronDown className="member-delivery-details-chevron h-3.5 w-3.5" aria-hidden="true" />

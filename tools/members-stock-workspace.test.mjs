@@ -55,3 +55,14 @@ test("secret controls render hidden until explicitly revealed, without starting 
   assert.ok(visible.includes('aria-label="Hide sample access token"'));
   assert.ok(visible.includes('aria-label="Copy sample access token"'));
 });
+
+test("stock status fields retain zero servers and explicit negative states", () => {
+  const html = render(module.exports.MembersStockBadges, { record: { ...record, onlinerConnected: true, onlinerConnectionState: "error", onlinerRichPresenceEnabled: false, joinedServerCount: 0, status: "failed" } });
+  for (const value of ["Onliner", "Failed", "Rich Presence", "Off", "Servers", ">0<", "OAuth", "Inactive"]) assert.ok(html.includes(value), value);
+  assert.equal((html.match(/ui-badge-destructive/g) || []).length, 2);
+  const disconnected = render(module.exports.MembersStockBadges, { record: { ...record, onlinerConnected: false, joinedServerCount: 1 } });
+  assert.equal(disconnected.includes("Onliner"), false);
+  assert.equal(disconnected.includes("Rich Presence"), false);
+  assert.ok(disconnected.includes("Servers"));
+  assert.ok(disconnected.includes("Active"));
+});

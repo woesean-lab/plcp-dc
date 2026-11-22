@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { StatusField } from "../components/ui/status-field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Activity, Bot, CalendarPlus, Check, CircleHelp, Copy, ExternalLink, FileJson, Hash, LogIn, LogOut, MessageSquareText, Pause, Play, RefreshCw, Rocket, RotateCcw, Server, ShieldCheck, Sparkles, Timer, TriangleAlert, X, Zap } from "lucide-react";
@@ -1511,9 +1512,7 @@ export default function OrderPage() {
                     </Button>
                   ) : null}
                   {dcordRejoinJob && !dcordRejoinRunning ? (
-                    <span className="public-token-result-pill status-badge" data-state={dcordRejoinJob.failed > 0 ? "failed" : "active"} title={dcordRejoinJob.failed > 0 ? `${dcordRejoinJob.failed} token(s) failed to re-join.` : "All assigned tokens re-joined successfully."}>
-                      Re-joined {dcordRejoinJob.succeeded}/{dcordRejoinJob.total}{dcordRejoinJob.failed > 0 ? ` · ${dcordRejoinJob.failed} failed` : ""}
-                    </span>
+                    <StatusField label="Re-join" state={dcordRejoinJob.failed > 0 ? "failed" : "active"} value={`${dcordRejoinJob.succeeded}/${dcordRejoinJob.total}${dcordRejoinJob.failed > 0 ? ` · ${dcordRejoinJob.failed} failed` : ""}`} details={dcordRejoinJob.failed > 0 ? `${dcordRejoinJob.failed} token(s) failed to re-join.` : "All assigned tokens re-joined successfully."} icon={<LogIn aria-hidden="true" />} />
                   ) : null}
                   {dcordTokenResults.length ? (
                     <Button className="member-log-action-button" type="button" variant="secondary" size="xs" onClick={() => void openHumanizeAllModal()} disabled={humanizingAll || allOrderTokensHumanized}>
@@ -1540,7 +1539,7 @@ export default function OrderPage() {
                   <div className="public-token-results-head" aria-hidden="true">
                     <span />
                     <span>Token</span>
-                    <span className="public-token-result-flow"><span /><span>Join</span><span>Boost</span><span>Slots</span></span>
+                    <span className="public-token-result-flow boost-status-flow"><span /><span>Join</span><span>Boost</span><span>Slots</span></span>
                   </div>
                   <PaginatedList key={uniqid} items={dcordTokenResults} label="Token result pages">{(pageItems, pageStart) => (<>
                   {pageItems.map((item, pageIndex) => {
@@ -1555,22 +1554,16 @@ export default function OrderPage() {
                         <span className="public-token-result-title">
                           <strong>{item.token}</strong>
                           {humanizerState ? (
-                            <span className="public-token-humanizer-badge status-badge" data-state={humanizerState}>
-                              <Sparkles className={humanizerState === "running" ? "animate-pulse" : ""} aria-hidden="true" />
-                              {humanizerState === "success" ? "Humanized" : humanizerState === "partial" ? "Partial" : humanizerState === "running" ? "Humanizing" : humanizerState === "failed" ? "Failed" : "Waiting"}
-                            </span>
+                            <StatusField label="Humanizer" state={humanizerState} value={humanizerState === "success" ? "Humanized" : humanizerState === "partial" ? "Partial" : humanizerState === "running" ? "Humanizing" : humanizerState === "failed" ? "Failed" : "Waiting"} icon={<Sparkles className={humanizerState === "running" ? "animate-pulse" : ""} aria-hidden="true" />} />
                           ) : null}
                           {rejoinResult ? (
-                            <span className="public-token-humanizer-badge status-badge" data-state={rejoinResult.state} title={rejoinResult.message}>
-                              <LogIn className={rejoinResult.state === "running" ? "animate-pulse" : ""} aria-hidden="true" />
-                              {rejoinResult.state === "success" ? "Re-joined" : rejoinResult.state === "failed" ? "Re-join failed" : rejoinResult.state === "running" ? "Re-joining" : "Re-join waiting"}
-                            </span>
+                            <StatusField label="Re-join" state={rejoinResult.state} value={rejoinResult.state === "success" ? "Re-joined" : rejoinResult.state === "failed" ? "Failed" : rejoinResult.state === "running" ? "Re-joining" : "Waiting"} details={rejoinResult.message} icon={<LogIn className={rejoinResult.state === "running" ? "animate-pulse" : ""} aria-hidden="true" />} />
                           ) : null}
                         </span>
                         <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}{rejoinResult?.message ? ` · Re-join: ${rejoinResult.message}` : ""}</small>
                         {item.timing ? <small className="public-token-result-timing">{item.timing}</small> : null}
                       </span>
-                      <span className="public-token-result-flow">
+                      <span className="public-token-result-flow boost-status-flow">
                         <span className="public-token-result-action">
                           {item.state === "error" && item.replaceable && normalizedStatus !== "CANCELLED" ? (
                             <Button type="button" variant="ghost" size="xs" className="public-token-replace-button" onClick={() => void handleReplaceDcordToken(item.index)} disabled={replacingTokenIndex !== null || normalizedStatus === "PROCESS" || dcordReplaceQueue.length > 0}>
@@ -1578,8 +1571,8 @@ export default function OrderPage() {
                             </Button>
                           ) : null}
                         </span>
-                        <span className="public-token-result-pill status-badge" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                        <span className="public-token-result-pill status-badge" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                        <StatusField label="Join" state={item.joinStatus} value={item.joinStatus} icon={<LogIn aria-hidden="true" />} />
+                        <StatusField label="Boost" state={item.boostStatus} value={item.boostStatus} icon={<Rocket aria-hidden="true" />} />
                         <span className="public-token-result-slots">{item.slots}</span>
                       </span>
                     </div>

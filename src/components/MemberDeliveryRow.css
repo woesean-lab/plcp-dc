@@ -23,10 +23,6 @@
 .member-delivery-identity strong { color: var(--app-text); font-size: 12px; overflow-wrap: anywhere; }
 .member-delivery-identity time { color: var(--app-subtle); font-size: 10px; line-height: 1.4; text-align: left; }
 .member-delivery-statuses { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; min-width: 0; margin: 0; }
-.member-delivery-field dt { display: inline-flex; flex-shrink: 0; align-items: center; gap: 5px; opacity: .8; }
-.member-delivery-value { min-width: 0; margin: 0; }
-.member-delivery-value span { display: block; overflow: hidden; text-overflow: ellipsis; }
-.member-delivery-value span::first-letter { text-transform: uppercase; }
 .member-delivery-overview > .community-member-row-actions { justify-self: end; }
 .member-delivery-details-chevron { transition: transform .15s ease; }
 .member-delivery-overview [aria-expanded="true"] .member-delivery-details-chevron { transform: rotate(180deg); }

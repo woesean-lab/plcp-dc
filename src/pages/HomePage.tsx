@@ -2,7 +2,7 @@ import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import { StockWorkspace } from "../components/StockWorkspace";
-import { MembersStockBulkActions, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
+import { MembersStockBadges, MembersStockBulkActions, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -53,7 +53,6 @@ import {
   Rocket,
   RotateCcw,
   Search,
-  Server,
   Settings2,
   SlidersHorizontal,
   Shield,
@@ -346,21 +345,6 @@ function normalizeProxyDraft(value: string) {
         : part;
     })
     .join("");
-}
-
-function getCommunityRecordBadge(record: CommunityAdminStatus["recent"][number]) {
-  if (record.status === "failed") return { label: "Inactive", variant: "destructive" as const };
-  return { label: "Active", variant: "success" as const };
-}
-
-function getCommunityOnlinerBadge(record: CommunityAdminStatus["recent"][number]) {
-  switch (record.onlinerConnectionState) {
-    case "connected": return { label: "Live", state: "connected" as const };
-    case "connecting": return { label: "Starting", state: "connecting" as const };
-    case "reconnecting": return { label: "Retrying", state: "reconnecting" as const };
-    case "error": return { label: "Failed", state: "error" as const };
-    default: return { label: "Offline", state: "disconnected" as const };
-  }
 }
 
 const EMPTY_COMMUNITY_CONFIG_DRAFT = {
@@ -3282,33 +3266,11 @@ export default function HomePage() {
         {communityVisibleRecords.length ? <>
           <div className="members-stock-member-scroll" role="list" aria-label="Members">
             {visibleCommunityRecords.map(record => {
-              const badge = getCommunityRecordBadge(record);
-              const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
               const revealedToken = communityAccessTokens[record.id];
               const revealedAccountToken = communityAccountTokens[record.id];
               return <MembersStockRow key={record.id} record={record} selected={selectedCommunityMemberIds.includes(record.id)} onSelect={selected => setSelectedCommunityMemberIds(current => selected ? [...current, record.id] : current.filter(id => id !== record.id))}
                 open={expandedCommunityMemberId === record.id} onToggle={() => setExpandedCommunityMemberId(current => current === record.id ? null : record.id)}
-                badges={<>
-                  {onlinerBadge ? (
-                    <span className="community-onliner-chip status-badge" data-state={onlinerBadge.state} title={record.onlinerLastError ?? `Onliner ${onlinerBadge.label.toLowerCase()}`}>
-                      <RadioTower className="h-3 w-3" aria-hidden="true" />
-                      <span>Onliner</span><b>{onlinerBadge.label}</b>
-                    </span>
-                  ) : null}
-                  {record.onlinerConnected ? (
-                    <span className="community-rich-presence-chip status-badge" data-enabled={record.onlinerRichPresenceEnabled === true} title={`Rich Presence ${record.onlinerRichPresenceEnabled === true ? "enabled" : "disabled"}`}>
-                      <Star className="h-3 w-3" aria-hidden="true" />
-                      <span>Rich Presence</span>
-                      <b>{record.onlinerRichPresenceEnabled === true ? "On" : "Off"}</b>
-                    </span>
-                  ) : null}
-                  <span className="community-server-count-chip status-badge" title="Unique servers joined through delivered orders">
-                    <Server className="h-3 w-3" aria-hidden="true" />
-                    <b>{record.joinedServerCount ?? 0}</b>
-                    <span>{record.joinedServerCount === 1 ? "Server" : "Servers"}</span>
-                  </span>
-                  <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
-                </>} actions={<>
+                badges={<MembersStockBadges record={record} />} actions={<>
                   {record.onlinerConnected ? (
                     <Button
                       type="button"

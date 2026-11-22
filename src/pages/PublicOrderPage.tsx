@@ -3,9 +3,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { StatusField } from "../components/ui/status-field";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, LogOut, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
+import { Activity, Bot, CalendarDays, CircleHelp, Copy, ExternalLink, LogIn, LogOut, Pause, Play, RefreshCw, Rocket, RotateCcw, ShieldCheck, Star, Timer, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { extractBotInvite, extractBotInviteFromError } from "../lib/bot-invite";
 import { getServiceTitle, isBoostService } from "../lib/services";
@@ -1208,7 +1209,7 @@ export default function PublicOrderPage() {
                       <div className="public-token-results-head" aria-hidden="true">
                         <span />
                         <span>Token</span>
-                        <span className="public-token-result-flow">
+                        <span className="public-token-result-flow boost-status-flow">
                           <span />
                           <span>Join</span>
                           <span>Boost</span>
@@ -1226,7 +1227,7 @@ export default function PublicOrderPage() {
                               <small>{item.boostMessage || item.status}{item.proxy ? ` · Proxy: ${item.proxy}` : ""}</small>
                               {item.timing ? <small className="public-token-result-timing">{item.timing}</small> : null}
                             </span>
-                            <span className="public-token-result-flow">
+                            <span className="public-token-result-flow boost-status-flow">
                               <span className="public-token-result-action">
                                 {item.state === "error" && item.replaceable ? (
                                   <Button
@@ -1241,8 +1242,8 @@ export default function PublicOrderPage() {
                                   </Button>
                                 ) : null}
                               </span>
-                              <span className="public-token-result-pill status-badge" data-state={item.joinStatus.toLowerCase()}>{item.joinStatus}</span>
-                              <span className="public-token-result-pill status-badge" data-state={item.boostStatus.toLowerCase()}>{item.boostStatus}</span>
+                              <StatusField label="Join" state={item.joinStatus} value={item.joinStatus} icon={<LogIn aria-hidden="true" />} />
+                              <StatusField label="Boost" state={item.boostStatus} value={item.boostStatus} icon={<Rocket aria-hidden="true" />} />
                               <span className="public-token-result-slots">{item.slots}</span>
                             </span>
                           </div>
