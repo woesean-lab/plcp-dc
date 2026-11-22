@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, CircleHelp, Copy, ExternalLink, Gem, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
+import { ArrowLeft, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, type ButtonProps } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -15,6 +15,7 @@ import { OrderReactionOption } from "../components/OrderReactionOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
+import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
@@ -195,6 +196,23 @@ function ReactionOptionExample() {
   return <OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit} onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />;
 }
 
+function OrderSectionsExample() {
+  return <div className="lookup-order-sections">
+    <ReactionExample />
+    <MemberDeliveryPanel completed={25} total={25} status="COMPLETED" actions={<Button type="button" size="sm" variant="accentGhost" onClick={() => toast.success("Sample check previewed")}><ShieldCheck className="h-4 w-4" />Check members</Button>}>
+      <div className="community-order-result-list humanizer-results member-delivery-list"><MemberDeliveryAccordion>
+        <MemberDeliveryRow item={MEMBER_DELIVERY_SAMPLES[0]} formatTime={() => "Nov 20, 2026, 3:00 PM"} />
+      </MemberDeliveryAccordion></div>
+    </MemberDeliveryPanel>
+    <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server className="h-4 w-4" />}>
+      <div className="lookup-technical-grid"><div><span>Order ID</span><strong>sample-order</strong></div><div><span>Server ID</span><strong>123456789012345678</strong></div></div>
+    </OrderDetailDisclosure>
+    <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson className="h-4 w-4" />}>
+      <div className="payload-panel overflow-auto p-4"><pre>{JSON.stringify({ uniqid: "sample-order", status: "COMPLETED" }, null, 2)}</pre></div>
+    </OrderDetailDisclosure>
+  </div>;
+}
+
 function ReactionExample() {
   const [message, setMessage] = useState("");
   const [count, setCount] = useState(1);
@@ -296,6 +314,7 @@ export default function UiKitPage() {
           <Example title="Existing surface styles" source="src/index.css · app-panel / app-panel-soft / payload-panel" code={'<section className="app-panel">Main panel</section>\n<div className="app-panel-soft">Nested group</div>\n<pre className="payload-panel">Code or payload</pre>'}>
             <div className="ui-ref-grid">{["app-panel", "app-panel-soft", "payload-panel"].map((className) => <div className={`${className} ui-ref-surface`} key={className}><strong>{className}</strong><span className="ui-ref-hint">Existing console surface</span></div>)}</div>
           </Example>
+          <Example title="Order detail sections" source="src/components/OrderDetailDisclosure.tsx · lookup-order-sections" code={'<div className="lookup-order-sections">\n  {reactionPanel}\n  {memberDeliveryPanel}\n  <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server />}>{details}</OrderDetailDisclosure>\n  <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson />}>{payload}</OrderDetailDisclosure>\n</div>'}><OrderSectionsExample /></Example>
           <Example title="Shared Card component" source="src/components/ui/card.tsx" code={'<Card>\n  <CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader>\n  <CardContent><Badge variant="success">Ready</Badge></CardContent>\n</Card>'}>
             <Card><CardHeader><CardTitle>Members Stock</CardTitle><CardDescription>Available accounts</CardDescription></CardHeader><CardContent><Badge variant="success"><ShieldCheck className="h-3 w-3" />Ready</Badge></CardContent></Card>
           </Example>

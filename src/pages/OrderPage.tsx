@@ -19,6 +19,7 @@ import { OrderReactionSettingsDialog } from "../components/OrderReactionSettings
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
+import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import { getHumanizerPackages, startDcordOrderHumanizer, type HumanizerJob, type HumanizerPackage } from "../lib/humanizer";
 import { getServiceTitle } from "../lib/services";
@@ -1452,6 +1453,7 @@ export default function OrderPage() {
             ) : null}
           </div>
 
+          <div className={isCommunityProvider ? "lookup-order-sections" : undefined}>
           {isCommunityProvider && result.customerReactions?.canConfigure ? <div className="lookup-reaction-section">
             {result.customerReactions.enabled ? <CustomerOrderReactionPanel key={`reaction-panel:${result.uniqid}`} uniqid={result.uniqid} summary={result.customerReactions} access="admin" onEditSettings={() => setReactionSettingsOrder(result.uniqid)} onUpdate={(order) => setResult((current) => mergeOrderStatus(current, order))} />
               : <OrderReactionAccessCard key={`reaction-access:${result.uniqid}`} disabled={result.customerReactions.disabled} dailyLimit={result.customerReactions.dailyLimit} firstDayLimit={result.customerReactions.firstDayLimit} onManage={() => setReactionSettingsOrder(result.uniqid)} />}
@@ -1644,11 +1646,7 @@ export default function OrderPage() {
             </div>
           ) : null}
 
-          <details className="lookup-technical-details">
-            <summary>
-              <span><Server className="h-4 w-4" aria-hidden="true" /> Order &amp; server details</span>
-              <small>IDs and timestamps</small>
-            </summary>
+          <OrderDetailDisclosure title="Order & server details" kicker="Order information" icon={<Server className="h-4 w-4" />}>
             <div className="lookup-technical-grid">
               <div><span>Order ID</span><strong className="is-mono" title={result.uniqid}>{result.uniqid}</strong></div>
               <div><span>Server ID</span><strong className="is-mono" title={serverId || "-"}>{serverId || "-"}</strong></div>
@@ -1656,17 +1654,14 @@ export default function OrderPage() {
               <div><span>Order created</span><strong>{result.createdAt ? formatTime(result.createdAt) : result.created_at ? formatTime(result.created_at) : "-"}</strong></div>
               <div><span>Server created</span><strong>{formatTime(serverCreatedAt)}</strong></div>
             </div>
-          </details>
+          </OrderDetailDisclosure>
 
-          <details className="lookup-raw-payload">
-            <summary>
-              <span><FileJson className="h-4 w-4" aria-hidden="true" /> Raw order payload</span>
-              <small>JSON</small>
-            </summary>
+          <OrderDetailDisclosure title="Raw order payload" kicker="Order data" icon={<FileJson className="h-4 w-4" />}>
             <div className="payload-panel overflow-auto p-4">
               <pre className="m-0 whitespace-pre-wrap break-words text-[12px] leading-5 text-[var(--app-text-secondary)]">{formatJson(result)}</pre>
             </div>
-          </details>
+          </OrderDetailDisclosure>
+          </div>
         </article>
       ) : (
         <div className={`${shell} lookup-empty-state`}>
