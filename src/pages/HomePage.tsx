@@ -2,6 +2,7 @@ import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import { StockWorkspace } from "../components/StockWorkspace";
+import { MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -618,6 +619,7 @@ export default function HomePage() {
   const [communityServerFilter, setCommunityServerFilter] = useState<"all" | "zero" | "one" | "two" | "three" | "joined">("all");
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
+  const [communityStatusError, setCommunityStatusError] = useState("");
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -742,6 +744,8 @@ export default function HomePage() {
   const [autoLeavingOrderId, setAutoLeavingOrderId] = useState<string | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
+  const [expandedCommunityMemberId, setExpandedCommunityMemberId] = useState<string | null>(null);
+  const [communityImportOpen, setCommunityImportOpen] = useState(false);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
   const [communityBulkAction, setCommunityBulkAction] = useState<"top" | "up" | "down" | "bottom" | "delete" | "transfer" | "onliner_connect" | "onliner_disconnect" | null>(null);
   const [exportingCommunityTokens, setExportingCommunityTokens] = useState<"access" | "account" | null>(null);
@@ -1371,6 +1375,7 @@ export default function HomePage() {
   async function refreshCommunityStatus(categoryId = communityStockType) {
     const requestId = ++communityStatusRequestRef.current;
     try {
+      setCommunityStatusError("");
       setLoadingCommunityStatus(true);
       const nextStatus = await getCommunityAdminStatus(categoryId);
       if (requestId === communityStatusRequestRef.current) {
@@ -1379,7 +1384,11 @@ export default function HomePage() {
         setCommunityAccessTokens({});
       }
     } catch (error) {
-      if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Community join status could not be loaded.");
+      if (requestId === communityStatusRequestRef.current) {
+        const message = error instanceof Error ? error.message : "Members Stock could not be loaded.";
+        setCommunityStatusError(message);
+        notifyError(message);
+      }
     } finally {
       if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
     }
@@ -3097,170 +3106,62 @@ export default function HomePage() {
   const communityPagination = paginate(communityVisibleRecords, communityMemberPage, communityMemberPageSize);
   const visibleCommunityRecords = communityPagination.items;
   const zeroServerCommunityRecords = communityVisibleRecords.filter((record) => (record.joinedServerCount ?? 0) === 0);
-  const communityStockPanel = communityStockLoading ? (
-    <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
-      <div className="community-admin-heading">
-        <div className="flex min-w-0 items-center gap-3">
-          <Skeleton className="h-10 w-10 shrink-0" />
-          <div className="min-w-0">
-            <Skeleton className="h-3 w-24" />
-            <Skeleton className="mt-3 h-6 w-40 max-w-full" />
-          </div>
-        </div>
-        <Skeleton className="h-7 w-24" />
-      </div>
-      <div className="community-admin-progress members-connected-summary">
-        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
-        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
-        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
-        <div><Skeleton className="h-2.5 w-24" /><Skeleton className="mt-4 h-6 w-10" /></div>
-      </div>
-      <div className="community-recent-list">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index}>
-            <Skeleton className="h-[34px] w-[34px]" />
-            <span className="min-w-0"><Skeleton className="h-4 w-36 max-w-full" /><Skeleton className="mt-2 h-2.5 w-48 max-w-full" /></span>
-            <Skeleton className="h-6 w-20" />
-            <Skeleton className="h-8 w-8" />
-          </div>
-        ))}
-      </div>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Skeleton className="h-11 w-52" />
-        <Skeleton className="h-11 w-56" />
-        <Skeleton className="h-11 w-28" />
-      </div>
-    </section>
-  ) : (
-    <section className={`${shell} community-admin-panel offline-stock-panel p-5 sm:p-6`}>
-      <div className="community-admin-heading">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="stat-icon overflow-hidden" aria-hidden="true">
-            {communityStatus?.bot?.avatarUrl
-              ? <img className="h-full w-full object-cover" src={communityStatus.bot.avatarUrl} alt="" />
-              : <Bot className="h-4 w-4" />}
-          </span>
-          <div className="min-w-0">
-            <p className={labelClass}>Members stock</p>
-            <h2 className="app-title mt-1 truncate text-lg font-semibold">{communityStatus?.bot?.name ?? "Members Bot"}</h2>
-          </div>
-        </div>
-        <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge>
-      </div>
 
-      <div className="community-category-manager">
-        <div className="community-category-manager-heading">
-          <div><p className={labelClass}>Stock categories</p><h3>Choose a member pool</h3><span>Each category keeps its own inventory.</span></div>
-          <Button type="button" size="sm" disabled={!communityStockConfigured} onClick={beginCreatingCommunityCategory}><Plus className="h-4 w-4" /> New category</Button>
-        </div>
-        <div className="community-category-grid" role="tablist" aria-label="Members Stock category">
-          {communityCategories.map((category) => {
-            const selected = communityStockType === category.id;
-            const hasStock = category.summary.authorized + category.summary.failed > 0;
-            const CategoryIcon = getCommunityCategoryIcon(category.iconName);
-            return (
-              <article key={category.id} className={`community-category-card ${selected ? "is-active" : ""}`}>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  className="community-category-select"
-                  onClick={() => {
-                    setCommunityStockType(category.id);
-                    setSelectedCommunityMemberIds([]);
-                    setCommunityMemberPage(1);
-                    setCommunityAccessTokens({});
-                    setCommunityImportFile(null);
-                    if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-                    void refreshCommunityStatus(category.id);
-                  }}
-                >
-                  <span className="community-category-icon" aria-hidden="true"><CategoryIcon className="h-4 w-4" /></span>
-                  <span className="community-category-copy">
-                    <strong>{category.name}</strong>
-                    <small>
-                      <span>{category.summary.ready} available · {category.summary.authorized + category.summary.failed} total</span>
-                      {category.checkReplacementEnabled ? (
-                        <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled">
-                          <RefreshCw aria-hidden="true" />
-                        </span>
-                      ) : null}
-                      {(category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).map((method) => {
-                        const MethodIcon = method === "experimental_join" ? ListChecks : method === "directly" ? UserPlus : Bot;
-                        const methodLabel = method === "experimental_join" ? "Experimental Join" : method === "directly" ? "Directly" : "Create Invite";
-                        return (
-                          <span key={method} className="community-category-rule-indicator" title={`${methodLabel} active`} aria-label={`${methodLabel} active`}>
-                            <MethodIcon aria-hidden="true" />
-                          </span>
-                        );
-                      })}
-                    </small>
-                  </span>
-                  <Badge variant={category.isPeriodic ? "secondary" : "outline"}>{category.isPeriodic ? "Period based" : "No period"}</Badge>
-                </button>
-                <div className="community-category-actions">
-                  <Button type="button" variant="ghost" size="icon-sm" title={`Move existing ${category.name} orders`} aria-label={`Move existing ${category.name} orders`} disabled={communityCategories.length < 2 || savingCommunityCategory} onClick={() => setCommunityOrderTransferSource(category)}><ArrowRightLeft className="h-3.5 w-3.5" /></Button>
-                  <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
-                  <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="community-admin-progress members-connected-summary">
-        <div><span>Total users</span><strong>{communityTotalUsers}</strong></div>
-        <div><span>Available users</span><strong>{communityVisibleSummary.ready}</strong></div>
-        <div><span>Active users</span><strong>{communityVisibleSummary.authorized}</strong></div>
-        <div><span>Inactive users</span><strong>{communityVisibleSummary.failed}</strong></div>
-      </div>
-
-      {!communityStockConfigured ? (
-        <p className="community-admin-note">Members Stock bot is not configured.</p>
-      ) : null}
-
-      <form onSubmit={handleImportCommunityStock} className="community-stock-import">
-        <div className="community-stock-import-heading">
-          <span className="community-stock-import-icon" aria-hidden="true"><FileJson className="h-4 w-4" /></span>
-          <div><h3>Import OAuth stock</h3><p><strong>{communityVisibleCategory?.name ?? "Selected category"}</strong> · JSON up to 10 MB / 5,000 records</p></div>
-        </div>
-
-        <input
-          ref={communityImportInputRef}
-          id="community-oauth-stock-file"
-          className="sr-only"
-          type="file"
-          accept=".json,application/json"
-          disabled={!communityStockConfigured || importingCommunityStock}
-          onChange={(event) => setCommunityImportFile(event.target.files?.[0] ?? null)}
-        />
-
-        <div className="community-stock-import-actions">
-          {communityImportFile ? <span className="community-stock-import-file"><FileJson className="h-3.5 w-3.5" /><strong>{communityImportFile.name}</strong><small>{Math.max(0.1, communityImportFile.size / 1024).toFixed(1)} KB</small><button type="button" aria-label="Clear selected file" onClick={() => { setCommunityImportFile(null); if (communityImportInputRef.current) communityImportInputRef.current.value = ""; }}><X className="h-3 w-3" /></button></span> : null}
-          <Button type="button" variant="secondary" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => communityImportInputRef.current?.click()}>
-            <FileJson className="h-4 w-4" /> {communityImportFile ? "Change JSON" : "Choose JSON"}
-          </Button>
-          <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
-            {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-            {importingCommunityStock && communityImportProgress
-              ? `Importing ${communityImportProgress.processed}/${communityImportProgress.total}`
-              : importingCommunityStock ? "Validating & importing..." : "Import stock"}
-          </Button>
-          <Button type="button" variant="secondary" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
+  const communityStockPanel = communityStockLoading ? <MembersStockSkeleton /> : (
+    <div className="members-stock-workspace">
+      <header className="members-stock-heading">
+        <div className="members-stock-heading-identity"><span className="monitor-panel-icon" aria-hidden="true">{communityStatus?.bot?.avatarUrl ? <img className="h-full w-full object-cover" src={communityStatus.bot.avatarUrl} alt="" /> : <Users className="h-4 w-4" />}</span><div><h2>Members Stock</h2><p title={communityStatus?.bot?.name}>{communityStatus?.bot?.name ?? "Discord accounts"}</p></div><Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge></div>
+        <div className="members-stock-heading-actions">
+          <Button type="button" variant="secondary" size="sm" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => setCommunityImportOpen(true)}><UploadCloud className="h-3.5 w-3.5" />Import stock</Button>
+          <Button type="button" variant="ghost" size="sm" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
-          <span className="community-stock-add-account-action">
-            <Button type="button" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}>
+          <Button type="button" size="sm" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}>
               <UserPlus className="h-4 w-4" /> Add account
             </Button>
-          </span>
         </div>
-      </form>
-
-      <div className="community-member-toolbar">
-        <div className="community-member-toolbar-filters">
+      </header>
+      <section className="members-stock-pools" aria-label="Member pools">
+        <div className="members-stock-section-heading"><h3>Member pools<span>{communityCategories.length}</span></h3><Button type="button" size="sm" variant="accentGhost" disabled={!communityStockConfigured} onClick={beginCreatingCommunityCategory}><Plus className="h-3.5 w-3.5" />New category</Button></div>
+        <div className="members-stock-categories">
+          {communityCategories.map(category => {
+            const hasStock = category.summary.authorized + category.summary.failed > 0;
+            const CategoryIcon = getCommunityCategoryIcon(category.iconName);
+            return <MembersStockCategory key={category.id} category={category} selected={communityStockType === category.id} icon={<CategoryIcon className="h-4 w-4" />} onSelect={() => {
+              setCommunityStockType(category.id); setSelectedCommunityMemberIds([]); setExpandedCommunityMemberId(null);
+              setCommunityMemberPage(1); setCommunityAccessTokens({}); setCommunityImportFile(null);
+              if (communityImportInputRef.current) communityImportInputRef.current.value = "";
+              void refreshCommunityStatus(category.id);
+            }} indicators={<>
+              {category.checkReplacementEnabled ? <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled"><RefreshCw aria-hidden="true" /></span> : null}
+              {(category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).map(method => {
+                const MethodIcon = method === "experimental_join" ? ListChecks : method === "directly" ? UserPlus : Bot;
+                const methodLabel = method === "experimental_join" ? "Experimental Join" : method === "directly" ? "Directly" : "Create Invite";
+                return <span key={method} className="community-category-rule-indicator" title={methodLabel + " active"} aria-label={methodLabel + " active"}><MethodIcon aria-hidden="true" /></span>;
+              })}
+            </>} actions={<>                  <Button type="button" variant="ghost" size="icon-sm" title={`Move existing ${category.name} orders`} aria-label={`Move existing ${category.name} orders`} disabled={communityCategories.length < 2 || savingCommunityCategory} onClick={() => setCommunityOrderTransferSource(category)}><ArrowRightLeft className="h-3.5 w-3.5" /></Button>
+                  <Button type="button" variant="ghost" size="icon-sm" title={`Edit ${category.name}`} onClick={() => beginEditingCommunityCategory(category)}><Settings2 className="h-3.5 w-3.5" /></Button>
+                  <Button type="button" variant="dangerGhost" size="icon-sm" title={hasStock ? "Empty this category before deleting it" : `Delete ${category.name}`} disabled={hasStock || savingCommunityCategory} onClick={() => setCommunityCategoryPendingDeletion(category)}><Trash2 className="h-3.5 w-3.5" /></Button>
+</>} />;
+          })}
+        </div>
+      </section>
+      <MembersStockSummary total={communityTotalUsers} available={communityVisibleSummary.ready} active={communityVisibleSummary.authorized} inactive={communityVisibleSummary.failed} />
+      {communityStatusError ? <div className="app-panel-soft members-stock-load-error" role="alert"><span>{communityStatusError}</span><Button type="button" size="sm" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>Retry</Button></div> : !communityStockConfigured ? <div className="app-panel-soft members-stock-setup"><TriangleAlert className="h-4 w-4" />Members Stock bot is not configured.</div> : null}
+      <section className="app-panel members-stock-list" aria-label="Stock members">
+        <header className="members-stock-list-heading"><h3>{communityVisibleCategory?.name ?? "Stock"} members<Badge variant="secondary">{communityCategoryRecords.length.toLocaleString("en-US")}</Badge></h3><div><Button type="button" variant="secondary" size="xs"
+            disabled={!zeroServerCommunityRecords.length || communityBulkAction !== null}
+            title="Select all members with 0 servers matching the current filters, including unloaded rows"
+            onClick={() => setSelectedCommunityMemberIds(zeroServerCommunityRecords.map((record) => record.id))}>
+            <ListChecks className="h-3.5 w-3.5" />Select 0 servers ({zeroServerCommunityRecords.length})
+          </Button><Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || communityStatus?.syncing || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}>
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus || communityStatus?.syncing ? "animate-spin" : ""}`} />
+              {communityStatus?.syncing && communityStatus.syncProgress
+                ? `Refreshing ${communityStatus.syncProgress.checked}/${communityStatus.syncProgress.total}`
+                : "Refresh"}
+            </Button></div></header>
+        <div className="members-stock-filters">
           <label className="community-member-search">
             <Search className="h-3.5 w-3.5" aria-hidden="true" />
             <Input value={communityMemberSearch} placeholder="Search username, name or ID..." aria-label="Search stock members by username, display name or ID" onChange={(event) => {
@@ -3325,8 +3226,7 @@ export default function HomePage() {
           />
 
         </div>
-          <div className="community-member-priority-actions">
-          <label className="community-member-select-all">
+        <div className="members-stock-selection"><label className="community-member-select-all">
             <input
               type="checkbox"
               aria-label="Select all filtered members"
@@ -3336,14 +3236,9 @@ export default function HomePage() {
               onChange={(event) => setSelectedCommunityMemberIds(event.target.checked ? communityVisibleRecords.map((record) => record.id) : [])}
             />
             <span>{selectedCommunityMemberIds.length ? `${selectedCommunityMemberIds.length} selected` : `Select all · ${communityVisibleRecords.length}`}</span>
-          </label>
-          <Button type="button" variant="secondary" size="xs"
-            disabled={!zeroServerCommunityRecords.length || communityBulkAction !== null}
-            title="Select all members with 0 servers matching the current filters, including unloaded rows"
-            onClick={() => setSelectedCommunityMemberIds(zeroServerCommunityRecords.map((record) => record.id))}>
-            <ListChecks className="h-3.5 w-3.5" />Select 0 servers ({zeroServerCommunityRecords.length})
-          </Button>
-            <Button type="button" variant="secondary" size="sm"
+          </label><span>{!selectedCommunityMemberIds.length ? communityVisibleRecords.length.toLocaleString("en-US") + " matching members" : null}{selectedCommunityMemberIds.length ? <Button type="button" size="xs" variant="ghost" disabled={communityBulkAction !== null} onClick={() => setSelectedCommunityMemberIds([])}>Clear</Button> : null}</span></div>
+        {selectedCommunityMemberIds.length > 0 ? <div className="members-stock-bulk" role="region" aria-label="Selected member actions">
+          <div className="members-stock-bulk-main">            <Button type="button" variant="secondary" size="sm"
               title="Connect selected accounts to Onliner using their saved tokens"
               disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || communityOnlinerActionId !== null || communityRichPresenceActionId !== null}
               onClick={beginConnectingSelectedCommunityMembers}>
@@ -3357,109 +3252,36 @@ export default function HomePage() {
               {communityBulkAction === "onliner_disconnect" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Power className="h-3.5 w-3.5" />}
               {communityBulkAction === "onliner_disconnect" ? "Disconnecting..." : "Disconnect selected"}
             </Button>
-            <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
-              {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
-            </Button>
-            <Button type="button" variant="secondary" size="sm" title="Download selected user tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("account")}>
-              {exportingCommunityTokens === "account" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} User tokens
-            </Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
-            <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
             <div className="community-member-transfer-actions">
-              <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
+              <FilterDropdown label="Transfer destination" showLabel={false} className="community-member-filter community-member-transfer-picker" value={communityTransferCategoryId} options={communityCategories.filter((category) => category.id !== communityStockType).map((category) => ({ value: category.id, label: `To: ${category.name}` }))} onChange={setCommunityTransferCategoryId} disabled={!communityCategories.some((category) => category.id !== communityStockType) || communityBulkAction !== null} />
               <Button type="button" variant="secondary" size="sm" disabled={!selectedCommunityMemberIds.length || !communityTransferCategoryId || communityBulkAction !== null} onClick={() => void transferSelectedCommunityMembers()}>
                 {communityBulkAction === "transfer" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}
                 {communityBulkAction === "transfer" ? "Transferring..." : "Transfer"}
               </Button>
             </div>
-            <Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button>
-            <Button type="button" variant="secondary" size="sm" disabled={loadingCommunityStatus || communityStatus?.syncing || !communityStockConfigured || communityBulkAction !== null} onClick={() => void refreshCommunityStock()}>
-              <RefreshCw className={`h-3.5 w-3.5 ${loadingCommunityStatus || communityStatus?.syncing ? "animate-spin" : ""}`} />
-              {communityStatus?.syncing && communityStatus.syncProgress
-                ? `Refreshing ${communityStatus.syncProgress.checked}/${communityStatus.syncProgress.total}`
-                : "Refresh"}
+<Button type="button" variant="dangerGhost" size="sm" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => setCommunityBulkDeleteOpen(true)}><Trash2 className="h-3.5 w-3.5" /> Delete selected</Button></div>
+          <details className="members-stock-bulk-more"><Button asChild size="xs" variant="ghost"><summary>More actions<ChevronDown className="h-3.5 w-3.5" /></summary></Button><div className="members-stock-bulk-extra"><div><span className="members-stock-bulk-extra-label">Export selected tokens</span>            <Button type="button" variant="secondary" size="sm" title="Download selected access tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("access")}>
+              {exportingCommunityTokens === "access" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Access tokens
             </Button>
-          </div>
-        </div>
-
-      {communityVisibleRecords.length ? (
-        <div className="community-recent-scroll">
-          <div className="community-recent-list">
-          {visibleCommunityRecords.map((record, index) => {
-            const badge = getCommunityRecordBadge(record);
-            const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
-            const revealedToken = communityAccessTokens[record.id];
-            const revealedAccountToken = communityAccountTokens[record.id];
-            return (
-              <div key={record.id || `${record.username}-${record.authorizedAt}-${index}`} data-state={record.status}>
-                <input
-                  className="community-member-checkbox"
-                  type="checkbox"
-                  checked={selectedCommunityMemberIds.includes(record.id)}
-                  onChange={(event) => setSelectedCommunityMemberIds((current) => event.target.checked ? [...current, record.id] : current.filter((id) => id !== record.id))}
-                  aria-label={`Select ${record.username}`}
-                />
-                <span className="community-recent-avatar" aria-hidden="true">
-                  {record.avatarUrl ? <img src={record.avatarUrl} alt="" /> : <Users className="h-3.5 w-3.5" />}
-                </span>
-                <span className="min-w-0">
-                  <strong>{record.displayName || record.username}</strong>
-                  <small>{record.displayName
-                    ? `@${record.username} · ${record.details || new Date(record.authorizedAt).toLocaleString()}`
-                    : record.details || new Date(record.authorizedAt).toLocaleString()}</small>
-                  {record.onlinerConnected && record.onlinerLastError ? (
-                    <span className="community-member-onliner-error" title={record.onlinerLastError}>
-                      <TriangleAlert className="h-3 w-3" aria-hidden="true" />
-                      <span>{record.onlinerLastError}</span>
-                    </span>
-                  ) : null}
-                  <span className="community-member-access-token" data-visible={Boolean(revealedToken)}>
-                    <KeyRound className="h-3 w-3" aria-hidden="true" />
-                    <code title={revealedToken?.accessToken}>{revealedToken?.accessToken ?? "Access token hidden"}</code>
-                    {revealedToken?.expiresAt ? <time dateTime={revealedToken.expiresAt}>{new Date(revealedToken.expiresAt).toLocaleString()}</time> : null}
-                    <button
-                      type="button"
-                      title={revealedToken ? "Hide access token" : "Show access token"}
-                      aria-label={`${revealedToken ? "Hide" : "Show"} ${record.username} access token`}
-                      disabled={loadingCommunityAccessTokenId !== null}
-                      onClick={() => void toggleCommunityAccessToken(record)}
-                    >
-                      {loadingCommunityAccessTokenId === record.id
-                        ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
-                        : revealedToken ? <EyeOff className="h-3 w-3" aria-hidden="true" /> : <Eye className="h-3 w-3" aria-hidden="true" />}
-                    </button>
-                    {revealedToken ? (
-                      <button type="button" title="Copy access token" aria-label={`Copy ${record.username} access token`} onClick={() => void copyCommunityAccessToken(record)}>
-                        <Copy className="h-3 w-3" aria-hidden="true" />
-                      </button>
-                    ) : null}
-                  </span>
-                  {record.hasStoredAccountToken ? (
-                    <span className="community-member-access-token" data-visible={Boolean(revealedAccountToken)}>
-                      <Shield className="h-3 w-3" aria-hidden="true" />
-                      <code title={revealedAccountToken}>{revealedAccountToken ?? "User token hidden"}</code>
-                      <button
-                        type="button"
-                        title={revealedAccountToken ? "Hide user token" : "Show user token"}
-                        aria-label={`${revealedAccountToken ? "Hide" : "Show"} ${record.username} user token`}
-                        disabled={loadingCommunityAccountTokenId !== null}
-                        onClick={() => void toggleCommunityAccountToken(record)}
-                      >
-                        {loadingCommunityAccountTokenId === record.id
-                          ? <LoaderCircle className="h-3 w-3 animate-spin" aria-hidden="true" />
-                          : revealedAccountToken ? <EyeOff className="h-3 w-3" aria-hidden="true" /> : <Eye className="h-3 w-3" aria-hidden="true" />}
-                      </button>
-                      {revealedAccountToken ? (
-                        <button type="button" title="Copy user token" aria-label={`Copy ${record.username} user token`} onClick={() => void copyCommunityAccountToken(record)}>
-                          <Copy className="h-3 w-3" aria-hidden="true" />
-                        </button>
-                      ) : null}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="community-member-state-badges">
+            <Button type="button" variant="secondary" size="sm" title="Download selected user tokens as TXT" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null || exportingCommunityTokens !== null} onClick={() => void exportSelectedCommunityTokens("account")}>
+              {exportingCommunityTokens === "account" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} User tokens
+            </Button>
+</div><div><span className="members-stock-bulk-extra-label">Order selected members</span>            <Button type="button" variant="secondary" size="xs" title="Move selected to top" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("top")}><ChevronsUp className="h-3.5 w-3.5" /> Top</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected up" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("up")}><ChevronUp className="h-3.5 w-3.5" /> Up</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected down" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("down")}><ChevronDown className="h-3.5 w-3.5" /> Down</Button>
+            <Button type="button" variant="secondary" size="xs" title="Move selected to bottom" disabled={!selectedCommunityMemberIds.length || communityBulkAction !== null} onClick={() => void reorderSelectedCommunityMembers("bottom")}><ChevronsDown className="h-3.5 w-3.5" /> Bottom</Button>
+</div></div></details>
+        </div> : null}
+        {communityVisibleRecords.length ? <>
+          <div className="members-stock-member-scroll" role="list" aria-label="Members">
+            {visibleCommunityRecords.map(record => {
+              const badge = getCommunityRecordBadge(record);
+              const onlinerBadge = record.onlinerConnected ? getCommunityOnlinerBadge(record) : null;
+              const revealedToken = communityAccessTokens[record.id];
+              const revealedAccountToken = communityAccountTokens[record.id];
+              return <MembersStockRow key={record.id} record={record} selected={selectedCommunityMemberIds.includes(record.id)} onSelect={selected => setSelectedCommunityMemberIds(current => selected ? [...current, record.id] : current.filter(id => id !== record.id))}
+                open={expandedCommunityMemberId === record.id} onToggle={() => setExpandedCommunityMemberId(current => current === record.id ? null : record.id)}
+                badges={<>
                   {onlinerBadge ? (
                     <span className="community-onliner-chip status-badge" data-state={onlinerBadge.state} title={record.onlinerLastError ?? `Onliner ${onlinerBadge.label.toLowerCase()}`}>
                       <RadioTower className="h-3 w-3" aria-hidden="true" />
@@ -3479,8 +3301,7 @@ export default function HomePage() {
                     <span>{record.joinedServerCount === 1 ? "Server" : "Servers"}</span>
                   </span>
                   <Badge className="community-member-auth-state" variant={badge.variant}>{badge.label}</Badge>
-                </span>
-                <span className="community-member-row-actions">
+                </>} actions={<>
                   {record.onlinerConnected ? (
                     <Button
                       type="button"
@@ -3523,24 +3344,45 @@ export default function HomePage() {
                       ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
                       : <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />}
                   </Button>
-                </span>
-              </div>
-            );
-          })}
+                </>}>
+                <p>Account ID · {record.id}</p>
+                <p>Authorized · {new Date(record.authorizedAt).toLocaleString()}</p>
+                {record.details ? <p>{record.details}</p> : null}
+                {record.onlinerConnected && record.onlinerLastError ? <div className="community-member-onliner-error"><TriangleAlert className="h-3.5 w-3.5" /><span>{record.onlinerLastError}</span></div> : null}
+                <div className="members-stock-secrets">
+                  <MembersStockSecret label="Access token" username={record.username} value={revealedToken?.accessToken} expiresAt={revealedToken?.expiresAt} busy={loadingCommunityAccessTokenId === record.id} disabled={loadingCommunityAccessTokenId !== null} onToggle={() => void toggleCommunityAccessToken(record)} onCopy={() => void copyCommunityAccessToken(record)} />
+                  {record.hasStoredAccountToken ? <MembersStockSecret label="User token" username={record.username} value={revealedAccountToken} busy={loadingCommunityAccountTokenId === record.id} disabled={loadingCommunityAccountTokenId !== null} onToggle={() => void toggleCommunityAccountToken(record)} onCopy={() => void copyCommunityAccountToken(record)} /> : null}
+                </div>
+              </MembersStockRow>;
+            })}
           </div>
-          <ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" />
-        </div>
-      ) : communityStatus?.configured ? (
-        communityCategoryRecords.length ? (
-          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No matching members</strong><span>Change the search or filters to see accounts in this category.</span></div>
-        ) : (
-          <div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No {communityVisibleCategory?.name ?? "category"} members yet</strong><span>Choose this category above, then import its OAuth JSON file.</span></div>
-        )
-      ) : null}
+          <div className="members-stock-list-footer"><ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" /></div>
+        </> : <div className="stock-empty-state"><Users className="h-6 w-6" /><strong>{communityCategoryRecords.length ? "No matching members" : "No members in this pool"}</strong><span>{communityCategoryRecords.length ? "No members match the selected filters." : communityVisibleCategory?.name ?? "Members Stock"}</span></div>}
+      </section>
+      {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import">        <input
+          ref={communityImportInputRef}
+          id="community-oauth-stock-file"
+          className="sr-only"
+          type="file"
+          accept=".json,application/json"
+          disabled={!communityStockConfigured || importingCommunityStock}
+          onChange={(event) => setCommunityImportFile(event.target.files?.[0] ?? null)}
+        />
 
-    </section>
+        <div className="community-stock-import-actions">
+          {communityImportFile ? <span className="community-stock-import-file"><FileJson className="h-3.5 w-3.5" /><strong>{communityImportFile.name}</strong><small>{Math.max(0.1, communityImportFile.size / 1024).toFixed(1)} KB</small><button type="button" aria-label="Clear selected file" onClick={() => { setCommunityImportFile(null); if (communityImportInputRef.current) communityImportInputRef.current.value = ""; }}><X className="h-3 w-3" /></button></span> : null}
+          <Button autoFocus type="button" variant="secondary" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => communityImportInputRef.current?.click()}>
+            <FileJson className="h-4 w-4" /> {communityImportFile ? "Change JSON" : "Choose JSON"}
+          </Button>
+          <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
+            {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+            {importingCommunityStock && communityImportProgress
+              ? `Importing ${communityImportProgress.processed}/${communityImportProgress.total}`
+              : importingCommunityStock ? "Validating & importing..." : "Import stock"}
+          </Button>
+</div></form></MembersStockImportDialog> : null}
+    </div>
   );
-
   const showManageSkeleton = refreshingManage && !orders.length;
   const waitingForInitialOnlinerData = activeTab === "onliner" && (
     !onlinerSnapshot ||
