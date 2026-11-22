@@ -10155,11 +10155,11 @@
 
 @media (max-width:520px) {
   .community-member-filter { width: min(190px, 58vw); }
-  .boost-proxy-toggle {
+  .boost-proxy-toggle:not(.community-reaction-option) {
     grid-template-columns: 16px 34px minmax(0, 1fr);
   }
 
-  .boost-proxy-toggle small {
+  .boost-proxy-toggle > small {
     grid-column: 3;
     white-space: normal;
   }

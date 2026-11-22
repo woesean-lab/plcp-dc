@@ -31,6 +31,9 @@
 
 .od-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 .od-metrics > button { display: grid; align-content: start; gap: 9px; min-width: 0; border: 1px solid var(--od-line); border-radius: 13px; padding: 17px 19px; color: var(--od-text); text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+/* Keep scrolling metric cards on their own rounded surface, without sampling
+   moving backdrop layers from the page behind them. */
+.od-metrics > button.app-panel { isolation: isolate; overflow: hidden; -webkit-backdrop-filter: none; backdrop-filter: none; }
 .od-metrics > button:hover { border-color: var(--app-accent-border); background: var(--od-raised); }
 .od-metrics > button[aria-pressed="true"] { border-color: var(--app-accent-border); background: linear-gradient(145deg, var(--app-accent-soft), var(--app-surface)); }
 .od-metric-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--app-text-secondary); font-size: 12px; font-weight: 500; }

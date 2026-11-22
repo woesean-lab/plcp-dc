@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, Layers3, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, type ButtonProps } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -202,6 +202,18 @@ function ReactionOptionExample() {
   return <OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit} onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />;
 }
 
+function OrderOverviewExample() {
+  const [selected, setSelected] = useState("total");
+  return <div className="orderdesk"><div className="od-metrics" aria-label="Sample order overview">{[
+    { key: "total", title: "All orders", count: "3,359", detail: "Your complete order history", Icon: Layers3 },
+    { key: "live", title: "In progress", count: "15", detail: "Deliveries currently running", Icon: RefreshCw },
+    { key: "soon", title: "Expiring soon", count: "24", detail: "Support ends in the next 7 days", Icon: Timer },
+    { key: "expired", title: "Expired", count: "120", detail: "Orders with ended support", Icon: CheckCircle2 }
+  ].map(({ key, title, count, detail, Icon }) => <button key={key} type="button" className="app-panel" data-kind={key} aria-pressed={selected === key} onClick={() => setSelected(key)}>
+    <span className="od-metric-title">{title}<Icon /></span><strong>{count}</strong><span className="od-metric-detail">{detail}<ArrowUpRight /></span>
+  </button>)}</div></div>;
+}
+
 function OrderSectionsExample() {
   return <div className="grid min-w-0 gap-4"><OrderDetailsLayout standaloneSections overview={
     <header className="lookup-workspace-header"><div className="lookup-order-identity"><span className="lookup-provider-mark" aria-hidden="true"><Server className="h-4 w-4" /></span><h2>Order overview</h2></div></header>
@@ -326,6 +338,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">
+          <Example title="Orders overview cards" source="src/components/OrdersWorkspace.tsx · OrdersWorkspace.css" code={'<div className="orderdesk"><div className="od-metrics">\n  <button className="app-panel" aria-pressed={selected}>\n    <span className="od-metric-title">All orders<Layers3 /></span>\n    <strong>3,359</strong>\n    <span className="od-metric-detail">Your complete order history<ArrowUpRight /></span>\n  </button>\n</div></div>\n// Metric cards isolate their rounded surfaces and do not blur the scrolling backdrop.'}><OrderOverviewExample /></Example>
           <Example title="Existing surface styles" source="src/index.css · app-panel / app-panel-soft / payload-panel" code={'<section className="app-panel">Main panel</section>\n<div className="app-panel-soft">Nested group</div>\n<pre className="payload-panel">Code or payload</pre>'}>
             <div className="ui-ref-grid">{["app-panel", "app-panel-soft", "payload-panel"].map((className) => <div className={`${className} ui-ref-surface`} key={className}><strong>{className}</strong><span className="ui-ref-hint">Existing console surface</span></div>)}</div>
           </Example>
