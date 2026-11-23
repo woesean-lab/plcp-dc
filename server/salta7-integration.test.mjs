@@ -19,7 +19,7 @@ function createRoute() {
     createDcordOrderId:()=>"boost-test",reserveDcordProxies:async count=>{proxyReservations.push(count);return ["proxy1","proxy2"]},
     saveDcordOrderTokens:async()=>{},saveDcordOrderProxies:async()=>{},saveTrackedOrderPayload:async order=>saved.push(structuredClone(order)),
     processDcordBoostOrder:async (...args)=>processing.push(args),summarizeBoostTokenStock:value=>value,redactToken:value=>value,console,
-    rotatingBoostStock:{reserveForDelivery:async()=>({tokens:["rotating-token"],proxies:["rotating-proxy"]})}
+    rotatingBoostStock:{reserveForDelivery:async()=>({tokens:["rotating-token"],proxies:[]})}
   };
   vm.runInNewContext(fn("createQueuedDcordResult")+"\n"+route("/api/dcord/boost-orders"),scope);
   return {run:async(body)=>{const res=response();await handler({body:{id:"invite",amount:4,duration:1,...body}},res,error=>{throw error});return res},saved,processing,proxyReservations,get remaining(){return remaining}};
@@ -103,4 +103,13 @@ test("Salta7 Re-join persists accepted job IDs and resumes them without submitti
   assert.equal(calls[0].boostProvider,"salta7");assert.equal(calls[0].boost,false);
   const final=jobs.at(-1);assert.equal(final.results[0].dcordTaskId,"rejoin-job");
   await scope.run({...base,serverInvite:"invite",useProxy:false,dcordRejoinJob:final},["token"],[]);assert.equal(calls[1].existingTaskId,"rejoin-job");
+});
+
+
+test("Rotating creation reserves no delivery proxies with either boost provider", async () => {
+  for (const boostProvider of ["salta7", "dcord"]) {
+    const api = createRoute(); await api.run({ boostProvider, boostStockPool: "rotating", amount: 2 });
+    assert.equal(api.saved[0].useProxy, false); assert.equal(api.proxyReservations.length, 0);
+    assert.deepEqual(Array.from(api.processing[0][1]), ["rotating-token"]);
+  }
 });

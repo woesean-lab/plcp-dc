@@ -159,7 +159,6 @@ import {
 } from "../lib/integration";
 import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUsedToken, CommunityJoinMethod, CreateOrderPayload, OrderStatusResponse, ServiceType, TrackedOrder, RotatingBoostAccount } from "../types";
 import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
-import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostServiceField } from "../components/BoostServiceField";
@@ -3012,7 +3011,7 @@ export default function HomePage() {
       isEldoradoSale: payload.isEldoradoSale,
       duration: payloadIsBoost ? payload.duration : undefined,
       boostStockPool: payloadIsBoost ? payload.boostStockPool : undefined,
-      useProxy: payloadIsBoost ? payload.boostProvider !== "salta7" : undefined,
+      useProxy: payloadIsBoost ? payload.boostProvider !== "salta7" && payload.boostStockPool !== "rotating" : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
       botInvite: created.bot_invite,
@@ -3060,7 +3059,7 @@ export default function HomePage() {
       duration: selectedIsBoost ? form.duration : undefined,
       boostStockPool: selectedIsBoost ? form.boostStockPool : undefined,
       boostProvider: selectedIsBoost ? form.boostProvider : undefined,
-      useProxy: selectedIsBoost ? form.boostProvider !== "salta7" : undefined,
+      useProxy: selectedIsBoost ? form.boostProvider !== "salta7" && form.boostStockPool !== "rotating" : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
       categoryAllocations: selectedIsCommunity && form.communityMultiCategory ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
@@ -3777,7 +3776,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
-                        <BoostServiceField value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} />
+                        <BoostServiceField useProxy={form.boostStockPool !== "rotating"} value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} />
                         <div className="boost-order-grid">
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Boosts</span>
@@ -3843,7 +3842,7 @@ export default function HomePage() {
                             />
                           </label>
 
-                          {form.boostProvider !== "salta7" ? <label className="boost-proxy-toggle is-enabled">
+                          {form.boostProvider !== "salta7" && form.boostStockPool !== "rotating" ? <label className="boost-proxy-toggle is-enabled">
                             <input
                               type="checkbox"
                               checked
@@ -4302,7 +4301,6 @@ export default function HomePage() {
                 </div>
               ) : null}
             </section>
-            {stockView === "rotating" || stockView === "rotating_used" ? <div className={`${shell} boost-proxy-section`}><RotatingProxyPoolPanel accounts={rotatingAccounts} onChange={() => { void refreshRotatingStock(); }} /></div> : null}
             {stockView !== "rotating" && stockView !== "rotating_used" ? <details className={`${shell} dcord-proxy-panel boost-routing-details`}>
               <summary><span><Globe2 className="h-4 w-4" /> Delivery routing <Badge variant="secondary">{dcordProxyCount} proxies</Badge></span><ChevronDown className="h-4 w-4" /></summary>
               <ProxyRoutingEditor kicker="Dcord routing" title="One-time proxies"
@@ -5161,7 +5159,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.boostStockPool === "rotating" ? "Rotating stock · 30 days" : `${orderConfirmationPayload.duration} month`}</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><Bot className="h-3.5 w-3.5" />{orderConfirmationPayload.boostProvider === "salta7" ? "Salta7" : "Dcord"}</span> : null}
-                  {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
+                  {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}

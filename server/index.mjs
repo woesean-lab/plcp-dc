@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { createAdminAuth } from "./admin-auth.mjs";
 import { createSalta7Client } from "./salta7.mjs";
+import { createRotatingTokenChecker } from "./rotating-token-check.mjs";
 import { diagnoseGuildJoinFailure, discordFailureDetails } from "./discord-join-diagnostics.mjs";
 import https from "node:https";
 import path from "node:path";
@@ -17,7 +18,7 @@ import pg from "pg";
 import { SocksProxyAgent } from "socks-proxy-agent";
 import WebSocket from "ws";
 import { createRotatingBoostStock } from "./rotating-boost-stock.mjs";
-import { attachRotatingOnliner, createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
+import { createRotatingBoostOnliner } from "./rotating-boost-onliner.mjs";
 import { planCommunityOnlinerDisconnect } from "./community-onliner-disconnect.mjs";
 import { canPublicLeaveAll, claimPublicLeaveAll, communityLeaveRunning, hideCommunityLeaveInformation, publicLeaveAllAllowedByCategories } from "./public-community-leave.mjs";
 import { convertOnlinerProxyImport, mergeOnlinerProxyImports } from "../shared/onliner-proxy-import.mjs";
@@ -5331,7 +5332,7 @@ async function revealDcordOrderTokens(order) {
   if (!order || typeof order !== "object" || Array.isArray(order) || !Array.isArray(order.dcordResults)) return order;
 
   const assignedTokens = await loadDcordOrderTokens(order.uniqid);
-  const assignedProxies = order.useProxy === true ? await loadDcordOrderProxies(order.uniqid) : [];
+  const assignedProxies = order.boostStockPool !== "rotating" && order.useProxy === true ? await loadDcordOrderProxies(order.uniqid) : [];
   const returnedIndexes = order.dcordResults.flatMap((result, index) =>
     String(result?.status ?? "").trim().toLowerCase() === "returned" ? [index] : []
   );
@@ -5499,20 +5500,13 @@ const rotatingBoostStock = createRotatingBoostStock({
   pool,
   encrypt: encryptCredential,
   decrypt: decryptCredential,
-  normalizeProxy: (proxy) => normalizeDiscordOnlinerProxyUrl(normalizeDcordProxyForDcord(proxy)),
-  loadOrderAssignment: async (orderId, client) => {
-    const keys = [getDcordOrderTokensSettingKey(orderId), getDcordOrderProxiesSettingKey(orderId)];
-    const values = await Promise.all(keys.map(async (key) => {
-      const result = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1", [key]);
-      return result.rows[0] ? JSON.parse(decryptCredential(result.rows[0].encrypted_value)) : [];
-    }));
-    return { tokens: values[0], proxies: values[1] };
-  },
+
 });
+
+const rotatingTokenChecker = createRotatingTokenChecker({ stock: rotatingBoostStock, client: salta7Client });
 
 const rotatingBoostOnliner = createRotatingBoostOnliner({
   stock: rotatingBoostStock,
-  accountLimit: discordOnlinerAccountLimit,
   readConfig: async (client) => {
     const result = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 FOR UPDATE", [discordOnlinerSettingKey]);
     return normalizeDiscordOnlinerConfig(result.rows[0] ? JSON.parse(decryptCredential(result.rows[0].encrypted_value)) : { enabled: false });
@@ -5524,17 +5518,12 @@ const rotatingBoostOnliner = createRotatingBoostOnliner({
   )
 });
 
-function applyRotatingOnlinerChange({ config, account, removedIds }) {
+function applyRotatingOnlinerChange({ config, removedIds }) {
   for (const id of removedIds) {
     const runtime = discordOnlinerRuntimes.get(id);
     if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
     discordOnlinerRuntimes.delete(id);
     discordOnlinerPendingRuntimeWrites.delete(id);
-  }
-  if (account && serviceRunsOnliner) {
-    const runtime = discordOnlinerRuntimes.get(account.id);
-    if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
-    startDiscordOnlinerAccounts(config, [account]);
   }
   if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = config;
 }
@@ -8400,7 +8389,7 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
       }
       results[index] = { ...results[index], state: "running", message: `${order.boostProvider === "salta7" ? "Salta7" : "Dcord"} join request is running.` };
       await saveDcordRejoinJob(orderId, createJob());
-      const proxy = order?.useProxy === true ? normalizeDcordProxyForDcord(proxies[index]) : "";
+      const proxy = order?.boostStockPool !== "rotating" && order?.useProxy === true ? normalizeDcordProxyForDcord(proxies[index]) : "";
       const response = await runDcordBoostToken(token, invite, { boost: false, proxy, boostProvider: order.boostProvider,
         ...(order.boostProvider === "salta7" ? { existingTaskId: results[index].dcordTaskId, onTaskCreated: async id => { results[index] = { ...results[index], dcordTaskId: id, taskPending: true }; await saveDcordRejoinJob(orderId, createJob()); } } : {}) });
       const succeeded = response?.success === true || ["joined", "already joined", "already_member", "already member"].includes(String(response?.joinStatus ?? "").toLowerCase());
@@ -8475,7 +8464,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let providerPaused = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
-  const assignedProxies = !isSalta7 && order.useProxy === true ? await loadDcordOrderProxies(orderId) : [];
+  const assignedProxies = !isSalta7 && order.boostStockPool !== "rotating" && order.useProxy === true ? await loadDcordOrderProxies(orderId) : [];
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
@@ -14533,27 +14522,17 @@ app.post("/api/dcord/check", requireSession, async (_req, res, next) => {
 
 app.get("/api/dcord/rotating-stock", requireSession, async (_req, res, next) => {
   try {
+    await rotatingTokenChecker.refresh();
     const accounts = await rotatingBoostStock.list({ includeTokens: true });
-    const config = await getDiscordOnlinerConfig();
-    const snapshot = await getDiscordOnlinerSnapshotForApi(config);
-    res.set("Cache-Control", "no-store").json({ accounts: attachRotatingOnliner(accounts, config, snapshot) });
+    res.set("Cache-Control", "no-store").json({ accounts });
   }
   catch (error) { next(error); }
 });
 
-app.post("/api/dcord/rotating-stock/:id/onliner", requireSession, async (req, res, next) => {
+app.post("/api/dcord/rotating-stock/:id/check-token", requireSession, async (req, res, next) => {
   try {
-    const result = await rotatingBoostOnliner.connect(req.params.id);
-    applyRotatingOnlinerChange(result);
-    res.json({ queued: true });
-  } catch (error) { next(error); }
-});
-
-app.delete("/api/dcord/rotating-stock/:id/onliner", requireSession, async (req, res, next) => {
-  try {
-    const result = await rotatingBoostOnliner.disconnect(req.params.id);
-    applyRotatingOnlinerChange(result);
-    res.json({ removed: true });
+    await loadSalta7ApiKey();
+    res.status(202).json(await rotatingTokenChecker.start(req.params.id));
   } catch (error) { next(error); }
 });
 
@@ -14562,24 +14541,6 @@ app.delete("/api/dcord/rotating-stock/:id", requireSession, async (req, res, nex
     const result = await rotatingBoostOnliner.remove(req.params.id);
     applyRotatingOnlinerChange(result);
     res.json({ removed: true });
-  } catch (error) { next(error); }
-});
-
-app.get("/api/dcord/rotating-stock/proxies", requireSession, async (_req, res, next) => {
-  try { res.set("Cache-Control", "no-store").json(await rotatingBoostStock.proxies()); }
-  catch (error) { next(error); }
-});
-
-app.post("/api/dcord/rotating-stock/proxies", requireSession, async (req, res, next) => {
-  try {
-    const input = Array.isArray(req.body?.proxies) ? req.body.proxies : String(req.body?.proxies ?? "").split(/[\r\n,]+/);
-    const lines = input.map((line) => String(line).trim()).filter(Boolean);
-    if (!lines.length || lines.length > 1000 || lines.some((line) => {
-      const proxy = normalizeDcordProxyForDcord(line);
-      const url = normalizeDiscordOnlinerProxyUrl(proxy);
-      return !url || proxy.length > 1000;
-    })) return res.status(400).json({ message: "Enter up to 1000 valid proxies, one per line. Use user:pass@host:port or host:port:user:pass." });
-    res.json(await rotatingBoostStock.addProxies(normalizeDcordStickyProxies(lines)));
   } catch (error) { next(error); }
 });
 
@@ -14857,7 +14818,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     if (boostStockPool === "rotating" && duration !== 1) {
       return res.status(400).json({ message: "Rotating stock is only available for 30-day orders." });
     }
-    const useProxy = boostProvider !== "salta7";
+    const useProxy = boostProvider !== "salta7" && boostStockPool !== "rotating";
     const requestedConcurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
     const allowMembershipScreening = req.body?.allowMembershipScreening === true;
     const humanizerPackageId = String(req.body?.humanizerPackageId ?? "").trim();
@@ -15381,7 +15342,7 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     const assignedTokens = await loadDcordOrderTokens(uniqid);
     assignedTokens[resultIndex] = replacementToken;
     await saveDcordOrderTokens(uniqid, assignedTokens);
-    if (order.useProxy === true) {
+    if (order.boostStockPool !== "rotating" && order.useProxy === true) {
       const assignedProxies = await loadDcordOrderProxies(uniqid);
       assignedProxies[resultIndex] = replacementProxy;
       await saveDcordOrderProxies(uniqid, assignedProxies);
@@ -15585,6 +15546,7 @@ app.use((error, _req, res, _next) => {
 
 if (serviceRunsWeb) await initializeDatabase();
 else await initializeDiscordOnlinerDatabase();
+applyRotatingOnlinerChange(await rotatingBoostOnliner.retire());
 if (serviceRunsWeb) {
   void loadCommunityMemberServerMemberships().catch((error) => {
     console.error("Members server-count cache warmup failed:", error instanceof Error ? error.message : error);

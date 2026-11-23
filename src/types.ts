@@ -357,12 +357,17 @@ export interface BoostStock {
 }
 
 export interface RotatingBoostAccount {
-  proxy?: string | null;
-  onlinerConnected?: boolean;
-  onlinerConnectionState?: string | null;
-  onlinerLastError?: string | null;
-  hasFixedProxy?: boolean;
-  proxyLabel?: string | null;
+  tokenCheck?: {
+    status: "submitting" | "running" | "valid" | "locked" | "invalid" | "error" | "unknown";
+    startedAt: string;
+    checkedAt?: string;
+    message?: string | null;
+    nitro?: boolean | null;
+    premiumType?: number | null;
+    nitroDays?: number | null;
+    boostFree?: number | null;
+    lockType?: string | null;
+  };
   token?: string;
   id: string;
   redactedToken: string;
@@ -375,13 +380,6 @@ export interface RotatingBoostAccount {
   startedAt?: string | null;
   customerEndsAt?: string | null;
   history: { orderId?: string; serverName?: string; startedAt?: string; customerEndsAt?: string; releasedAt: string }[];
-}
-
-export interface RotatingProxyPool {
-  total: number;
-  assigned: number;
-  available: number;
-  proxies: { proxy: string; label: string; assigned: boolean; accounts: number }[];
 }
 
 export interface BoostTokenStockInput {

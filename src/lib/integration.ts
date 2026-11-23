@@ -1,4 +1,4 @@
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary, RotatingBoostAccount, RotatingProxyPool } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary, RotatingBoostAccount } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -465,26 +465,12 @@ export function getRotatingBoostStock() {
   return requestJson<{ accounts: RotatingBoostAccount[] }>("/api/dcord/rotating-stock");
 }
 
-export function connectRotatingBoostOnliner(id: string) {
-  return requestJson<{ queued: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/onliner`, { method: "POST" });
-}
-
-export function disconnectRotatingBoostOnliner(id: string) {
-  return requestJson<{ removed: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/onliner`, { method: "DELETE" });
+export function checkRotatingBoostToken(id: string) {
+  return requestJson<{ queued: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/check-token`, { method: "POST" });
 }
 
 export function removeRotatingBoostAccount(id: string) {
   return requestJson<{ removed: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}`, { method: "DELETE" });
-}
-
-export function getRotatingBoostProxies() {
-  return requestJson<RotatingProxyPool>("/api/dcord/rotating-stock/proxies");
-}
-
-export function addRotatingBoostProxies(proxies: string) {
-  return requestJson<RotatingProxyPool>("/api/dcord/rotating-stock/proxies", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proxies })
-  });
 }
 
 export function moveThreeMonthToRotatingStock(count: number) {

@@ -119,3 +119,26 @@ test("production provider dispatcher sends Salta7 orders to Salta7 and preserves
   assert.equal((await context.run("sample-token","invite",{boostProvider:"salta7"})).boostCount,2);assert.equal(sent.length,1);
   await context.run("sample-token","invite",{});assert.equal(sent.length,1);
 });
+
+
+test("token checker sends only the check tool and our token, and whitelists returned facts", async () => {
+  const api = fixture({ fetch: async (url, init) => url.pathname === "/task/create" ? Response.json({ job_id: "check" }) : Response.json({ job_id: "check", status: "completed", items: [{ line: "mail:password:token", status: "valid", nitro: true, nitro_days: 41, boost_free: 0, premium_type: 2, email: "private", required_action: "private", unknown: "secret" }] }) });
+  assert.equal(await api.client.createTokenCheck("mail:password:token"), "check");
+  assert.deepEqual(JSON.parse(api.calls[0].body), { tool: "check", tokens: ["mail:password:token"] });
+  const result = await api.client.getTokenCheck("check", "token");
+  assert.equal(result.status, "valid"); assert.equal(result.boostFree, 0); assert.equal(result.nitroDays, 41);
+  assert.ok(!JSON.stringify(result).includes("private")); assert.ok(!JSON.stringify(result).includes("password"));
+});
+
+test("checker handles queued, missing, malformed and foreign-job results without assuming validity", async () => {
+  for (const [payload, expected] of [
+    [{ job_id: "check", status: "running", items: [] }, "running"],
+    [{ job_id: "check", status: "completed", items: [{ line: "other", status: "valid" }] }, "error"],
+    [{ job_id: "check", status: "completed", items: [{ line: "token", status: "locked", lock_type: "phone", nitro_days: -1, boost_free: 20 }] }, "locked"]
+  ]) {
+    const api = fixture({ fetch: async () => Response.json(payload) }); const result = await api.client.getTokenCheck("check", "token");
+    assert.equal(result.status, expected); if (expected === "locked") { assert.equal(result.lockType, "phone"); assert.equal(result.boostFree, null); assert.equal(result.nitroDays, null); }
+  }
+  await assert.rejects(fixture({ fetch: async () => Response.json({ job_id: "other", items: [] }) }).client.getTokenCheck("check", "token"));
+  await assert.rejects(fixture({ fetch: async () => Response.json({}) }).client.createTokenCheck("token"), { uncertain: true });
+});

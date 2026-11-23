@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowRightLeft, ArrowUpRight, Copy, Download, Eye, LoaderCircle, Power, RadioTower, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowRightLeft, ArrowUpRight, Copy, Download, Eye, LoaderCircle, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { connectRotatingBoostOnliner, disconnectRotatingBoostOnliner, moveThreeMonthToRotatingStock, removeRotatingBoostAccount } from "../lib/integration";
+import { checkRotatingBoostToken, moveThreeMonthToRotatingStock, removeRotatingBoostAccount } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
 import { Button } from "./ui/button";
 import { BoostStockStatus, boostStockOrderLink } from "./BoostStockStatus";
@@ -13,12 +13,9 @@ const labels: Record<RotatingBoostAccount["status"], string> = {
   available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Expired / low time"
 };
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString() : "—";
-const onlinerLabel = (row: RotatingBoostAccount) => !row.onlinerConnected ? "Not connected"
-  : row.onlinerConnectionState === "connected" ? "Live"
-  : row.onlinerConnectionState === "disabled" ? "Disabled"
-  : row.onlinerConnectionState === "error" ? "Connection error"
-  : row.onlinerConnectionState === "disconnected" ? "Offline"
-  : "Connecting";
+const checking = (row: RotatingBoostAccount) => ["submitting", "running"].includes(row.tokenCheck?.status ?? "");
+const checkLabel = (row: RotatingBoostAccount) => checking(row) ? "Checking…" : ({ valid: "Valid", locked: "Locked", invalid: "Invalid", error: "Check failed", unknown: "Unconfirmed" }[row.tokenCheck?.status as string] ?? "Not checked");
+const checkTone = (row: RotatingBoostAccount) => checking(row) ? "accent" : row.tokenCheck?.status === "valid" ? "success" : ["invalid", "locked", "error"].includes(row.tokenCheck?.status ?? "") ? "danger" : "neutral";
 
 export function RotatingBoostStockPanel({ search = "", accounts, availableThreeMonth, loading, error, onRefresh, onChange }: {
   search?: string;
@@ -41,23 +38,22 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
   const dialogRef = useRef<HTMLDivElement>(null);
   const moveLimit = Math.min(availableThreeMonth, 1000);
   const validCount = Number.isInteger(count) && count >= 1 && count <= moveLimit;
-  const hasOnlinerProfiles = accounts.some((row) => row.onlinerConnected);
+  const hasPendingChecks = accounts.some(checking);
   useEffect(() => {
-    if (!hasOnlinerProfiles || loading) return;
+    if (!hasPendingChecks || loading) return;
     const timer = window.setInterval(onRefresh, 5000);
     return () => window.clearInterval(timer);
-  }, [hasOnlinerProfiles, loading, onRefresh]);
+  }, [hasPendingChecks, loading, onRefresh]);
 
-  async function manageAccount(row: RotatingBoostAccount, action: "connect" | "disconnect" | "remove") {
+  async function manageAccount(row: RotatingBoostAccount, action: "check" | "remove") {
     if (actionLock.current) return;
-    if (action === "remove" && !window.confirm(`Remove ${row.redactedToken} from Rotating stock? Its Onliner connection will also be removed. Order history will be kept.`)) return;
+    if (action === "remove" && !window.confirm(`Remove ${row.redactedToken} from Rotating stock? Order history will be kept.`)) return;
     actionLock.current = true;
     setAccountAction(row.id);
     try {
       if (action === "remove") await removeRotatingBoostAccount(row.id);
-      else if (action === "disconnect") await disconnectRotatingBoostOnliner(row.id);
-      else await connectRotatingBoostOnliner(row.id);
-      toast.success(action === "remove" ? "Account removed from Rotating stock." : action === "disconnect" ? "Account removed from Onliner." : "Onliner connection queued using this account's fixed proxy.");
+      else await checkRotatingBoostToken(row.id);
+      toast.success(action === "remove" ? "Account removed from Rotating stock." : "Token check queued.");
       onRefresh();
     } catch (err) { toast.error(err instanceof Error ? err.message : "Account action failed."); }
     finally { actionLock.current = false; setAccountAction(null); }
@@ -145,7 +141,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
           </label>
           <div className="boost-current-order">{row.orderId ? <><Link target="_blank" rel="noopener noreferrer" to={boostStockOrderLink(row.orderId)} title={row.orderId}>{row.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link><small>{row.serverName || row.serverId || "Server pending"}</small></> : <><span>Unassigned</span><small>{row.status === "available" ? "Ready for a new order" : "No current order"}</small></>}</div>
           <div className="boost-rotating-status"><BoostStockStatus tone={statusTone(row.status)}>{labels[row.status]}</BoostStockStatus>
-            <span title={row.onlinerLastError || "Onliner connection through this account's fixed proxy"}><BoostStockStatus tone={row.onlinerConnectionState === "connected" ? "success" : row.onlinerLastError || row.onlinerConnectionState === "error" ? "danger" : "neutral"}><RadioTower className="h-3 w-3" />{onlinerLabel(row)}</BoostStockStatus></span>
+            <span title={row.tokenCheck?.message || (row.tokenCheck?.checkedAt ? "Checked " + formatDate(row.tokenCheck.checkedAt) : "Salta7 token check")}><BoostStockStatus tone={checkTone(row)}>{checking(row) ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}{checkLabel(row)}</BoostStockStatus></span>
           </div>
           <div className="boost-time-left" title={row.customerEndsAt ? "Delivery ends " + formatDate(row.customerEndsAt) : "Delivery has not started"}>
             <strong>{row.customerEndsAt ? Math.max(0, Math.ceil((Date.parse(row.customerEndsAt) - Date.now()) / 86400_000)) + " days left" : "Delivery not started"}</strong>
@@ -155,21 +151,22 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
           <div className="boost-row-actions community-member-row-actions">
             <Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button>
             <Button size="icon-sm" className="stock-row-action stock-row-action-details" variant="ghost" aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="View account details" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><Eye className="h-3.5 w-3.5" /></Button>
-            <span title={row.onlinerConnected ? "Remove from Onliner" : "Connect to Onliner using assigned proxy"}><Button size="icon-sm" className="stock-row-action" variant={row.onlinerConnected ? "dangerGhost" : "ghost"} disabled={accountAction !== null} aria-label={(row.onlinerConnected ? "Disconnect " : "Connect ") + row.redactedToken + " Onliner"} onClick={() => void manageAccount(row, row.onlinerConnected ? "disconnect" : "connect")}>
-              {accountAction === row.id ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : row.onlinerConnected ? <Power className="h-3.5 w-3.5" /> : <RadioTower className="h-3.5 w-3.5" />}
+            <span title="Check token with Salta7 · 5 checks per token daily"><Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={accountAction !== null || checking(row)} aria-label={"Check token " + row.redactedToken} onClick={() => void manageAccount(row, "check")}>
+              {accountAction === row.id || checking(row) ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
             </Button></span>
             <span title={["reserved", "in_use"].includes(row.status) ? "Cannot remove an account assigned to an active delivery" : "Remove from Rotating stock"}><Button size="icon-sm" className="stock-row-action" variant="dangerGhost" disabled={accountAction !== null || ["reserved", "in_use"].includes(row.status)} aria-label={"Remove " + row.redactedToken + " from Rotating stock"} onClick={() => void manageAccount(row, "remove")}><Trash2 className="h-3.5 w-3.5" /></Button></span>
           </div>
         </div>
         {expanded === row.id ? <div id={`boost-details-${row.id}`} className="boost-account-drawer">
           <div className="boost-rotating-details">
-            <div><small>Onliner connection</small><strong>{onlinerLabel(row)}</strong><span>{row.onlinerLastError || (row.onlinerConnected ? "Uses this account's assigned fixed proxy" : "Connect to check account availability")}</span></div>
+            <div><small>Token check · Salta7</small><strong>{checkLabel(row)}</strong><span>{row.tokenCheck?.message || (row.tokenCheck?.checkedAt ? "Checked " + formatDate(row.tokenCheck.checkedAt) : "5 checks per token daily")}</span></div>
+            {row.tokenCheck?.nitro != null ? <div><small>Nitro</small><strong>{row.tokenCheck.nitro ? "Active" : "None"}</strong><span>{row.tokenCheck.nitroDays != null ? row.tokenCheck.nitroDays + " days left" : "—"}</span></div> : null}
+            {row.tokenCheck?.boostFree != null ? <div><small>Free boost slots</small><strong>{row.tokenCheck.boostFree}</strong><span>At the last token check</span></div> : null}
+            {row.tokenCheck?.lockType ? <div><small>Verification required</small><strong>{row.tokenCheck.lockType}</strong></div> : null}
             <div><small>Current assignment</small><strong>{row.serverName || row.serverId || "Unassigned"}</strong>{row.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(row.orderId)}>Open order <ArrowUpRight className="h-3.5 w-3.5" /></Link> : <span>No order assigned</span>}</div>
             <div><small>Customer period ends</small><strong>{formatDate(row.customerEndsAt)}</strong><span>{row.startedAt ? "Started " + formatDate(row.startedAt) : "Delivery has not started"}</span></div>
             <div><small>Subscription ends</small><strong>{row.expiresAt ? formatDate(row.expiresAt) : "90 days from first assignment"}</strong><span>2 boosts per delivery</span></div>
-            <div><small>Fixed proxy</small><strong className="select-text">{row.proxy || row.proxyLabel || "Assigned on first delivery"}</strong>
-              {row.proxy ? <Button size="xs" variant="secondary" className="w-fit" onClick={async () => { try { await navigator.clipboard.writeText(row.proxy!); toast.success("Proxy copied."); } catch { toast.error("Proxy could not be copied."); } }}><Copy className="h-3.5 w-3.5" />Copy proxy</Button> : null}
-              <span>{row.hasFixedProxy ? "Reused for every order · never consumed" : "Uses the separate Rotating proxy pool"}</span></div>
+
           </div>
           <div className="boost-assignment-history"><strong>{row.history.length} previous assignments</strong>{row.history.length ? row.history.map((entry, index) => <div key={index}><strong>{entry.serverName || "Previous assignment"}</strong>{entry.orderId ? <Link target="_blank" rel="noopener noreferrer" className="boost-order-link" to={boostStockOrderLink(entry.orderId)}>{entry.orderId}<ArrowUpRight className="h-3.5 w-3.5" /></Link> : null}<span>{formatDate(entry.startedAt)} → {formatDate(entry.customerEndsAt)}</span><small>Released {formatDate(entry.releasedAt)}</small></div>) : <p>No previous assignments yet.</p>}</div>
         </div> : null}
