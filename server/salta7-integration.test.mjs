@@ -21,7 +21,7 @@ function createRoute(stockOverride, rotatingTokens = ["rotating-token"]) {
     processDcordBoostOrder:async (...args)=>processing.push(args),summarizeBoostTokenStock:value=>value,redactToken:value=>value,console,
     rotatingBoostStock:{reserveForDelivery:async()=>({tokens:rotatingTokens,proxies:[]})}
   };
-  vm.runInNewContext(fn("createQueuedDcordResult")+"\n"+route("/api/dcord/boost-orders"),scope);
+  vm.runInNewContext(fn("createQueuedDcordResult")+"\n"+fn("createBoostOrder")+"\n"+route("/api/dcord/boost-orders"),scope);
   return {run:async(body)=>{const res=response();await handler({body:{id:"invite",amount:4,duration:1,...body}},res,error=>{throw error});return res},saved,processing,proxyReservations,assigned,get remaining(){return remaining}};
 }
 

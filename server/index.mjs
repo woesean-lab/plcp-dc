@@ -1,4 +1,6 @@
+import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
+import { registerEldoradoIntegrationSettings } from "./eldorado-integration-settings.mjs";
 import { createAdminAuth } from "./admin-auth.mjs";
 import { createSalta7Client } from "./salta7.mjs";
 import { createRotatingTokenChecker } from "./rotating-token-check.mjs";
@@ -11829,7 +11831,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
   }
 });
 
-app.post("/api/community/orders", requireSession, async (req, res, next) => {
+async function createCommunityOrder(req, res, next) {
   let client = null;
   try {
     const amount = Number.parseInt(req.body?.amount, 10);
@@ -11904,7 +11906,7 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
       return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
     }
     const reactionDailyLimit = validateCustomerReactionLimit(categoryResult.rows, req.body?.reactionLimit);
-    const uniqid = createCommunityOrderId();
+    const uniqid = req.integrationOrderId || createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
     const createdAt = new Date();
@@ -12027,7 +12029,8 @@ app.post("/api/community/orders", requireSession, async (req, res, next) => {
   } finally {
     client?.release();
   }
-});
+}
+app.post("/api/community/orders", requireSession, createCommunityOrder);
 
 async function activateWaitingCommunityOrder(order) {
   if (!order || order.provider !== "community") return order;
@@ -14823,7 +14826,7 @@ app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next)
   }
 });
 
-app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
+async function createBoostOrder(req, res, next) {
   try {
     if (req.body?.boostProvider !== undefined && !["dcord", "salta7"].includes(req.body.boostProvider)) return res.status(400).json({ message: "Choose Dcord or Salta7." });
     if (req.body?.removeTwoFactor !== undefined && typeof req.body.removeTwoFactor !== "boolean") return res.status(400).json({ message: "Remove 2FA field must be enabled or disabled." });
@@ -14877,7 +14880,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       if (!humanizerPackage) return res.status(400).json({ message: "The selected Humanizer package could not be found." });
     }
 
-    const uniqid = createDcordOrderId();
+    const uniqid = req.integrationOrderId || createDcordOrderId();
     const rotatingReservation = boostStockPool === "rotating"
       ? await rotatingBoostStock.reserveForDelivery(requiredTokens, { uniqid, serverName: serverInfo.guildName, serverId: serverInfo.guildId })
       : null;
@@ -14960,6 +14963,29 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
   } catch (error) {
     next(error);
   }
+}
+app.post("/api/dcord/boost-orders", requireSession, createBoostOrder);
+
+async function validateEldoradoIntegrationInvite(input) {
+  if (!["members", "boosts"].includes(input?.kind) || !extractDiscordInviteCode(input?.invite)) throw Object.assign(new Error("A valid Discord invite link is required."), { statusCode: 400, code: "invalid_invite" });
+  const config = await getCommunityOAuthConfig();
+  let info;
+  try {
+    info = await resolveDiscordInviteWithBot(input.invite, config.botToken) ?? await resolveDiscordInvite(input.invite, { allowWebFallback: false });
+  } catch (error) {
+    if ([400, 404].includes(Number(error.statusCode || error.status))) throw Object.assign(new Error("The Discord invite is invalid or expired."), { statusCode: 400, code: "invalid_invite" });
+    throw error;
+  }
+  if (input.kind === "boosts") {
+    const screening = await checkDcordBoostMembershipScreening(extractDiscordInviteCode(input.invite), info);
+    if (screening.status === "open") throw Object.assign(new Error("Create a new invite with Bypass Join Application enabled and send us that new invite link."), { statusCode: 409, code: "join_application" });
+    if (screening.status !== "closed") throw Object.assign(new Error("Discord join application status could not be verified. Try again later."), { statusCode: 503, code: "screening_unknown" });
+  }
+}
+registerEldoradoIntegrationSettings(app, { pool, requireSession });
+registerEldoradoIntegration(app, { pool, validateInvite: validateEldoradoIntegrationInvite,
+  createMembers: createCommunityOrder, createBoosts: createBoostOrder, recoverBoost: recoverStaleDcordBoostOrder,
+  getCatalog: async () => { const config = await getCommunityOAuthConfig(); const categories = await pool.query("SELECT id,name,join_methods,is_periodic,reaction_use_enabled FROM community_stock_categories WHERE guild_id=$1 ORDER BY name", [config.guildId]); return { categories: categories.rows, services: ["COMMUNITY-ONLINE", "COMMUNITY-OFFLINE", "DCORD-BOOSTS"] }; }
 });
 
 app.get("/api/dcord/boost-orders/:uniqid/status", requireSession, async (req, res, next) => {
@@ -15564,7 +15590,7 @@ app.use((error, _req, res, _next) => {
   res.status(statusCode).json({ message: statusCode >= 500 && error?.expose !== true ? "Service is temporarily unavailable." : error.message });
 });
 
-if (serviceRunsWeb) await initializeDatabase();
+if (serviceRunsWeb) { await initializeDatabase(); await ensureEldoradoIntegrationStorage(pool); }
 else await initializeDiscordOnlinerDatabase();
 applyRotatingOnlinerChange(await rotatingBoostOnliner.retire());
 if (serviceRunsWeb) {

@@ -7,9 +7,11 @@ import { Skeleton } from "./ui/skeleton";
 import { PaginatedList } from "./ListPagination";
 import type { CommunityBotGuild, CommunityConfig, CommunityConfigInput, CommunityGuildLeaveProgress } from "../lib/community";
 import "./SettingsWorkspace.css";
+import EldoradoIntegrationSettings from "./EldoradoIntegrationSettings";
 
 export type SettingsWorkspaceProps = {
   loading: boolean;
+  integrationPreview?: boolean;
   error?: string;
   onRefresh: () => void;
   members: {
@@ -68,7 +70,8 @@ function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputEl
   </div>;
 }
 
-export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, salta7, guilds }: SettingsWorkspaceProps) {
+export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, salta7, guilds, integrationPreview = false }: SettingsWorkspaceProps) {
+  const [integrationConfigured, setIntegrationConfigured] = useState(false);
   const [section, setSection] = useState<Section>("connections");
   const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
@@ -84,8 +87,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     const query = search.trim().toLowerCase();
     return guilds.items.filter((guild) => !query || guild.name.toLowerCase().includes(query) || guild.id.includes(query));
   }, [guilds.items, search]);
-  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured));
-  const connectionCount = salta7 ? 3 : 2;
+  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured)) + Number(integrationConfigured);
+  const connectionCount = salta7 ? 4 : 3;
   const serverCount = config?.activeGuildCount == null ? "—" : `${config.activeGuildCountExact ? "" : "≥ "}${config.activeGuildCount.toLocaleString("en-US")}${config.serverLimit ? ` / ${config.serverLimit.toLocaleString("en-US")}` : ""}`;
   const canSaveMembers = !membersBusy && Boolean(members.draft.clientId.trim())
     && Boolean(config?.hasClientSecret || members.draft.clientSecret.trim()) && Boolean(config?.hasBotToken || members.draft.botToken.trim());
@@ -173,6 +176,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
                 <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={loading || salta7.saving || salta7.checking || !salta7.draft.trim()}>{salta7.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{salta7.saving ? "Verifying…" : "Verify & save"}</Button><Button type="button" size="sm" variant="secondary" disabled={loading || salta7.saving || salta7.checking || !salta7.configured} onClick={salta7.onCheck}>{salta7.checking ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check</Button></div>{salta7.configured ? <Button type="button" size="sm" variant="dangerGhost" disabled={loading || salta7.saving || salta7.checking} onClick={salta7.onRemove}><Trash2 className="h-3.5 w-3.5" />Remove</Button> : null}</footer>
               </form>
             </section> : null}
+            <EldoradoIntegrationSettings preview={integrationPreview} onConfigured={setIntegrationConfigured} />
           </div>
         </div>
 
