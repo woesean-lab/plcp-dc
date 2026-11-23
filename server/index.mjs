@@ -14536,6 +14536,21 @@ app.post("/api/dcord/rotating-stock/:id/check-token", requireSession, async (req
   } catch (error) { next(error); }
 });
 
+app.post("/api/dcord/rotating-stock/check-tokens", requireSession, async (req, res, next) => {
+  try {
+    await loadSalta7ApiKey();
+    res.status(202).json(await rotatingTokenChecker.startMany(req.body?.ids));
+  } catch (error) { next(error); }
+});
+
+app.post("/api/dcord/rotating-stock/delete", requireSession, async (req, res, next) => {
+  try {
+    const result = await rotatingBoostOnliner.removeMany(req.body?.ids);
+    if (result.config) applyRotatingOnlinerChange(result);
+    res.json({ removed: result.removedAccountIds.length, ids: result.removedAccountIds });
+  } catch (error) { next(error); }
+});
+
 app.delete("/api/dcord/rotating-stock/:id", requireSession, async (req, res, next) => {
   try {
     const result = await rotatingBoostOnliner.remove(req.params.id);

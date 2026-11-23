@@ -132,6 +132,16 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
       rows.splice(index, 1);
       return result;
     }),
+    removeMany: (ids, beforeRemove = async () => ({})) => mutate(async (rows, client) => {
+      if (!Array.isArray(ids) || !ids.length || ids.length > 5000 || ids.some(id => typeof id !== "string" || !id.trim() || id.length > 128)) {
+        throw Object.assign(new Error("Select between 1 and 5000 accounts to remove."), { statusCode: 400 });
+      }
+      const selected = new Set(ids);
+      const removed = rows.filter(row => selected.has(row.id));
+      const result = removed.length ? await beforeRemove(removed, client) : {};
+      for (let index = rows.length - 1; index >= 0; index--) if (selected.has(rows[index].id)) rows.splice(index, 1);
+      return { ...result, removedAccountIds: removed.map(row => row.id) };
+    }),
     list: ({ includeTokens = false } = {}) => mutate(async (rows, client) => {
       const ids = [...new Set(rows.filter((row) => row.status === "reserved" || row.status === "in_use").map((row) => row.orderId))];
       if (ids.length) {

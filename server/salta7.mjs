@@ -99,30 +99,36 @@ export function createSalta7Client({ loadKey, fetch: transport = globalThis.fetc
       return { token: masked, success: false, status: error?.providerBlocked ? "queued" : "error", joinStatus: error?.providerBlocked ? "not submitted" : "failed", boostStatus: "not submitted", slots: 0, boostCount: 0, boost: false, boosted: false, boostMessage: error.message, providerBlocked: error?.providerBlocked === true, transportUncertain: false, httpStatus: error?.statusCode };
     }
   }
-  async function createTokenCheck(token) {
-    const result = await request("/task/create", { tool: "check", tokens: [token] });
+  const checkIdentity = value => { const parts = String(value ?? "").trim().split(":"); return parts.length >= 3 ? parts[2] : parts[0]; };
+  async function createTokenChecks(tokens) {
+    const result = await request("/task/create", { tool: "check", tokens: tokens.map(checkIdentity) });
     const jobId = typeof result.job_id === "string" ? result.job_id.trim() : "";
     if (!jobId) throw Object.assign(new Error("Salta7 did not confirm the check. Wait before checking again."), { uncertain: true });
     return jobId;
   }
 
-  async function getTokenCheck(jobId, token) {
+  async function getTokenChecks(jobId, tokens) {
     const result = await request(`/task/items?job_id=${encodeURIComponent(jobId)}`);
     if (result.job_id !== jobId || !Array.isArray(result.items)) throw new Error("Salta7 check results could not be verified.");
-    const identity = value => { const parts = String(value ?? "").trim().split(":"); return parts.length >= 3 ? parts[2] : parts[0]; };
-    const item = result.items.find(value => identity(value.line) === identity(token));
-    const status = String(item?.status ?? "").toLowerCase();
-    if (!["valid", "locked", "invalid", "error"].includes(status)) {
-      if (["completed", "partial", "failed", "cancelled"].includes(result.status)) return { status: "error", message: "Salta7 could not check this token." };
-      return { status: "running" };
-    }
-    // Keep only check facts; provider lines, credentials and raw errors stay private.
-    const integer = (value, max) => Number.isInteger(value) && value >= 0 && value <= max ? value : null;
-    return { status, nitro: typeof item.nitro === "boolean" ? item.nitro : null,
-      premiumType: integer(item.premium_type, 3), nitroDays: integer(item.nitro_days, 100000),
-      boostFree: integer(item.boost_free, 2),
-      lockType: ["phone", "email", "reverify", "other"].includes(item.lock_type) ? item.lock_type : null,
-      message: status === "error" ? "Salta7 could not check this token." : null };
+    const items = new Map(result.items.map(item => [checkIdentity(item.line), item]));
+    return tokens.map(token => {
+      const item = items.get(checkIdentity(token));
+      const status = String(item?.status ?? "").toLowerCase();
+      if (!["valid", "locked", "invalid", "error"].includes(status)) {
+        if (["completed", "partial", "failed", "cancelled"].includes(result.status)) return { status: "error", message: "Salta7 could not check this token." };
+        return { status: "running" };
+      }
+      // Keep only check facts; provider lines, credentials and raw errors stay private.
+      const integer = (value, max) => Number.isInteger(value) && value >= 0 && value <= max ? value : null;
+      return { status, nitro: typeof item.nitro === "boolean" ? item.nitro : null,
+        premiumType: integer(item.premium_type, 3), nitroDays: integer(item.nitro_days, 100000),
+        boostFree: integer(item.boost_free, 2),
+        lockType: ["phone", "email", "reverify", "other"].includes(item.lock_type) ? item.lock_type : null,
+        message: status === "error" ? "Salta7 could not check this token." : null };
+    });
   }
-  return { check, run, createTokenCheck, getTokenCheck };
+  const createTokenCheck = token => createTokenChecks([token]);
+  const getTokenCheck = async (jobId, token) => (await getTokenChecks(jobId, [token]))[0];
+  return { check, run, createTokenCheck, getTokenCheck, createTokenChecks, getTokenChecks };
+
 }

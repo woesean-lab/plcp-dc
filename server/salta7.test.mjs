@@ -124,7 +124,7 @@ test("production provider dispatcher sends Salta7 orders to Salta7 and preserves
 test("token checker sends only the check tool and our token, and whitelists returned facts", async () => {
   const api = fixture({ fetch: async (url, init) => url.pathname === "/task/create" ? Response.json({ job_id: "check" }) : Response.json({ job_id: "check", status: "completed", items: [{ line: "mail:password:token", status: "valid", nitro: true, nitro_days: 41, boost_free: 0, premium_type: 2, email: "private", required_action: "private", unknown: "secret" }] }) });
   assert.equal(await api.client.createTokenCheck("mail:password:token"), "check");
-  assert.deepEqual(JSON.parse(api.calls[0].body), { tool: "check", tokens: ["mail:password:token"] });
+  assert.deepEqual(JSON.parse(api.calls[0].body), { tool: "check", tokens: ["token"] });
   const result = await api.client.getTokenCheck("check", "token");
   assert.equal(result.status, "valid"); assert.equal(result.boostFree, 0); assert.equal(result.nitroDays, 41);
   assert.ok(!JSON.stringify(result).includes("private")); assert.ok(!JSON.stringify(result).includes("password"));
@@ -141,4 +141,15 @@ test("checker handles queued, missing, malformed and foreign-job results without
   }
   await assert.rejects(fixture({ fetch: async () => Response.json({ job_id: "other", items: [] }) }).client.getTokenCheck("check", "token"));
   await assert.rejects(fixture({ fetch: async () => Response.json({}) }).client.createTokenCheck("token"), { uncertain: true });
+});
+
+
+test("bulk checker submits one credential-free job and maps reordered results to their own accounts", async () => {
+  const api = fixture({ fetch: async url => url.pathname === "/task/create" ? Response.json({ job_id: "bulk" }) : Response.json({ job_id: "bulk", status: "running", items: [{ line: "two", status: "locked", lock_type: "phone" }, { line: "one", status: "valid", boost_free: 1 }] }) });
+  assert.equal(await api.client.createTokenChecks(["email:password:one:2fa", "two", "three"]), "bulk");
+  assert.deepEqual(JSON.parse(api.calls[0].body), { tool: "check", tokens: ["one", "two", "three"] });
+  const results = await api.client.getTokenChecks("bulk", ["email:password:one:2fa", "two", "three"]);
+  assert.deepEqual(results.map(result => result.status), ["valid", "locked", "running"]);
+  assert.equal(results[0].boostFree, 1); assert.equal(results[1].lockType, "phone");
+  assert.equal(api.calls.length, 2); assert.ok(!JSON.stringify(api.calls).includes("password"));
 });

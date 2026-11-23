@@ -13,6 +13,7 @@ import { ListPagination, paginate } from "../components/ListPagination";
 import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
+import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDialog";
 import { BoostServiceField } from "../components/BoostServiceField";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
@@ -321,6 +322,7 @@ export default function UiKitPage() {
   const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("dcord");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [rotatingRemovalPreview, setRotatingRemovalPreview] = useState(false);
   const search = query.trim().toLowerCase();
   const visibleSections = SECTIONS.filter((section) => `${section.title} ${section.tags}`.toLowerCase().includes(search));
   const visible = (id: typeof SECTIONS[number]["id"]) => visibleSections.some((section) => section.id === id);
@@ -438,6 +440,7 @@ export default function UiKitPage() {
 
         {visible("overlays") ? <Section id="overlays">
           <Example title="Account profile" source="src/components/ProfileDialog.tsx · ProfileDialog.css" code={'<ProfileDialog onClose={closeProfile} />\n// Native modal; password changes require the current password.\n// Header uses ProfileAvatarButton plus a separate dangerGhost icon-sm Sign out action; modal has no header X.'}><ProfileExample /></Example>
+          <Example title="Rotating stock removal" source="src/components/RotatingStockRemoveDialog.tsx" code={'<RotatingStockRemoveDialog count={selected.length} onConfirm={removeSelected} onClose={close} />'}><Button type="button" size="sm" variant="dangerGhost" onClick={() => setRotatingRemovalPreview(true)}><Trash2 className="h-4 w-4" />Preview bulk removal</Button></Example>
           <Example title="Confirmation dialog & help tooltip" source="src/index.css · confirm-modal / member-check-control" code={'<div className="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirmation-title">\n  <span className="confirm-modal-icon"><TriangleAlert /></span>\n  <h2 id="confirmation-title">Remove sample?</h2>\n  <p>Preview the existing confirmation style.</p>\n  <div className="confirm-modal-actions">\n    <Button variant="secondary">Cancel</Button><Button variant="destructive">Remove</Button>\n  </div>\n</div>'}>
             <div className="ui-ref-row"><Button type="button" variant="secondary" size="sm" onClick={() => dialogRef.current?.showModal()}>Open sample dialog</Button><span className="member-check-control ui-ref-help"><button type="button" className="member-check-help" aria-label="About this example" aria-describedby="ui-ref-help"><CircleHelp className="h-3.5 w-3.5" /></button><span className="member-check-tooltip" role="tooltip" id="ui-ref-help">This is the existing monitor help tooltip. Hover or focus the help button.</span></span></div>
           </Example>
@@ -453,6 +456,7 @@ export default function UiKitPage() {
         </Section> : null}
       </div>
     </div>
+    {rotatingRemovalPreview ? <RotatingStockRemoveDialog count={3} onConfirm={async () => { toast.success("Sample removal previewed."); }} onClose={() => setRotatingRemovalPreview(false)} /> : null}
     <dialog ref={dialogRef} className="confirm-modal ui-ref-dialog" aria-labelledby="ui-ref-dialog-title" aria-describedby="ui-ref-dialog-description">
       <span className="confirm-modal-icon" aria-hidden="true"><TriangleAlert className="h-5 w-5" /></span><p className="app-kicker text-[var(--app-danger)]">Component preview</p><h2 id="ui-ref-dialog-title">Remove sample?</h2><p id="ui-ref-dialog-description">This example uses the console’s existing confirmation style. It only previews the action.</p>
       <div className="confirm-modal-actions"><Button type="button" variant="secondary" autoFocus onClick={() => dialogRef.current?.close()}>Cancel</Button><Button type="button" variant="destructive" onClick={() => { dialogRef.current?.close(); previewClick(); }}><Trash2 className="h-4 w-4" />Remove sample</Button></div>

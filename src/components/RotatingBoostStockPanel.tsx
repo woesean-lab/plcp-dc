@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ArrowRightLeft, ArrowUpRight, Copy, Download, Eye, LoaderCircle, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { checkRotatingBoostToken, moveThreeMonthToRotatingStock, removeRotatingBoostAccount } from "../lib/integration";
+import { checkRotatingBoostToken, checkRotatingBoostTokens, moveThreeMonthToRotatingStock, removeRotatingBoostAccounts } from "../lib/integration";
 import type { BoostStock, RotatingBoostAccount } from "../types";
 import { Button } from "./ui/button";
 import { BoostStockStatus, boostStockOrderLink } from "./BoostStockStatus";
 import toast from "react-hot-toast";
 import { Input } from "./ui/input";
+import { RotatingStockRemoveDialog } from "./RotatingStockRemoveDialog";
 
 const labels: Record<RotatingBoostAccount["status"], string> = {
   available: "Available", reserved: "Reserved", in_use: "In use", review: "Delivery issue", expired: "Expired / low time"
@@ -34,6 +35,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
   const [selected, setSelected] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [accountAction, setAccountAction] = useState<string | null>(null);
+  const [removalTargets, setRemovalTargets] = useState<RotatingBoostAccount[] | null>(null);
   const actionLock = useRef(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const moveLimit = Math.min(availableThreeMonth, 1000);
@@ -45,18 +47,34 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
     return () => window.clearInterval(timer);
   }, [hasPendingChecks, loading, onRefresh]);
 
-  async function manageAccount(row: RotatingBoostAccount, action: "check" | "remove") {
-    if (actionLock.current) return;
-    if (action === "remove" && !window.confirm(`Remove ${row.redactedToken} from Rotating stock? Order history will be kept.`)) return;
-    actionLock.current = true;
-    setAccountAction(row.id);
+  async function checkAccounts(rows: RotatingBoostAccount[]) {
+    if (actionLock.current || !rows.length) return;
+    actionLock.current = true; setAccountAction(rows.length === 1 ? rows[0].id : "bulk-check");
     try {
-      if (action === "remove") await removeRotatingBoostAccount(row.id);
-      else await checkRotatingBoostToken(row.id);
-      toast.success(action === "remove" ? "Account removed from Rotating stock." : "Token check queued.");
+      if (rows.length === 1) { await checkRotatingBoostToken(rows[0].id); toast.success("Token check queued."); }
+      else {
+        const result = await checkRotatingBoostTokens(rows.map(row => row.id));
+        toast.success(result.submitted ? `${result.submitted} token checks queued.${result.skipped ? ` ${result.skipped} already pending.` : ""}` : "Selected tokens are already being checked.");
+      }
       onRefresh();
-    } catch (err) { toast.error(err instanceof Error ? err.message : "Account action failed."); }
+    } catch (err) { toast.error(err instanceof Error ? err.message : "Token check failed."); }
     finally { actionLock.current = false; setAccountAction(null); }
+  }
+  function openRemoval(rows: RotatingBoostAccount[]) {
+    if (!actionLock.current && rows.length) setRemovalTargets([...rows]);
+  }
+  async function removeAccounts() {
+    if (actionLock.current || !removalTargets?.length) return;
+    actionLock.current = true; setAccountAction("removing");
+    try {
+      const ids = removalTargets.map(row => row.id);
+      const result = await removeRotatingBoostAccounts(ids);
+      const removed = new Set(ids);
+      setSelected(previous => previous.filter(id => !removed.has(id)));
+      setExpanded(previous => previous && removed.has(previous) ? null : previous);
+      toast.success(result.removed ? `${result.removed} account${result.removed === 1 ? "" : "s"} removed from Rotating stock.` : "Selected accounts are already removed.");
+      onRefresh();
+    } finally { actionLock.current = false; setAccountAction(null); }
   }
 
   useEffect(() => {
@@ -125,7 +143,11 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
     <div className={`stock-selection-bar flex flex-wrap items-center ${selectedRows.length ? "has-selection" : ""}`}>
       <label className="stock-select-all flex items-center"><input type="checkbox" checked={allSelected} disabled={!visible.length} onChange={(event) => setSelected(event.target.checked ? [...new Set([...selected, ...visible.map((row) => row.id)])] : selected.filter((id) => !visible.some((row) => row.id === id)))} /><span>{selectedRows.length ? selectedRows.length + " selected" : "Select visible"}</span></label>
       <div className="stock-selection-actions flex items-center">
-        {selectedRows.length ? <Button size="xs" variant="ghost" onClick={() => setSelected([])}>Clear</Button> : null}
+        {selectedRows.length ? <>
+          <Button size="xs" variant="ghost" disabled={accountAction !== null} onClick={() => setSelected([])}>Clear</Button>
+          <Button size="xs" variant="secondary" disabled={accountAction !== null || selectedRows.every(checking)} onClick={() => void checkAccounts(selectedRows)}>{accountAction === "bulk-check" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}Check selected ({selectedRows.length})</Button>
+          <Button size="xs" variant="dangerGhost" disabled={accountAction !== null} onClick={() => openRemoval(selectedRows)}><Trash2 className="h-3.5 w-3.5" />Delete selected ({selectedRows.length})</Button>
+        </> : null}
         <Button size="xs" variant="secondary" disabled={!exportRows.length || exportRows.some((row) => !row.token)} onClick={() => void copy(exportRows)}><Copy className="h-3.5 w-3.5" />{selectedRows.length ? "Copy selected" : "Copy visible"}</Button>
         <Button size="xs" variant="secondary" disabled={!exportRows.length || exportRows.some((row) => !row.token)} onClick={download}><Download className="h-3.5 w-3.5" />{selectedRows.length ? "Download selected" : "Download visible"}</Button>
       </div>
@@ -151,10 +173,10 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
           <div className="boost-row-actions community-member-row-actions">
             <Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={!row.token} aria-label={"Copy account " + row.redactedToken} title="Copy token" onClick={() => void copy([row])}><Copy className="h-3.5 w-3.5" /></Button>
             <Button size="icon-sm" className="stock-row-action stock-row-action-details" variant="ghost" aria-label={"Account details and history for " + row.redactedToken} aria-controls={`boost-details-${row.id}`} title="View account details" aria-expanded={expanded === row.id} onClick={() => setExpanded(expanded === row.id ? null : row.id)}><Eye className="h-3.5 w-3.5" /></Button>
-            <span title="Check token with Salta7 · 5 checks per token daily"><Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={accountAction !== null || checking(row)} aria-label={"Check token " + row.redactedToken} onClick={() => void manageAccount(row, "check")}>
+            <span title="Check token with Salta7 · 5 checks per token daily"><Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={accountAction !== null || checking(row)} aria-label={"Check token " + row.redactedToken} onClick={() => void checkAccounts([row])}>
               {accountAction === row.id || checking(row) ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
             </Button></span>
-            <span title="Remove from Rotating stock"><Button size="icon-sm" className="stock-row-action" variant="dangerGhost" disabled={accountAction !== null} aria-label={"Remove " + row.redactedToken + " from Rotating stock"} onClick={() => void manageAccount(row, "remove")}><Trash2 className="h-3.5 w-3.5" /></Button></span>
+            <span title="Remove from Rotating stock"><Button size="icon-sm" className="stock-row-action" variant="dangerGhost" disabled={accountAction !== null} aria-label={"Remove " + row.redactedToken + " from Rotating stock"} onClick={() => openRemoval([row])}><Trash2 className="h-3.5 w-3.5" /></Button></span>
           </div>
         </div>
         {expanded === row.id ? <div id={`boost-details-${row.id}`} className="boost-account-drawer">
@@ -172,6 +194,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
         </div> : null}
       </article>)}
     </div>
+    {removalTargets ? <RotatingStockRemoveDialog count={removalTargets.length} accountLabel={removalTargets.length === 1 ? removalTargets[0].redactedToken : undefined} onConfirm={removeAccounts} onClose={() => setRemovalTargets(null)} /> : null}
     {adding ? createPortal(<div className="confirm-modal-backdrop" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) setAdding(false);
     }}>

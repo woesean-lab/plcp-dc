@@ -432,3 +432,55 @@ test("an accepted check survives one transient job-ID persistence failure", asyn
   const service = createRotatingTokenChecker({ stock: f.stock, client: { createTokenCheck: async () => { f.failNextInventoryWrite(); return "job"; } } });
   await service.start(row.id); assert.equal(f.read()[0].tokenCheck.jobId, "job"); assert.equal(f.read()[0].tokenCheck.status, "running");
 });
+
+
+test("bulk removal handles every state together, deduplicates IDs and preserves unselected accounts and orders", async () => {
+  const f = fixture(); const rows = await f.seed(["one", "two", "three", "four", "five", "keep"], later(90));
+  const saved = f.read(); ["available", "reserved", "in_use", "review", "expired"].forEach((status, index) => Object.assign(saved[index], { status, orderId: "order", orderIndex: index, customerEndsAt: later(20) })); f.write(saved);
+  const order = { uniqid: "order", added: 10 }; f.orders.set("order", order);
+  let callbacks = 0;
+  const ids = rows.slice(0, 5).map(row => row.id);
+  const result = await f.stock.removeMany([...ids, ids[0]], async selected => { callbacks++; assert.equal(selected.length, 5); return { config: { accounts: [] }, removedIds: ["legacy-profile"] }; });
+  assert.deepEqual(result.removedAccountIds, ids); assert.deepEqual(result.removedIds, ["legacy-profile"]); assert.equal(callbacks, 1);
+  assert.deepEqual((await f.stock.list()).map(row => row.id), [rows[5].id]); assert.deepEqual(f.orders.get("order"), order);
+  assert.deepEqual((await f.stock.removeMany(ids)).removedAccountIds, []);
+});
+
+test("invalid bulk requests and cleanup/write failures leave the full inventory intact", async () => {
+  const f = fixture(); const rows = await f.seed(["one", "two"], later(90)); const ids = rows.map(row => row.id);
+  for (const input of [undefined, [], [123], [""], Array(5001).fill("id")]) await assert.rejects(f.stock.removeMany(input), { statusCode: 400 });
+  await assert.rejects(f.stock.removeMany(ids, async () => { throw new Error("cleanup failed"); }), /cleanup failed/);
+  f.failNextInventoryWrite(); await assert.rejects(f.stock.removeMany(ids), /Inventory write failed/);
+  assert.deepEqual((await f.stock.list()).map(row => row.id), ids);
+});
+
+test("bulk checks skip pending accounts, create one shared job and fetch it once per refresh", async () => {
+  const f = fixture(); const rows = await f.seed(["one", "two", "pending"], later(90));
+  const saved = f.read(); saved[2].tokenCheck = { status: "running", jobId: "previous", requestId: "previous-claim", startedAt: new Date().toISOString() }; f.write(saved);
+  let creates = 0, polls = 0;
+  const client = { createTokenChecks: async tokens => { creates++; assert.deepEqual(tokens, ["one", "two"]); return "bulk"; }, getTokenChecks: async (job, tokens) => { polls++; assert.equal(job, "bulk"); assert.deepEqual(tokens, ["one", "two"]); return [{ status: "valid" }, { status: "locked" }]; }, getTokenCheck: async () => ({ status: "running" }) };
+  const service = createRotatingTokenChecker({ stock: f.stock, client });
+  assert.deepEqual(await service.startMany(rows.map(row => row.id)), { queued: true, submitted: 2, skipped: 1 });
+  assert.deepEqual(await service.startMany(rows.map(row => row.id)), { queued: false, submitted: 0, skipped: 3 });
+  await service.refresh(); assert.equal(creates, 1); assert.equal(polls, 1);
+  assert.deepEqual(f.read().map(row => row.tokenCheck.status), ["valid", "locked", "running"]);
+  await service.refresh(); assert.equal(polls, 1);
+});
+
+test("overlapping bulk checks cannot submit the same account twice and invalid batches never submit", async () => {
+  const f = fixture(); const rows = await f.seed(["one", "two", "three"], later(90)); const submitted = [];
+  const client = { createTokenCheck: async token => { submitted.push(token); return "job-single"; }, createTokenChecks: async tokens => { submitted.push(...tokens); return "job-bulk"; } };
+  const service = createRotatingTokenChecker({ stock: f.stock, client });
+  await assert.rejects(service.startMany([]), { statusCode: 400 });
+  await assert.rejects(service.startMany([rows[0].id, "missing"]), { statusCode: 404 });
+  assert.equal(submitted.length, 0); assert.equal(f.read()[0].tokenCheck, undefined);
+  await Promise.all([service.startMany([rows[0].id, rows[1].id]), service.startMany([rows[1].id, rows[2].id])]);
+  assert.deepEqual(submitted.sort(), ["one", "three", "two"]);
+});
+
+test("bulk polling can finish after selected accounts are removed without restoring them", async () => {
+  const f = fixture(); const rows = await f.seed(["one", "two"], later(90));
+  const client = { createTokenChecks: async () => "bulk", getTokenChecks: async () => { await f.stock.removeMany(rows.map(row => row.id)); return [{ status: "valid" }, { status: "valid" }]; } };
+  const service = createRotatingTokenChecker({ stock: f.stock, client });
+  await service.startMany(rows.map(row => row.id)); await service.refresh(); assert.deepEqual(await f.stock.list(), []);
+});

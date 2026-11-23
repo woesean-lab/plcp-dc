@@ -469,6 +469,18 @@ export function checkRotatingBoostToken(id: string) {
   return requestJson<{ queued: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}/check-token`, { method: "POST" });
 }
 
+export function checkRotatingBoostTokens(ids: string[]) {
+  return requestJson<{ queued: boolean; submitted: number; skipped: number }>("/api/dcord/rotating-stock/check-tokens", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+  });
+}
+
+export function removeRotatingBoostAccounts(ids: string[]) {
+  return requestJson<{ removed: number; ids: string[] }>("/api/dcord/rotating-stock/delete", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids })
+  });
+}
+
 export function removeRotatingBoostAccount(id: string) {
   return requestJson<{ removed: boolean }>(`/api/dcord/rotating-stock/${encodeURIComponent(id)}`, { method: "DELETE" });
 }

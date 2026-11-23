@@ -16,6 +16,7 @@ export function createRotatingBoostOnliner({ stock, readConfig, writeConfig }) {
   }
   return {
     retire: () => stock.withAccounts(detach),
-    remove: id => stock.remove(id, (row, client) => detach([row], client))
+    remove: id => stock.remove(id, (row, client) => detach([row], client)),
+    removeMany: ids => stock.removeMany(ids, detach)
   };
 }
