@@ -162,6 +162,7 @@ import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
+import { BoostServiceField } from "../components/BoostServiceField";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
 
@@ -3697,10 +3698,6 @@ export default function HomePage() {
                     </fieldset>
                   ) : null}
 
-                  {selectedIsBoost ? <div className="boost-order-field md:col-span-2">
-                    <span className={fieldLabelClass}>Boost service</span>
-                    <div className="stock-duration-filter" role="group" aria-label="Boost service">{(["dcord", "salta7"] as const).map(value => <button type="button" key={value} className={form.boostProvider === value ? "is-active" : ""} aria-pressed={form.boostProvider === value} onClick={() => setForm(current => ({ ...current, boostProvider: value }))}>{value === "salta7" ? "Salta7" : "Dcord"}</button>)}</div>
-                  </div> : null}
                   {selectedIsBoost ? (
                     <fieldset className="service-selector md:col-span-2">
                       <legend className="sr-only">Boost stock source</legend>
@@ -3780,6 +3777,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
+                        <BoostServiceField value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} />
                         <div className="boost-order-grid">
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Boosts</span>

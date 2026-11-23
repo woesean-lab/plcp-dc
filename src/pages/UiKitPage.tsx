@@ -13,6 +13,7 @@ import { ListPagination, paginate } from "../components/ListPagination";
 import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
+import { BoostServiceField } from "../components/BoostServiceField";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
@@ -317,6 +318,7 @@ export default function UiKitPage() {
   const [checked, setChecked] = useState(true);
   const [promotion, setPromotion] = useState(true);
   const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
+  const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("dcord");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const search = query.trim().toLowerCase();
@@ -362,6 +364,9 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
+          <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
+            <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
+          </Example>
           <Example title="Inputs & compact search" source="src/components/ui/input.tsx · community-member-search" code={'import { Input } from "@/components/ui/input";\n\n<label><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label>\n<label className="community-member-search">\n  <Search className="h-3.5 w-3.5" />\n  <Input type="search" aria-label="Search members" placeholder="Search username, name or ID…" />\n</label>'}>
             <div className="ui-ref-grid"><label className="ui-ref-field"><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label><label className="ui-ref-field"><span className="field-label">Disabled field</span><Input disabled value="Unavailable" readOnly /></label><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Sample member search" placeholder="Search username, name or ID…" /></label></div>
           </Example>

@@ -2311,6 +2311,10 @@
     min-width: 0;
   }
 
+  .community-speed-profile-options.boost-service-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .community-speed-profile-options button,
   .community-speed-custom-option {
     display: grid;
@@ -10128,7 +10132,8 @@
   }
 
   .community-join-method-options,
-  .community-speed-profile-options {
+  .community-speed-profile-options,
+  .community-speed-profile-options.boost-service-options {
     grid-template-columns: 1fr;
   }
 
