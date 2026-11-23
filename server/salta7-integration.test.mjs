@@ -10,19 +10,19 @@ const fn=name=>ast.statements.find(node=>ts.isFunctionDeclaration(node)&&node.na
 const route=path=>ast.statements.find(node=>ts.isExpressionStatement(node)&&ts.isCallExpression(node.expression)&&node.expression.expression.getText(ast)==="app.post"&&node.expression.arguments[0]?.text===path).getText(ast);
 const response=()=>({statusCode:200,status(code){this.statusCode=code;return this},json(body){this.body=body;return this},set(){return this}});
 
-function createRoute() {
-  const saved=[],proxyReservations=[],processing=[];let handler;let remaining;
-  const stock={oneMonth:["token1","token2","token3"],threeMonth:["3m-token"]};
+function createRoute(stockOverride, rotatingTokens = ["rotating-token"]) {
+  const saved=[],proxyReservations=[],processing=[],assigned=[];let handler;let remaining;
+  const stock=stockOverride??{oneMonth:["token1","token2","token3"],threeMonth:["3m-token"]};
   const scope={app:{post:(_path,_auth,fn)=>{handler=fn}},requireSession(){},loadSalta7ApiKey:async()=>"key",extractDiscordInviteCode:value=>value,normalizeDcordBoostConcurrency:()=>1,
     getCommunityOAuthConfig:async()=>({}),normalizeSubmittedDiscordResolution:()=>({guildId:"guild",guildName:"Sample server"}),normalizeDiscordGuildName:value=>value,
     checkDcordBoostMembershipScreening:async()=>({status:"closed"}),loadBoostTokenStock:async()=>stock,saveBoostTokenStock:async value=>{remaining=value;return value},
     createDcordOrderId:()=>"boost-test",reserveDcordProxies:async count=>{proxyReservations.push(count);return ["proxy1","proxy2"]},
-    saveDcordOrderTokens:async()=>{},saveDcordOrderProxies:async()=>{},saveTrackedOrderPayload:async order=>saved.push(structuredClone(order)),
+    saveDcordOrderTokens:async(_id,tokens)=>assigned.push(Array.from(tokens)),saveDcordOrderProxies:async()=>{},saveTrackedOrderPayload:async order=>saved.push(structuredClone(order)),
     processDcordBoostOrder:async (...args)=>processing.push(args),summarizeBoostTokenStock:value=>value,redactToken:value=>value,console,
-    rotatingBoostStock:{reserveForDelivery:async()=>({tokens:["rotating-token"],proxies:[]})}
+    rotatingBoostStock:{reserveForDelivery:async()=>({tokens:rotatingTokens,proxies:[]})}
   };
   vm.runInNewContext(fn("createQueuedDcordResult")+"\n"+route("/api/dcord/boost-orders"),scope);
-  return {run:async(body)=>{const res=response();await handler({body:{id:"invite",amount:4,duration:1,...body}},res,error=>{throw error});return res},saved,processing,proxyReservations,get remaining(){return remaining}};
+  return {run:async(body)=>{const res=response();await handler({body:{id:"invite",amount:4,duration:1,...body}},res,error=>{throw error});return res},saved,processing,proxyReservations,assigned,get remaining(){return remaining}};
 }
 
 test("Salta7 creation reserves our tokens without consuming delivery proxies; Dcord keeps them",async()=>{
@@ -111,5 +111,35 @@ test("Rotating creation reserves no delivery proxies with either boost provider"
     const api = createRoute(); await api.run({ boostProvider, boostStockPool: "rotating", amount: 2 });
     assert.equal(api.saved[0].useProxy, false); assert.equal(api.proxyReservations.length, 0);
     assert.deepEqual(Array.from(api.processing[0][1]), ["rotating-token"]);
+  }
+});
+
+
+test("order token-format choice preserves all original stock and assignment fields", async () => {
+  const token = "email:password:account-token:2fa-secret";
+  const waiting = "other:password:waiting-token:waiting-2fa";
+  for (const boostStockPool of ["regular", "rotating"]) for (const removeTwoFactor of [true, false]) {
+    const stock = { oneMonth: [token, waiting], threeMonth: [] };
+    const api = createRoute(stock, [token]);
+    await api.run({ boostProvider: "salta7", boostStockPool, amount: 2, removeTwoFactor });
+    assert.equal(api.saved[0].removeTwoFactor, removeTwoFactor);
+    assert.deepEqual(api.assigned[0], [token]); assert.deepEqual(Array.from(api.processing[0][1]), [token]);
+    assert.deepEqual(stock.oneMonth, [token, waiting]);
+    if (boostStockPool === "regular") assert.deepEqual(Array.from(api.remaining.oneMonth), [waiting]);
+  }
+});
+
+test("invalid token-format flags reject the order before any reservation", async () => {
+  const api = createRoute(); const result = await api.run({ removeTwoFactor: "false" });
+  assert.equal(result.statusCode, 400); assert.equal(api.saved.length, 0); assert.equal(api.assigned.length, 0);
+});
+
+test("delivery and resumed jobs forward the saved request-format choice", async () => {
+  for (const removeTwoFactor of [true, false]) {
+    const api = worker({ status: "joined + boosted", boostCount: 2, dcordTaskId: "saved-job" });
+    await api.run({ ...base, removeTwoFactor, dcordResults: [{ status: "verifying", dcordTaskId: "saved-job" }] }, ["email:password:token:2fa"], "invite");
+    assert.equal(api.submissions[0].options.removeTwoFactor, removeTwoFactor);
+    assert.equal(api.submissions[0].token, "email:password:token:2fa");
+    assert.equal(api.saved.at(-1).removeTwoFactor, removeTwoFactor);
   }
 });

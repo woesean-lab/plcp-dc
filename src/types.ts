@@ -123,6 +123,7 @@ export type OrderStatus =
 
 export interface CreateOrderPayload {
   boostProvider?: BoostProvider;
+  removeTwoFactor?: boolean;
   service: ServiceType;
   id: string;
   amount: number;
@@ -168,6 +169,7 @@ export interface CreateOrderResponse {
 
 export interface OrderStatusResponse {
   boostProvider?: BoostProvider;
+  removeTwoFactor?: boolean;
   customerReactions?: CustomerOrderReactions;
   boostStockPool?: BoostStockPool;
   uniqid: string;
@@ -256,6 +258,7 @@ export interface OrderStatusResponse {
 
 export interface TrackedOrder {
   boostProvider?: BoostProvider;
+  removeTwoFactor?: boolean;
   customerReactions?: OrderReactionOverview;
   boostStockPool?: BoostStockPool;
   uniqid: string;

@@ -153,3 +153,30 @@ test("bulk checker submits one credential-free job and maps reordered results to
   assert.equal(results[0].boostFree, 1); assert.equal(results[1].lockType, "phone");
   assert.equal(api.calls.length, 2); assert.ok(!JSON.stringify(api.calls).includes("password"));
 });
+
+
+test("request-only 2FA removal affects exactly four-part Salta7 lines and honors the saved flag", async () => {
+  const sent = [];
+  const context = { salta7Client: { run: async token => { sent.push(token); return { boostCount: 2 }; } }, redactToken: () => "masked" };
+  vm.runInNewContext(code("removeBoostTokenTwoFactor") + "\n" + code("runDcordBoostToken") + ";this.run=runDcordBoostToken;", context);
+  for (const token of ["bare-token", "email:password:token", "email:password:token:2fa", "one:two:three:four:five"]) {
+    const original = token;
+    for (const removeTwoFactor of [true, false]) {
+      await context.run(token, "invite", { boostProvider: "salta7", removeTwoFactor });
+      const expected = removeTwoFactor && token.split(":").length === 4 ? "email:password:token" : token;
+      assert.equal(sent.at(-1), expected); assert.equal(token, original);
+    }
+  }
+  await context.run("email:password:token:2fa", "invite", { boostProvider: "salta7" });
+  assert.equal(sent.at(-1), "email:password:token");
+});
+
+test("Dcord requests extract the actual token after removing the fourth field", async () => {
+  let submitted;
+  const context = { requestDcord: async (_path, init) => { if (init.method === "POST") submitted = JSON.parse(init.body); return {}; }, dcordTaskCreatePath: "/create", dcordTaskStatusPath: "/status", dcordTaskMaxWaitMs: 1000,
+    getDcordTaskId: () => "job", getDcordTaskStatus: () => "completed", normalizeDcordTaskResult: () => ({ boosted: true }) };
+  vm.runInNewContext(["removeBoostTokenTwoFactor", "extractDcordApiToken", "runDcordBoostToken"].map(code).join("\n") + ";this.run=runDcordBoostToken;", context);
+  const original = "email:password:token:2fa";
+  await context.run(original, "invite", { boostProvider: "dcord", removeTwoFactor: true });
+  assert.equal(submitted.token, "token"); assert.equal(original, "email:password:token:2fa");
+});

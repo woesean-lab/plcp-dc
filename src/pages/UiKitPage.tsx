@@ -15,6 +15,7 @@ import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDialog";
 import { BoostServiceField } from "../components/BoostServiceField";
+import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
@@ -319,6 +320,7 @@ export default function UiKitPage() {
   const [checked, setChecked] = useState(true);
   const [promotion, setPromotion] = useState(true);
   const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
+  const [removeTwoFactor, setRemoveTwoFactor] = useState(true);
   const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -369,6 +371,7 @@ export default function UiKitPage() {
           <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
             <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
           </Example>
+          <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
           <Example title="Inputs & compact search" source="src/components/ui/input.tsx · community-member-search" code={'import { Input } from "@/components/ui/input";\n\n<label><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label>\n<label className="community-member-search">\n  <Search className="h-3.5 w-3.5" />\n  <Input type="search" aria-label="Search members" placeholder="Search username, name or ID…" />\n</label>'}>
             <div className="ui-ref-grid"><label className="ui-ref-field"><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label><label className="ui-ref-field"><span className="field-label">Disabled field</span><Input disabled value="Unavailable" readOnly /></label><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Sample member search" placeholder="Search username, name or ID…" /></label></div>
           </Example>

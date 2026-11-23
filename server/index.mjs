@@ -5430,7 +5430,7 @@ function normalizeBoostTokenList(value) {
 
 function removeBoostTokenTwoFactor(value) {
   const parts = String(value ?? "").split(":");
-  return parts.length >= 4 ? parts.slice(0, -1).join(":") : String(value ?? "");
+  return parts.length === 4 ? parts.slice(0, -1).join(":") : String(value ?? "");
 }
 
 function normalizeBoostTokenStock(value) {
@@ -8243,14 +8243,15 @@ async function returnDcordTokensToStock(order, tokens, results, includeUncertain
 }
 
 async function runDcordBoostToken(token, invite, options = {}) {
+  const requestToken = options.removeTwoFactor !== false ? removeBoostTokenTwoFactor(token) : token;
   if (options.boostProvider === "salta7") {
-    const result = await salta7Client.run(removeBoostTokenTwoFactor(token), invite, options);
+    const result = await salta7Client.run(requestToken, invite, options);
     return { ...result, token: redactToken(token) };
   }
   let taskId = options.existingTaskId ? String(options.existingTaskId) : null;
   try {
     if (!taskId) {
-      const createPayload = { type: "join", token: extractDcordApiToken(token), invite, boost: options.boost !== false };
+      const createPayload = { type: "join", token: extractDcordApiToken(requestToken), invite, boost: options.boost !== false };
       const proxy = String(options.proxy ?? "").trim();
       if (proxy) createPayload.proxy = proxy;
       const requestStartedAt = Date.now();
@@ -8390,7 +8391,7 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
       results[index] = { ...results[index], state: "running", message: `${order.boostProvider === "salta7" ? "Salta7" : "Dcord"} join request is running.` };
       await saveDcordRejoinJob(orderId, createJob());
       const proxy = order?.boostStockPool !== "rotating" && order?.useProxy === true ? normalizeDcordProxyForDcord(proxies[index]) : "";
-      const response = await runDcordBoostToken(token, invite, { boost: false, proxy, boostProvider: order.boostProvider,
+      const response = await runDcordBoostToken(token, invite, { boost: false, proxy, boostProvider: order.boostProvider, removeTwoFactor: order.removeTwoFactor,
         ...(order.boostProvider === "salta7" ? { existingTaskId: results[index].dcordTaskId, onTaskCreated: async id => { results[index] = { ...results[index], dcordTaskId: id, taskPending: true }; await saveDcordRejoinJob(orderId, createJob()); } } : {}) });
       const succeeded = response?.success === true || ["joined", "already joined", "already_member", "already member"].includes(String(response?.joinStatus ?? "").toLowerCase());
       results[index] = {
@@ -8595,6 +8596,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     let dcordAcceptedMs = Number.isFinite(results[index]?.dcordAcceptedMs) ? results[index].dcordAcceptedMs : undefined;
     const normalizedResult = await runDcordBoostToken(token, invite, {
       boostProvider: order.boostProvider,
+      removeTwoFactor: order.removeTwoFactor,
       existingTaskId,
       proxy,
       onTaskCreated: async (taskId, timing) => {
@@ -14824,6 +14826,8 @@ app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next)
 app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
   try {
     if (req.body?.boostProvider !== undefined && !["dcord", "salta7"].includes(req.body.boostProvider)) return res.status(400).json({ message: "Choose Dcord or Salta7." });
+    if (req.body?.removeTwoFactor !== undefined && typeof req.body.removeTwoFactor !== "boolean") return res.status(400).json({ message: "Remove 2FA field must be enabled or disabled." });
+    const removeTwoFactor = req.body?.removeTwoFactor !== false;
     const boostProvider = req.body?.boostProvider === "dcord" ? "dcord" : "salta7";
     if (boostProvider === "salta7") await loadSalta7ApiKey();
     const invite = extractDiscordInviteCode(req.body?.id);
@@ -14895,6 +14899,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
       uniqid,
       provider: "dcord",
       boostProvider,
+      removeTwoFactor,
       service: "DCORD-BOOSTS",
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
