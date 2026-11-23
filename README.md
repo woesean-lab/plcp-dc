@@ -143,6 +143,16 @@ Iki servis ayni PostgreSQL baglanti ve sifreleme ortam degiskenlerini kullanmali
 tek replica olarak calistirilmalidir. PostgreSQL advisory lock ikinci worker'in ayni hesaplari
 baglamasini engeller. Ayarlar, runtime durumu ve loglar ortak PostgreSQL uzerinden senkronize edilir.
 
+## Salta7 Boosts
+
+- Settings > Connections altinda Salta7 API key dogrulanip sifreli saklanir. Check yalnizca `/balance` okur.
+- Create > Boosts > Boost service seciminden Dcord veya Salta7 secilir. Varsayilan Dcord'dur.
+- Salta7 mevcut Boost Stock tokenlarini `/task/create` ile kullanir; saglayici stogundan satin alma yapmaz, proxy gondermez ve Dcord'un tek kullanimlik proxylerini tuketmez.
+- `/task/status` ve `/task/items` ile gercek 0/1/2 boost sonuclari izlenir. Kabul edilen job ID kaydedilir; sorgu kesilirse ayni job sorgulanir.
+- POST sonucu belirsiz ve job ID yoksa token otomatik tekrar gonderilmez; saglayici uzerinden manuel dogrulama gerekir. Kabul edilmis veya belirsiz gorevde tokeni stoga iade/replacement engellenir.
+- Eski boost route/provider/result alanlari uyumluluk icin korunur; `boostProvider: "salta7"` saglayiciyi secer. Bu alan bulunmayan eski siparisler Dcord ile devam eder.
+- API referansi: https://salta7.store/api. Canli gorev acmak tokenlari Salta7'ye gonderir ve Salta7 bakiyesini kullanabilir.
+
 ## Dcord Boosts
 
 - Siparisler yerel token stokundan token ayirir; her token 2x boost olarak sayilir.

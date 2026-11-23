@@ -46,7 +46,17 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
 }
 
 export function getAdminConfig() {
-  return requestJson<{ dcordConfigured: boolean; boostStock: BoostStock }>("/api/admin/config");
+  return requestJson<{ dcordConfigured: boolean; salta7Configured?: boolean; boostStock: BoostStock }>("/api/admin/config");
+}
+
+export function saveSalta7ApiKey(apiKey: string) {
+  return requestJson<{ configured: boolean }>("/api/salta7/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey }) });
+}
+export function clearSalta7ApiKey() {
+  return requestJson("/api/salta7/config", { method: "DELETE" });
+}
+export function checkSalta7Connection() {
+  return requestJson<{ connected: boolean; message: string; balance?: number }>("/api/salta7/check", { method: "POST" });
 }
 
 export async function createOrder(payload: CreateOrderPayload) {

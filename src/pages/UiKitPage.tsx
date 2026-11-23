@@ -251,6 +251,8 @@ function StockNavigationExample() {
 }
 
 function SettingsExample() {
+  const [saltaConfigured, setSaltaConfigured] = useState(false);
+  const [saltaKey, setSaltaKey] = useState("");
   const [config, setConfig] = useState({ configured: true, stored: true, clientId: "123456789012345678", guildId: "234567890123456789", hasClientSecret: true, hasBotToken: true, guildName: "Sample Members server", activeGuildCount: 3, activeGuildCountExact: true, botVerified: true, serverLimit: 100 });
   const [draft, setDraft] = useState({ clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" });
   const [configured, setConfigured] = useState(true);
@@ -260,6 +262,7 @@ function SettingsExample() {
   return <SettingsWorkspace loading={false} onRefresh={() => toast.success("Sample connection status refreshed")}
     members={{ config, draft, onDraftChange: setDraft, saving: false, onSave: (event) => { event.preventDefault(); setConfig({ ...config, configured: true, stored: true, clientId: draft.clientId, guildId: draft.guildId, hasClientSecret: true, hasBotToken: true }); setDraft({ ...draft, clientSecret: "", botToken: "" }); toast.success("Sample settings saved"); }, onRemove: () => { setConfig({ ...config, configured: false, stored: false, hasClientSecret: false, hasBotToken: false, clientId: "", guildId: "" }); setDraft({ clientId: "", guildId: "", clientSecret: "", botToken: "" }); } }}
     dcord={{ configured, draft: key, onDraftChange: setKey, saving: false, onSave: (event) => { event.preventDefault(); setConfigured(true); setKey(""); toast.success("Sample key saved"); }, onRemove: () => { setConfigured(false); setKey(""); } }}
+    salta7={{ configured: saltaConfigured, draft: saltaKey, onDraftChange: setSaltaKey, saving: false, checking: false, onSave: event => { event.preventDefault(); setSaltaConfigured(true); setSaltaKey(""); toast.success("Sample Salta7 key saved"); }, onRemove: () => setSaltaConfigured(false), onCheck: () => toast.success("Sample Salta7 connection checked") }}
     guilds={{ items: guilds, selected, onSelectionChange: setSelected, loading: false, leaving: false, progress: null, onOpen: () => {}, onRefresh: () => toast.success("Sample servers refreshed"), onLeave: () => toast.success("Sample server action previewed") }}
   />;
 }

@@ -4,6 +4,7 @@ export type ServiceType = CommunityServiceType | BoostServiceType;
 export type OrderProvider = "community" | "dcord";
 export type BoostDuration = 1 | 3;
 export type BoostStockPool = "regular" | "rotating";
+export type BoostProvider = "dcord" | "salta7";
 export type CommunityJoinMethod = "create_invite" | "experimental_join" | "directly";
 
 export type CommunityMemberResult = {
@@ -121,6 +122,7 @@ export type OrderStatus =
   | string;
 
 export interface CreateOrderPayload {
+  boostProvider?: BoostProvider;
   service: ServiceType;
   id: string;
   amount: number;
@@ -165,6 +167,7 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  boostProvider?: BoostProvider;
   customerReactions?: CustomerOrderReactions;
   boostStockPool?: BoostStockPool;
   uniqid: string;
@@ -252,6 +255,7 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  boostProvider?: BoostProvider;
   customerReactions?: OrderReactionOverview;
   boostStockPool?: BoostStockPool;
   uniqid: string;

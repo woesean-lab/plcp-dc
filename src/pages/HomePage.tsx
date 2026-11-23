@@ -162,6 +162,7 @@ import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { RotatingProxyPoolPanel } from "../components/RotatingProxyPoolPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
+import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
 
 const EMPTY_FORM = {
@@ -171,6 +172,7 @@ const EMPTY_FORM = {
   delay: 1,
   duration: 1 as 1 | 3,
   boostStockPool: "regular" as "regular" | "rotating",
+  boostProvider: "dcord" as "dcord" | "salta7",
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",
@@ -573,6 +575,10 @@ export default function HomePage() {
 
   const [dcordApiKey, setDcordApiKey] = useState("");
   const [dcordConfigured, setDcordConfigured] = useState(false);
+  const [salta7Configured, setSalta7Configured] = useState(false);
+  const [salta7ApiKey, setSalta7ApiKey] = useState("");
+  const [savingSalta7ApiKey, setSavingSalta7ApiKey] = useState(false);
+  const [checkingSalta7, setCheckingSalta7] = useState(false);
   const [boostStock, setBoostStock] = useState<BoostStock>(EMPTY_BOOST_STOCK);
   const [rotatingAccounts, setRotatingAccounts] = useState<RotatingBoostAccount[]>([]);
   const [rotatingLoading, setRotatingLoading] = useState(false);
@@ -795,7 +801,7 @@ export default function HomePage() {
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
-  const selectedApiConfigured = selectedIsBoost ? dcordConfigured : Boolean(communityStatus?.configured);
+  const selectedApiConfigured = selectedIsBoost ? (form.boostProvider === "salta7" ? salta7Configured : dcordConfigured) : Boolean(communityStatus?.configured);
   const selectedCanCreate = selectedApiConfigured && (
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
@@ -1020,6 +1026,7 @@ export default function HomePage() {
     try {
       const config = await getAdminConfig();
       setDcordConfigured(config.dcordConfigured);
+      setSalta7Configured(config.salta7Configured === true);
       setBoostStock(config.boostStock);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Connection could not be checked.");
@@ -1909,6 +1916,7 @@ export default function HomePage() {
     try {
       const [admin, config] = await Promise.all([getAdminConfig(), getCommunityConfig()]);
       setDcordConfigured(admin.dcordConfigured);
+      setSalta7Configured(admin.salta7Configured === true);
       setBoostStock(admin.boostStock);
       setCommunityConfig(config);
       if (!communityConfig) setCommunityConfigDraft((current) => ({ ...current, clientId: current.clientId || config.clientId, guildId: current.guildId || config.guildId }));
@@ -2530,6 +2538,32 @@ export default function HomePage() {
     }
   }
 
+  async function handleSaveSalta7ApiKey(event: FormEvent) {
+    event.preventDefault();
+    try {
+      setSavingSalta7ApiKey(true);
+      await saveSalta7ApiKey(salta7ApiKey.trim());
+      setSalta7Configured(true); setSalta7ApiKey(""); notifySuccess("Salta7 API key verified and saved.");
+    } catch (error) { notifyError(error instanceof Error ? error.message : "Salta7 key could not be saved."); }
+    finally { setSavingSalta7ApiKey(false); }
+  }
+
+  async function handleClearSalta7ApiKey() {
+    try {
+      setSavingSalta7ApiKey(true); await clearSalta7ApiKey();
+      setSalta7Configured(false); setSalta7ApiKey(""); notifySuccess("Salta7 API key removed.");
+    } catch (error) { notifyError(error instanceof Error ? error.message : "Salta7 key could not be removed."); }
+    finally { setSavingSalta7ApiKey(false); }
+  }
+
+  async function handleCheckSalta7() {
+    try {
+      setCheckingSalta7(true); const result = await checkSalta7Connection();
+      notifySuccess(result.balance === undefined ? result.message : `${result.message} Balance: $${result.balance.toFixed(2)}`);
+    } catch (error) { notifyError(error instanceof Error ? error.message : "Salta7 connection failed."); }
+    finally { setCheckingSalta7(false); }
+  }
+
   async function handleClearDcordApiKey() {
     try {
       setSavingDcordApiKey(true);
@@ -2965,6 +2999,7 @@ export default function HomePage() {
     const nextOrder: TrackedOrder = {
       uniqid: created.uniqid,
       provider: payloadIsBoost ? "dcord" : "community",
+      boostProvider: payloadIsBoost ? payload.boostProvider : undefined,
       service: payload.service,
       serverId,
       serverName,
@@ -2976,7 +3011,7 @@ export default function HomePage() {
       isEldoradoSale: payload.isEldoradoSale,
       duration: payloadIsBoost ? payload.duration : undefined,
       boostStockPool: payloadIsBoost ? payload.boostStockPool : undefined,
-      useProxy: payloadIsBoost ? true : undefined,
+      useProxy: payloadIsBoost ? payload.boostProvider !== "salta7" : undefined,
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
       botInvite: created.bot_invite,
@@ -3023,7 +3058,8 @@ export default function HomePage() {
       delay: selectedIsBoost ? undefined : form.delay,
       duration: selectedIsBoost ? form.duration : undefined,
       boostStockPool: selectedIsBoost ? form.boostStockPool : undefined,
-      useProxy: selectedIsBoost ? true : undefined,
+      boostProvider: selectedIsBoost ? form.boostProvider : undefined,
+      useProxy: selectedIsBoost ? form.boostProvider !== "salta7" : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
       categoryAllocations: selectedIsCommunity && form.communityMultiCategory ? selectedCommunityAllocations.map(({ category, amount }) => ({ categoryId: category.id, amount })) : undefined,
@@ -3487,7 +3523,7 @@ export default function HomePage() {
                     <div className="service-grid service-grid-compact choose-service-grid">
                       {[
                         { value: "community", title: "Members", description: "Connected OAuth stock", icon: Users },
-                        { value: "boosts", title: "Boosts", description: "Dcord join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
+                        { value: "boosts", title: "Boosts", description: "Join + boost delivery", icon: boostServiceOption?.icon ?? Plus }
                       ].map((option, index) => {
                         const Icon = option.icon;
                         const selected = option.value === "boosts"
@@ -3661,6 +3697,10 @@ export default function HomePage() {
                     </fieldset>
                   ) : null}
 
+                  {selectedIsBoost ? <div className="boost-order-field md:col-span-2">
+                    <span className={fieldLabelClass}>Boost service</span>
+                    <div className="stock-duration-filter" role="group" aria-label="Boost service">{(["dcord", "salta7"] as const).map(value => <button type="button" key={value} className={form.boostProvider === value ? "is-active" : ""} aria-pressed={form.boostProvider === value} onClick={() => setForm(current => ({ ...current, boostProvider: value }))}>{value === "salta7" ? "Salta7" : "Dcord"}</button>)}</div>
+                  </div> : null}
                   {selectedIsBoost ? (
                     <fieldset className="service-selector md:col-span-2">
                       <legend className="sr-only">Boost stock source</legend>
@@ -3805,7 +3845,7 @@ export default function HomePage() {
                             />
                           </label>
 
-                          <label className="boost-proxy-toggle is-enabled">
+                          {form.boostProvider !== "salta7" ? <label className="boost-proxy-toggle is-enabled">
                             <input
                               type="checkbox"
                               checked
@@ -3814,7 +3854,7 @@ export default function HomePage() {
                             <span><ShieldCheck className="h-4 w-4" aria-hidden="true" /></span>
                             <strong>One-time proxy required</strong>
                             <small>{dcordProxyCount ? `${dcordProxyCount} available; one is consumed per token` : "No proxies saved"}</small>
-                          </label>
+                          </label> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
@@ -4018,7 +4058,7 @@ export default function HomePage() {
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
-                        Configure {selectedIsBoost ? "Dcord" : "Members bot"}
+                        Configure {selectedIsBoost ? form.boostProvider === "salta7" ? "Salta7" : "Dcord" : "Members bot"}
                       </Link>
                     </Button>
                   ) : null}
@@ -4704,6 +4744,7 @@ export default function HomePage() {
           onRefresh={() => void refreshSettingsConnections()}
           members={{ config: communityConfig, draft: communityConfigDraft, onDraftChange: setCommunityConfigDraft, saving: savingCommunityConfig, onSave: handleSaveCommunityConfig, onRemove: () => void handleClearCommunityConfig() }}
           dcord={{ configured: dcordConfigured, draft: dcordApiKey, onDraftChange: setDcordApiKey, saving: savingDcordApiKey, onSave: handleSaveDcordApiKey, onRemove: () => void handleClearDcordApiKey() }}
+          salta7={{ configured: salta7Configured, draft: salta7ApiKey, onDraftChange: setSalta7ApiKey, saving: savingSalta7ApiKey, onSave: handleSaveSalta7ApiKey, onRemove: () => void handleClearSalta7ApiKey(), checking: checkingSalta7, onCheck: () => void handleCheckSalta7() }}
           guilds={{ items: communityGuilds, loading: loadingCommunityGuilds, error: communityGuildsError, leaving: leavingCommunityGuilds, selected: selectedCommunityGuildIds, onSelectionChange: setSelectedCommunityGuildIds,
             onOpen: () => { if (!showCommunityGuildManager) void toggleCommunityGuildManager(); }, onRefresh: () => void loadCommunityGuildList(), onLeave: handleLeaveSelectedCommunityGuilds, progress: communityGuildLeaveProgress }}
         /> : null}
@@ -5121,7 +5162,8 @@ export default function HomePage() {
                 <div className="order-confirm-meta">
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.boostStockPool === "rotating" ? "Rotating stock · 30 days" : `${orderConfirmationPayload.duration} month`}</span> : null}
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
-                  {orderConfirmationPayload.duration ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
+                  {orderConfirmationPayload.duration ? <span><Bot className="h-3.5 w-3.5" />{orderConfirmationPayload.boostProvider === "salta7" ? "Salta7" : "Dcord"}</span> : null}
+                  {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}

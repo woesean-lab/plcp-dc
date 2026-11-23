@@ -85,7 +85,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
           <div>
             <Link className="od-order-name" to={orderUrl} title={name}>{name}</Link>
             <div className="od-order-description"><span>{order.categoryName || service}</span><span aria-hidden="true">·</span><code title={order.uniqid}>#{order.uniqid.length > 16 ? order.uniqid.slice(-12) : order.uniqid}</code></div>
-            <span className="od-order-context">{duration}{!boost ? ` · ${joinMethod}` : ""}</span>
+            <span className="od-order-context">{duration}{!boost ? ` · ${joinMethod}` : ` · ${order.boostProvider === "salta7" ? "Salta7" : "Dcord"}`}</span>
           </div>
         </div>
       </td>

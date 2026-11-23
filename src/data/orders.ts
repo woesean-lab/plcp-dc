@@ -47,6 +47,7 @@ export async function saveTrackedOrders(orders: TrackedOrder[]) {
     statusDelay: order.statusDelay,
     duration: order.duration,
     useProxy: order.useProxy,
+    boostProvider: order.boostProvider,
     concurrency: order.concurrency,
     cost: order.cost,
     botInvite: order.botInvite,

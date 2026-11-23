@@ -1228,8 +1228,8 @@ export default function OrderPage() {
                   <OrderStatusIndicator status={result.status ?? "UNKNOWN"} />
                   <span className="lookup-service-name">
                     <small>Service</small>
-                    <strong>{serviceName}</strong>
-                    <code>{serviceType}</code>
+                    <strong>{serviceName}{isDcordProvider ? ` · ${result.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : ""}</strong>
+                    <code>{isDcordProvider && result.boostProvider === "salta7" ? "SALTA7-BOOSTS" : serviceType}</code>
                   </span>
                   {joinMethod ? (
                     <span className="lookup-join-method" data-join-method={joinMethod}>
@@ -1276,7 +1276,7 @@ export default function OrderPage() {
             <div className="lookup-progress-heading">
               <div>
                 <p className="app-kicker">Live delivery</p>
-                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? "Waiting for Dcord" : "Delivery in progress"}</h3>
+                <h3>{normalizedStatus === "COMPLETED" ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaitingForBot ? "Waiting for bot" : isWaitingForDcord ? `Waiting for ${result.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : "Delivery in progress"}</h3>
               </div>
               <div className="lookup-progress-value">
                 <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>

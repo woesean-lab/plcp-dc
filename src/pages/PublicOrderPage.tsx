@@ -969,7 +969,7 @@ export default function PublicOrderPage() {
                 <OrderStatusIndicator status={statusLabel} loading={isInitialLoading} />
                 <span className="lookup-service-name">
                   <small>Service</small>
-                  {isInitialLoading ? <Skeleton className="h-3 w-14" /> : <strong>{serviceName}</strong>}
+                  {isInitialLoading ? <Skeleton className="h-3 w-14" /> : <strong>{serviceName}{isBoostOrder ? ` · ${status?.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : ""}</strong>}
                 </span>
               </div>
             </div>

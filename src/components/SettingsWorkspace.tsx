@@ -28,6 +28,7 @@ export type SettingsWorkspaceProps = {
     onSave: FormEventHandler<HTMLFormElement>;
     onRemove: () => void;
   };
+  salta7?: SettingsWorkspaceProps["dcord"] & { checking: boolean; onCheck: () => void };
   guilds: {
     items: CommunityBotGuild[];
     loading: boolean;
@@ -67,7 +68,7 @@ function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputEl
   </div>;
 }
 
-export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, guilds }: SettingsWorkspaceProps) {
+export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, salta7, guilds }: SettingsWorkspaceProps) {
   const [section, setSection] = useState<Section>("connections");
   const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
@@ -83,7 +84,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     const query = search.trim().toLowerCase();
     return guilds.items.filter((guild) => !query || guild.name.toLowerCase().includes(query) || guild.id.includes(query));
   }, [guilds.items, search]);
-  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured);
+  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured));
+  const connectionCount = salta7 ? 3 : 2;
   const serverCount = config?.activeGuildCount == null ? "—" : `${config.activeGuildCountExact ? "" : "≥ "}${config.activeGuildCount.toLocaleString("en-US")}${config.serverLimit ? ` / ${config.serverLimit.toLocaleString("en-US")}` : ""}`;
   const canSaveMembers = !membersBusy && Boolean(members.draft.clientId.trim())
     && Boolean(config?.hasClientSecret || members.draft.clientSecret.trim()) && Boolean(config?.hasBotToken || members.draft.botToken.trim());
@@ -115,8 +117,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     <header className="page-heading settings-page-heading">
       <div><p className="app-kicker">Workspace</p><h1 className="page-title">Settings</h1><p className="app-copy page-copy">Connections and bot server access.</p></div>
       <div className="settings-heading-actions">
-        {loading ? <span className="settings-refreshing" role="status"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Refreshing</span> : <Badge variant={connectedCount === 2 ? "success" : "secondary"}>{connectedCount === 2 ? <CheckCircle2 aria-hidden="true" /> : <Settings2 aria-hidden="true" />}{connectedCount} / 2 configured</Badge>}
-        <Button type="button" size="sm" variant="secondary" disabled={loading || members.saving || dcord.saving || guilds.leaving} onClick={onRefresh}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh status</Button>
+        {loading ? <span className="settings-refreshing" role="status"><LoaderCircle className="h-3.5 w-3.5 animate-spin" />Refreshing</span> : <Badge variant={connectedCount === connectionCount ? "success" : "secondary"}>{connectedCount === connectionCount ? <CheckCircle2 aria-hidden="true" /> : <Settings2 aria-hidden="true" />}{connectedCount} / {connectionCount} configured</Badge>}
+        <Button type="button" size="sm" variant="secondary" disabled={loading || members.saving || dcord.saving || salta7?.saving || salta7?.checking || guilds.leaving} onClick={onRefresh}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh status</Button>
       </div>
     </header>
 
@@ -164,6 +166,13 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
                 <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={dcordBusy || !dcord.draft.trim()}>{dcord.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{dcord.saving ? "Saving…" : dcord.configured ? "Replace key" : "Save key"}</Button>{dcord.draft ? <Button type="button" size="sm" variant="ghost" disabled={dcordBusy} onClick={() => dcord.onDraftChange("")}>Reset</Button> : null}</div>{dcord.configured ? <Button type="button" size="sm" variant="dangerGhost" disabled={dcordBusy} onClick={dcord.onRemove}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Remove</Button> : null}</footer>
               </form>
             </section>
+            {salta7 ? <section className="app-panel settings-card settings-dcord-card" aria-labelledby={`${id}-salta7-title`}>
+              <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><KeyRound className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Boost delivery</span><h3 id={`${id}-salta7-title`}>Salta7 API</h3></div><Badge variant={salta7.configured ? "success" : "secondary"}>{salta7.configured ? "Configured" : "Not configured"}</Badge></header>
+              <form onSubmit={salta7.onSave} className="settings-connection-form" aria-label="Salta7 settings">
+                <div className="settings-card-body"><SecretField label="API key" saved={salta7.configured} disabled={loading || salta7.saving || salta7.checking} value={salta7.draft} onChange={event => salta7.onDraftChange(event.target.value)} placeholder={salta7.configured ? "Enter a replacement key" : "Paste Salta7 API key"} autoComplete="new-password" /><p className="settings-field-note">Uses Boost Stock tokens without sending proxies.</p></div>
+                <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={loading || salta7.saving || salta7.checking || !salta7.draft.trim()}>{salta7.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{salta7.saving ? "Verifying…" : "Verify & save"}</Button><Button type="button" size="sm" variant="secondary" disabled={loading || salta7.saving || salta7.checking || !salta7.configured} onClick={salta7.onCheck}>{salta7.checking ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check</Button></div>{salta7.configured ? <Button type="button" size="sm" variant="dangerGhost" disabled={loading || salta7.saving || salta7.checking} onClick={salta7.onRemove}><Trash2 className="h-3.5 w-3.5" />Remove</Button> : null}</footer>
+              </form>
+            </section> : null}
           </div>
         </div>
 

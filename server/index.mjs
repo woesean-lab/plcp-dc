@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { createAdminAuth } from "./admin-auth.mjs";
+import { createSalta7Client } from "./salta7.mjs";
 import { diagnoseGuildJoinFailure, discordFailureDetails } from "./discord-join-diagnostics.mjs";
 import https from "node:https";
 import path from "node:path";
@@ -5413,6 +5414,14 @@ async function loadDcordApiKey() {
   return apiKey;
 }
 
+async function loadSalta7ApiKey() {
+  const key = await loadEncryptedSetting("salta7_api_key");
+  if (!key) throw Object.assign(new Error("Configure the Salta7 API key in Settings."), { statusCode: 503 });
+  return key;
+}
+
+const salta7Client = createSalta7Client({ loadKey: loadSalta7ApiKey });
+
 function normalizeBoostTokenList(value) {
   const items = Array.isArray(value) ? value : String(value ?? "").split(/\r?\n/);
   return Array.from(new Set(items.map((item) => String(item ?? "").trim()).filter(Boolean)));
@@ -8245,6 +8254,10 @@ async function returnDcordTokensToStock(order, tokens, results, includeUncertain
 }
 
 async function runDcordBoostToken(token, invite, options = {}) {
+  if (options.boostProvider === "salta7") {
+    const result = await salta7Client.run(removeBoostTokenTwoFactor(token), invite, options);
+    return { ...result, token: redactToken(token) };
+  }
   let taskId = options.existingTaskId ? String(options.existingTaskId) : null;
   try {
     if (!taskId) {
@@ -8364,6 +8377,7 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
   const orderId = String(order?.uniqid ?? "").trim();
   const invite = String(order?.serverInvite ?? "").trim();
   const results = tokens.map((token, index) => ({
+    ...(order.boostProvider === "salta7" && (order.dcordRejoinJob?.results?.[index]?.taskPending || order.dcordRejoinJob?.results?.[index]?.transportUncertain) ? order.dcordRejoinJob.results[index] : {}),
     index,
     token: redactToken(token),
     state: "waiting",
@@ -8380,10 +8394,15 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
   await saveDcordRejoinJob(orderId, createJob());
   try {
     await forEachWithConcurrency(tokens, Math.min(5, normalizeDcordBoostConcurrency(order?.concurrency)), async (token, index) => {
-      results[index] = { ...results[index], state: "running", message: "Dcord join request is running." };
+      if (order.boostProvider === "salta7" && results[index].transportUncertain && !results[index].dcordTaskId) {
+        results[index] = { ...results[index], state: "failed", message: "Verify the unconfirmed Salta7 join before submitting this account again." };
+        return;
+      }
+      results[index] = { ...results[index], state: "running", message: `${order.boostProvider === "salta7" ? "Salta7" : "Dcord"} join request is running.` };
       await saveDcordRejoinJob(orderId, createJob());
       const proxy = order?.useProxy === true ? normalizeDcordProxyForDcord(proxies[index]) : "";
-      const response = await runDcordBoostToken(token, invite, { boost: false, proxy });
+      const response = await runDcordBoostToken(token, invite, { boost: false, proxy, boostProvider: order.boostProvider,
+        ...(order.boostProvider === "salta7" ? { existingTaskId: results[index].dcordTaskId, onTaskCreated: async id => { results[index] = { ...results[index], dcordTaskId: id, taskPending: true }; await saveDcordRejoinJob(orderId, createJob()); } } : {}) });
       const succeeded = response?.success === true || ["joined", "already joined", "already_member", "already member"].includes(String(response?.joinStatus ?? "").toLowerCase());
       results[index] = {
         index,
@@ -8391,7 +8410,9 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
         state: succeeded ? "success" : "failed",
         joinStatus: String(response?.joinStatus ?? response?.status ?? (succeeded ? "joined" : "failed")),
         message: String(response?.boostMessage ?? (succeeded ? "Re-joined successfully." : "Re-join failed.")),
-        dcordTaskId: response?.dcordTaskId
+        dcordTaskId: response?.dcordTaskId,
+        taskPending: response?.taskPending === true,
+        transportUncertain: response?.transportUncertain === true
       };
       await saveDcordRejoinJob(orderId, createJob());
     });
@@ -8407,6 +8428,8 @@ async function runDcordOrderRejoin(order, tokens, proxies) {
 }
 
 async function processDcordBoostOrder(order, tokens, invite) {
+  const isSalta7 = order?.boostProvider === "salta7";
+  const boostProviderName = isSalta7 ? "Salta7" : "Dcord";
   const orderId = String(order?.uniqid ?? "").trim();
   if (!orderId || dcordOrderProcessingJobs.has(orderId)) return;
   if (order?.deliveryPaused === true || dcordOrderPausedJobs.has(orderId)) {
@@ -8437,6 +8460,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
         taskPending: true
       };
     }
+    if (isSalta7) return { ...existing, status: "verifying", joinStatus: "verifying", boostStatus: "verifying", transportUncertain: true, boostMessage: "Salta7 submission was interrupted before its job ID was saved. Manual verification is required." };
     return {
       ...existing,
       status: "queued",
@@ -8451,7 +8475,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
   let providerPaused = false;
   let retryAfterMs = dcordRetryBaseMs;
   let retryCount = Number.parseInt(order.dcordRetryCount, 10) || 0;
-  const assignedProxies = order.useProxy === true ? await loadDcordOrderProxies(orderId) : [];
+  const assignedProxies = !isSalta7 && order.useProxy === true ? await loadDcordOrderProxies(orderId) : [];
 
   async function saveCurrentProgress(forceWaiting = false) {
     progressSave = progressSave.then(async () => {
@@ -8475,14 +8499,14 @@ async function processDcordBoostOrder(order, tokens, invite) {
           ? "Boost delivery is paused. No new tokens will be submitted until it is resumed."
           : waitingForProvider
           ? hasQueued
-            ? "Dcord is temporarily unavailable. Queued delivery will resume automatically."
-            : "Dcord response is uncertain. The submitted tokens are being verified without a duplicate request."
+            ? `${boostProviderName} is temporarily unavailable. Queued delivery will resume automatically.`
+            : `${boostProviderName} response is uncertain. Submitted tokens will not be duplicated.`
           : finished
           ? added >= order.amount
             ? `${added}/${order.amount} boosts completed.`
             : `${added}/${order.amount} boosts completed. Review failed tokens in the payload.`
           : hasRunning && !hasQueued
-            ? `${added}/${order.amount} boosts completed. Waiting for Dcord verification.`
+            ? `${added}/${order.amount} boosts completed. Waiting for ${boostProviderName} verification.`
             : `${added}/${order.amount} boosts completed.`,
         dcordResults: results
       });
@@ -8499,7 +8523,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
         status: "returned",
         joinStatus: "not submitted",
         boostStatus: "not submitted",
-        boostMessage: "Dcord remained unavailable. This token was returned to stock."
+        boostMessage: `${boostProviderName} remained unavailable. This token was returned to stock.`
       };
     });
     const added = results.reduce((total, item) => total + getDcordResultBoostCount(item), 0);
@@ -8511,7 +8535,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
       dcordRetryCount: retryCount,
       nextRetryAt: null,
       returnedTokenCount: returnedCount,
-      details: `${returnedCount} unsubmitted token${returnedCount === 1 ? " was" : "s were"} returned to stock after the Dcord outage.`,
+      details: `${returnedCount} unsubmitted token${returnedCount === 1 ? " was" : "s were"} returned to stock after the ${boostProviderName} outage.`,
       dcordResults: results
     });
   }
@@ -8581,6 +8605,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const dcordStartedAt = Date.now();
     let dcordAcceptedMs = Number.isFinite(results[index]?.dcordAcceptedMs) ? results[index].dcordAcceptedMs : undefined;
     const normalizedResult = await runDcordBoostToken(token, invite, {
+      boostProvider: order.boostProvider,
       existingTaskId,
       proxy,
       onTaskCreated: async (taskId, timing) => {
@@ -8590,7 +8615,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
           status: "joining",
           joinStatus: "joining",
           boostStatus: "waiting",
-          boostMessage: "Dcord accepted the task. Waiting for its result.",
+          boostMessage: `${isSalta7 ? "Salta7" : "Dcord"} accepted the task. Waiting for its result.`,
           dcordTaskId: taskId,
           dcordTaskStatus: "pending",
           taskPending: true,
@@ -8608,7 +8633,13 @@ async function processDcordBoostOrder(order, tokens, invite) {
       dcordElapsedMs: Date.now() - dcordStartedAt,
       totalMs: Date.now() - tokenStartedAt
     };
-    if (normalized.providerBlocked === true) {
+    if (isSalta7 && normalized.status === "not_used") {
+      const returnedToStock = await returnDcordTokenToStock(order, token);
+      if (returnedToStock) {
+        await mutateUsedBoostTokenHistory(history => history.filter(item => item.id !== usedTokenId));
+        results[index] = { ...normalized, status: "returned", returnedToStock: true, boostMessage: "Salta7 did not process this account. Token returned to stock." };
+      } else results[index] = { ...results[index], ...normalized, usedTokenId };
+    } else if (normalized.providerBlocked === true) {
       await mutateUsedBoostTokenHistory((history) => history.filter((item) => item.id !== usedTokenId));
       const { usedTokenId: _unusedId, ...currentResult } = results[index];
       results[index] = { ...currentResult, ...normalized };
@@ -8616,18 +8647,20 @@ async function processDcordBoostOrder(order, tokens, invite) {
       await updateUsedBoostTokenResult(usedTokenId, normalized);
       results[index] = { ...results[index], ...normalized, usedTokenId };
     }
-    if (normalized.providerBlocked === true) {
+    if (isSalta7 && normalized.serverBlocked === true) {
+      dcordOrderPausedJobs.add(orderId);
+    } else if (normalized.providerBlocked === true) {
       providerPaused = true;
       retryCount += 1;
-      retryAfterMs = markDcordProviderFailure();
+      retryAfterMs = isSalta7 ? getDcordRetryDelay(retryCount - 1) : markDcordProviderFailure();
     } else if (normalized.taskPending === true) {
       retryAfterMs = dcordTaskPollIntervalMs;
     } else if (isUncertainDcordTransportResult(normalized)) {
       providerPaused = true;
       retryCount += 1;
-      retryAfterMs = markDcordProviderFailure();
+      retryAfterMs = isSalta7 ? getDcordRetryDelay(retryCount - 1) : markDcordProviderFailure();
     } else {
-      markDcordProviderHealthy();
+      if (!isSalta7) markDcordProviderHealthy();
     }
     await saveCurrentProgress();
     await runNextToken();
@@ -8641,7 +8674,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
         await stopAfterOutage();
         return;
       }
-      const availability = await checkDcordProviderAvailability();
+      const availability = isSalta7 ? { available: true, retryAfterMs: 0 } : await checkDcordProviderAvailability();
       if (!availability.available) {
         providerPaused = true;
         retryCount += 1;
@@ -8659,7 +8692,7 @@ async function processDcordBoostOrder(order, tokens, invite) {
     const workerCount = Math.min(tokens.length, normalizeDcordBoostConcurrency(order.concurrency));
     await Promise.all(Array.from({ length: workerCount }, () => runNextToken()));
     await saveCurrentProgress();
-    if (!dcordOrderPausedJobs.has(orderId) && providerPaused && (hasRunnable || results.some(isRunnableDcordResult))) {
+    if (!dcordOrderPausedJobs.has(orderId) && (providerPaused || (isSalta7 && results.some(isDcordTaskPendingResult))) && (hasRunnable || results.some(isRunnableDcordResult))) {
       await saveCurrentProgress(true);
       scheduleDcordOrderRetry(orderId, retryAfterMs);
     }
@@ -8686,6 +8719,11 @@ async function recoverStaleDcordBoostOrder(order) {
   const orderId = String(order?.uniqid ?? "").trim();
   if (!orderId || !order || order.provider !== "dcord" || !Array.isArray(order.dcordResults) || order.deliveryPaused === true || String(order.status ?? "").toUpperCase() === "PAUSED") return order;
   if (dcordOrderProcessingJobs.has(orderId) || !order.dcordResults.some(isDcordUnconfirmedRunningResult)) return order;
+  if (order.boostProvider === "salta7") {
+    const uncertain = { ...order, status: "WAITING", details: "Salta7 submission was interrupted. Verify the task before replacing or returning this account.", dcordResults: order.dcordResults.map(item => isDcordUnconfirmedRunningResult(item) ? { ...item, status: "verifying", joinStatus: "verifying", boostStatus: "verifying", transportUncertain: true } : item) };
+    await saveTrackedOrderPayload(uncertain);
+    return uncertain;
+  }
 
   const recoveredOrder = {
     ...order,
@@ -14391,11 +14429,31 @@ app.get("/api/admin/config", requireSession, async (_req, res, next) => {
     const result = await pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'dcord_api_key' LIMIT 1");
     res.json({
       dcordConfigured: result.rowCount > 0,
+      salta7Configured: Boolean(await loadEncryptedSetting("salta7_api_key")),
       boostStock: summarizeBoostTokenStock(await loadBoostTokenStock())
     });
   } catch (error) {
     next(error);
   }
+});
+
+app.put("/api/salta7/config", requireSession, async (req, res, next) => {
+  try {
+    const key = String(req.body?.apiKey ?? "").trim();
+    if (!key || key.length > 2000 || /[\r\n]/.test(key)) return res.status(400).json({ message: "Enter a valid Salta7 API key." });
+    // Read-only validation, with no task creation or account-token transmission.
+    await createSalta7Client({ loadKey: async () => key }).check();
+    await saveEncryptedSetting("salta7_api_key", key);
+    res.json({ configured: true });
+  } catch (error) { next(error); }
+});
+app.delete("/api/salta7/config", requireSession, async (_req, res, next) => {
+  try { await pool.query("DELETE FROM app_settings WHERE setting_key = 'salta7_api_key'"); res.status(204).end(); }
+  catch (error) { next(error); }
+});
+app.post("/api/salta7/check", requireSession, async (_req, res, next) => {
+  try { res.set("Cache-Control", "no-store").json(await salta7Client.check()); }
+  catch (error) { next(error); }
 });
 
 app.put("/api/dcord/config", requireSession, async (req, res, next) => {
@@ -14789,6 +14847,9 @@ app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next)
 
 app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
   try {
+    if (req.body?.boostProvider !== undefined && !["dcord", "salta7"].includes(req.body.boostProvider)) return res.status(400).json({ message: "Choose Dcord or Salta7." });
+    const boostProvider = req.body?.boostProvider === "salta7" ? "salta7" : "dcord";
+    if (boostProvider === "salta7") await loadSalta7ApiKey();
     const invite = extractDiscordInviteCode(req.body?.id);
     const amount = Number.parseInt(req.body?.amount, 10);
     const duration = Number.parseInt(req.body?.duration, 10);
@@ -14796,7 +14857,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     if (boostStockPool === "rotating" && duration !== 1) {
       return res.status(400).json({ message: "Rotating stock is only available for 30-day orders." });
     }
-    const useProxy = true;
+    const useProxy = boostProvider !== "salta7";
     const requestedConcurrency = normalizeDcordBoostConcurrency(req.body?.concurrency);
     const allowMembershipScreening = req.body?.allowMembershipScreening === true;
     const humanizerPackageId = String(req.body?.humanizerPackageId ?? "").trim();
@@ -14857,6 +14918,7 @@ app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
     const order = {
       uniqid,
       provider: "dcord",
+      boostProvider,
       service: "DCORD-BOOSTS",
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -15140,7 +15202,7 @@ async function resumeDcordBoostOrderHandler(req, res, next) {
     const retryTimer = dcordOrderRetryTimers.get(uniqid);
     if (retryTimer) clearTimeout(retryTimer);
     dcordOrderRetryTimers.delete(uniqid);
-    dcordCircuitOpenUntil = 0;
+    if (order.boostProvider !== "salta7") dcordCircuitOpenUntil = 0;
     dcordOrderPausedJobs.delete(uniqid);
 
     const resumedOrder = {
@@ -15150,7 +15212,7 @@ async function resumeDcordBoostOrderHandler(req, res, next) {
       providerStatus: "checking",
       dcordRetryCount: 0,
       nextRetryAt: null,
-      details: "Manual Dcord delivery check started."
+      details: `Manual ${order.boostProvider === "salta7" ? "Salta7" : "Dcord"} delivery check started.`
     };
     await saveTrackedOrderPayload(resumedOrder);
     if (!dcordOrderProcessingJobs.has(uniqid)) {
@@ -15188,8 +15250,9 @@ app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, r
       return res.status(409).json({ message: "Only a waiting Dcord order can be cancelled." });
     }
     if (order.dcordResults.some(isDcordTaskPendingResult)) {
-      return res.status(409).json({ message: "Dcord already accepted this task and does not provide a task cancellation endpoint. Its result must be checked before returning the token." });
+      return res.status(409).json({ message: `${order.boostProvider === "salta7" ? "Salta7" : "Dcord"} already accepted this task. Its result must be checked before returning the token.` });
     }
+    if (order.boostProvider === "salta7" && order.dcordResults.some(isUncertainDcordTransportResult)) return res.status(409).json({ message: "Verify the Salta7 task before returning submitted tokens to stock." });
     const tokens = await loadDcordOrderTokens(uniqid);
     const results = [...order.dcordResults];
     const returnedTokenCount = await returnDcordTokensToStock(order, tokens, results, true);
@@ -15256,6 +15319,7 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
 
     const results = Array.isArray(order.dcordResults) ? [...order.dcordResults] : [];
     const currentResult = results[resultIndex];
+    if (order.boostProvider === "salta7" && currentResult && (isRunnableDcordResult(currentResult) || isUncertainDcordTransportResult(currentResult))) return res.status(409).json({ message: "Wait for the Salta7 task to be verified before replacing this account." });
     if (!currentResult || typeof currentResult !== "object" || Array.isArray(currentResult)) {
       return res.status(404).json({ message: "Token result could not be found." });
     }
