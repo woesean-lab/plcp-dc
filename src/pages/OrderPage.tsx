@@ -1181,7 +1181,8 @@ export default function OrderPage() {
           "If you purchased Online Members, use Check Members during the guarantee period. Offline members can be replaced within the guarantee period.",
           ...(reactionInstructions.length ? ["", ...reactionInstructions] : []),
           "",
-          `⚙️ Delivery Speed: ${deliveryTiming}`
+          `⚙️ Delivery Speed: ${deliveryTiming}`,
+          "You can change the join delay from the order monitor."
         ].join("\n")
       : [
           "Please add our bot to your server to start the delivery.",

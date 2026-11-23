@@ -380,7 +380,7 @@ export function importCommunityOAuthStock(records: unknown[], categoryId: Commun
   }).then(parseResponse<CommunityOAuthImportResult>);
 }
 
-export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType, onliner?: { connect: boolean; richPresenceEnabled: boolean; authProxy?: string }) {
+export function addCommunityAccount(accountToken: string, categoryId: CommunityStockType, onliner?: { connect: boolean; richPresenceEnabled: boolean; authProxy?: string; gatewayBeforeAuth?: boolean }) {
   return fetch(`/api/community/categories/${encodeURIComponent(categoryId)}/accounts`, {
     method: "POST",
     cache: "no-store",
@@ -389,6 +389,7 @@ export function addCommunityAccount(accountToken: string, categoryId: CommunityS
     body: JSON.stringify({
       accountToken,
       connectToOnliner: onliner?.connect === true,
+      gatewayBeforeAuth: onliner?.gatewayBeforeAuth !== false,
       richPresenceEnabled: onliner?.richPresenceEnabled !== false,
       authProxy: onliner?.authProxy
     })

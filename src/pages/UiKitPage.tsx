@@ -204,7 +204,7 @@ function ReactionAccessExample() {
 
 function ReactionOptionExample() {
   const [enabled, setEnabled] = useState(true);
-  const [limit, setLimit] = useState(50);
+  const [limit, setLimit] = useState(100);
   return <OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit} onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />;
 }
 
@@ -313,6 +313,7 @@ export default function UiKitPage() {
   const [status, setStatus] = useState("all");
   const [checked, setChecked] = useState(true);
   const [promotion, setPromotion] = useState(true);
+  const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const search = query.trim().toLowerCase();
@@ -372,6 +373,9 @@ export default function UiKitPage() {
           </Example>
           <Example title="Option card" source="src/index.css · boost-proxy-toggle" code={'<label className={`boost-proxy-toggle ${enabled ? "is-enabled" : ""}`}>\n  <input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />\n  <span><Star className="h-4 w-4" /></span><strong>Eldorado sale?</strong>\n  <small>Show the promotion on the customer monitor.</small>\n</label>'}>
             <label className={`boost-proxy-toggle ${promotion ? "is-enabled" : ""}`}><input type="checkbox" checked={promotion} onChange={(event) => setPromotion(event.target.checked)} /><span><Star className="h-4 w-4" aria-hidden="true" /></span><strong>Eldorado sale?</strong><small>Show the promotion on the customer monitor.</small></label>
+          </Example>
+          <Example title="Gateway before authorization" source="src/pages/HomePage.tsx · onliner-enabled-card" code={'// Off by default. Independent of Connect to Onliner.\n<label className="onliner-enabled-card">\n  <input type="checkbox" checked={gatewayBeforeAuth} onChange={event => setGatewayBeforeAuth(event.target.checked)} />\n  <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />\n  <span><strong>Connect Gateway before auth</strong><small>Connects before authorization.</small></span>\n</label>'}>
+            <label className="onliner-enabled-card"><input type="checkbox" checked={gatewayBeforeAuth} onChange={event => setGatewayBeforeAuth(event.target.checked)} /><RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" /><span><strong>Connect Gateway before auth</strong><small>Connects before authorization.</small></span></label>
           </Example>
           <Example title="Order reaction option" source="src/components/OrderReactionOption.tsx · boost-proxy-toggle · Badge · stock-duration-filter" code={'<OrderReactionOption enabled={enabled} memberCount={500} dailyLimit={limit}\n  onEnabledChange={setEnabled} onDailyLimitChange={setLimit} />'}><ReactionOptionExample /></Example>
         </Section> : null}

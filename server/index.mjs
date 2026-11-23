@@ -10464,6 +10464,10 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
     const categoryId = parseCommunityCategoryId(requestedCategoryId);
     const accountToken = String(req.body?.accountToken ?? "").trim();
     const connectToOnliner = req.body?.connectToOnliner === true;
+    if (req.body?.gatewayBeforeAuth !== undefined && typeof req.body.gatewayBeforeAuth !== "boolean") {
+      return res.status(400).json({ message: "Choose whether to connect Gateway before authorization." });
+    }
+    const gatewayBeforeAuth = req.body?.gatewayBeforeAuth !== false;
     const onlinerRichPresenceEnabled = req.body?.richPresenceEnabled !== false;
     const hasAuthProxy = req.body?.authProxy !== undefined;
     const authProxy = hasAuthProxy ? normalizeDiscordOnlinerProxyUrl(req.body.authProxy) : "";
@@ -10492,7 +10496,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
 
     const redirectUri = `${req.protocol}://${req.get("host")}/api/community/oauth/callback`;
     const { accountIdentity, oauth, discordUserId } = await authorizeCommunityStockAccount({
-      config, accountToken, proxyUrl: normalizedOnlinerProxyUrl, onlinerAccount: linkedOnlinerAccount, redirectUri
+      config, accountToken, proxyUrl: normalizedOnlinerProxyUrl, onlinerAccount: linkedOnlinerAccount, redirectUri, gatewayBeforeAuth
     }, {
       normalizeProxy: normalizeDiscordOnlinerProxyUrl,
       withGatewaySession: runWithHumanizerGatewaySession,

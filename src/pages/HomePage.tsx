@@ -704,6 +704,7 @@ export default function HomePage() {
   const [communityAccountProxies, setCommunityAccountProxies] = useState("");
   const [showCommunityAccountToken, setShowCommunityAccountToken] = useState(false);
   const [communityConnectToOnliner, setCommunityConnectToOnliner] = useState(false);
+  const [communityGatewayBeforeAuth, setCommunityGatewayBeforeAuth] = useState(false);
   const [communityAccountRichPresence, setCommunityAccountRichPresence] = useState(true);
   const [addingCommunityAccount, setAddingCommunityAccount] = useState(false);
   const [communityAccountProgress, setCommunityAccountProgress] = useState({ completed: 0, total: 0 });
@@ -766,6 +767,18 @@ export default function HomePage() {
   const selectedCommunityCategory = selectedCommunityAllocations[0]?.category ?? communityCategories.find((category) => category.id === form.communityCategoryId) ?? communityCategories[0];
   const selectedCommunityHasPeriodic = selectedCommunityAllocations.some(({ category }) => category.isPeriodic);
   const selectedCommunityHasReactions = selectedCommunityAllocations.some(({ category }) => category.isPeriodic && category.reactionUseEnabled);
+  useEffect(() => {
+    if (!selectedIsCommunity) return;
+    setForm((current) => {
+      const speed = current.amount >= 500
+        ? { delay: 700, communitySpeedProfile: "safe" as const }
+        : current.amount > 250 ? { delay: 60, communitySpeedProfile: "fast" as const } : null;
+      const reactionLimit = current.communityReactions && current.amount >= 500 ? 100 : current.communityReactionLimit;
+      if ((!speed || current.delay === speed.delay && current.communitySpeedProfile === speed.communitySpeedProfile)
+        && reactionLimit === current.communityReactionLimit) return current;
+      return { ...current, ...speed, communityReactionLimit: reactionLimit };
+    });
+  }, [selectedIsCommunity, form.amount]);
   const defaultCommunitySupportMonths = form.amount >= 500 ? 2 : 1;
   useEffect(() => {
     if (!selectedIsCommunity || !selectedCommunityHasPeriodic) return;
@@ -2045,6 +2058,7 @@ export default function HomePage() {
     setCommunityUseAuthProxies(false);
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
+    setCommunityGatewayBeforeAuth(false);
     setCommunityAccountRichPresence(true);
     setCommunityAccountProgress({ completed: 0, total: 0 });
     setCommunityAccountBulkErrors([]);
@@ -2058,6 +2072,7 @@ export default function HomePage() {
     setCommunityUseAuthProxies(false);
     setShowCommunityAccountToken(false);
     setCommunityConnectToOnliner(false);
+    setCommunityGatewayBeforeAuth(false);
     setCommunityAccountRichPresence(true);
     setCommunityAccountProgress({ completed: 0, total: 0 });
     setCommunityAccountBulkErrors([]);
@@ -2093,6 +2108,7 @@ export default function HomePage() {
         try {
           const result = await addCommunityAccount(accountPairs[index].token, category.id, {
             connect: communityConnectToOnliner,
+            gatewayBeforeAuth: communityGatewayBeforeAuth,
             richPresenceEnabled: communityAccountRichPresence,
             authProxy: accountPairs[index].proxy
           });
@@ -3978,7 +3994,7 @@ export default function HomePage() {
                           ) : null}
 
                           {selectedIsCommunity && selectedCommunityHasReactions ? <OrderReactionOption enabled={form.communityReactions} memberCount={Number(form.amount)} dailyLimit={form.communityReactionLimit}
-                            onEnabledChange={(enabled) => setForm((current) => ({ ...current, communityReactions: enabled }))}
+                            onEnabledChange={(enabled) => setForm((current) => ({ ...current, communityReactions: enabled, communityReactionLimit: enabled && current.amount >= 500 ? 100 : current.communityReactionLimit }))}
                             onDailyLimitChange={(limit) => setForm((current) => ({ ...current, communityReactionLimit: limit }))} /> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
@@ -4849,6 +4865,11 @@ export default function HomePage() {
               </div>
             ) : null}
             <label className="onliner-enabled-card mt-4 text-left">
+              <input type="checkbox" checked={communityGatewayBeforeAuth} disabled={addingCommunityAccount} onChange={(event) => setCommunityGatewayBeforeAuth(event.target.checked)} />
+              <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
+              <span><strong>Connect Gateway before auth</strong><small>Connects before authorization.</small></span>
+            </label>
+            <label className="onliner-enabled-card mt-3 text-left">
               <input type="checkbox" checked={communityConnectToOnliner} disabled={addingCommunityAccount} onChange={(event) => setCommunityConnectToOnliner(event.target.checked)} />
               <RadioTower className="h-4 w-4 text-[var(--app-accent)]" aria-hidden="true" />
               <span><strong>Connect to Onliner</strong><small>Keeps accounts online after authorization.</small></span>

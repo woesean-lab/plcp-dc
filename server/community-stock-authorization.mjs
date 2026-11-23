@@ -14,14 +14,14 @@ export function getReusableAuthorizationGatewayUser(account, proxyUrl, runtime, 
 }
 
 // Every REST step uses the chosen account proxy. No direct transport fallback.
-export async function authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount, redirectUri }, {
+export async function authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount, redirectUri, gatewayBeforeAuth = true }, {
   normalizeProxy, withGatewaySession, getConnectedGatewayUser, requestThroughProxy, exchangeCode
 }) {
   const proxy = normalizeProxy(proxyUrl);
   if (!proxy) throw Object.assign(new Error("Add an available proxy to the Onliner proxy pool before authorizing accounts."), { statusCode: 409 });
   const authorize = async (gatewayUser) => {
     const gatewayUserId = String(gatewayUser?.id ?? "");
-    if (!/^\d{17,20}$/.test(gatewayUserId)) throw Object.assign(new Error("The Onliner Gateway did not return a valid account identity."), { statusCode: 409 });
+    if (gatewayBeforeAuth && !/^\d{17,20}$/.test(gatewayUserId)) throw Object.assign(new Error("The Onliner Gateway did not return a valid account identity."), { statusCode: 409 });
     const accountIdentity = await requestThroughProxy("users/@me", proxy, { headers: { Authorization: accountToken } });
     if (!accountIdentity.response.ok) {
       throw Object.assign(new Error(accountIdentity.response.status === 429
@@ -29,7 +29,8 @@ export async function authorizeCommunityStockAccount({ config, accountToken, pro
         : "Discord rejected this account token. Check that it is current and valid."), { statusCode: accountIdentity.response.status === 429 ? 429 : 401 });
     }
     const discordUserId = String(accountIdentity.payload?.id ?? "");
-    if (discordUserId !== gatewayUserId) throw Object.assign(new Error("The REST account identity does not match the Onliner Gateway account."), { statusCode: 409 });
+    if (!/^\d{17,20}$/.test(discordUserId)) throw Object.assign(new Error("Discord did not return a valid account identity."), { statusCode: 409 });
+    if (gatewayBeforeAuth && discordUserId !== gatewayUserId) throw Object.assign(new Error("The REST account identity does not match the Onliner Gateway account."), { statusCode: 409 });
     const query = new URLSearchParams({ client_id: config.clientId, response_type: "code", redirect_uri: redirectUri, scope: "identify guilds.join" });
     const authorization = await requestThroughProxy("oauth2/authorize?" + query.toString(), proxy, {
       method: "POST", headers: { Authorization: accountToken, "Content-Type": "application/json" },
@@ -52,6 +53,7 @@ export async function authorizeCommunityStockAccount({ config, accountToken, pro
     }
     return { accountIdentity, oauth, discordUserId };
   };
+  if (!gatewayBeforeAuth) return authorize(null);
   const connectedUser = await getConnectedGatewayUser(onlinerAccount, proxy);
   if (connectedUser) return authorize(connectedUser);
   return withGatewaySession({ id: onlinerAccount?.discordUserId || null, token: accountToken, proxyUrl: proxy, onlinerAccountId: onlinerAccount?.id ?? null }, authorize);

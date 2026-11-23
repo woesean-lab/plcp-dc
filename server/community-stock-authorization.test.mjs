@@ -11,14 +11,14 @@ const proxy = "http://assigned-proxy:8080";
 const token = "sample-account-token";
 const input = { config: { clientId: "application", clientSecret: "sample-secret" }, accountToken: token, proxyUrl: proxy, redirectUri: "https://panel.example/api/community/oauth/callback" };
 const oauth = { accessToken: "access-token-value-with-length", refreshToken: "refresh-token-value-with-length", expiresAt: new Date("2027-01-01"), expiresIn: 3600 };
-function fixture(overrides = {}) {
+function fixture(overrides = {}, gatewayRequired = true) {
   const events = [];
   const dependencies = {
     normalizeProxy: value => value?.startsWith("http://") ? value : "",
     getConnectedGatewayUser: async () => null,
     withGatewaySession: async (account, task) => { assert.equal(account.proxyUrl,proxy); assert.equal(account.token,token); events.push("READY"); return task(user); },
     requestThroughProxy: async (path, route, options) => {
-      assert.equal(route,proxy); assert.equal(events[0],"READY"); events.push(path);
+      assert.equal(route,proxy); if (gatewayRequired) assert.equal(events[0],"READY"); events.push(path);
       if (path === "users/@me") return { response: {ok:true}, payload:user };
       if (path.startsWith("oauth2/authorize?")) {
         assert.equal(options.headers.Authorization,token);
@@ -54,6 +54,37 @@ test("ready Onliner sessions are reused without reconnecting", async () => {
   events.push("READY");
   await authorizeCommunityStockAccount({...input,onlinerAccount:{id:"linked",discordUserId:user.id}},dependencies);
   assert.equal(events.filter(event=>event==="READY").length,1);
+});
+
+test("Gateway off skips session lookup and connection while every OAuth step keeps its proxy", async () => {
+  const { events, dependencies } = fixture({
+    getConnectedGatewayUser: async () => assert.fail("Gateway lookup must be skipped"),
+    withGatewaySession: async () => assert.fail("Gateway must not connect")
+  }, false);
+  const result = await authorizeCommunityStockAccount({ ...input, gatewayBeforeAuth: false, onlinerAccount: { id: "existing" } }, dependencies);
+  assert.equal(result.discordUserId, user.id);
+  assert.equal(result.oauth, oauth);
+  assert.equal(events[0], "users/@me");
+  assert.equal(events.length, 4);
+  assert.equal(events.includes("READY"), false);
+});
+
+test("Gateway off still requires a proxy, valid REST identity, consent and OAuth user/scope verification", async () => {
+  const direct = { ...input, gatewayBeforeAuth: false };
+  await assert.rejects(authorizeCommunityStockAccount({ ...direct, proxyUrl: "" }, fixture({}, false).dependencies), error => error.statusCode === 409);
+  for (const mode of ["invalid-id", "token-rejected", "oauth-user", "scope", "no-consent"]) {
+    const { dependencies } = fixture({}, false);
+    const original = dependencies.requestThroughProxy;
+    dependencies.withGatewaySession = async () => assert.fail("Gateway disabled");
+    dependencies.requestThroughProxy = async (...args) => {
+      if (args[0] === "users/@me" && mode === "invalid-id") return { response: { ok: true }, payload: {} };
+      if (args[0] === "users/@me" && mode === "token-rejected") return { response: { ok: false, status: 401 } };
+      if (args[0] === "oauth2/@me" && ["oauth-user", "scope"].includes(mode)) return { response: { ok: true }, payload: { user: mode === "oauth-user" ? { id: "999999999999999999" } : user, scopes: mode === "scope" ? [] : ["guilds.join"] } };
+      if (args[0].startsWith("oauth2/authorize?") && mode === "no-consent") return { response: { ok: true }, payload: {} };
+      return original(...args);
+    };
+    await assert.rejects(authorizeCommunityStockAccount(direct, dependencies), error => [401, 409, 502].includes(error.statusCode), mode);
+  }
 });
 
 test("REST identity mismatches and OAuth verification errors never produce authorized stock", async () => {
@@ -148,8 +179,8 @@ const normalizerContext = {
 vm.runInNewContext(functionCode("normalizeDiscordOnlinerConfig")+";this.normalize=normalizeDiscordOnlinerConfig;",normalizerContext);
 const normalizeConfig=normalizerContext.normalize;
 function response() { return { statusCode:200,status(code){this.statusCode=code;return this;},set(){return this;},json(value){this.body=value;return this;} }; }
-function accountRoute({connect=true,proxyAvailable=true,authFailure=false,customProxy=false,occupied=false,linked=false}={}) {
-  const writes=[];const stored=[];const starts=[];const stops=[];
+function accountRoute({connect=true,proxyAvailable=true,authFailure=false,customProxy=false,occupied=false,linked=false,gatewayBeforeAuth}={}) {
+  const writes=[];const stored=[];const starts=[];const stops=[];const authEvents=[];
   const other={id:"other-profile",botToken:"other-token",proxyUrl:"http://other-proxy:8080"};
   let handler;
   const scope={
@@ -166,7 +197,10 @@ function accountRoute({connect=true,proxyAvailable=true,authFailure=false,custom
     authorizeCommunityStockAccount:async(args,dependencies)=>{
       assert.equal(args.proxyUrl,proxy);assert.equal(args.accountToken,token);
       if(authFailure)throw Error("Gateway failed");
-      return authorizeCommunityStockAccount(args,{...fixture().dependencies,normalizeProxy:dependencies.normalizeProxy});
+      const auth=fixture({},args.gatewayBeforeAuth);
+      const result=await authorizeCommunityStockAccount(args,{...auth.dependencies,normalizeProxy:dependencies.normalizeProxy});
+      authEvents.push(...auth.events);
+      return result;
     },
     requestDiscordThroughProxy(){assert.fail("test helper supplies its mock proxy transport");},
     runWithHumanizerGatewaySession(){assert.fail("test helper supplies its mock Gateway");},
@@ -180,9 +214,31 @@ function accountRoute({connect=true,proxyAvailable=true,authFailure=false,custom
   };
   const route=ast.statements.find(node=>ts.isExpressionStatement(node)&&ts.isCallExpression(node.expression)&&node.expression.expression.getText(ast)==="app.post"&&node.expression.arguments[0]?.text==="/api/community/categories/:categoryId/accounts");
   vm.runInNewContext(route.getText(ast),scope);
-  const request={params:{categoryId:"offline"},body:{accountToken:token,connectToOnliner:connect,...(customProxy?{authProxy:proxy}:{})},protocol:"https",get:()=>"panel.example"};
-  return {handler,request,writes,stored,starts,stops,other};
+  const request={params:{categoryId:"offline"},body:{accountToken:token,connectToOnliner:connect,...(gatewayBeforeAuth !== undefined ? {gatewayBeforeAuth} : {}),...(customProxy?{authProxy:proxy}:{})},protocol:"https",get:()=>"panel.example"};
+  return {handler,request,writes,stored,starts,stops,other,authEvents};
 }
+
+test("authorization Gateway choice and persistent Onliner choice are independent in the single/bulk endpoint", async () => {
+  for (const gatewayBeforeAuth of [true, false]) for (const connect of [true, false]) {
+    const state=accountRoute({gatewayBeforeAuth,connect});
+    const res=response();
+    await state.handler(state.request,res,error=>{throw error;});
+    assert.equal(res.statusCode,201);
+    assert.equal(state.authEvents.includes("READY"),gatewayBeforeAuth);
+    assert.equal(state.writes.length,1);
+    assert.equal(state.stored.length,connect?1:0);
+    assert.equal(state.starts.length,connect?1:0);
+  }
+});
+
+test("invalid Gateway option types are rejected before authorization or persistence", async () => {
+  for (const gatewayBeforeAuth of ["false", 0, null, {}]) {
+    const state=accountRoute({gatewayBeforeAuth});const res=response();
+    await state.handler(state.request,res,error=>{throw error;});
+    assert.equal(res.statusCode,400);
+    assert.equal(state.writes.length,0);assert.equal(state.authEvents.length,0);
+  }
+});
 
 test("shared single/bulk endpoint only persists stock after proxied Gateway authorization and retains its proxy in Onliner",async()=>{
   for(const connect of [true,false]) {
