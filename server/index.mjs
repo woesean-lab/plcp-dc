@@ -14824,7 +14824,7 @@ app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next)
 app.post("/api/dcord/boost-orders", requireSession, async (req, res, next) => {
   try {
     if (req.body?.boostProvider !== undefined && !["dcord", "salta7"].includes(req.body.boostProvider)) return res.status(400).json({ message: "Choose Dcord or Salta7." });
-    const boostProvider = req.body?.boostProvider === "salta7" ? "salta7" : "dcord";
+    const boostProvider = req.body?.boostProvider === "dcord" ? "dcord" : "salta7";
     if (boostProvider === "salta7") await loadSalta7ApiKey();
     const invite = extractDiscordInviteCode(req.body?.id);
     const amount = Number.parseInt(req.body?.amount, 10);

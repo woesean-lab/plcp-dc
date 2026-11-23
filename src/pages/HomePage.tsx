@@ -172,7 +172,7 @@ const EMPTY_FORM = {
   delay: 1,
   duration: 1 as 1 | 3,
   boostStockPool: "regular" as "regular" | "rotating",
-  boostProvider: "dcord" as "dcord" | "salta7",
+  boostProvider: "salta7" as "dcord" | "salta7",
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",

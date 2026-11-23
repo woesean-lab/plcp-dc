@@ -28,9 +28,9 @@ function createRoute() {
 test("Salta7 creation reserves our tokens without consuming delivery proxies; Dcord keeps them",async()=>{
   for(const boostProvider of ["salta7","dcord",undefined]){
     const api=createRoute();const res=await api.run({boostProvider});
-    assert.equal(res.statusCode,200);assert.equal(api.saved[0].boostProvider,boostProvider??"dcord");
-    assert.equal(api.saved[0].useProxy,boostProvider!=="salta7");
-    assert.equal(api.proxyReservations.length,boostProvider==="salta7"?0:1);
+    assert.equal(res.statusCode,200);assert.equal(api.saved[0].boostProvider,boostProvider??"salta7");
+    assert.equal(api.saved[0].useProxy,boostProvider==="dcord");
+    assert.equal(api.proxyReservations.length,boostProvider==="dcord"?1:0);
     assert.deepEqual(Array.from(api.processing[0][1]),["token1","token2"]);
     assert.deepEqual(Array.from(api.remaining.oneMonth),["token3"]);
   }

@@ -319,7 +319,7 @@ export default function UiKitPage() {
   const [checked, setChecked] = useState(true);
   const [promotion, setPromotion] = useState(true);
   const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
-  const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("dcord");
+  const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [rotatingRemovalPreview, setRotatingRemovalPreview] = useState(false);
