@@ -154,7 +154,7 @@ export function RotatingBoostStockPanel({ search = "", accounts, availableThreeM
             <span title="Check token with Salta7 · 5 checks per token daily"><Button size="icon-sm" className="stock-row-action" variant="ghost" disabled={accountAction !== null || checking(row)} aria-label={"Check token " + row.redactedToken} onClick={() => void manageAccount(row, "check")}>
               {accountAction === row.id || checking(row) ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5" />}
             </Button></span>
-            <span title={["reserved", "in_use"].includes(row.status) ? "Cannot remove an account assigned to an active delivery" : "Remove from Rotating stock"}><Button size="icon-sm" className="stock-row-action" variant="dangerGhost" disabled={accountAction !== null || ["reserved", "in_use"].includes(row.status)} aria-label={"Remove " + row.redactedToken + " from Rotating stock"} onClick={() => void manageAccount(row, "remove")}><Trash2 className="h-3.5 w-3.5" /></Button></span>
+            <span title="Remove from Rotating stock"><Button size="icon-sm" className="stock-row-action" variant="dangerGhost" disabled={accountAction !== null} aria-label={"Remove " + row.redactedToken + " from Rotating stock"} onClick={() => void manageAccount(row, "remove")}><Trash2 className="h-3.5 w-3.5" /></Button></span>
           </div>
         </div>
         {expanded === row.id ? <div id={`boost-details-${row.id}`} className="boost-account-drawer">

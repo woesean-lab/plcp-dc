@@ -128,7 +128,6 @@ export function createRotatingBoostStock({ pool, encrypt, decrypt }) {
       const index = rows.findIndex((item) => item.id === id);
       if (index < 0) throw Object.assign(new Error("Rotating account could not be found."), { statusCode: 404 });
       const row = rows[index];
-      if (["reserved", "in_use"].includes(row.status)) fail("This account is assigned to an active delivery and cannot be removed yet.");
       const result = await beforeRemove(row, client);
       rows.splice(index, 1);
       return result;

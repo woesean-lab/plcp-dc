@@ -81,17 +81,30 @@ test("removal leaves other stock and legacy proxy settings untouched", async () 
   assert.equal(f.settings.has("dcord_rotating_boost_proxies"), false);
 });
 
-test("active deliveries cannot be removed; failed cleanup rolls back removal", async () => {
-  const f = fixture();
-  const [first] = await f.seed(["one"], later(90));
-  for (const status of ["reserved", "in_use"]) {
-    const rows = f.read(); rows[0].status = status; rows[0].customerEndsAt = later(20); f.write(rows);
-    await assert.rejects(f.stock.remove(first.id), { statusCode: 409 });
-    assert.equal(f.read().length, 1);
+test("accounts can be removed in every status without changing order history", async () => {
+  for (const status of ["available", "reserved", "in_use", "review", "expired"]) {
+    const f = fixture();
+    const [first, second] = await f.seed(["one", "two"], later(90));
+    const order = { uniqid: "active-order", status: "COMPLETED", added: 2, dcordResults: [{ boosted: true, status: "success" }] };
+    f.orders.set(order.uniqid, structuredClone(order));
+    const rows = f.read();
+    Object.assign(rows[0], { status, orderId: order.uniqid, orderIndex: 0, customerEndsAt: later(20), tokenCheck: { status: "running", jobId: "check-job" } });
+    f.write(rows);
+    await f.stock.remove(first.id);
+    assert.deepEqual((await f.stock.list()).map(row => row.id), [second.id]);
+    assert.deepEqual(f.orders.get(order.uniqid), order);
+    assert.equal(await f.stock.canSubmit(order.uniqid, "one"), false);
+    await f.stock.sync(order);
+    assert.deepEqual((await f.stock.list()).map(row => row.id), [second.id]);
+    assert.deepEqual(await f.stock.reserveForDelivery(1, { uniqid: "new-order" }), { tokens: ["two"], proxies: [] });
   }
-  const rows = f.read(); rows[0].status = "available"; f.write(rows);
-  await assert.rejects(f.stock.remove(first.id, async () => { throw new Error("cleanup failed"); }), /cleanup failed/);
-  assert.equal(f.read().length, 1);
+});
+
+test("failed cleanup rolls back removal even for an in-use account", async () => {
+  const f = fixture(); const [row] = await f.seed(["one"], later(90));
+  const rows = f.read(); Object.assign(rows[0], { status: "in_use", customerEndsAt: later(20) }); f.write(rows);
+  await assert.rejects(f.stock.remove(row.id, async () => { throw new Error("cleanup failed"); }), /cleanup failed/);
+  assert.equal(f.read()[0].id, row.id); assert.equal(f.read()[0].status, "in_use");
 });
 
 test("moving deduplicates account identities without starting the clock and removes source tokens", async () => {
