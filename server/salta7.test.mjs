@@ -74,11 +74,28 @@ test("uncertain submission never retries a POST or leaks upstream credentials",a
 
 test("known API failures keep actionable safe messages and distinguish rejected from uncertain jobs",async()=>{
   for(const status of [400,401,403,409,429,503]) {
-    const api=fixture({fetch:async()=>Response.json({detail:"secret-token"},{status})});
+    const api=fixture({fetch:async()=>Response.json({detail:"sample-token"},{status})});
     const result=await api.client.run("sample-token","invite");
     assert.equal(result.transportUncertain,false);assert.equal(result.providerBlocked,[401,403,429,503].includes(status));
-    assert.equal(result.httpStatus,status);assert.ok(!JSON.stringify(result).includes("secret-token"));
+    assert.equal(result.httpStatus,status);assert.ok(!JSON.stringify(result).includes("sample-token"));
+    assert.match(result.boostMessage,new RegExp(`HTTP ${status}`));
   }
+});
+
+test("task rejection preserves the provider reason while redacting account lines, passwords and API keys",async()=>{
+  const line="person@example.com:private-password:sample-token";
+  const api=fixture({fetch:async()=>Response.json({detail:`No valid accounts to run. Rejected ${line}; key secret-api-key; password private-password; token sample-token`},{status:400})});
+  const result=await api.client.run(line,"invite");
+  assert.match(result.boostMessage,/No valid accounts to run/);assert.match(result.boostMessage,/HTTP 400/);
+  for(const secret of [line,"person@example.com","private-password","sample-token","secret-api-key"])assert.ok(!result.boostMessage.includes(secret),secret);
+  assert.equal(api.calls.length,1);
+});
+
+test("validation errors show field/message without leaking input or ctx",async()=>{
+  const api=fixture({fetch:async()=>Response.json({detail:[{loc:["body","tokens",0],msg:"Invalid account format",input:"not-public",ctx:{password:"hidden-context"}}]},{status:422})});
+  const result=await api.client.run("sample-token","invite");
+  assert.match(result.boostMessage,/body.tokens.0: Invalid account format/);
+  for(const secret of ["not-public","hidden-context"])assert.ok(!JSON.stringify(result).includes(secret));
 });
 
 test("wrong job IDs and missing results cannot establish successful delivery",async()=>{

@@ -1,3 +1,21 @@
+function salta7ErrorDetail(payload, secrets) {
+  const detail = payload?.detail;
+  const text = typeof detail === "string" ? detail
+    : Array.isArray(detail) ? detail.map(item => {
+      // Validation inputs and ctx may contain credentials; keep location/message only.
+      const location = Array.isArray(item?.loc) ? item.loc.filter(value => typeof value === "string" || typeof value === "number").join(".") : "";
+      return typeof item?.msg === "string" ? `${location ? location + ": " : ""}${item.msg}` : "";
+    }).filter(Boolean).join("; ") : "";
+  let safe = text;
+  const values = [...new Set(secrets.filter(value => typeof value === "string" && value))].flatMap(value => [value, encodeURIComponent(value)]).sort((a, b) => b.length - a.length);
+  for (const value of values) safe = safe.split(value).join("[redacted]");
+  return safe.replace(/\b(?:Bearer|Bot)\s+[^\s,;"<>]+/gi, "[redacted authorization]")
+    .replace(/\b(?:https?|socks4a?|socks5h?):\/\/[^\s"<>]+/gi, "[redacted URL]")
+    .replace(/\b[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{20,}\b/g, "[redacted token]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted email]")
+    .replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, 400);
+}
+
 // Salta7 BYOT integration. Never send proxy fields or buy from provider stock.
 export function createSalta7Client({ loadKey, fetch: transport = globalThis.fetch, baseUrl = "https://salta7.store", sleep = ms => new Promise(resolve => setTimeout(resolve, ms)), now = Date.now, pollMs = 5000, maxWaitMs = 620000 }) {
   async function request(path, body) {
@@ -15,9 +33,11 @@ export function createSalta7Client({ loadKey, fetch: transport = globalThis.fetc
     }
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      // Do not echo upstream detail: it can contain account credentials.
       const messages = { 401: "Salta7 rejected the API key.", 403: "Salta7 balance or account access is insufficient.", 400: "Salta7 rejected this task.", 409: "Salta7 rejected a duplicate task or reached an account limit.", 429: "Salta7 is at capacity.", 503: "Salta7 is temporarily unavailable." };
-      throw Object.assign(new Error(messages[response.status] || `Salta7 returned HTTP ${response.status}.`), {
+      const tokens = Array.isArray(body?.tokens) ? body.tokens : [];
+      const detail = salta7ErrorDetail(payload, [key, ...tokens, ...tokens.flatMap(token => String(token).split(":"))]);
+      const summary = messages[response.status] || "Salta7 rejected the request.";
+      throw Object.assign(new Error(`${summary} (HTTP ${response.status})${detail ? ` ${detail}` : ""}`), {
         statusCode: response.status, expose: true, providerBlocked: [401, 403, 429, 503].includes(response.status),
         uncertain: body !== undefined && response.status >= 500 && response.status !== 503
       });
