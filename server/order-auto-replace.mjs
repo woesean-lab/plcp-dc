@@ -1,5 +1,5 @@
 export const AUTO_REPLACE_DEFAULTS = Object.freeze({ members: 3, boosts: 3 });
-export const AUTO_REPLACE_MAX_ROUNDS = 10;
+export const AUTO_REPLACE_MAX_ROUNDS = 100;
 
 // Whole-payload writers (checks, recovery, reactions) must not reset a budget
 // claimed by another worker. Enforce monotonic rounds at the DB boundary.

@@ -15,8 +15,9 @@ const boostOrder = (extra = {}) => ({ uniqid: "boosts", provider: "dcord", autoR
 
 test("limits are separate, default to three, accept disabling, and reject unbounded/invalid input", () => {
   assert.deepEqual(AUTO_REPLACE_DEFAULTS, { members: 3, boosts: 3 });
-  assert.deepEqual(validateAutoReplaceSettings({ members: 0, boosts: 10 }), { members: 0, boosts: 10 });
-  for (const value of [null, {}, { members: "3", boosts: 3 }, { members: -1, boosts: 3 }, { members: 1.5, boosts: 3 }, { members: 3, boosts: 11 }]) assert.throws(() => validateAutoReplaceSettings(value), { statusCode: 400 });
+  assert.deepEqual(validateAutoReplaceSettings({ members: 0, boosts: 100 }), { members: 0, boosts: 100 });
+  assert.deepEqual(validateAutoReplaceSettings({ members: 100, boosts: 0 }), { members: 100, boosts: 0 });
+  for (const value of [null, {}, { members: "3", boosts: 3 }, { members: -1, boosts: 3 }, { members: 1.5, boosts: 3 }, { members: 3, boosts: 101 }, { members: 101, boosts: 3 }]) assert.throws(() => validateAutoReplaceSettings(value), { statusCode: 400 });
 });
 
 test("only settled opted-in orders replace failed deliveries; diagnostics alone never replace joined members", () => {

@@ -27,7 +27,7 @@ export default function AutoReplaceSettings({ preview = false }: { preview?: boo
   }
   useEffect(() => { if (!preview) void load(); }, [preview]);
   const limits = { members: Number(draft.members), boosts: Number(draft.boosts) };
-  const valid = Object.entries(draft).every(([key, value]) => value.trim() !== "" && Number.isInteger(limits[key as keyof AutoReplaceLimits]) && Number(value) >= 0 && Number(value) <= 10);
+  const valid = Object.entries(draft).every(([key, value]) => value.trim() !== "" && Number.isInteger(limits[key as keyof AutoReplaceLimits]) && Number(value) >= 0 && Number(value) <= 100);
   const dirty = Boolean(saved && (limits.members !== saved.members || limits.boosts !== saved.boosts));
   async function save() {
     if (!valid || !saved || pending.current) return;
@@ -47,10 +47,10 @@ export default function AutoReplaceSettings({ preview = false }: { preview?: boo
       <div className="settings-card-body settings-field-grid">
         {(["members", "boosts"] as const).map(key => <label className="settings-field" key={key}>
           <span className="field-label">{key === "members" ? "Members" : "Boosts"} · maximum rounds</span>
-          <Input type="number" min={0} max={10} step={1} required disabled={loading || saving || !saved} value={draft[key]}
+          <Input type="number" min={0} max={100} step={1} required disabled={loading || saving || !saved} value={draft[key]}
             onChange={event => { setDraft(current => ({ ...current, [key]: event.target.value })); setNotice(""); }} />
         </label>)}
-        <p className="settings-field-note">0 disables auto-replace. Limits apply per order, including existing orders with Auto-replace enabled. Maximum 10 rounds.</p>
+        <p className="settings-field-note">0 disables auto-replace. Limits apply per order, including existing orders with Auto-replace enabled. Maximum 100 rounds.</p>
         {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
         {error ? <p className="text-xs text-[var(--app-danger)]" role="alert">{error}</p> : null}
       </div>
