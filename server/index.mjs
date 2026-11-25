@@ -2,7 +2,7 @@ import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from ".
 import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
-import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
+import { managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
@@ -1772,13 +1772,14 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       ? requestedId
       : crypto.randomUUID();
     seenAccountIds.add(id);
+    const isBot = account?.isBot === true || isDiscordGuildId(String(account?.communityBotClientId ?? ""));
     return {
       id,
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
-      richPresenceEnabled: account?.isBot === true ? false : account?.richPresenceEnabled !== false,
-      isBot: account?.isBot === true,
-      connectionRevision: account?.isBot === true ? String(account?.connectionRevision || "").slice(0, 80) : null,
+      richPresenceEnabled: isBot ? false : account?.richPresenceEnabled !== false,
+      isBot,
+      connectionRevision: isBot ? String(account?.connectionRevision || "").slice(0, 80) : null,
       communityBotClientId: isDiscordGuildId(String(account?.communityBotClientId ?? "")) ? String(account.communityBotClientId) : null,
       discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
@@ -2236,12 +2237,16 @@ function formatDiscordOnlinerSocketAddress(address, port) {
 
 async function getDiscordOnlinerConfig() {
   const raw = await loadEncryptedSetting(discordOnlinerSettingKey);
-  if (!raw) return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" }));
-  try {
-    return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig(JSON.parse(raw)));
-  } catch {
-    return hydrateDiscordOnlinerSpotifyPlaylist(normalizeDiscordOnlinerConfig({ enabled: false, activityText: "Pulcip Members" }));
+  const fallback = { enabled: false, activityText: "Pulcip Members" };
+  let config;
+  try { config = normalizeDiscordOnlinerConfig(raw ? JSON.parse(raw) : fallback); }
+  catch { config = normalizeDiscordOnlinerConfig(fallback); }
+  // Legacy profiles may predate isBot. Match saved application tokens locally; never probe user tokens as bots.
+  if (config.accounts.some(account => !account.isBot)) {
+    const [shared, pooled] = await Promise.all([getCommunityOAuthConfig(), communityBotPool.knownBotAccounts()]);
+    config = normalizeDiscordOnlinerConfig(managedOnlinerAccounts(config, [shared, ...pooled]));
   }
+  return hydrateDiscordOnlinerSpotifyPlaylist(config);
 }
 
 function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
@@ -2920,18 +2925,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         appendDiscordOnlinerLog("info", `RESUME payload sent to Discord (seq ${sequence}).`, account.id);
       } else {
         const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
-        socket.send(JSON.stringify(account.isBot ? botGatewayIdentify(account, presence) : {
-        op: 2,
-        d: {
-          token: account.botToken,
-          properties: createDiscordGatewayIdentityProperties(),
-          presence,
-            capabilities: 16381,
-            compress: false,
-            client_state: createDiscordGatewayClientState()
-          }
-        }));
-        appendDiscordOnlinerLog("info", "IDENTIFY payload sent to Discord.", account.id);
+        const identify = onlinerGatewayIdentify(account, presence, {
+          properties: createDiscordGatewayIdentityProperties(), clientState: createDiscordGatewayClientState()
+        });
+        socket.send(JSON.stringify(identify));
+        appendDiscordOnlinerLog("info", `IDENTIFY payload sent to Discord (${account.isBot ? `bot · intents=${identify.d.intents}` : "account"}).`, account.id);
       }
       return;
     }
@@ -3120,6 +3118,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       runtime.state = "error";
       runtime.lastError = code === 4004
         ? "Discord rejected the saved account token. Automatic reconnect stopped while REST verification runs."
+        : code === 4013 ? "Discord rejected the Gateway intents (4013). Update and restart the Onliner worker, then reconnect this bot."
         : `Discord rejected this Gateway session with non-retryable close code ${code}. Automatic reconnect stopped.`;
       appendDiscordOnlinerLog("error", `[${code}] ${runtime.lastError}`, account.id);
       queueDiscordOnlinerRuntimePersist(runtime);

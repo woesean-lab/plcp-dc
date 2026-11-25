@@ -159,6 +159,15 @@ test("disabled/empty pools never fall back to the shared bot", options, () => fi
   await assert.rejects(service.setEnabled(a, "yes"), /enabled/);
 }));
 
+test("internal bot identity matching covers disabled bots and never trusts mismatched application credentials", options, () => fixture(async ({ service, add, db }) => {
+  await add(a); await add(b); await service.setEnabled(b, false);
+  assert.deepEqual((await service.knownBotAccounts()).sort((x,y) => x.clientId.localeCompare(y.clientId)), [
+    { clientId: a, botToken: a }, { clientId: b, botToken: b }
+  ]);
+  await db.query("UPDATE community_bot_pool SET encrypted_value=$2 WHERE client_id=$1", [a, encrypt(JSON.stringify({ clientId: b, botToken: "mismatched-token" }))]);
+  assert.deepEqual(await service.knownBotAccounts(), [{ clientId: b, botToken: b }]);
+}));
+
 test("a pool application reuses its own grant across orders and keeps different applications separate", options, () => fixture(async ({ pool, add, db }) => {
   await add(a); await add(b);
   const authorizations = [];

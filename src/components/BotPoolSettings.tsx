@@ -1,12 +1,13 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw } from "lucide-react";
+import { Bot, Check, CheckCircle2, Clock3, Globe2, Layers3, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { SecretField } from "./ui/secret-field";
 import { PaginatedList } from "./ListPagination";
 import { Skeleton } from "./ui/skeleton";
+import { MetricGrid } from "./ui/metric-grid";
 import { BotSettingsDialog } from "./BotSettingsDialog";
 import { BotServersDialog } from "./BotServersDialog";
 import { connectCommunityBotOnliner, getCommunityBotsOnliner, getCommunityBotPool, saveCommunityPoolBot, setCommunityPoolBotEnabled, type BotOnlinerStatus, type CommunityConfig, type PoolBot } from "../lib/community";
@@ -130,7 +131,6 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
           <div className="bot-pool-row-copy">
             <div className="bot-pool-row-title"><strong>{bot.name}</strong>{bot.isDefault ? <Badge variant="secondary">Default</Badge> : null}<Badge variant={bot.enabled ? "success" : "secondary"}>{bot.isDefault ? bot.enabled ? "Configured" : "Not configured" : bot.enabled ? "Enabled" : "Disabled"}</Badge>{connection ? <Badge variant={connection.state === "connected" ? "success" : connection.state === "error" ? "destructive" : "secondary"} title={connection.lastError || undefined}>Onliner · {connection.state}</Badge> : null}</div>
             <small>{bot.clientId === "default" ? "Set up the default Members bot" : bot.clientId}</small>
-            <div className="bot-pool-row-stats"><span><strong>{(bot.deliveredMembers || 0).toLocaleString("en-US")}</strong> delivered</span><span><strong>{bot.totalOrders.toLocaleString("en-US")}</strong> total orders</span><span><strong>{bot.activeOrders.toLocaleString("en-US")}</strong> active orders</span><span><strong>{bot.pendingMembers.toLocaleString("en-US")}</strong> remaining</span></div>
             <div className="bot-pool-row-stats"><span><strong>{(bot.authorizedAccounts || 0).toLocaleString("en-US")}</strong> authorized accounts</span><span><strong>{(bot.activeAccounts || 0).toLocaleString("en-US")}</strong> unexpired</span>{bot.isDefault && config?.activeGuildCount != null ? <span><strong>{config.activeGuildCountExact ? "" : "≥ "}{config.activeGuildCount}{config.serverLimit ? ` / ${config.serverLimit}` : ""}</strong> servers</span> : null}</div>
           </div>
           <span className="community-member-row-actions">
@@ -139,6 +139,12 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
             <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
             {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "secondary"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
           </span>
+          <MetricGrid className="bot-pool-row-metrics" label={`${bot.name} delivery metrics`} items={[
+            { label: "Delivered members", value: bot.deliveredMembers || 0, icon: <CheckCircle2 className="h-3.5 w-3.5" />, tone: "success" },
+            { label: "Total orders", value: bot.totalOrders, icon: <Layers3 className="h-3.5 w-3.5" /> },
+            { label: "Active orders", value: bot.activeOrders, icon: <RadioTower className="h-3.5 w-3.5" /> },
+            { label: "Remaining members", value: bot.pendingMembers, icon: <Clock3 className="h-3.5 w-3.5" /> }
+          ]} />
         </div>;
       })}</>}</PaginatedList></div> : !error && !loading ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bots yet</strong><span>Add a bot to enable automatic assignment.</span></div> : null}
     </div>

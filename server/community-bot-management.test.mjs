@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement, safeBotConnectionError } from "./community-bot-management.mjs";
+import { botGatewayIdentify, managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement, safeBotConnectionError } from "./community-bot-management.mjs";
 
 const sharedId = "111111111111111111", poolId = "222222222222222222";
 test("bot management resolves the selected application's credentials without changing the shared configuration", async () => {
@@ -80,12 +80,42 @@ test("bot identify uses unprivileged bot intents and never requests user session
   const payload = botGatewayIdentify({ botToken: "private" }, presence);
   assert.equal(payload.op, 2);
   assert.equal(payload.d.token, "private");
-  assert.equal(payload.d.intents, 0);
+  assert.equal(payload.d.intents, 1);
   assert.deepEqual(payload.d.presence, presence);
   assert.equal(payload.d.properties.browser, "Pulcip Onliner");
   assert.ok(!("capabilities" in payload.d));
   assert.ok(!("client_state" in payload.d));
   assert.deepEqual(botGatewayIdentify({ botToken: "private" }, { ...presence, activities: [{ name: "Must stay off" }] }).d.presence.activities, []);
+});
+
+test("legacy default/pool profiles receive bot IDENTIFY on the wire without changing account profiles or settings", () => {
+  const config = { enabled: true, status: "idle", accounts: [
+    { id: "old-default", botToken: "default-token", proxyUrl: "http://existing:8080", richPresenceEnabled: true },
+    { id: "old-pool", botToken: "pool-token", isBot: false, proxyUrl: "http://pool:8080" },
+    { id: "member", botToken: "member-token", discordUserId: "333333333333333333", richPresenceEnabled: true }
+  ] };
+  const original = structuredClone(config);
+  const migrated = managedOnlinerAccounts(config, [{ clientId: sharedId, botToken: "default-token" }, { clientId: poolId, botToken: "pool-token" }]);
+  const presence = { activities: [{ name: "Legacy activity" }], status: "idle", since: null, afk: false };
+  const legacy = { properties: { browser: "existing-account-client" }, clientState: { previous: true } };
+  for (const account of migrated.accounts.slice(0, 2)) {
+    const wire = JSON.parse(JSON.stringify(onlinerGatewayIdentify(account, presence, legacy)));
+    assert.equal(wire.op, 2);
+    assert.equal(wire.d.intents, 1);
+    assert.equal(wire.d.properties.browser, "Pulcip Onliner");
+    assert.deepEqual(wire.d.presence.activities, []);
+    assert.ok(!("capabilities" in wire.d) && !("client_state" in wire.d));
+    assert.equal(account.richPresenceEnabled, false);
+  }
+  assert.deepEqual(config, original, "classification does not mutate saved configuration");
+  assert.equal(migrated.accounts[0].proxyUrl, original.accounts[0].proxyUrl);
+  const userWire = onlinerGatewayIdentify(migrated.accounts[2], presence, legacy);
+  assert.deepEqual(userWire.d.properties, legacy.properties);
+  assert.deepEqual(userWire.d.client_state, legacy.clientState);
+  assert.equal(userWire.d.capabilities, 16381);
+  assert.equal(migrated.accounts[2].richPresenceEnabled, true);
+  assert.deepEqual(onlinerGatewayIdentify({ botToken: "token", communityBotClientId: poolId }, presence, legacy).d.intents, 1,
+    "a linked application cannot fall back to the account packet if its old isBot flag is missing");
 });
 
 test("connection error details keep the diagnostic code and redact saved tokens and proxy credentials", async () => {

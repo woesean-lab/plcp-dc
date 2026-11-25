@@ -192,6 +192,16 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
     return credentials;
   }
 
+  async function knownBotAccounts() {
+    const result = await pool.query("SELECT client_id, encrypted_value FROM community_bot_pool");
+    return result.rows.flatMap(row => {
+      try {
+        const config = JSON.parse(decrypt(row.encrypted_value));
+        return config.clientId === row.client_id && config.botToken ? [{ clientId: config.clientId, botToken: config.botToken }] : [];
+      } catch { return []; }
+    });
+  }
+
   async function release(orderId) { await pool.query("DELETE FROM community_bot_pool_reservations WHERE order_id = $1", [orderId]); }
 
   async function withGrantLock(clientId, userId, run) {
@@ -217,7 +227,7 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
       await pool.query("DELETE FROM community_bot_pool_credential_leases WHERE client_id = $1 AND discord_user_id = $2 AND owner_token = $3", [clientId,userId,owner]);
     }
   }
-  return { list, save, setEnabled, acquire, release, load, withGrantLock, grantUserIds };
+  return { list, save, setEnabled, acquire, release, load, knownBotAccounts, withGrantLock, grantUserIds };
 }
 
 export function registerCommunityBotPool(app, requireSession, service) {

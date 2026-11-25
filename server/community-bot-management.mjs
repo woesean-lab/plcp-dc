@@ -13,9 +13,23 @@ export function createManagedBotResolver({ getSharedConfig, loadPoolConfig }) {
 
 export function botGatewayIdentify(account, presence) {
   // https://github.com/discord/discord-api-docs/blob/main/developers/events/gateway-events.mdx#identify
-  return { op: 2, d: { token: account.botToken, intents: 0,
+  // GUILDS is the only event intent needed for the Onliner server counter.
+  return { op: 2, d: { token: account.botToken, intents: 1,
     properties: { os: process.platform, browser: "Pulcip Onliner", device: "Pulcip Onliner" },
     presence: { ...presence, activities: [] }, compress: false } };
+}
+
+export function managedOnlinerAccounts(config, bots) {
+  const byToken = new Map(bots.filter(bot => bot?.botToken && /^\d{16,22}$/.test(bot.clientId)).map(bot => [bot.botToken, bot.clientId]));
+  return { ...config, accounts: config.accounts.map(account => {
+    const clientId = byToken.get(account.botToken);
+    return clientId ? { ...account, isBot: true, communityBotClientId: clientId, richPresenceEnabled: false } : account;
+  }) };
+}
+
+export function onlinerGatewayIdentify(account, presence, { properties, clientState }) {
+  if (account.isBot === true || /^\d{16,22}$/.test(String(account.communityBotClientId || ""))) return botGatewayIdentify(account, presence);
+  return { op: 2, d: { token: account.botToken, properties, presence, capabilities: 16381, compress: false, client_state: clientState } };
 }
 
 export function safeBotConnectionError(message, account) {

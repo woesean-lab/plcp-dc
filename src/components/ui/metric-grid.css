@@ -1,0 +1,10 @@
+.metric-grid-container { min-width: 0; container: metrics / inline-size; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; min-width: 0; margin: 0; }
+.metric-grid-item { min-width: 0; padding: 16px 18px; border-radius: var(--app-radius-md); }
+.metric-grid-item dt { display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--app-muted); font-size: 10px; }
+.metric-grid-item dd { margin: 10px 0 0; color: var(--app-text); font-size: 26px; line-height: 1; letter-spacing: -.035em; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.metric-grid-item[data-tone="success"] .metric-grid-icon { color: var(--app-success); }
+@container metrics (max-width: 560px) {
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-grid-item { padding: 15px; }
+}
