@@ -168,8 +168,39 @@ test("invalid input saves no job, and healthy-only stock completes without OAuth
 test("all sync routes require an authenticated session", () => {
   const routes = [], auth = () => {};
   registerBotSync({ get: (...args) => routes.push(args), post: (...args) => routes.push(args) }, auth, {});
-  assert.equal(routes.length, 5); assert.ok(routes.every(route => route[1] === auth));
+  assert.equal(routes.length, 6); assert.ok(routes.every(route => route[1] === auth));
 });
+
+test("notification feed restores server progress across controllers, includes paused/legacy work and exposes no credential or member lists", options, () => fixture(async ({ api, controller, add, db }) => {
+  await add(0); await add(1, "offline");
+  const started = await api.start(bot); await api.tick();
+  const defaultJob = await api.start(shared);
+  await db.query("UPDATE community_bot_sync_jobs SET status='paused',updated_at=NOW()-INTERVAL '2 days' WHERE id=$1", [defaultJob.id]);
+  await db.query("INSERT INTO community_bot_authorization_jobs(id,client_id,status,payload) VALUES ('legacy',$1,'running',$2::jsonb)", [other, JSON.stringify({ memberIds: ids, guildId: guild, redirectUri: "private", total: 32, processed: 4, succeeded: 3, failed: 1, errors: [{ userId: ids[0], message: "private" }] })]);
+  const notifications = await controller().notifications();
+  assert.equal(notifications.length, 3);
+  const resumed = notifications.find(job => job.id === started.id);
+  assert.equal(resumed.processed, 1); assert.equal(resumed.total, 2); assert.equal(resumed.botName, "Bot");
+  assert.equal(notifications.find(job => job.id === defaultJob.id).status, "paused");
+  assert.equal(notifications.find(job => job.id === defaultJob.id).botName, "Default bot");
+  assert.equal(notifications.find(job => job.id === "legacy").legacy, true);
+  for (const job of notifications) {
+    assert.ok(!("memberIds" in job)); assert.ok(!("failedIds" in job)); assert.ok(!("guildId" in job)); assert.ok(!("redirectUri" in job)); assert.deepEqual(job.errors, []);
+  }
+  assert.ok(!JSON.stringify(notifications).includes("secret")); assert.ok(!JSON.stringify(notifications).includes("private"));
+}));
+
+test("notification feed reports a completion missed while the browser was closed, expires old results and returns only the latest job per bot", options, () => fixture(async ({ api, controller, add, db }) => {
+  await add(0);
+  const initial = await api.start(bot); await api.tick();
+  assert.equal((await controller().notifications())[0].status, "completed");
+  const next = await api.start(bot);
+  const current = await api.notifications(); assert.equal(current.length, 1); assert.equal(current[0].id, next.id); assert.notEqual(current[0].id, initial.id);
+  await api.cancel(bot);
+  assert.equal((await api.notifications())[0].status, "cancelled");
+  await db.exec("UPDATE community_bot_sync_jobs SET updated_at=NOW()-INTERVAL '10 minutes'");
+  assert.deepEqual(await api.notifications(), []);
+}));
 
 const source = fs.readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
 const ast = ts.createSourceFile("index.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);

@@ -16,6 +16,7 @@ import { getCommunityConfig } from "./lib/community";
 import { checkDcordConnection, getAdminConfig } from "./lib/integration";
 import { Button } from "./components/ui/button";
 import { ProfileAvatarButton, ProfileDialog } from "./components/ProfileDialog";
+import { BotSyncNotifications } from "./components/BotSyncNotifications";
 
 const UiKitPage = lazy(() => import("./pages/UiKitPage"));
 
@@ -98,6 +99,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
+      <BotSyncNotifications />
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>

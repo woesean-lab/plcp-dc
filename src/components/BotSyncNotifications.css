@@ -1,0 +1,5 @@
+.bot-sync-toast { display: grid; gap: 9px; width: 280px; max-width: calc(100vw - 100px); min-width: 0; text-align: left; }
+.bot-sync-toast > strong { font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.bot-sync-toast > span, .bot-sync-toast-actions > span { color: var(--app-muted); font-size: 11px; line-height: 1.5; }
+.bot-sync-toast > .monitor-live-progress-track { grid-column: 1 / -1; margin-top: 0; }
+.bot-sync-toast-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }

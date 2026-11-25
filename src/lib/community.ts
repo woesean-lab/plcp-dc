@@ -14,6 +14,10 @@ export function controlBotAuthorizationJob(clientId: string, action: "resume" | 
 
 export type BotSyncSummary = { totalAccounts: number; pending: number; upToDate: number; unavailable: number };
 export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
+export type BotSyncNotification = BotSyncJob & { botName: string; updatedAt: string };
+export function getBotSyncNotifications(signal?: AbortSignal) {
+  return fetch("/api/community/bot-sync-jobs", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncNotification[]>);
+}
 export function getBotSyncPreview(clientId: string, signal?: AbortSignal) {
   return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/preview`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncSummary>);
 }

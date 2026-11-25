@@ -4,6 +4,7 @@ import { BotSettingsDialog } from "./BotSettingsDialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
+import { notifyBotSyncChange, showBotSyncToast } from "./BotSyncNotifications";
 import { controlBotSync, getBotSyncJob, getBotSyncPreview, startBotSync, type BotSyncJob, type BotSyncSummary } from "../lib/community";
 
 export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = false }: {
@@ -57,7 +58,13 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
       const next = preview ? action === "cancel" || action === "resume" ? { ...job!, status: action === "cancel" ? "cancelled" as const : "queued" as const }
         : { ...summary!, id: "preview", clientId, total: summary?.pending || 0, processed: 0, succeeded: 0, failed: 0, errors: [], status: "queued" as const }
         : action === "cancel" || action === "resume" ? await controlBotSync(clientId, action) : await startBotSync(clientId, action === "retry");
-      if (mounted.current) { setJob(next); if (["completed", "cancelled"].includes(next.status)) { changed.current(); if (!preview) setRevision(value => value + 1); } }
+      if (preview) showBotSyncToast({ ...next, id: "preview-bot-sync", botName: name }, false, true);
+      else notifyBotSyncChange(next, name);
+      if (mounted.current) {
+        setJob(next);
+        if (["completed", "cancelled"].includes(next.status)) { changed.current(); if (!preview) setRevision(value => value + 1); }
+        if (!preview && action !== "cancel") onClose();
+      }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update sync."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
@@ -66,6 +73,7 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
   return <BotSettingsDialog title={`${name} · Sync accounts`} busy={busy} onClose={onClose}>
     <div className="settings-card-body bot-sync-body">
       <p className="settings-field-note">Sync missing or expiring OAuth permissions across all stock categories.</p>
+      <p className="settings-field-note">Runs on the server. You can close this window or refresh the page; progress appears in a notification.</p>
       {loading ? <div role="status" aria-label="Loading sync status"><Skeleton className="h-12 w-full" /><Skeleton className="mt-3 h-12 w-full" /></div> : summary ? <dl className="bot-sync-summary app-panel-soft">
         <div><dt>Accounts</dt><dd>{summary.totalAccounts.toLocaleString("en-US")}</dd></div><div><dt>Up to date</dt><dd>{summary.upToDate.toLocaleString("en-US")}</dd></div><div><dt>To sync</dt><dd>{summary.pending.toLocaleString("en-US")}</dd></div><div><dt>Unavailable</dt><dd>{summary.unavailable.toLocaleString("en-US")}</dd></div>
       </dl> : null}

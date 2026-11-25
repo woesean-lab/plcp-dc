@@ -59,6 +59,21 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     }
     return safe((await pool.query("SELECT * FROM community_bot_sync_jobs WHERE client_id=$1 ORDER BY created_at DESC LIMIT 1", [clientId])).rows[0]);
   }
+  async function notifications() {
+    const result = await pool.query(`SELECT jobs.id,jobs.client_id,jobs.status,jobs.legacy,jobs.updated_at,
+      COALESCE(bots.name,CASE WHEN payload->>'isDefault'='true' THEN 'Default bot' ELSE 'Bot '||jobs.client_id END) AS bot_name,
+      jsonb_build_object('total',payload->'total','processed',payload->'processed','succeeded',payload->'succeeded',
+        'failed',payload->'failed','details',payload->'details') AS payload
+      FROM (SELECT DISTINCT ON (client_id) * FROM (
+        SELECT id,client_id,status,payload,created_at,updated_at,FALSE AS legacy FROM community_bot_sync_jobs
+        UNION ALL
+        SELECT id,client_id,status,payload,created_at,updated_at,TRUE AS legacy FROM community_bot_authorization_jobs
+      ) AS history WHERE status IN ('queued','running','paused') OR updated_at>NOW()-INTERVAL '5 minutes'
+      ORDER BY client_id,created_at DESC) AS jobs
+      LEFT JOIN community_bot_pool AS bots ON bots.client_id=jobs.client_id
+      ORDER BY jobs.created_at`);
+    return result.rows.map(row => ({ ...safe(row), legacy: row.legacy, botName: row.bot_name, updatedAt: row.updated_at, errors: [] }));
+  }
   async function start(clientId, input = {}, redirectUri) {
     if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Choose a valid sync action.", 400);
     if (input.retryFailed !== undefined && typeof input.retryFailed !== "boolean") throw fail("Choose a valid retry action.", 400);
@@ -137,12 +152,13 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
         worker_token=NULL,lease_until=NULL,updated_at=NOW() WHERE id=$1 AND worker_token=$4`, [row.id, JSON.stringify(progress), status, owner]);
     } finally { if (heartbeat) clearInterval(heartbeat); running = false; }
   }
-  return { preview, latest, start, resume, cancel, tick };
+  return { preview, latest, notifications, start, resume, cancel, tick };
 }
 
 export function registerBotSync(app, requireSession, service) {
   const wrap = action => async (req, res, next) => { try { res.set("Cache-Control", "no-store").json(await action(req)); } catch (error) { next(error); } };
   const base = "/api/community/bots/:clientId/sync";
+  app.get("/api/community/bot-sync-jobs", requireSession, wrap(() => service.notifications()));
   app.get(`${base}/preview`, requireSession, wrap(req => service.preview(req.params.clientId)));
   app.get(base, requireSession, wrap(req => service.latest(req.params.clientId)));
   app.post(base, requireSession, wrap(req => service.start(req.params.clientId, req.body, `${req.protocol}://${req.get("host")}/api/community/oauth/callback`)));
