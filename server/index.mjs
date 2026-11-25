@@ -3,6 +3,7 @@ import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
 import { createManagedBotResolver, withoutManagedBotProfiles } from "./community-bot-management.mjs";
+import { createBotSync, registerBotSync, BOT_SYNC_STORAGE_SQL } from "./community-bot-sync.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
@@ -527,6 +528,28 @@ function normalizeCommunityOAuthConfig(value = {}) {
     ...(value.orderBotId ? { orderBotId: value.orderBotId, poolBotId: value.poolBotId, redirectUri: value.redirectUri, stockGuildId: value.stockGuildId } : {}) };
 }
 
+async function authorizeStockMemberForBot(config, member) {
+  let encryptedAccountToken = member.encrypted_account_token;
+  if (!encryptedAccountToken) {
+    const saved = await pool.query("SELECT encrypted_account_token FROM community_oauth_joins WHERE discord_user_id = $1 AND guild_id = $2", [member.discord_user_id, config.guildId]);
+    encryptedAccountToken = saved.rows[0]?.encrypted_account_token;
+  }
+  if (!encryptedAccountToken) throw new Error("This member needs a stored account token to authorize the order bot.");
+  const accountToken = decryptCredential(encryptedAccountToken);
+  const onliner = await getDiscordOnlinerConfig();
+  const linked = onliner.accounts.find(account => account.botToken === accountToken);
+  const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
+  if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
+  const result = await authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount: linked,
+    redirectUri: config.redirectUri, gatewayBeforeAuth: true }, {
+    normalizeProxy: normalizeDiscordOnlinerProxyUrl, withGatewaySession: runWithHumanizerGatewaySession,
+    getConnectedGatewayUser: getConnectedCommunityAuthorizationGatewayUser,
+    requestThroughProxy: requestDiscordThroughProxy, exchangeCode: exchangeCommunityOAuthAuthorizationCode
+  });
+  if (String(result.discordUserId) !== String(member.discord_user_id)) throw new Error("The stored account token belongs to another member.");
+  return { ...result.oauth, authorizationProxy: proxyUrl };
+}
+
 const orderBotService = createOrderBotService({ pool, request: requestDiscord, encrypt: encryptCredential, decrypt: decryptCredential,
   loadPoolConfig: clientId => communityBotPool.load(clientId),
   withPoolGrantLock: (clientId, userId, run) => communityBotPool.withGrantLock(clientId, userId, run),
@@ -534,27 +557,7 @@ const orderBotService = createOrderBotService({ pool, request: requestDiscord, e
   requestIdentity: (accessToken, oauth) => oauth.authorizationProxy
     ? requestDiscordThroughProxy("oauth2/@me", oauth.authorizationProxy, { headers: { Authorization: `Bearer ${accessToken}` } })
     : requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } }),
-  authorize: async (config, member) => {
-    let encryptedAccountToken = member.encrypted_account_token;
-    if (!encryptedAccountToken) {
-      const saved = await pool.query("SELECT encrypted_account_token FROM community_oauth_joins WHERE discord_user_id = $1 AND guild_id = $2", [member.discord_user_id, config.guildId]);
-      encryptedAccountToken = saved.rows[0]?.encrypted_account_token;
-    }
-    if (!encryptedAccountToken) throw new Error("This member needs a stored account token to authorize the order bot.");
-    const accountToken = decryptCredential(encryptedAccountToken);
-    const onliner = await getDiscordOnlinerConfig();
-    const linked = onliner.accounts.find(account => account.botToken === accountToken);
-    const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
-    if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
-    const result = await authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount: linked,
-      redirectUri: config.redirectUri, gatewayBeforeAuth: true }, {
-      normalizeProxy: normalizeDiscordOnlinerProxyUrl, withGatewaySession: runWithHumanizerGatewaySession,
-      getConnectedGatewayUser: getConnectedCommunityAuthorizationGatewayUser,
-      requestThroughProxy: requestDiscordThroughProxy, exchangeCode: exchangeCommunityOAuthAuthorizationCode
-    });
-    if (String(result.discordUserId) !== String(member.discord_user_id)) throw new Error("The stored account token belongs to another member.");
-    return { ...result.oauth, authorizationProxy: proxyUrl };
-  }
+  authorize: authorizeStockMemberForBot
 });
 
 const communityBotPool = createCommunityBotPool({ pool, encrypt: encryptCredential, decrypt: decryptCredential,
@@ -563,6 +566,25 @@ const botAuthorizations = createBotAuthorizations({ pool, getConfig: getCommunit
   loadBot: communityBotPool.load, token: orderBotService.token, encrypt: encryptCredential, decrypt: decryptCredential,
   request: requestDiscord, refresh: exchangeCommunityOAuthRefreshToken, parseExpiry: parseCommunityAccessTokenExpiry,
   withGrantLock: communityBotPool.withGrantLock });
+
+async function synchronizeStockMemberForBot(config, member) {
+  if (!config.isDefault) return orderBotService.token(config, member);
+  try { return await refreshStoredCommunityOAuthCredential(config, member); }
+  catch (error) {
+    if (error.statusCode === 429 || error.oauthRefreshTransient || (!error.oauthAccessInvalid && !error.oauthRefreshInvalid)) throw error;
+    if (!member.encrypted_account_token) throw error;
+  }
+  const oauth = await authorizeStockMemberForBot(config, member);
+  await pool.query(`UPDATE community_oauth_joins SET encrypted_access_token=$3, encrypted_refresh_token=$4,
+    access_token_expires_at=$5, authorized_at=NOW(),
+    status=CASE WHEN status='failed' AND COALESCE(details,'') ~* 'OAuth' THEN 'authorized' ELSE status END,
+    details=CASE WHEN status='failed' AND COALESCE(details,'') ~* 'OAuth' THEN NULL ELSE details END
+    WHERE guild_id=$1 AND discord_user_id=$2`,
+    [config.guildId, member.discord_user_id, encryptCredential(oauth.accessToken), encryptCredential(oauth.refreshToken), oauth.expiresAt]);
+}
+
+const botSync = createBotSync({ pool, getConfig: getCommunityOAuthConfig, loadBot: communityBotPool.load,
+  decrypt: decryptCredential, legacy: botAuthorizations, synchronize: synchronizeStockMemberForBot });
 
 async function getCommunityOAuthConfig(order = null) {
   let stored = null;
@@ -8969,6 +8991,7 @@ async function initializeDatabase() {
   await pool.query(ORDER_BOT_STORAGE_SQL);
   await pool.query(BOT_POOL_STORAGE_SQL);
   await pool.query(BOT_AUTHORIZATION_STORAGE_SQL);
+  await pool.query(BOT_SYNC_STORAGE_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -10180,6 +10203,7 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
 registerCommunityBotPool(app, requireSession, communityBotPool);
 const resolveManagedCommunityBot = createManagedBotResolver({ getSharedConfig: getCommunityOAuthConfig, loadPoolConfig: communityBotPool.load });
 registerBotAuthorizations(app, requireSession, botAuthorizations);
+registerBotSync(app, requireSession, botSync);
 
 app.post("/api/community/order-bot/inspect", requireSession, async (req, res, next) => {
   try {
@@ -15806,6 +15830,8 @@ if (serviceRunsWeb) {
   const communityAutoLeaveTimer = setInterval(runCommunityAutoLeaveJobs, communityAutoLeavePollMs);
   const botAuthorizationTimer = setInterval(() => void botAuthorizations.tick().catch(error => console.error("Bot authorization job failed:", error.message)), 2_000);
   botAuthorizationTimer.unref();
+  const botSyncTimer = setInterval(() => void botSync.tick().catch(error => console.error("Bot sync failed:", error.message)), 2_000);
+  botSyncTimer.unref();
   communityAutoLeaveTimer.unref();
   const communityAutoLeaveInitialTimer = setTimeout(runCommunityAutoLeaveJobs, 1_000);
   communityAutoLeaveInitialTimer.unref();

@@ -9,8 +9,8 @@ import "./BotDirectory.css";
 export type DirectoryBot = PoolBot & { isDefault?: boolean; serverCount?: string };
 const count = (value = 0) => value.toLocaleString("en-US");
 
-export function BotDirectory({ bots, loading = false, actions }: {
-  bots: DirectoryBot[]; loading?: boolean; actions: (bot: DirectoryBot) => ReactNode;
+export function BotDirectory({ bots, loading = false, actions, accountActions }: {
+  bots: DirectoryBot[]; loading?: boolean; actions: (bot: DirectoryBot) => ReactNode; accountActions?: (bot: DirectoryBot) => ReactNode;
 }) {
   return <div className="bot-directory app-panel-soft" aria-busy={loading}>
     <PaginatedList items={loading ? [] : bots} label="Bot pages">{items => <table className="bot-directory-table" aria-label="Members bots">
@@ -24,7 +24,7 @@ export function BotDirectory({ bots, loading = false, actions }: {
           <span className="bot-directory-id">{bot.clientId === "default" ? "Set up the default bot" : bot.clientId}</span>
           {bot.serverCount ? <span className="bot-directory-detail">{bot.serverCount} servers</span> : null}
         </div></div></td>
-        <td><span className="bot-directory-mobile-label">Accounts</span><strong className="bot-directory-number">{count(bot.authorizedAccounts)}</strong><span className="bot-directory-detail">{count(bot.activeAccounts)} unexpired</span></td>
+        <td><span className="bot-directory-mobile-label">Accounts</span><strong className="bot-directory-number">{count(bot.authorizedAccounts)}</strong><span className="bot-directory-detail">{count(bot.activeAccounts)} unexpired</span>{accountActions ? <div className="bot-directory-account-actions">{accountActions(bot)}</div> : null}</td>
         <td><span className="bot-directory-mobile-label">Delivered</span><strong className="bot-directory-number" data-tone="success">{count(bot.deliveredMembers)}</strong><span className="bot-directory-detail">members</span></td>
         <td><span className="bot-directory-mobile-label">Orders</span><strong className="bot-directory-number">{count(bot.totalOrders)}</strong><span className="bot-directory-detail">{count(bot.activeOrders)} active</span></td>
         <td><span className="bot-directory-mobile-label">Remaining</span><strong className="bot-directory-number">{count(bot.pendingMembers)}</strong><span className="bot-directory-detail">members</span></td>

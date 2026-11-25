@@ -11,6 +11,21 @@ export function startBotAuthorizationJob(clientId: string, categoryId: string, d
 export function controlBotAuthorizationJob(clientId: string, action: "resume" | "cancel") {
   return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations/${action}`, { method: "POST", credentials: "same-origin" }).then(parseResponse<BotAuthorizationJob>);
 }
+
+export type BotSyncSummary = { totalAccounts: number; pending: number; upToDate: number; unavailable: number };
+export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
+export function getBotSyncPreview(clientId: string, signal?: AbortSignal) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/preview`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncSummary>);
+}
+export function getBotSyncJob(clientId: string, signal?: AbortSignal) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncJob | null>);
+}
+export function startBotSync(clientId: string, retryFailed = false) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retryFailed }) }).then(parseResponse<BotSyncJob>);
+}
+export function controlBotSync(clientId: string, action: "resume" | "cancel") {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/${action}`, { method: "POST", credentials: "same-origin" }).then(parseResponse<BotSyncJob>);
+}
 export function getCommunityBotPool(signal?: AbortSignal) {
   return fetch("/api/community/bot-pool", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<{ bots: PoolBot[] }>);
 }

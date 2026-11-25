@@ -1,7 +1,7 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
 import { OrderBotOption, EMPTY_ORDER_BOT } from "../components/OrderBotOption";
-import StockBotAuthorizations from "../components/StockBotAuthorizations";
-import type { PoolBot } from "../lib/community";
+import { OAuthBotTargetField } from "../components/OAuthBotTargetField";
+import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { getCommunitySpeedRange, getCommunitySpeedLabel } from "../../shared/community-speed.mjs";
 import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
@@ -743,8 +743,8 @@ export default function HomePage() {
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
   const [stockAuthorizationBotId, setStockAuthorizationBotId] = useState("");
-  const [stockPoolBots, setStockPoolBots] = useState<PoolBot[]>([]);
-  const [stockBotRevision, setStockBotRevision] = useState(0);
+  const [stockTargetReady, setStockTargetReady] = useState(false);
+  const [communityExportOpen, setCommunityExportOpen] = useState(false);
   const [expandedCommunityMemberId, setExpandedCommunityMemberId] = useState<string | null>(null);
   const [communityImportOpen, setCommunityImportOpen] = useState(false);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
@@ -2381,7 +2381,7 @@ export default function HomePage() {
 
   async function handleImportCommunityStock(event: FormEvent) {
     event.preventDefault();
-    if (!communityImportFile) return;
+    if (!communityImportFile || !stockTargetReady || importingCommunityStock) return;
     try {
       setImportingCommunityStock(true);
       if (communityImportFile.size > 10 * 1024 * 1024) throw new Error("OAuth stock JSON must be smaller than 10 MB.");
@@ -2420,7 +2420,6 @@ export default function HomePage() {
       }
       await refreshCommunityStatus();
       setCommunityImportFile(null);
-      setStockBotRevision(current => current+1);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
       const summary = `${result.imported} imported to ${result.categoryName ?? communityVisibleCategory?.name ?? "category"}, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) {
@@ -2437,6 +2436,7 @@ export default function HomePage() {
   }
 
   async function handleExportCommunityStock() {
+    if (!stockTargetReady || exportingCommunityStock) return;
     try {
       setExportingCommunityStock(true);
       const records = await exportCommunityOAuthStock(communityStockType, stockAuthorizationBotId || undefined);
@@ -2454,6 +2454,7 @@ export default function HomePage() {
       link.download = `members-${categoryName}${stockAuthorizationBotId ? `-${stockAuthorizationBotId}` : ""}-oauth-stock.json`;
       link.click();
       URL.revokeObjectURL(url);
+      setCommunityExportOpen(false);
       notifySuccess(`${records.length} OAuth record${records.length === 1 ? "" : "s"} exported.`);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "OAuth stock could not be exported.");
@@ -3202,8 +3203,8 @@ export default function HomePage() {
   const communityStockPanel = communityStockLoading ? <MembersStockSkeleton /> : (
     <div className="members-stock-workspace">
       <MembersStockHeader ready={communityCategories.reduce((sum, category) => sum + category.summary.ready, 0)} total={communityCategories.reduce((sum, category) => sum + category.summary.authorized + category.summary.failed, 0)} status={communityStockBadge.label !== "Ready" ? <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge> : undefined} actions={<>
-          <Button type="button" variant="secondary" size="sm" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => setCommunityImportOpen(true)}><UploadCloud className="h-3.5 w-3.5" />Import stock</Button>
-          <Button type="button" variant="ghost" size="sm" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
+          <Button type="button" variant="secondary" size="sm" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => { setStockTargetReady(false); setCommunityImportOpen(true); }}><UploadCloud className="h-3.5 w-3.5" />Import stock</Button>
+          <Button type="button" variant="ghost" size="sm" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => { setStockTargetReady(false); setCommunityExportOpen(true); }}>
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
             {exportingCommunityStock ? "Exporting..." : "Export stock"}
           </Button>
@@ -3236,8 +3237,6 @@ export default function HomePage() {
           })}
         </div>
       </section>
-      <StockBotAuthorizations categoryId={communityStockType} categoryName={communityVisibleCategory?.name || "category"} selectedIds={selectedCommunityMemberIds}
-        value={stockAuthorizationBotId} onChange={setStockAuthorizationBotId} onBotsChange={setStockPoolBots} sharedName={communityStatus?.bot?.name} revision={stockBotRevision} disabled={importingCommunityStock || exportingCommunityStock} />
       <MembersStockSummary total={communityTotalUsers} available={communityVisibleSummary.ready} active={communityVisibleSummary.authorized} inactive={communityVisibleSummary.failed} />
       {communityStatusError ? <div className="app-panel-soft members-stock-load-error" role="alert"><span>{communityStatusError}</span><Button type="button" size="sm" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>Retry</Button></div> : !communityStockConfigured ? <div className="app-panel-soft members-stock-setup"><TriangleAlert className="h-4 w-4" />Members Stock bot is not configured.</div> : null}
       <section className="app-panel members-stock-list" aria-label="Stock members">
@@ -3441,7 +3440,7 @@ export default function HomePage() {
           <div className="members-stock-list-footer"><ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" /></div>
         </> : <div className="stock-empty-state"><Users className="h-6 w-6" /><strong>{communityCategoryRecords.length ? "No matching members" : "No members in this pool"}</strong><span>{communityCategoryRecords.length ? "No members match the selected filters." : communityVisibleCategory?.name ?? "Members Stock"}</span></div>}
       </section>
-      {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import"><p className="settings-field-note">OAuth target: {stockPoolBots.find(bot => bot.clientId === stockAuthorizationBotId)?.name || communityStatus?.bot?.name || "Shared bot"}{stockAuthorizationBotId ? " · Existing accounts in this category only." : ""}</p>        <input
+      {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import"><OAuthBotTargetField value={stockAuthorizationBotId} onChange={setStockAuthorizationBotId} defaultName={communityStatus?.bot?.name} disabled={importingCommunityStock} onReadyChange={setStockTargetReady} /><input
           ref={communityImportInputRef}
           id="community-oauth-stock-file"
           className="sr-only"
@@ -3456,13 +3455,19 @@ export default function HomePage() {
           <Button autoFocus type="button" variant="secondary" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => communityImportInputRef.current?.click()}>
             <FileJson className="h-4 w-4" /> {communityImportFile ? "Change JSON" : "Choose JSON"}
           </Button>
-          <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock}>
+          <Button type="submit" disabled={!communityStockConfigured || !communityImportFile || importingCommunityStock || !stockTargetReady}>
             {importingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
             {importingCommunityStock && communityImportProgress
               ? `Importing ${communityImportProgress.processed}/${communityImportProgress.total}`
               : importingCommunityStock ? "Validating & importing..." : "Import stock"}
           </Button>
 </div></form></MembersStockImportDialog> : null}
+      {communityExportOpen ? <BotSettingsDialog title="Export OAuth accounts" busy={exportingCommunityStock} onClose={() => setCommunityExportOpen(false)}>
+        <form onSubmit={event => { event.preventDefault(); void handleExportCommunityStock(); }}>
+          <div className="settings-card-body"><p className="settings-field-note">{communityVisibleCategory?.name ?? "Selected category"} · JSON export</p><OAuthBotTargetField value={stockAuthorizationBotId} onChange={setStockAuthorizationBotId} defaultName={communityStatus?.bot?.name} disabled={exportingCommunityStock} onReadyChange={setStockTargetReady} /></div>
+          <footer className="settings-card-footer"><Button type="button" variant="secondary" size="sm" disabled={exportingCommunityStock} onClick={() => setCommunityExportOpen(false)}>Cancel</Button><Button type="submit" variant="secondary" size="sm" disabled={!stockTargetReady || exportingCommunityStock}>{exportingCommunityStock ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}Export stock</Button></footer>
+        </form>
+      </BotSettingsDialog> : null}
     </div>
   );
   const showManageSkeleton = refreshingManage && !orders.length;

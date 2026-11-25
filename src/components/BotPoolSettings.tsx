@@ -6,6 +6,7 @@ import { SecretField } from "./ui/secret-field";
 import { BotDirectory, type DirectoryBot } from "./BotDirectory";
 import { BotSettingsDialog } from "./BotSettingsDialog";
 import { BotServersDialog } from "./BotServersDialog";
+import { BotSyncDialog } from "./BotSyncDialog";
 import { getCommunityBotPool, saveCommunityPoolBot, setCommunityPoolBotEnabled, type CommunityConfig, type PoolBot } from "../lib/community";
 
 export const PREVIEW_POOL_BOTS: PoolBot[] = [
@@ -32,6 +33,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const [editing, setEditing] = useState<PoolBot | null>(null);
   const [editor, setEditor] = useState<"default" | "pool" | null>(null);
   const [servers, setServers] = useState<{ clientId: string; name: string } | null>(null);
+  const [syncing, setSyncing] = useState<DirectoryBot | null>(null);
   const [search, setSearch] = useState("");
   const [draft, setDraft] = useState(EMPTY);
   const pending = useRef(false);
@@ -93,7 +95,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
       <div className="bot-directory-toolbar"><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Search bots" placeholder="Search bots or application IDs" value={search} onChange={event => setSearch(event.target.value)} /></label><span>{rows.length} bots · {bots.filter(bot => bot.enabled).length} enabled in pool</span></div>
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button></div> : null}
       {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
-      {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} actions={bot => <>
+      {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} accountActions={bot => <Button type="button" size="xs" variant="secondary" aria-label={`Sync accounts for ${bot.name}`} aria-haspopup="dialog" disabled={locked || !bot.hasBotToken || !bot.hasClientSecret || (!preview && !config?.configured)} onClick={() => setSyncing(bot)}><RefreshCw className="h-3.5 w-3.5" />Sync</Button>} actions={bot => <>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
         {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "secondary"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
@@ -113,6 +115,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     </form>}
     </BotSettingsDialog> : null}
     {servers ? <BotServersDialog {...servers} preview={preview} onClose={() => setServers(null)} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
+    {syncing ? <BotSyncDialog clientId={syncing.clientId} name={syncing.name} preview={preview} onClose={() => { setSyncing(null); void load(); onRefreshDefault?.(); }} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
 
   </section>;
 }

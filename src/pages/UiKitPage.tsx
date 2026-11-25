@@ -31,7 +31,7 @@ import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
 import BotPoolSettings, { PREVIEW_POOL_BOTS } from "../components/BotPoolSettings";
 import { BotServersSkeleton } from "../components/BotServersDialog";
-import StockBotAuthorizations from "../components/StockBotAuthorizations";
+import { OAuthBotTargetField } from "../components/OAuthBotTargetField";
 import { StockWorkspace } from "../components/StockWorkspace";
 import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSummary } from "../components/MembersStockWorkspace";
 import type { CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
@@ -344,7 +344,7 @@ export default function UiKitPage() {
   const [removeTwoFactor, setRemoveTwoFactor] = useState(true);
   const [autoReplace, setAutoReplace] = useState(false);
   const [orderBot, setOrderBot] = useState({ ...EMPTY_ORDER_BOT, enabled: true });
-  const [stockAuthorizationBot, setStockAuthorizationBot] = useState("1544546102458720276");
+  const [stockAuthorizationBot, setStockAuthorizationBot] = useState("");
   const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -434,8 +434,8 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">
-          <Example title="Stock bot authorizations" source="src/components/StockBotAuthorizations.tsx" code={'<StockBotAuthorizations categoryId={category.id} categoryName={category.name}\n  selectedIds={selectedIds} value={botId} onChange={setBotId}\n  onBotsChange={setBots} sharedName={sharedBot.name} />\n// Bulk jobs persist progress; OAuth imports stay scoped to their selected application.'}><StockBotAuthorizations categoryId="offline" categoryName="Offline" selectedIds={["123456789012345678"]} value={stockAuthorizationBot} onChange={setStockAuthorizationBot} onBotsChange={() => {}} sharedName="Members bot" preview /></Example>
-          <Example title="Members bot actions" source="src/components/BotPoolSettings.tsx · BotDirectory.tsx · BotSettingsDialog.tsx · BotServersDialog.tsx" code={'<BotPoolSettings preview />\n// Bot directory with search, account counts, aligned delivery columns and shared icon-sm actions.\n// Edit and server management open native dialogs; previews only update sample state.'}><BotPoolSettings preview /></Example>
+          <Example title="OAuth import/export target" source="src/components/OAuthBotTargetField.tsx" code={'<OAuthBotTargetField value={botId} onChange={setBotId} />\n// Bot selection lives inside import/export dialogs. Account sync lives in Settings → Bots.'}><OAuthBotTargetField value={stockAuthorizationBot} onChange={setStockAuthorizationBot} defaultName="Members bot" preview /></Example>
+          <Example title="Members bot actions" source="src/components/BotPoolSettings.tsx · BotDirectory.tsx · BotSettingsDialog.tsx · BotServersDialog.tsx" code={'<BotPoolSettings preview />\n// Bot directory with search, account counts, aligned delivery columns and shared icon-sm actions.\n// Accounts Sync, edit and server management open native dialogs; previews only update sample state.'}><BotPoolSettings preview /></Example>
           <Example title="Bot server loading" source="src/components/BotServersDialog.tsx · ui/skeleton.tsx" code={'<BotServersSkeleton />\n// Matching rows replace the loading text inside the server dialog.'}><BotServersSkeleton /></Example>
           <Example title="Bot directory" source="src/components/BotDirectory.tsx · BotDirectory.css" code={'<BotDirectory bots={bots} loading={loading}\n  actions={bot => <Button size="icon-sm" variant="secondary">…</Button>} />\n// One table surface; account/delivery metrics align across bots.\n// Narrow rows retain readable labels and move actions below on phones.'}><BotDirectory bots={[{ ...PREVIEW_POOL_BOTS[0], clientId: "999999999999999999", name: "Default Members bot", isDefault: true, serverCount: "44 / 100", authorizedAccounts: 6895, activeAccounts: 5997, deliveredMembers: 177497, totalOrders: 1305, activeOrders: 152, pendingMembers: 24087 }, ...PREVIEW_POOL_BOTS]} actions={bot => <Button size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} onClick={previewClick}><ShieldCheck className="h-3.5 w-3.5" /></Button>} /></Example>
           <Example title="Members Stock workspace" source="src/components/MembersStockWorkspace.tsx · MembersStockWorkspace.css" code={'// Independent pools, summary cards and one member-list surface.\n<MembersStockCategory category={pool} selected={selected} actions={poolActions} />\n<MembersStockSummary total={total} available={ready} active={active} inactive={inactive} />\n<MembersStockRow record={member} open={openId === member.id}\n  actions={rowActions} badges={statuses} onToggle={toggleDetails}>\n  <MembersStockSecret label="Access token" {...tokenControls} />\n</MembersStockRow>\n// Bulk actions appear only with a selection. Tokens load only on reveal.\n// Mobile pools scroll horizontally; all shared action geometry stays unchanged.'}><MembersStockExample /></Example>

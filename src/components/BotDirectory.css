@@ -13,6 +13,7 @@
 .bot-directory-number { display: block; color: var(--app-text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bot-directory-number[data-tone="success"] { color: var(--app-success); }
 .bot-directory-detail { display: block; margin-top: 4px; color: var(--app-muted); font-size: 10px; line-height: 1.5; white-space: nowrap; }
+.bot-directory-account-actions { margin-top: 8px; }
 .bot-directory-copy > .bot-directory-detail { margin-top: 0; }
 .bot-directory-mobile-label { display: none; }
 .bot-directory-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
