@@ -12,8 +12,8 @@ const base = patch => ({ id: "job", clientId: "123456789012345678", categoryId: 
 const text = node => typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join("") : node?.props ? text(node.props.children) : "";
 function nodes(node, type) { return !node ? [] : Array.isArray(node) ? node.flatMap(item => nodes(item, type)) : typeof node === "object" && node.props ? [...(node.type === type ? [node] : []), ...nodes(node.props.children, type)] : []; }
 function fixture(initial = base()) {
-  const slots = [], effects = [], timers = new Map(), commands = [], notices = [];
-  let cursor = 0, dirty = true, mounted = true, tree, serverJob = initial, queuedRead, nextTimer = 0, closes = 0, changes = 0;
+  const slots = [], effects = [], timers = new Map(), commands = [], notices = [], frames = [];
+  let cursor = 0, dirty = true, mounted = true, tree, serverJob = initial, queuedRead, queuedPreview, nextTimer = 0, closes = 0, changes = 0;
   const dependencies = {
     react: {
       useState(initial) { const id = cursor++; if (!(id in slots)) slots[id] = typeof initial === "function" ? initial() : initial; return [slots[id], value => { slots[id] = typeof value === "function" ? value(slots[id]) : value; dirty = true; }]; },
@@ -27,16 +27,16 @@ function fixture(initial = base()) {
     "../lib/community": {
       getBotSyncCategories: async () => [{ id: "online", name: "OAuth Online" }, { id: "new", name: "New" }],
       getBotSyncJob: async () => { if (queuedRead) { const read = queuedRead; queuedRead = null; return read; } return serverJob; },
-      getBotSyncPreview: async () => ({ totalAccounts: 100, upToDate: 8, pending: 92, unavailable: 0 }),
+      getBotSyncPreview: async () => { if (queuedPreview) { const read = queuedPreview; queuedPreview = null; return read; } return { totalAccounts: 100, upToDate: 8, pending: 92, unavailable: 0 }; },
       controlBotSync: async (id, action) => { commands.push({ action }); serverJob = base({ status: action === "cancel" ? "cancelled" : "queued", stopping: action === "cancel" }); return serverJob; },
       startBotSync: async (id, retry, categoryId) => { commands.push({ action: "start", retry, categoryId }); return base({ status: "queued", categoryId, processed: 0, succeeded: 0, failed: 0 }); }
     }
   };
   const scope = { exports: {}, AbortController, Error, require: name => { assert.ok(name in dependencies, name); return dependencies[name]; }, setTimeout: (fn, delay) => { timers.set(++nextTimer, { fn, delay }); return nextTimer; }, clearTimeout: id => timers.delete(id) };
   vm.runInNewContext(code, scope);
-  function render() { cursor = 0; dirty = false; tree = scope.exports.BotSyncDialog({ clientId: "123456789012345678", name: "Bot", onClose: () => closes++, onChanged: () => changes++ }); const pending = effects.splice(0); pending.forEach(fn => fn()); }
+  function render() { cursor = 0; dirty = false; tree = scope.exports.BotSyncDialog({ clientId: "123456789012345678", name: "Bot", onClose: () => closes++, onChanged: () => changes++ }); frames.push({ loading: nodes(tree, "div").some(node => node.props["aria-busy"]), progress: nodes(tree, "progress").length, text: text(tree) }); const pending = effects.splice(0); pending.forEach(fn => fn()); }
   async function flush() { for (let i = 0; i < 8; i++) { if (dirty && mounted) render(); await new Promise(resolve => setImmediate(resolve)); if (!dirty) break; } }
-  return { commands, notices, timers, flush, setServer: value => { serverJob = value; }, queueRead: value => { queuedRead = value; },
+  return { commands, notices, timers, frames, flush, setServer: value => { serverJob = value; }, queueRead: value => { queuedRead = value; }, queuePreview: value => { queuedPreview = value; },
     get tree() { return tree; }, get progress() { return nodes(tree, "progress")[0]?.props.job; }, get closes() { return closes; }, get changes() { return changes; },
     button(label) { const result = nodes(tree, "button").find(node => text(node) === label || node.props["aria-label"] === label); assert.ok(result, `Missing ${label}`); return result.props; },
     select(value) { nodes(tree, "select")[0].props.onChange(value); },
@@ -44,6 +44,22 @@ function fixture(initial = base()) {
     stop() { mounted = false; slots.forEach(slot => slot?.cleanup?.()); }
   };
 }
+
+test("restoring an active category keeps loading continuous until its counts are ready", async () => {
+  const f = fixture();
+  let release;
+  f.queuePreview(new Promise(resolve => { release = resolve; }));
+  await f.flush();
+  assert.ok(f.frames.length >= 2);
+  assert.ok(f.frames.every(frame => frame.loading && frame.progress === 0));
+  assert.ok(f.frames.every(frame => !frame.text.includes("Unavailable category") && !frame.text.includes("Stop")));
+  release({ totalAccounts: 100, upToDate: 8, pending: 92, unavailable: 0 });
+  await f.flush();
+  assert.equal(f.frames.at(-1).loading, false);
+  assert.equal(f.progress.categoryId, "online");
+  assert.equal(f.progress.processed, 10);
+  f.stop();
+});
 
 test("Close does not send Stop, and Escape cancels the stop confirmation before closing the modal", async () => {
   const f = fixture(); await f.flush();

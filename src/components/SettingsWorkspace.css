@@ -55,6 +55,7 @@
 .settings-card-footer { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; min-width: 0; padding: 16px 22px; border-top: 1px solid var(--app-divider); }
 .settings-card-footer > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .bot-sync-body { display: grid; gap: 16px; }
+.bot-sync-loading { display: grid; min-width: 0; gap: 16px; }
 .bot-sync-body > .settings-field-note { margin: 0; }
 .bot-sync-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); padding: 12px 0; margin: 0; }
 .bot-sync-summary > div { min-width: 0; padding: 0 14px; border-right: 1px solid var(--app-divider); }

@@ -13,6 +13,13 @@ type Action = "start" | "retry" | "resume" | "cancel";
 const previewCategories = [{ id: "online", name: "OAuth Online" }, { id: "offline", name: "OAuth Offline" }];
 const previewSummary = (scope: string) => ({ totalAccounts: scope ? 375 : 750, pending: scope ? 25 : 50, upToDate: scope ? 350 : 700, unavailable: 0 });
 
+export function BotSyncSkeleton() {
+  return <div className="bot-sync-loading" role="status" aria-label="Loading sync status">
+    <div aria-hidden="true"><Skeleton className="mb-2 h-3 w-24" /><Skeleton className="h-12 w-full" /></div>
+    <div className="bot-sync-summary app-panel-soft" aria-hidden="true">{Array.from({ length: 4 }, (_, index) => <div key={index}><Skeleton className="h-3 w-16 max-w-full" /><Skeleton className="mt-2 h-5 w-10" /></div>)}</div>
+  </div>;
+}
+
 export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = false }: {
   clientId: string; name: string; onClose: () => void; onChanged: () => void; preview?: boolean;
 }) {
@@ -46,12 +53,10 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
       : Promise.all([getBotSyncCategories(clientId, controller.signal), getBotSyncJob(clientId, controller.signal)]))
       .then(async ([nextCategories, nextJob]) => {
         if (!current()) return;
-        setCategories(nextCategories);
-        if (!preview) setJob(nextJob);
         const scope = botSyncActive(nextJob) ? nextJob?.categoryId || "" : categoryId;
-        if (scope !== categoryId) { setCategoryId(scope); return; }
+        if (scope !== categoryId) { generation.current++; setCategoryId(scope); return; }
         const nextSummary = preview ? previewSummary(scope) : await getBotSyncPreview(clientId, controller.signal, scope);
-        if (current()) setSummary(nextSummary);
+        if (current()) { setCategories(nextCategories); if (!preview) setJob(nextJob); setSummary(nextSummary); }
       })
       .catch(reason => { if (current()) setError(reason instanceof Error ? reason.message : "Could not load sync status."); })
       .finally(() => { if (current()) setLoading(false); });
@@ -118,25 +123,27 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
   const visibleJob = job && (active || (job.categoryId || "") === categoryId) ? job : null;
   const scopeName = (item: BotSyncJob) => item.categoryName || categories.find(category => category.id === item.categoryId)?.name || (item.categoryId ? "Unavailable category" : "All categories");
   return <BotSettingsDialog title={`${name} · Sync accounts`} busy={busy} onClose={onClose} onCancel={confirmingStop ? () => setConfirmingStop(false) : undefined} headerActions={!confirmingStop ? <Button type="button" size="icon-sm" variant="secondary" aria-label="Refresh sync status" title="Refresh sync status" disabled={busy || loading} onClick={() => setRevision(value => value + 1)}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} /></Button> : null}>
-    <div className="settings-card-body bot-sync-body">
+    <div className="settings-card-body bot-sync-body" aria-busy={loading}>
       <p className="settings-field-note">Sync missing or expiring OAuth permissions. Accounts that are up to date are skipped.</p>
+      {loading ? <BotSyncSkeleton /> : <>
       <FilterDropdown label="Stock category" value={categoryId} options={[{ value: "", label: "All categories" }, ...categories.map(category => ({ value: category.id, label: category.name })), ...(selectedMissing ? [{ value: categoryId, label: "Unavailable category" }] : [])]} onChange={value => { setLoading(true); setSummary(null); setConfirmingStop(false); setCategoryId(value); }} disabled={loading || busy || active} />
-      {loading ? <div role="status" aria-label="Loading sync status"><Skeleton className="h-16 w-full" /><Skeleton className="mt-3 h-12 w-full" /></div> : summary ? <dl className="bot-sync-summary app-panel-soft">
+      {summary ? <dl className="bot-sync-summary app-panel-soft">
         <div><dt>Accounts</dt><dd>{summary.totalAccounts.toLocaleString("en-US")}</dd></div><div><dt>Up to date</dt><dd>{summary.upToDate.toLocaleString("en-US")}</dd></div><div><dt>To sync</dt><dd>{summary.pending.toLocaleString("en-US")}</dd></div><div><dt>Unavailable</dt><dd>{summary.unavailable.toLocaleString("en-US")}</dd></div>
       </dl> : null}
       {summary?.unavailable ? <p className="settings-field-note">{summary.unavailable} accounts need a saved account token or renewable OAuth permission.</p> : null}
-      {!loading && visibleJob ? <BotSyncProgress key={visibleJob.id} job={visibleJob} categoryName={scopeName(visibleJob)} /> : null}
+      {visibleJob ? <BotSyncProgress key={visibleJob.id} job={visibleJob} categoryName={scopeName(visibleJob)} /> : null}
       {job?.legacy ? <p className="settings-field-note">An earlier category authorization is still active. Resume or stop it here before starting another sync.</p> : null}
       <p className="settings-field-note">{active ? "Close this window to keep syncing in the background. Stop ends the job after the current account." : "Sync runs on the server. Progress is saved across page refreshes and appears in a notification."}</p>
+      </>}
       {error ? <div className="settings-load-error app-panel-soft" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => setRevision(value => value + 1)}>Refresh status</Button></div> : null}
       {confirmingStop && active ? <div className="app-panel-soft bot-sync-stop-confirm" role="group" aria-label="Confirm stopping sync"><strong>Stop this sync?</strong><p>Completed OAuth permissions are kept. The current account may finish; remaining accounts will not start.</p></div> : null}
     </div>
     <footer className="settings-card-footer">
       <Button ref={confirmingStop ? cancelStop : undefined} type="button" size="sm" variant="secondary" disabled={busy} onClick={() => confirmingStop ? setConfirmingStop(false) : onClose()}>{confirmingStop || !job ? "Cancel" : "Close"}</Button>
       <div>
-        {job?.status === "paused" && !confirmingStop ? <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => void act("resume")}>{action === "resume" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}Resume</Button> : null}
-        {active ? <Button type="button" size="sm" variant={confirmingStop ? "destructive" : "dangerGhost"} disabled={busy || job?.stopping} onClick={() => confirmingStop ? void act("cancel") : setConfirmingStop(true)}>{action === "cancel" || job?.stopping ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}{job?.stopping ? "Stopping…" : confirmingStop ? "Stop sync" : "Stop"}</Button> : <>
-          {visibleJob?.failed ? <Button type="button" size="sm" variant="secondary" disabled={busy || loading || !summary} onClick={() => void act("retry")}>{action === "retry" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}Retry failed ({visibleJob.failed})</Button> : null}
+        {!loading && job?.status === "paused" && !confirmingStop ? <Button type="button" size="sm" variant="secondary" disabled={busy} onClick={() => void act("resume")}>{action === "resume" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}Resume</Button> : null}
+        {!loading && active ? <Button type="button" size="sm" variant={confirmingStop ? "destructive" : "dangerGhost"} disabled={busy || job?.stopping} onClick={() => confirmingStop ? void act("cancel") : setConfirmingStop(true)}>{action === "cancel" || job?.stopping ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3.5 w-3.5" />}{job?.stopping ? "Stopping…" : confirmingStop ? "Stop sync" : "Stop"}</Button> : <>
+          {!loading && visibleJob?.failed ? <Button type="button" size="sm" variant="secondary" disabled={busy || loading || !summary} onClick={() => void act("retry")}>{action === "retry" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : null}Retry failed ({visibleJob.failed})</Button> : null}
           <Button type="button" size="sm" variant="secondary" disabled={busy || loading || !summary || selectedMissing || summary.pending === 0} onClick={() => void act("start")}>{action === "start" ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Sync</Button>
         </>}
       </div>
