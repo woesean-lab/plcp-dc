@@ -88,7 +88,12 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
         if (!allowAuthorize) throw Object.assign(new Error("This member has not authorized the order bot."), { oauthAccessInvalid: true });
         oauth = await authorize(config, member);
       }
-      const identity = await requestIdentity(oauth.accessToken, oauth);
+      // Fresh authorization already queried oauth2/@me with this access token.
+      // Reuse that response, then apply the same user/application/scope checks.
+      // Persisted grants and refresh responses still take the normal read path.
+      const identity = oauth.verifiedOAuthIdentity
+        ? { response: { ok: true }, payload: oauth.verifiedOAuthIdentity }
+        : await requestIdentity(oauth.accessToken, oauth);
       if (identity.response.status === 429) throw fail("Discord is limiting order bot authorizations. Wait before resuming delivery.", 429);
       if (!identity.response.ok || String(identity.payload?.user?.id) !== userId || String(identity.payload?.application?.id) !== config.clientId
         || !Array.isArray(identity.payload?.scopes) || !identity.payload.scopes.includes("guilds.join")) throw fail("Discord returned an authorization for a different member or application, or without guilds.join.");

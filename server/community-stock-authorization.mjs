@@ -51,7 +51,7 @@ export async function authorizeCommunityStockAccount({ config, accountToken, pro
     if (!oauthIdentity.response.ok || String(oauthIdentity.payload?.user?.id ?? "") !== discordUserId || !scopes.includes("guilds.join")) {
       throw Object.assign(new Error("The new OAuth authorization could not be verified with the required guilds.join permission."), { statusCode: 502 });
     }
-    return { accountIdentity, oauth, discordUserId };
+    return { accountIdentity, oauth, discordUserId, oauthIdentity: oauthIdentity.payload };
   };
   if (!gatewayBeforeAuth) return authorize(null);
   const connectedUser = await getConnectedGatewayUser(onlinerAccount, proxy);

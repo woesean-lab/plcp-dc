@@ -279,6 +279,7 @@ test("stock sync reuses the existing per-application pool service and default cr
   assert.equal(await synchronize({ clientId: bot }, member), "pool-access");
   assert.equal(await synchronize({ isDefault: true, clientId: shared }, member), "shared-refreshed");
   assert.deepEqual(calls.map(call => call[0]), ["pool", "refresh"]);
+  assert.equal(calls[0][1].gatewayBeforeAuth, false);
   assert.equal(calls[1][3], undefined);
 });
 
@@ -286,6 +287,7 @@ test("invalid default refresh falls back to fresh authorization and saves only e
   const { synchronize, calls } = stockSynchronizer({ refreshStoredCommunityOAuthCredential: async () => { throw Object.assign(Error("Expired refresh"), { oauthRefreshInvalid: true }); } });
   await synchronize({ isDefault: true, clientId: shared, guildId: guild }, { discord_user_id: ids[0], encrypted_account_token: "saved" });
   assert.deepEqual(calls.map(call => call[0]), ["authorize", "save"]);
+  assert.equal(calls[0][1].gatewayBeforeAuth, false);
   assert.match(calls[1][1], /WHERE guild_id=\$1 AND discord_user_id=\$2/);
   const args = calls[1][2];
   assert.equal(args[0], guild); assert.equal(args[1], ids[0]);

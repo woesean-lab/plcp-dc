@@ -542,13 +542,13 @@ async function authorizeStockMemberForBot(config, member) {
   const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
   if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
   const result = await authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount: linked,
-    redirectUri: config.redirectUri, gatewayBeforeAuth: true }, {
+    redirectUri: config.redirectUri, gatewayBeforeAuth: config.gatewayBeforeAuth !== false }, {
     normalizeProxy: normalizeDiscordOnlinerProxyUrl, withGatewaySession: runWithHumanizerGatewaySession,
     getConnectedGatewayUser: getConnectedCommunityAuthorizationGatewayUser,
     requestThroughProxy: requestDiscordThroughProxy, exchangeCode: exchangeCommunityOAuthAuthorizationCode
   });
   if (String(result.discordUserId) !== String(member.discord_user_id)) throw new Error("The stored account token belongs to another member.");
-  return { ...result.oauth, authorizationProxy: proxyUrl };
+  return { ...result.oauth, authorizationProxy: proxyUrl, verifiedOAuthIdentity: result.oauthIdentity };
 }
 
 const orderBotService = createOrderBotService({ pool, request: requestDiscord, encrypt: encryptCredential, decrypt: decryptCredential,
@@ -570,6 +570,9 @@ const botAuthorizations = createBotAuthorizations({ pool, getConfig: getCommunit
   withGrantLock: communityBotPool.withGrantLock });
 
 async function synchronizeStockMemberForBot(config, member) {
+  // Sync uses the existing REST identity and OAuth checks; a temporary Gateway
+  // connection adds no authorization grant and can wait on a separate timeout.
+  config = { ...config, gatewayBeforeAuth: false };
   if (!config.isDefault) return orderBotService.token(config, member);
   try { return await refreshStoredCommunityOAuthCredential(config, member); }
   catch (error) {
