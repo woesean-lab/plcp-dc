@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export function BotSettingsDialog({ title, busy = false, onClose, onCancel, children }: {
-  title: string; busy?: boolean; onClose: () => void; onCancel?: () => void; children: ReactNode;
+export function BotSettingsDialog({ title, busy = false, onClose, onCancel, headerActions, children }: {
+  title: string; busy?: boolean; onClose: () => void; onCancel?: () => void; headerActions?: ReactNode; children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -20,7 +20,7 @@ export function BotSettingsDialog({ title, busy = false, onClose, onCancel, chil
       const rect = event.currentTarget.getBoundingClientRect();
       if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.current?.close();
     }}>
-    <header className="settings-card-heading"><div className="settings-card-title"><h3 id={id}>{title}</h3></div></header>
+    <header className="settings-card-heading"><div className="settings-card-title"><h3 id={id}>{title}</h3></div>{headerActions}</header>
     {children}
   </dialog>, document.body);
 }
