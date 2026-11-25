@@ -13,26 +13,12 @@
 .settings-content, .settings-content > [role="tabpanel"] { min-width: 0; }
 .bot-pool-body { display: grid; gap: 14px; }
 .bot-pool-body > .settings-field-note { margin-top: 0; }
-.bot-settings-list { min-width: 0; container: bots / inline-size; }
-.bot-pool-row { display: grid; grid-template-columns: 35px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--app-divider); }
-.bot-pool-row:last-child { border-bottom: 0; }
-.bot-pool-row-metrics { grid-column: 1 / -1; }
-.bot-pool-row-copy { display: grid; min-width: 0; gap: 7px; overflow-wrap: anywhere; line-height: 1.5; }
-.bot-pool-row-title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
-.bot-pool-row-title > strong { font-size: 12px; color: var(--app-text); }
-.bot-pool-row-copy small { font-size: 11px; color: var(--app-muted); }
-.bot-pool-row-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--app-muted); font-size: 11px; }
-.bot-pool-row-stats strong { color: var(--app-text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
 .confirm-modal.bot-settings-dialog { position: fixed; inset: 0; margin: auto; width: min(760px, calc(100vw - 32px)); max-width: none; max-height: calc(100dvh - 32px); overflow-y: auto; padding: 0; color: var(--app-text); container: settings / inline-size; }
 .bot-settings-dialog::backdrop { background: var(--app-overlay-bg); backdrop-filter: blur(8px); }
 .bot-server-skeleton-row { display: flex; min-width: 0; align-items: center; gap: 12px; padding: 14px 0; }
 .bot-server-skeleton-row > div:last-child { min-width: 0; flex: 1; }
 .bot-server-confirm-list { display: grid; gap: 12px; margin-top: 18px; }
 .bot-server-confirm-list > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--app-text); font-size: 12px; overflow-wrap: anywhere; }
-@container bots (max-width: 440px) {
-  .bot-pool-row { grid-template-columns: 35px minmax(0, 1fr); padding: 14px 12px; }
-  .bot-pool-row > .community-member-row-actions { grid-column: 2; justify-self: end; }
-}
 .bot-pool-full-width { grid-column: 1 / -1; }
 .bot-pool-option-status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--app-text-secondary); font-size: 12px; }
 .bot-pool-option-status > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }

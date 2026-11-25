@@ -4,7 +4,7 @@ import fs from "node:fs";
 import vm from "node:vm";
 import { EventEmitter } from "node:events";
 import ts from "typescript";
-import { managedOnlinerAccounts } from "./community-bot-management.mjs";
+import { withoutManagedBotProfiles } from "./community-bot-management.mjs";
 import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey, pruneStockAuthProxyPool, validateStockAuthProxy } from "./community-stock-authorization.mjs";
 
 const user = { id: "123456789012345678", username: "sample" };
@@ -179,44 +179,49 @@ const normalizerContext = {
 };
 vm.runInNewContext(functionCode("normalizeDiscordOnlinerConfig")+";this.normalize=normalizeDiscordOnlinerConfig;",normalizerContext);
 const normalizeConfig=normalizerContext.normalize;
-test("loading saved Onliner configuration classifies legacy managed bots before Gateway startup", async () => {
+test("removed bot profiles are excluded before Gateway startup while Members Onliner settings remain unchanged", async () => {
   let raw = JSON.stringify({ enabled: true, accounts: [
-    { id: "shared-bot", botToken: "saved-bot-token", richPresenceEnabled: true, proxyUrl: proxy },
+    { id: "removed-bot", communityBotClientId: "111111111111111111", botToken: "saved-bot-token" },
     { id: "stock-user", botToken: token, discordUserId: user.id, richPresenceEnabled: true, proxyUrl: proxy }
   ] });
-  const scope = {
-    loadEncryptedSetting: async () => raw, discordOnlinerSettingKey: "onliner", normalizeDiscordOnlinerConfig: normalizeConfig,
-    hydrateDiscordOnlinerSpotifyPlaylist: async value => value, managedOnlinerAccounts,
-    getCommunityOAuthConfig: async () => ({ clientId: "111111111111111111", botToken: "saved-bot-token" }),
-    communityBotPool: { knownBotAccounts: async () => [] }
-  };
+  const scope = { loadEncryptedSetting: async () => raw, discordOnlinerSettingKey: "onliner",
+    normalizeDiscordOnlinerConfig: normalizeConfig, hydrateDiscordOnlinerSpotifyPlaylist: async value => value, withoutManagedBotProfiles };
   vm.runInNewContext(functionCode("getDiscordOnlinerConfig") + ";this.load=getDiscordOnlinerConfig;", scope);
   const loaded = await scope.load();
   assert.equal(loaded.enabled, true);
-  assert.equal(loaded.accounts[0].isBot, true);
-  assert.equal(loaded.accounts[0].richPresenceEnabled, false);
+  assert.equal(loaded.accounts.length, 1);
+  assert.equal(loaded.accounts[0].id, "stock-user");
+  assert.equal(loaded.accounts[0].richPresenceEnabled, true);
   assert.equal(loaded.accounts[0].proxyUrl, proxy);
-  assert.equal(loaded.accounts[1].isBot, false);
-  assert.equal(loaded.accounts[1].richPresenceEnabled, true);
-  scope.communityBotPool.knownBotAccounts = async () => { throw new Error("temporary database failure"); };
-  await assert.rejects(scope.load(), /temporary database failure/, "a failed lookup must not silently erase the loaded profiles");
   raw = "null";
   const fallback = await scope.load();
   assert.equal(fallback.enabled, false);
   assert.equal(fallback.accounts.length, 0);
 });
-test("bot profiles retain Rich Presence off while ordinary account settings remain editable", () => {
-  const config = normalizeConfig({ accounts: [
-    { id: "bot-profile", botToken: "bot-token", isBot: true, richPresenceEnabled: true },
-    { id: "user-profile", botToken: token, richPresenceEnabled: true }
-  ] });
-  assert.equal(config.accounts[0].richPresenceEnabled, false);
-  assert.equal(config.accounts[0].isBot, true);
-  assert.equal(config.accounts[1].richPresenceEnabled, true);
-  const legacyLinked = normalizeConfig({ accounts: [{ id: "linked-without-flag", botToken: "bot-token", communityBotClientId: "111111111111111111", richPresenceEnabled: true }] });
-  assert.equal(legacyLinked.accounts[0].isBot, true);
-  assert.equal(legacyLinked.accounts[0].richPresenceEnabled, false);
+
+test("worker reconciliation disconnects removed integration bots without restarting Members connections", async () => {
+  const bot = { id: "removed-bot", communityBotClientId: "111111111111111111", botToken: "bot" };
+  const member = { id: "stock-user", botToken: token, proxyUrl: proxy, richPresenceEnabled: true };
+  const current = { enabled: true, accounts: [bot, member] };
+  const stopped = [], writes = [], started = [];
+  const memberRuntime = { accountId: member.id }, botRuntime = { accountId: bot.id };
+  const scope = {
+    pool: { query: async (sql, args) => { writes.push({ sql, args }); return { rows: [] }; } },
+    discordOnlinerRuntimes: new Map([[bot.id, botRuntime], [member.id, memberRuntime]]),
+    discordOnlinerPendingRuntimeWrites: new Map([[bot.id, {}]]),
+    stopDiscordOnlinerRuntime: value => stopped.push(value.accountId),
+    startDiscordOnlinerAccounts: (_config, values) => started.push(...values),
+    applyDiscordOnlinerSettings() {}, applyDiscordOnlinerAccountPresenceLive() {}
+  };
+  vm.runInNewContext(functionCode("reconcileDiscordOnlinerWorkerConfig") + ";this.reconcile=reconcileDiscordOnlinerWorkerConfig;", scope);
+  await scope.reconcile(current, withoutManagedBotProfiles(current));
+  assert.deepEqual(stopped, [bot.id]);
+  assert.deepEqual(started, []);
+  assert.equal(scope.discordOnlinerRuntimes.get(member.id), memberRuntime);
+  assert.equal(scope.discordOnlinerRuntimes.has(bot.id), false);
+  assert.deepEqual(Array.from(writes[0].args[0]), [bot.id]);
 });
+
 function response() { return { statusCode:200,status(code){this.statusCode=code;return this;},set(){return this;},json(value){this.body=value;return this;} }; }
 function accountRoute({connect=true,proxyAvailable=true,authFailure=false,customProxy=false,occupied=false,linked=false,gatewayBeforeAuth}={}) {
   const writes=[];const stored=[];const starts=[];const stops=[];const authEvents=[];

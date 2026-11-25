@@ -25,18 +25,6 @@ export function setCommunityPoolBotEnabled(clientId: string, enabled: boolean) {
   }).then(parseResponse<{ bots: PoolBot[] }>);
 }
 
-export type BotOnlinerStatus = { clientId: string; linked: boolean; state: string; lastError?: string | null };
-export function getCommunityBotsOnliner(clientIds: string[], signal?: AbortSignal) {
-  return fetch(`/api/community/bots/onliner?clientIds=${encodeURIComponent(clientIds.join(","))}`, {
-    credentials: "same-origin", cache: "no-store", signal
-  }).then(parseResponse<{ bots: BotOnlinerStatus[] }>);
-}
-export function connectCommunityBotOnliner(clientId: string) {
-  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/onliner`, {
-    method: "POST", credentials: "same-origin", cache: "no-store"
-  }).then(parseResponse<{ linked: boolean; enabled: boolean; clientId: string }>);
-}
-
 export function inspectCommunityOrderBot(botToken: string, guildId: string, signal?: AbortSignal) {
   return fetch("/api/community/order-bot/inspect", { method: "POST", credentials: "same-origin", cache: "no-store", signal,
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ botToken, guildId })

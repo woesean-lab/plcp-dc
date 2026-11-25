@@ -1,0 +1,37 @@
+.bot-directory { min-width: 0; container: bot-directory / inline-size; overflow: hidden; }
+.bot-directory-table { width: 100%; border-collapse: collapse; text-align: left; }
+.bot-directory-table th { padding: 12px 16px; color: var(--app-muted); font-size: 10px; font-weight: 500; background: var(--app-control-bg); border-bottom: 1px solid var(--app-divider); }
+.bot-directory-table td { padding: 18px 16px; vertical-align: middle; border-bottom: 1px solid var(--app-divider); }
+.bot-directory-table tr:last-child td { border-bottom: 0; }
+.bot-directory-table th:first-child { width: 36%; }
+.bot-directory-table td:last-child > .community-member-row-actions { justify-content: flex-end; }
+.bot-directory-identity { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.bot-directory-copy { display: grid; gap: 6px; min-width: 0; }
+.bot-directory-name { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.bot-directory-name > strong { margin-right: 2px; color: var(--app-text); font-size: 12px; font-weight: 650; overflow-wrap: anywhere; }
+.bot-directory-id { color: var(--app-subtle); font-size: 10px; overflow-wrap: anywhere; }
+.bot-directory-number { display: block; color: var(--app-text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bot-directory-number[data-tone="success"] { color: var(--app-success); }
+.bot-directory-detail { display: block; margin-top: 4px; color: var(--app-muted); font-size: 10px; line-height: 1.5; white-space: nowrap; }
+.bot-directory-copy > .bot-directory-detail { margin-top: 0; }
+.bot-directory-mobile-label { display: none; }
+.bot-directory-toolbar { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+.bot-directory-toolbar > span { color: var(--app-muted); font-size: 11px; }
+@container bot-directory (max-width: 860px) {
+  .bot-directory-table, .bot-directory-table tbody { display: block; }
+  .bot-directory-table thead { display: none; }
+  .bot-directory-table tbody tr { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px 12px; padding: 18px 16px; border-bottom: 1px solid var(--app-divider); }
+  .bot-directory-table tbody tr:last-child { border-bottom: 0; }
+  .bot-directory-table td { min-width: 0; padding: 0; border: 0; }
+  .bot-directory-table td:first-child { grid-column: 1 / -2; }
+  .bot-directory-table td:last-child { grid-column: 4; grid-row: 1; align-self: center; justify-self: end; }
+  .bot-directory-table td:nth-child(n+2):nth-child(-n+5) { grid-row: 2; }
+  .bot-directory-mobile-label { display: block; margin-bottom: 6px; color: var(--app-muted); font-size: 10px; }
+}
+@container bot-directory (max-width: 440px) {
+  .bot-directory-table tbody tr { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 16px 12px; }
+  .bot-directory-table td:first-child { grid-column: 1 / -1; }
+  .bot-directory-table td:last-child { grid-column: 1 / -1; grid-row: 4; }
+  .bot-directory-table td:nth-child(2), .bot-directory-table td:nth-child(3) { grid-row: 2; }
+  .bot-directory-table td:nth-child(4), .bot-directory-table td:nth-child(5) { grid-row: 3; }
+}
