@@ -12,10 +12,11 @@ const syncState = { exports: {} }; vm.runInNewContext(stateCode, syncState);
 const job = (patch = {}) => ({ id: "persisted-job", clientId: "222222222222222222", botName: "Members 01", status: "running", total: 750, processed: 250, succeeded: 248, failed: 2, errors: [], updatedAt: "2026-11-25T12:00:00Z", ...patch });
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
-function fixture() {
+function fixture(storage = new Map()) {
   let effect, cleanup, response = [job()], pending, serial = 0;
   const calls = [], dismissed = [], requests = [], timers = new Map();
   const window = new EventTarget(), document = Object.assign(new EventTarget(), { visibilityState: "visible" });
+  window.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
   class CustomEvent extends Event { constructor(name, init) { super(name); this.detail = init.detail; } }
   const toast = (content, options) => calls.push({ type: "blank", job: content.props.job, stale: content.props.stale, options });
   for (const type of ["success", "error", "loading"]) toast[type] = (content, options) => calls.push({ type, job: content.props.job, stale: content.props.stale, options });
@@ -36,7 +37,7 @@ function fixture() {
   vm.runInContext(compiled, context);
   context.exports.BotSyncNotifications();
   cleanup = effect();
-  return { calls, dismissed, requests, timers, api: context.exports,
+  return { calls, dismissed, requests, timers, storage, api: context.exports,
     setResponse: next => { response = next; pending = undefined; }, setPending: next => { pending = next; },
     async tick() { assert.equal(timers.size, 1); const [id, timer] = timers.entries().next().value; timers.delete(id); timer.fn(); await flush(); },
     async event(name) { window.dispatchEvent(new Event(name)); await flush(); },
@@ -113,5 +114,52 @@ test("stopping retains one live notification until the in-flight result is settl
   f.setResponse([job({ status: "cancelled", stopping: false, processed: 251, succeeded: 249 })]); await f.tick();
   assert.equal(f.calls.at(-1).type, "blank"); assert.equal(f.calls.at(-1).options.duration, 6000);
   assert.equal(f.calls.at(-1).job.processed, 251);
+  f.stop();
+});
+
+test("a seen completion stays hidden after reload, focus and a temporary absence from the feed", async () => {
+  const completed = job({ status: "completed", processed: 750, succeeded: 0, failed: 750 });
+  const first = fixture(); first.setResponse([completed]); await flush(); await first.tick();
+  assert.equal(first.calls.filter(call => call.job.status === "completed").length, 1);
+  first.stop();
+  const reloaded = fixture(first.storage); reloaded.setResponse([completed]); await flush(); await reloaded.tick();
+  assert.equal(reloaded.calls.filter(call => call.job.status === "completed").length, 0);
+  await reloaded.event("focus"); await reloaded.tick();
+  reloaded.setResponse([]); await reloaded.tick();
+  reloaded.setResponse([completed]); await reloaded.tick();
+  assert.equal(reloaded.calls.filter(call => call.job.status === "completed").length, 0);
+  reloaded.stop();
+});
+
+test("an unseen completion is delivered once, cosmetic changes stay quiet and a new job still notifies", async () => {
+  const f = fixture(); await flush();
+  f.setResponse([job({ status: "completed", processed: 750, succeeded: 748 })]); await f.tick();
+  const count = f.calls.length;
+  f.setResponse([job({ status: "completed", processed: 750, succeeded: 748, botName: "Renamed", details: "Different note" })]); await f.tick();
+  assert.equal(f.calls.length, count);
+  f.setResponse([job({ id: "new-job", status: "queued", processed: 0, succeeded: 0, failed: 0 })]); await f.tick();
+  assert.equal(f.calls.at(-1).job.id, "new-job"); assert.equal(f.calls.at(-1).type, "loading");
+  f.stop();
+});
+
+test("late active snapshots cannot resurrect a completed notification across reloads", async () => {
+  const first = fixture(); await flush();
+  first.setResponse([job({ status: "completed", processed: 750, succeeded: 748 })]); await first.tick();
+  const count = first.calls.length;
+  first.setResponse([job()]); await first.tick(); assert.equal(first.calls.length, count);
+  first.stop();
+  const restored = fixture(first.storage); await flush();
+  assert.equal(restored.calls.length, 0);
+  restored.stop();
+});
+
+test("unavailable browser storage still deduplicates finished results in the current page", async () => {
+  const f = fixture({ get() { throw Error("Storage blocked"); }, set() { throw Error("Storage blocked"); } });
+  await flush();
+  f.setResponse([job({ status: "cancelled", stopping: false })]); await f.tick();
+  const count = f.calls.length;
+  f.setResponse([]); await f.tick();
+  f.setResponse([job({ status: "cancelled", stopping: false })]); await f.tick();
+  assert.equal(f.calls.length, count);
   f.stop();
 });

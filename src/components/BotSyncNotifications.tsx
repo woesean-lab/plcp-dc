@@ -10,6 +10,33 @@ import "./BotSyncNotifications.css";
 const CHANGE_EVENT = "community-bot-sync-change";
 const toastId = (id: string) => `bot-sync:${id}`;
 const active = (job: BotSyncJob) => job.stopping || ["queued", "running", "paused"].includes(job.status);
+const RECEIPTS_KEY = "pulcip:bot-sync-notifications:v1";
+type CompletionReceipt = { result: string; seenAt: number };
+const completionReceipts = new Map<string, CompletionReceipt>();
+
+function loadCompletionReceipts() {
+  try {
+    const stored: unknown = JSON.parse(window.localStorage.getItem(RECEIPTS_KEY) || "[]");
+    if (Array.isArray(stored)) for (const item of stored) {
+      if (typeof item?.id === "string" && typeof item.result === "string" && Number.isFinite(item.seenAt)) {
+        const current = completionReceipts.get(item.id);
+        if (!current || current.seenAt < item.seenAt) completionReceipts.set(item.id, { result: item.result, seenAt: item.seenAt });
+      }
+    }
+  } catch { /* Keep in-memory receipts when browser storage is unavailable. */ }
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  for (const [id, receipt] of completionReceipts) if (receipt.seenAt < cutoff) completionReceipts.delete(id);
+  const oldestFirst = [...completionReceipts.entries()].sort((a, b) => a[1].seenAt - b[1].seenAt);
+  oldestFirst.slice(0, Math.max(0, oldestFirst.length - 200)).forEach(([id]) => completionReceipts.delete(id));
+  return completionReceipts;
+}
+
+function rememberCompletion(id: string, result: string) {
+  const receipts = loadCompletionReceipts();
+  receipts.set(id, { result, seenAt: Date.now() });
+  try { window.localStorage.setItem(RECEIPTS_KEY, JSON.stringify([...receipts].slice(-200).map(([jobId, receipt]) => ({ id: jobId, ...receipt })))); }
+  catch { /* The current browser session still deduplicates the notification. */ }
+}
 
 export function notifyBotSyncChange(job: BotSyncJob, botName: string) {
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { ...job, botName, updatedAt: new Date().toISOString() } }));
@@ -47,10 +74,21 @@ export function BotSyncNotifications() {
     const signatures = new Map<string, string>();
     const displayed = new Set<string>();
     const render = (job: BotSyncNotification, stale = false) => {
+      const previous = jobs.get(job.id);
+      const receipts = loadCompletionReceipts();
+      // A delayed observation must not reopen a finished job as active.
+      if (active(job) && (receipts.has(job.id) || (previous && !active(previous)))) return;
       const signature = JSON.stringify([job.status, job.stopping, job.processed, job.total, job.succeeded, job.failed, job.details, job.botName, job.categoryId, job.categoryName, formatBotSyncEta(job.estimatedRemainingSeconds), stale]);
       if (signatures.get(job.id) === signature) return;
-      jobs.set(job.id, job); signatures.set(job.id, signature); displayed.add(job.id);
+      jobs.set(job.id, job); signatures.set(job.id, signature);
+      const result = JSON.stringify([job.status, job.processed, job.total, job.succeeded, job.failed]);
+      if (!active(job) && receipts.get(job.id)?.result === result) {
+        if (previous && active(previous)) toast.dismiss(toastId(job.id));
+        return;
+      }
+      displayed.add(job.id);
       showBotSyncToast(job, stale);
+      if (!active(job)) rememberCompletion(job.id, result);
     };
     const schedule = (delay: number) => { clearTimeout(timer); timer = setTimeout(() => void poll(), delay); };
     const poll = async () => {
