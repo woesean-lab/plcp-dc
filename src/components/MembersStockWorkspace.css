@@ -15,6 +15,10 @@
 .members-stock-heading-identity h2 { color: var(--app-text); font-size: 23px; font-weight: 700; letter-spacing: -.035em; }
 .members-stock-heading-identity p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; margin-top: 4px; color: var(--app-muted); font-size: 11px; }
 .members-stock-heading-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.members-stock-inventory-actions { justify-content: flex-end; padding: 0 24px 20px; }
+@container members-stock (max-width: 640px) {
+  .members-stock-inventory-actions { padding: 0 16px 16px; }
+}
 .members-stock-pools { display: grid; min-width: 0; gap: 13px; }
 .members-stock-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .members-stock-section-heading h3 { color: var(--app-text-secondary); font-size: 13px; font-weight: 650; }

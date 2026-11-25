@@ -8,8 +8,17 @@ import { MemberActivityAvatar } from "./MemberActivityAvatar";
 import type { CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
 import "./MembersStockWorkspace.css";
 
+export function MembersStockHeader({ ready, total, actions, status }: { ready: number; total: number; actions: ReactNode; status?: ReactNode }) {
+  return <section className="app-panel boost-workbench members-stock-overview">
+    <header className="boost-inventory-heading"><div><span className="boost-heading-icon" aria-hidden="true"><Users className="h-5 w-5" /></span><div className="boost-heading-copy"><h2>Members Stock</h2><p>Shared accounts across all member pools.</p></div></div>
+      <div className="boost-inventory-totals">{status || <span className="boost-live-indicator">{ready.toLocaleString("en-US")} members ready</span>}<span className="boost-account-total">{total.toLocaleString("en-US")} accounts in stock</span></div>
+    </header>
+    <div className="members-stock-heading-actions members-stock-inventory-actions">{actions}</div>
+  </section>;
+}
+
 export function MembersStockSkeleton() {
-  return <div className="members-stock-workspace" role="status" aria-label="Loading Members Stock" aria-busy="true"><div className="members-stock-heading"><Skeleton className="h-12 w-64" /><Skeleton className="h-10 w-36" /></div><div className="members-stock-categories">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-32 w-full" />)}</div><div className="members-stock-summary">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-24 w-full" />)}</div><div className="app-panel members-stock-list"><Skeleton className="m-5 h-10 w-64 max-w-full" />{[0, 1, 2, 3].map(index => <div className="members-stock-skeleton-row" key={index}><Skeleton className="h-9 w-9" /><Skeleton className="h-8 w-44 max-w-full" /><Skeleton className="ml-auto h-6 w-24" /></div>)}</div></div>;
+  return <div className="members-stock-workspace" role="status" aria-label="Loading Members Stock" aria-busy="true"><div className="app-panel boost-workbench"><div className="boost-inventory-heading"><div><Skeleton className="h-10 w-10 rounded-xl" /><div><Skeleton className="h-4 w-32" /><Skeleton className="mt-2 h-3 w-48 max-w-full" /></div></div><Skeleton className="h-8 w-28" /></div><div className="members-stock-heading-actions members-stock-inventory-actions"><Skeleton className="h-9 w-28" /><Skeleton className="h-9 w-28" /><Skeleton className="h-9 w-28" /></div></div><div className="members-stock-categories">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-32 w-full" />)}</div><div className="members-stock-summary">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-24 w-full" />)}</div><div className="app-panel members-stock-list"><Skeleton className="m-5 h-10 w-64 max-w-full" />{[0, 1, 2, 3].map(index => <div className="members-stock-skeleton-row" key={index}><Skeleton className="h-9 w-9" /><Skeleton className="h-8 w-44 max-w-full" /><Skeleton className="ml-auto h-6 w-24" /></div>)}</div></div>;
 }
 
 export function MembersStockCategory({ category, selected, icon, indicators, actions, onSelect }: {

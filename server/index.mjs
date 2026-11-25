@@ -2,6 +2,7 @@ import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from ".
 import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
+import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
@@ -1776,6 +1777,9 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
       richPresenceEnabled: account?.richPresenceEnabled !== false,
+      isBot: account?.isBot === true,
+      connectionRevision: account?.isBot === true ? String(account?.connectionRevision || "").slice(0, 80) : null,
+      communityBotClientId: isDiscordGuildId(String(account?.communityBotClientId ?? "")) ? String(account.communityBotClientId) : null,
       discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
   }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
@@ -2726,7 +2730,7 @@ function getDiscordOnlinerAgeLabel(timestamp, now = Date.now()) {
 
 async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
   try {
-    const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
+    const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.isBot ? `Bot ${account.botToken}` : account.botToken, "GET", undefined);
     const status = Number(identity.response.status) || 0;
     const code = Number(identity.payload?.code ?? 0);
     if (identity.response.ok) {
@@ -2914,7 +2918,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         appendDiscordOnlinerLog("info", `RESUME payload sent to Discord (seq ${sequence}).`, account.id);
       } else {
         const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
-        socket.send(JSON.stringify({
+        socket.send(JSON.stringify(account.isBot ? botGatewayIdentify(account, presence) : {
         op: 2,
         d: {
           token: account.botToken,
@@ -3369,7 +3373,7 @@ async function reconcileDiscordOnlinerWorkerConfig(current, candidate) {
   const connectionChangedAccounts = candidate.accounts.filter((account) => {
     const previous = currentById.get(account.id);
     return previous && (previous.botToken !== account.botToken
-      || previous.proxyUrl !== account.proxyUrl);
+      || previous.proxyUrl !== account.proxyUrl || previous.isBot !== account.isBot || previous.connectionRevision !== account.connectionRevision);
   });
   const richPresenceChangedIds = new Set(candidate.accounts
     .filter((account) => {
@@ -4268,6 +4272,7 @@ async function leaveCommunityBotGuilds(config, guilds) {
   }
   communityGuildLeaveProgress = {
     active: true,
+    clientId: config.clientId,
     total: guilds.length,
     completed: 0,
     currentGuilds: [],
@@ -10182,6 +10187,21 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
 });
 
 registerCommunityBotPool(app, requireSession, communityBotPool);
+const resolveManagedCommunityBot = createManagedBotResolver({ getSharedConfig: getCommunityOAuthConfig, loadPoolConfig: communityBotPool.load });
+registerBotOnlinerManagement(app, requireSession, createBotOnlinerManagement({
+  resolveBot: resolveManagedCommunityBot, getConfig: getDiscordOnlinerConfig,
+  saveConfig: config => saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(config)),
+  selectProxy: selectDiscordOnlinerProxy, normalize: normalizeDiscordOnlinerConfig,
+  snapshot: getDiscordOnlinerSnapshotForApi,
+  start: (config, account) => {
+    if (serviceRunsOnliner) {
+      const runtime = discordOnlinerRuntimes.get(account.id);
+      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
+      startDiscordOnlinerAccounts(config, [account]);
+    }
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = config;
+  }
+}));
 registerBotAuthorizations(app, requireSession, botAuthorizations);
 
 app.post("/api/community/order-bot/inspect", requireSession, async (req, res, next) => {
@@ -10362,9 +10382,9 @@ app.post("/api/community/bot/leave-all-guilds", requireSession, async (req, res,
   }
 });
 
-app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => {
+app.get("/api/community/bot/guilds", requireSession, async (req, res, next) => {
   try {
-    const config = await getCommunityOAuthConfig();
+    const config = req.query.clientId ? await resolveManagedCommunityBot(String(req.query.clientId)) : await getCommunityOAuthConfig();
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
     communityBotGuildCountCache = null;
     const [{ guilds, exact }, activeOrderResult] = await Promise.all([
@@ -10376,7 +10396,9 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
          FROM tracked_orders
          WHERE payload->>'provider' = 'community'
            AND UPPER(COALESCE(payload->>'status', '')) = 'PROCESS'
-         GROUP BY payload->>'serverId', UPPER(COALESCE(payload->>'status', 'PROCESS'))`
+           AND (payload->>'botApplicationId' = $1 OR ($2::boolean AND COALESCE(payload->>'customBot', 'false') <> 'true'))
+         GROUP BY payload->>'serverId', UPPER(COALESCE(payload->>'status', 'PROCESS'))`,
+        [config.clientId, config.clientId === (await getCommunityOAuthConfig()).clientId]
       )
     ]);
     const activeOrdersByGuild = new Map();
@@ -10409,8 +10431,10 @@ app.get("/api/community/bot/guilds", requireSession, async (_req, res, next) => 
   }
 });
 
-app.get("/api/community/bot/leave-progress", requireSession, (_req, res) => {
-  res.set("Cache-Control", "no-store").json(communityGuildLeaveProgress);
+app.get("/api/community/bot/leave-progress", requireSession, (req, res) => {
+  const progress = req.query.clientId && String(req.query.clientId) !== communityGuildLeaveProgress.clientId
+    ? { active: false, total: 0, completed: 0, currentGuilds: [], startedAt: null, finishedAt: null } : communityGuildLeaveProgress;
+  res.set("Cache-Control", "no-store").json(progress);
 });
 
 app.post("/api/community/bot/leave-guilds", requireSession, async (req, res, next) => {
@@ -10424,7 +10448,7 @@ app.post("/api/community/bot/leave-guilds", requireSession, async (req, res, nex
     if (!requestedIds.length || requestedIds.length > 200) {
       return res.status(400).json({ message: "Select between 1 and 200 servers." });
     }
-    const config = await getCommunityOAuthConfig();
+    const config = req.body?.clientId ? await resolveManagedCommunityBot(String(req.body.clientId)) : await getCommunityOAuthConfig();
     if (!config.configured) return res.status(503).json({ message: "Configure the Members bot before managing its servers." });
     communityBotGuildCountCache = null;
     const { guilds, exact } = await loadCommunityBotGuilds(config);

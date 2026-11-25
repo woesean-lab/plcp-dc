@@ -1,13 +1,12 @@
 import { SecretField } from "./ui/secret-field";
 import BotPoolSettings from "./BotPoolSettings";
 import { useSearchParams } from "react-router-dom";
-import { useEffect, useId, useMemo, useRef, useState, type FormEventHandler, type KeyboardEvent } from "react";
-import { Bot, Check, CheckCircle2, Globe2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
+import { useEffect, useId, useRef, useState, type FormEventHandler, type KeyboardEvent } from "react";
+import { Bot, Check, CheckCircle2, KeyRound, LoaderCircle, LockKeyhole, RefreshCw, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Skeleton } from "./ui/skeleton";
-import { PaginatedList } from "./ListPagination";
 import type { CommunityBotGuild, CommunityConfig, CommunityConfigInput, CommunityGuildLeaveProgress } from "../lib/community";
 import "./SettingsWorkspace.css";
 import EldoradoIntegrationSettings from "./EldoradoIntegrationSettings";
@@ -67,7 +66,6 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   const [integrationConfigured, setIntegrationConfigured] = useState(false);
   const requestedSection = searchParams.get("settings");
   const section: Section = requestedSection === "servers" ? "bot-pool" : SECTIONS.some(item => item.id === requestedSection) ? requestedSection as Section : "connections";
-  const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
   const workspace = useRef<HTMLElement | null>(null);
   const tabs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -76,11 +74,6 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   const membersBusy = loading || members.saving || guilds.leaving;
   const dcordBusy = loading || dcord.saving;
   const membersDirty = members.draft.clientId !== (config?.clientId ?? "") || members.draft.guildId !== (config?.guildId ?? "") || Boolean(members.draft.clientSecret || members.draft.botToken);
-  const selectedGuilds = guilds.items.filter((guild) => guilds.selected[guild.id]);
-  const visibleGuilds = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return guilds.items.filter((guild) => !query || guild.name.toLowerCase().includes(query) || guild.id.includes(query));
-  }, [guilds.items, search]);
   const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured)) + Number(integrationConfigured);
   const connectionCount = salta7 ? 4 : 3;
   const canSaveMembers = !membersBusy && Boolean(members.draft.clientId.trim())
@@ -167,22 +160,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
 
         <div id={`${id}-bot-pool-panel`} role="tabpanel" aria-labelledby={`${id}-bot-pool-tab`} hidden={section !== "bot-pool"} tabIndex={0}>
           <div className="settings-section-heading"><div><h2>Bots</h2><p>Manage the default bot and pool bots together.</p></div><span className="settings-section-index">02</span></div>
-          {section === "bot-pool" ? <BotPoolSettings preview={integrationPreview} defaultConfig={config} defaultEditor={defaultBotEditor} disabled={membersBusy} onRefreshDefault={onRefresh} /> : null}
-          <details className="lookup-technical-details bot-settings-servers" open={requestedSection === "servers" || undefined} onToggle={event => { if (event.currentTarget.open && config?.configured) guilds.onOpen(); }}>
-            <summary><span><Globe2 className="h-3.5 w-3.5" aria-hidden="true" />Default bot servers</span><small>{config?.botName || "Default bot"}</small></summary>
-          <section className="app-panel settings-card" aria-label="Members bot servers">
-            <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Server access</span><h3>Connected servers</h3></div><Button type="button" size="sm" variant="secondary" disabled={!config?.configured || guilds.loading || guilds.leaving} onClick={guilds.onRefresh}><RefreshCw className={`h-3.5 w-3.5${guilds.loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh</Button></header>
-            {!config?.configured ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bot configured</strong><span>Server access is unavailable.</span></div> : <>
-              <div className="settings-guild-toolbar"><label className="settings-guild-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Search bot servers" placeholder="Search servers or IDs" value={search} onChange={(event) => setSearch(event.target.value)} /></label><span>{guilds.items.length.toLocaleString("en-US")} servers</span><Button type="button" size="xs" variant="secondary" disabled={guilds.loading || guilds.leaving || !visibleGuilds.length} onClick={() => guilds.onSelectionChange({ ...guilds.selected, ...Object.fromEntries(visibleGuilds.map((guild) => [guild.id, true])) })}>Select all</Button><Button type="button" size="xs" variant="ghost" disabled={guilds.leaving || !selectedGuilds.length} onClick={() => guilds.onSelectionChange({})}>Clear</Button></div>
-              {guilds.error ? <div className="settings-load-error settings-server-error" role="alert"><span>{guilds.error}</span><Button type="button" size="xs" variant="secondary" disabled={guilds.loading || guilds.leaving} onClick={guilds.onRefresh}>Retry</Button></div> : null}
-              {guilds.loading ? <div className="community-guild-manager-loading" role="status"><LoaderCircle className="h-4 w-4 animate-spin" />Loading servers…</div> : visibleGuilds.length ? <div className="settings-guild-list"><PaginatedList key={search} items={visibleGuilds} label="Bot server pages">{(pageItems) => <>{pageItems.map((guild) => <button key={guild.id} type="button" className="community-guild-row" disabled={guilds.leaving} data-selected={guilds.selected[guild.id] ? "true" : "false"} role="checkbox" aria-checked={guilds.selected[guild.id] === true} onClick={() => guilds.onSelectionChange({ ...guilds.selected, [guild.id]: !guilds.selected[guild.id] })}>
-                <span className="community-guild-check">{guilds.selected[guild.id] ? <Check className="h-3.5 w-3.5" /> : null}</span><span className="community-guild-avatar">{guild.iconUrl ? <img src={guild.iconUrl} alt="" /> : <Globe2 className="h-4 w-4" />}</span><span className="community-guild-copy"><strong>{guild.name}</strong><small>{guild.id}{guild.configured ? " · Stock server" : ""}</small>{guild.activeOrderCount > 0 ? <span className="community-guild-order-statuses">{guild.activeOrderStatuses.map((item) => <em key={item.status} data-status={item.status.toLowerCase().replace(/\s+/g, "-")}>{item.count} active · {item.status}</em>)}</span> : null}</span>
-              </button>)}</>}</PaginatedList></div> : guilds.error ? null : <div className="stock-empty-state settings-empty"><Globe2 className="h-6 w-6" /><strong>{search ? "No matching servers" : "No servers found"}</strong><span>{search ? "No servers match this search." : "The bot has no visible server memberships."}</span></div>}
-              {guilds.leaving && guilds.progress ? <div className="settings-leave-progress" role="status"><LoaderCircle className="h-4 w-4 animate-spin" /><span><strong>Leaving servers</strong><small>{guilds.progress.completed} of {guilds.progress.total} processed</small></span><div className="monitor-live-progress-track"><span style={{ width: `${guilds.progress.total ? Math.min(100, guilds.progress.completed / guilds.progress.total * 100) : 0}%` }} /></div></div> : null}
-              <footer className="settings-card-footer"><span className="settings-selection-count"><strong>{selectedGuilds.length}</strong> selected</span><Button type="button" size="sm" variant="dangerGhost" disabled={guilds.loading || guilds.leaving || !selectedGuilds.length} onClick={guilds.onLeave}>{guilds.leaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}{guilds.leaving ? "Leaving…" : "Leave selected"}</Button></footer>
-            </>}
-          </section>
-          </details>
+          {section === "bot-pool" ? <BotPoolSettings preview={integrationPreview} defaultConfig={config} defaultEditor={defaultBotEditor} disabled={membersBusy} onRefreshDefault={onRefresh} openDefaultServers={requestedSection === "servers"} /> : null}
+
         </div>
 
 

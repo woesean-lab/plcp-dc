@@ -7,7 +7,7 @@ import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import { StockWorkspace } from "../components/StockWorkspace";
-import { MembersStockBadges, MembersStockBulkActions, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
+import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -3201,9 +3201,7 @@ export default function HomePage() {
 
   const communityStockPanel = communityStockLoading ? <MembersStockSkeleton /> : (
     <div className="members-stock-workspace">
-      <header className="members-stock-heading">
-        <div className="members-stock-heading-identity"><span className="monitor-panel-icon" aria-hidden="true"><Users className="h-4 w-4" /></span><div><h2>Members Stock</h2><p>Shared inventory · {stockPoolBots.length} pool bots</p></div><Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge></div>
-        <div className="members-stock-heading-actions">
+      <MembersStockHeader ready={communityCategories.reduce((sum, category) => sum + category.summary.ready, 0)} total={communityCategories.reduce((sum, category) => sum + category.summary.authorized + category.summary.failed, 0)} status={communityStockBadge.label !== "Ready" ? <Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge> : undefined} actions={<>
           <Button type="button" variant="secondary" size="sm" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => setCommunityImportOpen(true)}><UploadCloud className="h-3.5 w-3.5" />Import stock</Button>
           <Button type="button" variant="ghost" size="sm" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
             {exportingCommunityStock ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -3212,8 +3210,7 @@ export default function HomePage() {
           <Button type="button" size="sm" disabled={!communityStockConfigured || !communityVisibleCategory || addingCommunityAccount} onClick={() => communityVisibleCategory && beginAddingCommunityAccount(communityVisibleCategory)}>
               <UserPlus className="h-4 w-4" /> Add account
             </Button>
-        </div>
-      </header>
+        </>} />
       <section className="members-stock-pools" aria-label="Member pools">
         <div className="members-stock-section-heading"><h3>Member pools<span>{communityCategories.length}</span></h3><Button type="button" size="sm" variant="accentGhost" disabled={!communityStockConfigured} onClick={beginCreatingCommunityCategory}><Plus className="h-3.5 w-3.5" />New category</Button></div>
         <div className="members-stock-categories">

@@ -25,6 +25,18 @@ export function setCommunityPoolBotEnabled(clientId: string, enabled: boolean) {
   }).then(parseResponse<{ bots: PoolBot[] }>);
 }
 
+export type BotOnlinerStatus = { clientId: string; linked: boolean; state: string };
+export function getCommunityBotsOnliner(clientIds: string[], signal?: AbortSignal) {
+  return fetch(`/api/community/bots/onliner?clientIds=${encodeURIComponent(clientIds.join(","))}`, {
+    credentials: "same-origin", cache: "no-store", signal
+  }).then(parseResponse<{ bots: BotOnlinerStatus[] }>);
+}
+export function connectCommunityBotOnliner(clientId: string) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/onliner`, {
+    method: "POST", credentials: "same-origin", cache: "no-store"
+  }).then(parseResponse<{ linked: boolean; enabled: boolean; clientId: string }>);
+}
+
 export function inspectCommunityOrderBot(botToken: string, guildId: string, signal?: AbortSignal) {
   return fetch("/api/community/order-bot/inspect", { method: "POST", credentials: "same-origin", cache: "no-store", signal,
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ botToken, guildId })
@@ -363,20 +375,21 @@ export async function clearCommunityConfig() {
   }
 }
 
-export function getCommunityBotGuilds() {
-  return fetch("/api/community/bot/guilds", {
+export function getCommunityBotGuilds(clientId?: string, signal?: AbortSignal) {
+  return fetch(`/api/community/bot/guilds${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ""}`, {
+    signal,
     cache: "no-store",
     credentials: "same-origin"
   }).then(parseResponse<{ exact: boolean; guilds: CommunityBotGuild[] }>);
 }
 
-export function leaveCommunityBotGuilds(guildIds: string[]) {
+export function leaveCommunityBotGuilds(guildIds: string[], clientId?: string) {
   return fetch("/api/community/bot/leave-guilds", {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ guildIds, confirmation: "LEAVE SELECTED" })
+    body: JSON.stringify({ guildIds, clientId, confirmation: "LEAVE SELECTED" })
   }).then(parseResponse<{
     requested: number;
     left: number;
@@ -398,8 +411,8 @@ export function leaveDiscordUserGuild(accountToken: string, guildId: string) {
   }).then(parseResponse<{ left: true; guildId: string; username: string | null } >);
 }
 
-export function getCommunityGuildLeaveProgress() {
-  return fetch("/api/community/bot/leave-progress", {
+export function getCommunityGuildLeaveProgress(clientId?: string) {
+  return fetch(`/api/community/bot/leave-progress${clientId ? `?clientId=${encodeURIComponent(clientId)}` : ""}`, {
     cache: "no-store",
     credentials: "same-origin"
   }).then(parseResponse<CommunityGuildLeaveProgress>);
