@@ -1,3 +1,5 @@
+import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
+import { getCommunitySpeedPattern, getCommunitySpeedAverage, getCommunitySpeedLabel, getCommunitySpeedPresetDelay } from "../../shared/community-speed.mjs";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -23,12 +25,6 @@ import type { OrderStatusResponse } from "../types";
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
 const ELDORADO_STORE_URL = "https://www.eldorado.gg/users/PulcipStore/shop/CustomItem?gameId=217&searchQuery=members";
-const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
-const MONITOR_SPEED_PROFILES = [
-  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
-  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
-  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
-] as const;
 
 type DcordTokenResult = {
   index: number;
@@ -495,9 +491,9 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const speedProfile = typeof status?.speedProfile === "string" ? status.speedProfile : "custom";
-  const balancedActiveDelay = typeof status?.activeDelay === "number" ? status.activeDelay : BALANCED_DELAY_PATTERN[0];
-  const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
-  const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
+  const speedPattern = getCommunitySpeedPattern(speedProfile, totalMembers);
+  const balancedActiveDelay = typeof status?.activeDelay === "number" ? status.activeDelay : speedPattern?.[0];
+  const effectiveEstimateDelay = getCommunitySpeedAverage(speedProfile, currentDelay, totalMembers);
   const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof effectiveEstimateDelay === "number"
     ? membersRemaining * effectiveEstimateDelay
     : undefined;
@@ -589,10 +585,10 @@ export default function PublicOrderPage() {
     }
   }, [currentDelay]);
 
-  async function handleUpdateDelay(profileOverride: "safe" | "balanced" | "fast" | "custom" = "custom") {
+  async function handleUpdateDelay(profileOverride: "safe" | "balanced" | "balanced2" | "fast" | "custom" = "custom") {
     if (isTerminalStatus || isInvitesPaused || delayUpdateInFlightRef.current || delayUpdateCooldownUntilRef.current > Date.now()) return;
 
-    const profileDelay = MONITOR_SPEED_PROFILES.find((profile) => profile.key === profileOverride)?.delay;
+    const profileDelay = getCommunitySpeedPresetDelay(profileOverride);
     const nextDelay = profileDelay ?? Number.parseInt(delayDraft, 10);
 
     if (!Number.isFinite(nextDelay) || nextDelay < 0) {
@@ -620,7 +616,7 @@ export default function PublicOrderPage() {
       }
       delayUpdateCooldownUntilRef.current = Date.now() + DELAY_UPDATE_COOLDOWN_SECONDS * 1000;
       setDelayUpdateCooldown(DELAY_UPDATE_COOLDOWN_SECONDS);
-      toast.success(`${nextSpeedProfile ? `${MONITOR_SPEED_PROFILES.find((profile) => profile.key === nextSpeedProfile)?.label ?? "Custom"} profile` : "Delay"} updated.`);
+      toast.success(`${nextSpeedProfile ? `${getCommunitySpeedLabel(nextSpeedProfile)} profile` : "Delay"} updated.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Delay could not be updated.");
     } finally {
@@ -818,30 +814,13 @@ export default function PublicOrderPage() {
           <h2>Join delay</h2>
         </div>
         {currentDelay !== 0 ? (
-          <strong className="monitor-current-delay">{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
+          <strong className="monitor-current-delay">{speedPattern ? `${getCommunitySpeedLabel(speedProfile)} · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s` : "-"}</strong>
         ) : null}
       </div>
 
       {isCommunityOrder ? (
-        <div className="monitor-speed-profile-options" aria-label="Delivery speed profile">
-          {MONITOR_SPEED_PROFILES.map((profile) => {
-            const Icon = profile.icon;
-            return (
-              <button
-                key={profile.key}
-                type="button"
-                className={speedProfile === profile.key ? "is-selected" : ""}
-                aria-pressed={speedProfile === profile.key}
-                disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
-                onClick={() => void handleUpdateDelay(profile.key)}
-              >
-                <Icon className="h-4 w-4" aria-hidden="true" />
-                <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
-                <em>{profile.timing}</em>
-              </button>
-            );
-          })}
-        </div>
+        <CommunitySpeedProfileOptions value={speedProfile} amount={totalMembers} disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
+          onChange={profile => void handleUpdateDelay(profile)} />
       ) : null}
 
       <div className="monitor-delay-controls">
@@ -1095,7 +1074,7 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-foot">
                   <span><Activity className="h-3.5 w-3.5" /> {isCompleted ? "Everything has been delivered" : `${formatNumber(membersRemaining)} remaining`}</span>
                   {isBoostOrder || currentDelay !== 0 ? (
-                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
+                    <span><Timer className="h-3.5 w-3.5" /> {isBoostOrder ? boostDuration : speedPattern ? `${getCommunitySpeedLabel(speedProfile)} · ${balancedActiveDelay}s` : typeof currentDelay === "number" ? `${currentDelay}s delay` : "Live updates"}</span>
                   ) : null}
                 </div>
               </section>

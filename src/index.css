@@ -6924,6 +6924,23 @@
   margin-top: 14px;
 }
 
+.community-speed-profile-options.community-member-speed-options,
+.monitor-speed-profile-options.community-member-speed-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (max-width: 760px) {
+  .community-speed-profile-options.community-member-speed-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .monitor-speed-profile-options.community-member-speed-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .monitor-speed-profile-options button {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;

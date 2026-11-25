@@ -17,6 +17,8 @@ import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDial
 import { BoostServiceField } from "../components/BoostServiceField";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { OrderAutoReplaceOption } from "../components/OrderAutoReplaceOption";
+import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
+import type { CommunitySpeedProfile } from "../../shared/community-speed.mjs";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
@@ -198,6 +200,19 @@ function MonitorControlsExample() {
   </div>;
 }
 
+function MemberSpeedExample() {
+  const [amount, setAmount] = useState(250);
+  const [profile, setProfile] = useState<CommunitySpeedProfile>("balanced2");
+  return <div className="ui-ref-stack">
+    <label className="ui-ref-field"><span className="field-label">Total members</span><Input type="number" min={1} value={amount} onChange={event => setAmount(Math.max(1, Number(event.target.value) || 1))} /></label>
+    <div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
+      <CommunitySpeedProfileOptions creation value={profile} amount={amount} onChange={setProfile} />
+    </div>
+    <CommunitySpeedProfileOptions value={profile} amount={amount} onChange={setProfile} />
+    <CommunitySpeedProfileOptions value="balanced2" amount={amount} onChange={() => {}} disabled />
+  </div>;
+}
+
 function ReactionAccessExample() {
   const [state, setState] = useState("not-enabled");
   return <div className="ui-ref-stack">
@@ -370,6 +385,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
+          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} amount={order.amount}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// creation uses the existing create-order option styles.\n// Balanced 2 uses the total order size: ≤250: 1–6s, 251–400: 30–60s, >400: 30–300s.'}><MemberSpeedExample /></Example>
           <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
             <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
           </Example>

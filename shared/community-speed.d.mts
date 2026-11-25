@@ -1,0 +1,10 @@
+export type CommunitySpeedProfile = "safe" | "balanced" | "balanced2" | "fast" | "custom";
+export const COMMUNITY_BALANCED_DELAY_PATTERN: readonly number[];
+export function normalizeCommunitySpeedProfile(value: unknown): CommunitySpeedProfile;
+export function getCommunitySpeedPattern(profile: string, amount?: unknown): readonly number[] | null;
+export function getCommunitySpeedRange(profile: string, amount?: unknown): string;
+export function getCommunitySpeedPresetDelay(profile: string): number | null;
+export function getCommunitySpeedDelay(profile: string, configuredDelay: number, patternIndex: number, amount?: unknown): number;
+export function getCommunitySpeedAverage(profile: string, configuredDelay: number | undefined, amount?: unknown): number | undefined;
+export function getCommunitySpeedLabel(profile: string): string;
+export function getCommunitySpeedDescription(profile: string, delay: unknown, amount?: unknown): string;

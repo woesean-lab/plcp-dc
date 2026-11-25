@@ -1,3 +1,5 @@
+import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
+import { getCommunitySpeedPattern, getCommunitySpeedAverage, getCommunitySpeedLabel, getCommunitySpeedDescription } from "../../shared/community-speed.mjs";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -29,12 +31,6 @@ import type { CommunityMemberResult, OrderProvider, OrderStatusResponse } from "
 
 const labelClass = "app-kicker";
 const DISCORD_EPOCH_MS = 1_420_070_400_000n;
-const BALANCED_DELAY_PATTERN = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
-const ORDER_SPEED_PROFILES = [
-  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
-  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
-  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
-] as const;
 
 type DcordTokenResult = {
   index: number;
@@ -468,9 +464,9 @@ export default function OrderPage() {
   const categoryAllocations = Array.isArray(result?.categoryAllocations) ? result.categoryAllocations : [];
   const currentDelay = getNumberField(result, ["delay"]);
   const speedProfile = typeof result?.speedProfile === "string" ? result.speedProfile : "custom";
-  const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : BALANCED_DELAY_PATTERN[0];
-  const balancedAverageDelay = BALANCED_DELAY_PATTERN.reduce((total, delay) => total + delay, 0) / BALANCED_DELAY_PATTERN.length;
-  const effectiveEstimateDelay = speedProfile === "balanced" ? balancedAverageDelay : currentDelay;
+  const speedPattern = getCommunitySpeedPattern(speedProfile, totalAmount);
+  const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : speedPattern?.[0];
+  const effectiveEstimateDelay = getCommunitySpeedAverage(speedProfile, currentDelay, totalAmount);
   const expiration = getOrderSupportExpiration(result);
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
@@ -556,7 +552,7 @@ export default function OrderPage() {
       ]
     : [
         { label: "Expiration", value: formatTime(expiration ?? undefined) },
-        { label: "Join delay", value: speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result?.delay) }
+        { label: "Join delay", value: speedPattern ? `${getCommunitySpeedLabel(speedProfile)} · ${balancedActiveDelay}s` : formatDelay(result?.delay) }
       ];
 
   useEffect(() => {
@@ -768,7 +764,7 @@ export default function OrderPage() {
     }
   }
 
-  async function handleUpdateDelay(delayOverride?: number, nextSpeedProfile: "safe" | "balanced" | "fast" | "custom" = "custom") {
+  async function handleUpdateDelay(delayOverride?: number, nextSpeedProfile: "safe" | "balanced" | "balanced2" | "fast" | "custom" = "custom") {
     const target = (result?.uniqid ?? uniqid).trim();
     const delay = delayOverride ?? Number.parseInt(delayDraft, 10);
 
@@ -1123,9 +1119,7 @@ export default function OrderPage() {
       return;
     }
 
-    const deliveryTiming = speedProfile === "balanced"
-      ? "Balanced (variable 30–300 second delay)"
-      : `${formatTemplateDelay(result?.delay)} seconds (fully customizable)`;
+    const deliveryTiming = getCommunitySpeedDescription(speedProfile, formatTemplateDelay(result?.delay), totalAmount);
     const reactions = result?.customerReactions;
     const formatReactionCount = (count: number) => count.toLocaleString("en-US");
     const reactionInstructions = reactions && reactions.dailyLimit > 0
@@ -1414,28 +1408,11 @@ export default function OrderPage() {
               <section className={`lookup-delay-control ${isCommunityProvider ? "has-speed-profiles" : ""}`}>
                 <div className="lookup-delay-heading">
                   <p className={labelClass}>Join delay</p>
-                  <strong>{speedProfile === "balanced" ? `Balanced · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
+                  <strong>{speedPattern ? `${getCommunitySpeedLabel(speedProfile)} · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
                 </div>
                 {isCommunityProvider ? (
-                  <div className="monitor-speed-profile-options lookup-speed-profile-options" aria-label="Delivery speed profile">
-                    {ORDER_SPEED_PROFILES.map((profile) => {
-                      const Icon = profile.icon;
-                      return (
-                        <button
-                          key={profile.key}
-                          type="button"
-                          className={speedProfile === profile.key ? "is-selected" : ""}
-                          aria-pressed={speedProfile === profile.key}
-                          disabled={updatingDelay}
-                          onClick={() => void handleUpdateDelay(profile.delay, profile.key)}
-                        >
-                          <Icon className="h-4 w-4" aria-hidden="true" />
-                          <span><strong>{profile.label}</strong><small>{profile.description}</small></span>
-                          <em>{profile.timing}</em>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <CommunitySpeedProfileOptions className="lookup-speed-profile-options" value={speedProfile} amount={totalAmount} disabled={updatingDelay}
+                    onChange={(profile, delay) => void handleUpdateDelay(delay, profile)} />
                 ) : null}
                 <div className="lookup-delay-actions">
                   <Input

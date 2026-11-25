@@ -1,3 +1,5 @@
+import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
+import { getCommunitySpeedRange, getCommunitySpeedLabel } from "../../shared/community-speed.mjs";
 import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
@@ -186,7 +188,7 @@ const EMPTY_FORM = {
   communityReactions: false,
   communityReactionLimit: 50,
   communityCustomDelay: 1,
-  communitySpeedProfile: "custom" as "safe" | "balanced" | "fast" | "custom",
+  communitySpeedProfile: "custom" as "safe" | "balanced" | "balanced2" | "fast" | "custom",
   communityJoinMethod: "create_invite" as CommunityJoinMethod,
   isEldoradoSale: true
 };
@@ -261,11 +263,6 @@ function describeCommunityAccountError(message: string) {
   return { title: "Authorization failed", detail: detail || "Discord could not authorize this account." };
 }
 
-const COMMUNITY_SPEED_PROFILES = [
-  { key: "safe", label: "Safe", delay: 700, timing: "700s", description: "Lowest risk", icon: ShieldCheck },
-  { key: "balanced", label: "Balanced", delay: 300, timing: "30–300s", description: "12-step rhythm", icon: Timer },
-  { key: "fast", label: "Fast", delay: 60, timing: "60s", description: "Quick delivery", icon: Rocket }
-] as const;
 
 const COMMUNITY_CATEGORY_ICONS: Record<string, typeof Users> = {
   Users,
@@ -780,7 +777,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!selectedIsCommunity) return;
     setForm((current) => {
-      const speed = current.amount >= 500
+      const speed = current.communitySpeedProfile === "balanced2" ? null : current.amount >= 500
         ? { delay: 700, communitySpeedProfile: "safe" as const }
         : current.amount > 250 ? { delay: 60, communitySpeedProfile: "fast" as const } : null;
       const reactionLimit = current.communityReactions && current.amount >= 500 ? 100 : current.communityReactionLimit;
@@ -3952,24 +3949,8 @@ export default function HomePage() {
                                 <span className="boost-order-label">Delivery speed</span>
                                 <small>Time between member joins.</small>
                               </div>
-                              <div className="community-speed-profile-options" aria-label="Delivery speed profile">
-                                {COMMUNITY_SPEED_PROFILES.map((profile) => {
-                                  const Icon = profile.icon;
-                                  const selected = form.communitySpeedProfile === profile.key;
-                                  return (
-                                    <button
-                                      key={profile.key}
-                                      type="button"
-                                      className={selected ? "is-selected" : ""}
-                                      aria-pressed={selected}
-                                      onClick={() => setForm((current) => ({ ...current, delay: profile.delay, communitySpeedProfile: profile.key }))}
-                                    >
-                                      <Icon className="h-4 w-4" aria-hidden="true" />
-                                      <span className="community-speed-option-copy"><strong>{profile.label}</strong><small>{profile.description}</small></span>
-                                      <em>{profile.timing}</em>
-                                    </button>
-                                  );
-                                })}
+                              <CommunitySpeedProfileOptions creation value={form.communitySpeedProfile} amount={Number(form.amount)} disabled={creating}
+                                onChange={(communitySpeedProfile, delay) => setForm(current => ({ ...current, delay, communitySpeedProfile }))}>
                                 <label className={`community-speed-custom-option ${form.communitySpeedProfile === "custom" ? "is-selected" : ""}`}>
                                   <Settings2 className="h-4 w-4" aria-hidden="true" />
                                   <span className="community-speed-option-copy"><strong>Custom</strong><small>Exact delay</small></span>
@@ -3989,7 +3970,7 @@ export default function HomePage() {
                                     <em>s</em>
                                   </span>
                                 </label>
-                              </div>
+                              </CommunitySpeedProfileOptions>
                             </div>
 
                           </>
@@ -5176,7 +5157,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.autoReplace ? <span><RefreshCw className="h-3.5 w-3.5" />Auto-replace enabled · Settings round limit</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
-                  {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}
+                  {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.speedProfile === "balanced2" ? `${getCommunitySpeedLabel(orderConfirmationPayload.speedProfile)} · ${getCommunitySpeedRange(orderConfirmationPayload.speedProfile, orderConfirmationPayload.amount)}` : `${orderConfirmationPayload.delay}s delay`}</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                   {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.amount} first day · {orderConfirmationPayload.reactionLimit} / day after</span> : null}
                 </div>

@@ -123,7 +123,7 @@ export function leaveAllPublicCommunityOrderMembers(uniqid: string) {
   );
 }
 
-export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfile?: "safe" | "balanced" | "fast" | "custom") {
+export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfile?: "safe" | "balanced" | "balanced2" | "fast" | "custom") {
   return requestPublicOrderApi<unknown>(uniqid, "delay", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -338,7 +338,7 @@ export async function updateOrderDelay(
   uniqid: string,
   delay: number,
   provider: OrderProvider = "community",
-  speedProfile?: "safe" | "balanced" | "fast" | "custom"
+  speedProfile?: "safe" | "balanced" | "balanced2" | "fast" | "custom"
 ) {
   if (provider !== "community") throw new Error("Delay updates are only supported for Members orders.");
   const prefix = "/api/community/orders";

@@ -1,5 +1,6 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
+import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
 import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceRunner, invokeReplacement, withOrderReplacementLock } from "./order-auto-replace.mjs";
 import { registerEldoradoIntegrationSettings } from "./eldorado-integration-settings.mjs";
 import { createAdminAuth } from "./admin-auth.mjs";
@@ -7334,12 +7335,7 @@ function isCommunityAccountTokenInvalid(value) {
     || Number(value?.payload?.code ?? value?.code) === 40002;
 }
 
-const communityBalancedDelayPattern = [30, 180, 75, 300, 120, 45, 240, 90, 150, 60, 210, 100];
 
-function normalizeCommunitySpeedProfile(value) {
-  const profile = String(value ?? "custom").trim().toLowerCase();
-  return ["safe", "balanced", "fast"].includes(profile) ? profile : "custom";
-}
 
 function normalizeCommunityJoinMethod(value, fallback = "create_invite") {
   const method = String(value ?? fallback).trim().toLowerCase();
@@ -7551,7 +7547,7 @@ async function runCommunityOrder(order, members, config) {
     let lastBotCheckAt = Date.now();
     while (true) {
       const control = await pool.query(
-        "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
+        "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile, payload->>'amount' AS amount FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
         [order.uniqid]
       );
       if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return false;
@@ -7561,9 +7557,7 @@ async function runCommunityOrder(order, members, config) {
         ? currentDelay
         : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
       const speedProfile = normalizeCommunitySpeedProfile(control.rows[0]?.speed_profile);
-      const delaySeconds = speedProfile === "balanced" && configuredDelay > 0
-        ? communityBalancedDelayPattern[patternIndex % communityBalancedDelayPattern.length]
-        : configuredDelay;
+      const delaySeconds = getCommunitySpeedDelay(speedProfile, configuredDelay, patternIndex, control.rows[0]?.amount ?? order.amount);
       const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
       const nextMemberAt = new Date(delayEndsAt).toISOString();
       const activeDelayUpdate = await pool.query(
@@ -13012,7 +13006,7 @@ app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res,
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const requestedSpeedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
-    const profileDelay = requestedSpeedProfile === "safe" ? 700 : requestedSpeedProfile === "balanced" ? 300 : requestedSpeedProfile === "fast" ? 60 : null;
+    const profileDelay = getCommunitySpeedPresetDelay(requestedSpeedProfile);
     const delay = profileDelay ?? Number.parseInt(req.body?.delay, 10);
     if (!uniqid || uniqid.length > 160 || !Number.isInteger(delay) || delay < 0 || delay > 1200) {
       return res.status(400).json({ message: "A valid order ID and delay between 0 and 1200 seconds are required." });
@@ -14333,7 +14327,7 @@ app.post("/api/public/orders/:uniqid/delay", async (req, res, next) => {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const requestedSpeedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
-    const profileDelay = requestedSpeedProfile === "safe" ? 700 : requestedSpeedProfile === "balanced" ? 300 : requestedSpeedProfile === "fast" ? 60 : null;
+    const profileDelay = getCommunitySpeedPresetDelay(requestedSpeedProfile);
     const delay = profileDelay ?? Number.parseInt(req.body?.delay, 10);
     if (!uniqid || uniqid.length > 160 || !Number.isFinite(delay) || delay < 0 || delay > 1200) {
       return res.status(400).json({ message: "A valid order ID and delay between 0 and 1200 seconds are required." });

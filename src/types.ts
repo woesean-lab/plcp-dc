@@ -137,7 +137,7 @@ export interface CreateOrderPayload {
   categoryId?: string;
   categoryAllocations?: CommunityCategoryAllocation[];
   durationMonths?: number;
-  speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  speedProfile?: "safe" | "balanced" | "balanced2" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
   isEldoradoSale?: boolean;
   reactionLimit?: number;
@@ -246,7 +246,7 @@ export interface OrderStatusResponse {
   membersLeaveJob?: CommunityLeaveProgress | null;
   delayUpdateCooldownSeconds?: number;
   restartCooldownSeconds?: number;
-  speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  speedProfile?: "safe" | "balanced" | "balanced2" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
@@ -278,7 +278,7 @@ export interface TrackedOrder {
   amount?: number;
   added?: number;
   delay?: number;
-  speedProfile?: "safe" | "balanced" | "fast" | "custom";
+  speedProfile?: "safe" | "balanced" | "balanced2" | "fast" | "custom";
   joinMethod?: CommunityJoinMethod;
   activeDelay?: number | null;
   nextMemberAt?: string | null;
