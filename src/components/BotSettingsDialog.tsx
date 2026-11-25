@@ -1,8 +1,8 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
-export function BotSettingsDialog({ title, busy = false, onClose, children }: {
-  title: string; busy?: boolean; onClose: () => void; children: ReactNode;
+export function BotSettingsDialog({ title, busy = false, onClose, onCancel, children }: {
+  title: string; busy?: boolean; onClose: () => void; onCancel?: () => void; children: ReactNode;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const id = useId();
@@ -14,7 +14,7 @@ export function BotSettingsDialog({ title, busy = false, onClose, children }: {
     return () => { document.body.style.overflow = overflow; previous?.focus(); };
   }, []);
   return createPortal(<dialog ref={dialog} className="confirm-modal bot-settings-dialog" aria-labelledby={id}
-    onClose={onClose} onCancel={event => { if (busy) event.preventDefault(); }}
+    onClose={onClose} onCancel={event => { if (busy || onCancel) event.preventDefault(); if (!busy) onCancel?.(); }}
     onClick={event => {
       if (busy || event.target !== event.currentTarget) return;
       const rect = event.currentTarget.getBoundingClientRect();

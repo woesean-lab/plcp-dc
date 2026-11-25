@@ -7,6 +7,8 @@ import * as jsxRuntime from "react/jsx-runtime";
 
 const source = fs.readFileSync(new URL("../src/components/BotSyncNotifications.tsx", import.meta.url), "utf8");
 const compiled = ts.transpileModule(source, { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+const stateCode = ts.transpileModule(fs.readFileSync(new URL("../src/lib/bot-sync-state.ts", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+const syncState = { exports: {} }; vm.runInNewContext(stateCode, syncState);
 const job = (patch = {}) => ({ id: "persisted-job", clientId: "222222222222222222", botName: "Members 01", status: "running", total: 750, processed: 250, succeeded: 248, failed: 2, errors: [], updatedAt: "2026-11-25T12:00:00Z", ...patch });
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
@@ -25,6 +27,7 @@ function fixture() {
     "lucide-react": { Pause: "svg", Square: "svg" },
     "react-hot-toast": { __esModule: true, default: toast },
     "./ui/button": { Button: "button" },
+    "../lib/bot-sync-state": syncState.exports,
     "../lib/community": { getBotSyncNotifications: async signal => { requests.push(signal); if (pending) return pending; if (response instanceof Error) throw response; return response; } },
     "./BotSyncNotifications.css": {}
   };
@@ -100,5 +103,15 @@ test("obsolete jobs are dismissed when replaced and focus immediately refreshes 
   f.setResponse([job({ id: "next-job", processed: 0, succeeded: 0, failed: 0 })]);
   await f.event("focus"); await f.tick();
   assert.ok(f.dismissed.includes("bot-sync:persisted-job")); assert.equal(f.calls.at(-1).options.id, "bot-sync:next-job");
+  f.stop();
+});
+
+test("stopping retains one live notification until the in-flight result is settled", async () => {
+  const f = fixture(); await flush();
+  f.setResponse([job({ status: "cancelled", stopping: true })]); await f.tick();
+  assert.equal(f.calls.at(-1).type, "loading"); assert.equal(f.calls.at(-1).options.duration, Infinity);
+  f.setResponse([job({ status: "cancelled", stopping: false, processed: 251, succeeded: 249 })]); await f.tick();
+  assert.equal(f.calls.at(-1).type, "blank"); assert.equal(f.calls.at(-1).options.duration, 6000);
+  assert.equal(f.calls.at(-1).job.processed, 251);
   f.stop();
 });

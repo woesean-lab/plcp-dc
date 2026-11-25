@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { estimateBotSyncRemaining, recordBotSyncTiming } from "./community-bot-sync-timing.mjs";
 
 export const BOT_SYNC_STORAGE_SQL = `CREATE TABLE IF NOT EXISTS community_bot_sync_jobs (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL, payload JSONB NOT NULL, status TEXT NOT NULL,
@@ -29,8 +30,10 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
   const fail = (message, statusCode = 409) => Object.assign(new Error(message), { statusCode });
   const safe = row => {
     if (!row) return null;
-    const { memberIds, failedIds, guildId, redirectUri, isDefault, ...publicValue } = row.payload;
-    return { id: row.id, clientId: row.client_id, status: row.status, ...publicValue };
+    const { memberIds, failedIds, guildId, redirectUri, isDefault, timingSamplesMs, lastProgressAt, ...publicValue } = row.payload;
+    return { id: row.id, clientId: row.client_id, status: row.status, ...publicValue,
+      stopping: row.status === "cancelled" && Boolean(row.worker_token) && Date.parse(row.lease_until) > Date.now(),
+      estimatedRemainingSeconds: estimateBotSyncRemaining(row.payload, row.status) };
   };
   async function configFor(clientId) {
     if (!/^\d{16,22}$/.test(String(clientId))) throw fail("Choose a configured bot.", 400);
@@ -85,19 +88,20 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     const config = await configFor(clientId);
     if (!config.isDefault && legacy) {
       const job = await legacy.latest(clientId);
-      if (job && ["queued", "running", "paused"].includes(job.status)) return { ...job, legacy: true };
+      if (job && (["queued", "running", "paused"].includes(job.status) || job.stopping)) return { ...job, legacy: true };
     }
     return safe((await pool.query("SELECT * FROM community_bot_sync_jobs WHERE client_id=$1 ORDER BY created_at DESC LIMIT 1", [clientId])).rows[0]);
   }
   async function notifications() {
-    const result = await pool.query(`SELECT jobs.id,jobs.client_id,jobs.status,jobs.legacy,jobs.updated_at,
+    const result = await pool.query(`SELECT jobs.id,jobs.client_id,jobs.status,jobs.legacy,jobs.updated_at,jobs.worker_token,jobs.lease_until,
       COALESCE(bots.name,CASE WHEN payload->>'isDefault'='true' THEN 'Default bot' ELSE 'Bot '||jobs.client_id END) AS bot_name,
       jsonb_build_object('total',payload->'total','processed',payload->'processed','succeeded',payload->'succeeded',
-        'failed',payload->'failed','details',payload->'details','categoryId',payload->'categoryId','categoryName',payload->'categoryName') AS payload
+        'failed',payload->'failed','details',payload->'details','categoryId',payload->'categoryId','categoryName',payload->'categoryName',
+        'timingSamplesMs',payload->'timingSamplesMs','lastProgressAt',payload->'lastProgressAt') AS payload
       FROM (SELECT DISTINCT ON (client_id) * FROM (
-        SELECT id,client_id,status,payload,created_at,updated_at,FALSE AS legacy FROM community_bot_sync_jobs
+        SELECT id,client_id,status,payload,created_at,updated_at,worker_token,lease_until,FALSE AS legacy FROM community_bot_sync_jobs
         UNION ALL
-        SELECT id,client_id,status,payload,created_at,updated_at,TRUE AS legacy FROM community_bot_authorization_jobs
+        SELECT id,client_id,status,payload,created_at,updated_at,worker_token,lease_until,TRUE AS legacy FROM community_bot_authorization_jobs
       ) AS history WHERE status IN ('queued','running','paused') OR updated_at>NOW()-INTERVAL '5 minutes'
       ORDER BY client_id,created_at DESC) AS jobs
       LEFT JOIN community_bot_pool AS bots ON bots.client_id=jobs.client_id
@@ -125,7 +129,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
       if (earlier.rows.length) throw fail("An earlier authorization job is still active for this bot. Wait for it to finish.");
     }
     const payload = { ...summary, memberIds: ids, failedIds: [], guildId: config.guildId, isDefault: config.isDefault, redirectUri,
-      total: ids.length, processed: 0, succeeded: 0, failed: 0, errors: [], details: ids.length ? "" : "All eligible accounts are up to date." };
+      total: ids.length, processed: 0, succeeded: 0, failed: 0, errors: [], timingSamplesMs: [], lastProgressAt: new Date().toISOString(), details: ids.length ? "" : "All eligible accounts are up to date." };
     try {
       return safe((await pool.query("INSERT INTO community_bot_sync_jobs(id,client_id,payload,status) VALUES ($1,$2,$3::jsonb,$4) RETURNING *",
         [crypto.randomUUID(), clientId, JSON.stringify(payload), ids.length ? "queued" : "completed"])).rows[0]);
@@ -135,7 +139,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     await configFor(clientId);
     const current = await latest(clientId);
     if (current?.legacy && current.status === "paused") return { ...await legacy.resume(clientId), legacy: true };
-    const result = await pool.query("UPDATE community_bot_sync_jobs SET status='queued',payload=payload-'details',updated_at=NOW() WHERE client_id=$1 AND status='paused' RETURNING *", [clientId]);
+    const result = await pool.query("UPDATE community_bot_sync_jobs SET status='queued',payload=(payload-'details') || jsonb_build_object('lastProgressAt',NOW()),updated_at=NOW() WHERE client_id=$1 AND status='paused' RETURNING *", [clientId]);
     if (!result.rows.length) throw fail("No paused sync was found.");
     return safe(result.rows[0]);
   }
@@ -159,6 +163,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
       heartbeat = setInterval(() => { void pool.query("UPDATE community_bot_sync_jobs SET lease_until=NOW()+INTERVAL '3 minutes' WHERE id=$1 AND worker_token=$2", [row.id, owner]).catch(() => {}); }, 30_000);
       heartbeat.unref();
       const progress = row.payload;
+      const accountStartedAt = Date.now();
       const userId = progress.memberIds[progress.processed];
       let status = "queued";
       try {
@@ -180,7 +185,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
           if (progress.errors.length < 25) progress.errors.push({ userId, message: String(error.message || "Authorization failed.").slice(0, 300) });
         }
       }
-      if (status !== "paused") progress.processed++;
+      if (status !== "paused") { progress.processed++; recordBotSyncTiming(progress, accountStartedAt); }
       if (progress.processed >= progress.total) status = "completed";
       await pool.query(`UPDATE community_bot_sync_jobs SET payload=$2::jsonb,status=CASE WHEN status='cancelled' THEN status ELSE $3 END,
         worker_token=NULL,lease_until=NULL,updated_at=NOW() WHERE id=$1 AND worker_token=$4`, [row.id, JSON.stringify(progress), status, owner]);

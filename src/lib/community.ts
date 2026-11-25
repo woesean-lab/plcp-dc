@@ -14,7 +14,7 @@ export function controlBotAuthorizationJob(clientId: string, action: "resume" | 
 
 export type BotSyncCategory = { id: string; name: string };
 export type BotSyncSummary = { categoryId?: string | null; categoryName?: string | null; totalAccounts: number; pending: number; upToDate: number; unavailable: number };
-export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; categoryId?: string | null; categoryName?: string | null; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
+export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; stopping?: boolean; estimatedRemainingSeconds?: number | null; categoryId?: string | null; categoryName?: string | null; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
 export type BotSyncNotification = BotSyncJob & { botName: string; updatedAt: string };
 export function getBotSyncNotifications(signal?: AbortSignal) {
   return fetch("/api/community/bot-sync-jobs", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncNotification[]>);

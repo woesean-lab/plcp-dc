@@ -62,9 +62,6 @@
 .bot-sync-summary dt { color: var(--app-muted); font-size: 10px; }
 .bot-sync-summary dd { margin: 5px 0 0; color: var(--app-text); font-size: 15px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .bot-sync-status { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px; margin-bottom: 12px; color: var(--app-muted); font-size: 11px; }
-.bot-sync-progress details { margin-top: 14px; color: var(--app-text-secondary); font-size: 11px; }
-.bot-sync-progress summary { cursor: pointer; }
-.bot-sync-progress details p { overflow-wrap: anywhere; }
 @media (max-width: 440px) {
   .bot-sync-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 0; }
   .bot-sync-summary > div:nth-child(2) { border: 0; }

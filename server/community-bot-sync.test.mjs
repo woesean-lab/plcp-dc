@@ -321,3 +321,39 @@ test("fresh default authorization repairs OAuth failures only and preserves deli
   assert.equal(rows.find(row => row.guild_id === other).encrypted_access_token, "other-guild-grant");
   assert.equal(rows.length, 3);
 }));
+
+test("stop reports an in-flight result as Stopping across reload and prevents new jobs until settlement", options, () => fixture(async ({ api, controller, add, setBehavior, db }) => {
+  await add(0); await add(1); await api.start(bot);
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  setBehavior(async () => { entered(); await new Promise(resolve => { release = resolve; }); });
+  const work = api.tick(); await started;
+  const stopping = await controller().cancel(bot);
+  assert.equal(stopping.stopping, true);
+  assert.equal((await controller().latest(bot)).stopping, true);
+  assert.equal((await controller().notifications())[0].stopping, true);
+  await assert.rejects(api.start(bot), error => error.statusCode === 409);
+  release(); await work;
+  const final = await controller().latest(bot);
+  assert.equal(final.stopping, false); assert.equal(final.status, "cancelled"); assert.equal(final.processed, 1); assert.equal(final.succeeded, 1);
+  const row = (await db.query("SELECT * FROM community_bot_sync_jobs WHERE id=$1", [final.id])).rows[0];
+  assert.equal(row.worker_token, null);
+}));
+
+test("ETA is persisted for active work, hidden on pause and excludes paused time on resume", options, () => fixture(async ({ api, controller, add, db }) => {
+  for (let index = 0; index < 8; index++) await add(index);
+  const job = await api.start(bot);
+  await db.query(`UPDATE community_bot_sync_jobs SET payload=payload || $2::jsonb WHERE id=$1`, [job.id, JSON.stringify({ processed: 3, succeeded: 3, timingSamplesMs: [5000, 6000, 7000], lastProgressAt: new Date().toISOString() })]);
+  const restored = await controller().latest(bot);
+  assert.ok(restored.estimatedRemainingSeconds >= 29 && restored.estimatedRemainingSeconds <= 30);
+  assert.equal("timingSamplesMs" in restored, false);
+  const notification = (await controller().notifications())[0];
+  assert.ok(notification.estimatedRemainingSeconds >= 29 && notification.estimatedRemainingSeconds <= 30);
+  assert.equal("timingSamplesMs" in notification, false);
+  await db.query("UPDATE community_bot_sync_jobs SET status='paused',payload=payload || $2::jsonb WHERE id=$1", [job.id, JSON.stringify({ lastProgressAt: "2020-01-01T00:00:00Z" })]);
+  assert.equal((await api.latest(bot)).estimatedRemainingSeconds, null);
+  await api.resume(bot);
+  const saved = (await db.query("SELECT payload FROM community_bot_sync_jobs WHERE id=$1", [job.id])).rows[0].payload;
+  assert.ok(Date.parse(saved.lastProgressAt) > Date.now() - 5000);
+  assert.ok((await api.latest(bot)).estimatedRemainingSeconds >= 29);
+}));

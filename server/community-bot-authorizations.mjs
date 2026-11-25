@@ -17,7 +17,8 @@ export function createBotAuthorizations({ pool, getConfig, loadBot, token, encry
   const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
   const validId = value => /^\d{16,22}$/.test(String(value));
   const safe = row => { if (!row) return null; const { memberIds: _ids, redirectUri: _redirect, guildId: _guild, ...payload } = row.payload;
-    return { id: row.id, clientId: row.client_id, status: row.status, ...payload }; };
+    return { id: row.id, clientId: row.client_id, status: row.status, ...payload,
+      stopping: row.status === "cancelled" && Boolean(row.worker_token) && Date.parse(row.lease_until) > Date.now() }; };
   async function validate(clientId, categoryId) {
     if (!validId(clientId)) throw fail("Choose a pool bot.");
     const credentials = await loadBot(clientId);
@@ -91,8 +92,8 @@ export function createBotAuthorizations({ pool, getConfig, loadBot, token, encry
       }
       if (status !== "paused") progress.processed++;
       if (progress.processed >= progress.total) status = "completed";
-      await pool.query(`UPDATE community_bot_authorization_jobs SET payload=$2::jsonb,status=$3,worker_token=NULL,lease_until=NULL,updated_at=NOW()
-        WHERE id=$1 AND worker_token=$4 AND status='running'`, [claimed.id,JSON.stringify(progress),status,owner]);
+      await pool.query(`UPDATE community_bot_authorization_jobs SET payload=$2::jsonb,status=CASE WHEN status='cancelled' THEN status ELSE $3 END,worker_token=NULL,lease_until=NULL,updated_at=NOW()
+        WHERE id=$1 AND worker_token=$4`, [claimed.id,JSON.stringify(progress),status,owner]);
     } finally { if (heartbeat) clearInterval(heartbeat); running = false; }
   }
 

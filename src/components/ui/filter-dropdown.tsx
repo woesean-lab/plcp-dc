@@ -71,7 +71,7 @@ export function FilterDropdown({
 
   const menu = isOpen ? (
     <div ref={menuRef} className={`filter-dropdown-menu${portal ? " filter-dropdown-portal" : ""}`} role="listbox" aria-label={label} tabIndex={-1} style={portal ? menuPosition : undefined}
-      onKeyDown={(event) => { if (event.key === "Escape") { setOpen(false); triggerRef.current?.focus(); } }}
+      onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); setOpen(false); triggerRef.current?.focus(); } }}
       onBlur={(event) => {
         if (portal && !menuRef.current?.contains(event.relatedTarget as Node | null) && !triggerRef.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
       }}>
@@ -102,7 +102,7 @@ export function FilterDropdown({
           if (!event.currentTarget.parentElement?.contains(event.relatedTarget as Node | null) && !menuRef.current?.contains(event.relatedTarget as Node | null)) setOpen(false);
         }}
         onKeyDown={(event) => {
-          if (event.key === "Escape") setOpen(false);
+          if (event.key === "Escape" && isOpen) { event.preventDefault(); event.stopPropagation(); setOpen(false); }
         }}
       >
         <span>{selected?.label ?? value}</span>

@@ -101,3 +101,17 @@ test("every bulk authorization route is protected by the existing session middle
   registerBotAuthorizations({get:(...args)=>routes.push(args),post:(...args)=>routes.push(args)},auth,{});
   assert.equal(routes.length,5); assert.ok(routes.every(route=>route[1]===auth));
 });
+
+test("stopping a running legacy authorization preserves the final in-flight result and releases its lease", options, () => fixture(async ({ api, setBehavior, db, authorized }) => {
+  await api.start(bot, { categoryId: "offline" }, "url");
+  let entered, release;
+  const started = new Promise(resolve => { entered = resolve; });
+  setBehavior(async () => { entered(); await new Promise(resolve => { release = resolve; }); });
+  const work = api.tick(); await started;
+  assert.equal((await api.cancel(bot)).stopping, true);
+  release(); await work; await api.tick();
+  const final = await api.latest(bot);
+  assert.equal(final.status, "cancelled"); assert.equal(final.stopping, false); assert.equal(final.processed, 1); assert.equal(final.succeeded, 1);
+  assert.equal(authorized.length, 1);
+  assert.equal((await db.query("SELECT worker_token FROM community_bot_authorization_jobs WHERE id=$1", [final.id])).rows[0].worker_token, null);
+}));
