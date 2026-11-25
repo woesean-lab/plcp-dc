@@ -1,40 +1,56 @@
-.bot-sync-progress { display: grid; gap: 12px; min-width: 0; }
-.bot-sync-progress-heading, .bot-sync-progress-meta, .bot-sync-outcomes { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
-.bot-sync-progress-heading h4 { margin: 4px 0 0; color: var(--app-text); font-size: 13px; font-weight: 650; overflow-wrap: anywhere; }
+.bot-sync-progress { display: flex; flex-direction: column; gap: 16px; min-width: 0; width: 100%; container: bot-sync-progress / inline-size; }
+.bot-sync-overview { display: flex; flex-direction: column; gap: 14px; min-width: 0; padding: 16px; }
+.bot-sync-progress-heading, .bot-sync-progress-meta, .bot-sync-outcomes { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.bot-sync-progress-heading > div { min-width: 0; }
+.bot-sync-progress-heading h4 { margin: 4px 0 0; color: var(--app-text); font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .bot-sync-progress-heading .app-kicker { font-size: 9px; }
 .bot-sync-progress-meta, .bot-sync-outcomes { color: var(--app-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .bot-sync-progress-meta > span, .bot-sync-outcomes > span { display: inline-flex; align-items: center; gap: 6px; }
 .bot-sync-progress-meta strong, .bot-sync-outcomes strong { color: var(--app-text); }
-.bot-sync-progress > .monitor-live-progress-track { margin: 0; }
+.bot-sync-overview > .monitor-live-progress-track { flex: none; grid-column: auto; width: 100%; margin: 0; }
+.bot-sync-outcomes { justify-content: flex-start; gap: 10px 20px; }
+.bot-sync-outcomes > span:last-child { margin-left: auto; }
 .bot-sync-outcomes > span:first-child > svg { color: var(--app-success); }
 .bot-sync-outcomes > span[data-failed="true"] > svg { color: var(--app-danger); }
-.bot-sync-progress > .settings-field-note { margin: 0; }
-.bot-sync-errors { min-width: 0; overflow: visible; }
-.bot-sync-errors > summary { border-radius: inherit; }
-.bot-sync-errors > summary:hover, .bot-sync-errors > summary:focus-visible { background: var(--app-hover); }
-.bot-sync-errors > summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
-.bot-sync-errors > summary > svg { flex-shrink: 0; transition: transform .15s ease; }
-.bot-sync-errors[open] > summary > svg { transform: rotate(180deg); }
-.bot-sync-errors-body { display: grid; gap: 12px; padding: 14px; }
-.bot-sync-errors-body > .settings-field-note { margin: 0; }
-.bot-sync-error-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.bot-sync-error-tools .community-member-search { flex: 1 1 180px; min-width: 0; }
-.bot-sync-error-tools .filter-dropdown { flex: 1 1 180px; min-width: 0; }
-.bot-sync-error-list { max-height: 280px; overflow-y: auto; overscroll-behavior: contain; }
-.bot-sync-error-row { display: grid; gap: 8px; padding: 12px 0; border-top: 1px solid var(--app-divider); }
-.bot-sync-error-row:first-child { border-top: 0; padding-top: 0; }
-.bot-sync-error-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.bot-sync-error-heading > div { display: grid; gap: 4px; min-width: 0; }
-.bot-sync-error-heading strong { color: var(--app-text-secondary); font-size: 11px; font-weight: 650; }
-.bot-sync-error-heading span, .bot-sync-error-row p { color: var(--app-muted); font-size: 11px; overflow-wrap: anywhere; }
-.bot-sync-error-technical { min-width: 0; color: var(--app-muted); font-size: 10px; }
-.bot-sync-error-technical > summary { width: fit-content; cursor: pointer; color: var(--app-text-secondary); }
-.bot-sync-error-technical > summary:hover { color: var(--app-accent-bright); }
-.bot-sync-error-technical > p { margin-top: 8px; padding: 10px; background: var(--app-code-bg); border-radius: var(--app-radius-md); }
+.bot-sync-overview > .settings-field-note { margin: 0; padding-top: 12px; border-top: 1px solid var(--app-divider); }
+.bot-sync-errors { min-width: 0; width: 100%; }
+.bot-sync-errors > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 14px 16px; color: var(--app-text-secondary); font-size: 12px; font-weight: 650; border-radius: inherit; cursor: pointer; list-style: none; }
+.bot-sync-errors > summary::-webkit-details-marker, .bot-sync-error-detail > summary::-webkit-details-marker { display: none; }
+.bot-sync-errors > summary > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bot-sync-errors > summary:hover, .bot-sync-error-detail > summary:hover { background: var(--app-hover); }
+.bot-sync-errors > summary:focus-visible, .bot-sync-error-detail > summary:focus-visible { outline: 2px solid var(--app-accent); outline-offset: -2px; }
+.bot-sync-errors > summary > svg, .bot-sync-error-detail > summary > svg:last-child { flex-shrink: 0; color: var(--app-muted); transition: transform .15s ease; }
+.bot-sync-errors[open] > summary { border-bottom: 1px solid var(--app-divider); border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.bot-sync-errors[open] > summary > svg, .bot-sync-error-detail[open] > summary > svg:last-child { transform: rotate(180deg); }
+.bot-sync-errors-body { min-width: 0; padding: 14px 16px 0; }
+.bot-sync-errors-body > .settings-field-note { margin: 0 0 12px; }
+.bot-sync-error-tools { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, .8fr) auto; align-items: center; gap: 8px; min-width: 0; padding-bottom: 14px; }
+.bot-sync-error-tools .community-member-search, .bot-sync-error-tools .filter-dropdown { min-width: 0; width: 100%; max-width: none; }
+.bot-sync-error-list { max-height: min(360px, 42dvh); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; border-top: 1px solid var(--app-divider); }
+.bot-sync-error-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 8px; border-bottom: 1px solid var(--app-divider); }
+.bot-sync-error-row:last-child { border-bottom: 0; }
+.bot-sync-error-row > .community-member-row-actions { margin-top: 14px; }
+.bot-sync-error-detail { min-width: 0; }
+.bot-sync-error-detail > summary { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 14px 8px; border-radius: var(--app-radius-md); cursor: pointer; list-style: none; }
+.bot-sync-error-detail > summary > svg:first-child { flex-shrink: 0; color: var(--app-danger); }
+.bot-sync-error-detail > summary > span { display: grid; flex: 1; gap: 4px; min-width: 0; }
+.bot-sync-error-detail strong { color: var(--app-text-secondary); font-size: 11px; font-weight: 600; overflow-wrap: anywhere; }
+.bot-sync-error-detail small { color: var(--app-muted); font-size: 10px; }
+.bot-sync-error-response { display: grid; gap: 8px; padding: 0 8px 14px; color: var(--app-muted); font-size: 11px; line-height: 1.6; }
+.bot-sync-error-response > span { margin-top: 4px; color: var(--app-text-secondary); font-size: 10px; font-weight: 600; }
+.bot-sync-error-response pre { margin: 0; padding: 10px 12px; border-radius: var(--app-radius-md); background: var(--app-code-bg); color: var(--app-muted); white-space: pre-wrap; overflow-wrap: anywhere; font-size: 10px; }
 .bot-sync-stop-confirm { display: grid; gap: 8px; padding: 14px; font-size: 12px; }
 .bot-sync-stop-confirm > p { color: var(--app-muted); font-size: 11px; line-height: 1.5; }
-@media (max-width: 440px) {
-  .bot-sync-error-tools > .filter-dropdown { flex-basis: 100%; }
-  .bot-sync-errors-body { padding: 12px; }
+@container bot-sync-progress (max-width: 560px) {
+  .bot-sync-error-tools { grid-template-columns: minmax(0, 1fr) auto; }
+  .bot-sync-error-tools > .community-member-search { grid-column: 1 / -1; }
 }
-@media (prefers-reduced-motion: reduce) { .bot-sync-errors > summary > svg { transition: none; } }
+@container bot-sync-progress (max-width: 380px) {
+  .bot-sync-overview { padding: 14px; }
+  .bot-sync-progress-meta { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .bot-sync-outcomes { gap: 10px 14px; }
+  .bot-sync-outcomes > span:last-child { flex-basis: 100%; margin-left: 0; }
+  .bot-sync-errors > summary { padding: 14px; }
+  .bot-sync-errors-body { padding-inline: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .bot-sync-errors > summary > svg, .bot-sync-error-detail > summary > svg:last-child { transition: none; } }

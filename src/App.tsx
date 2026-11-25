@@ -300,7 +300,8 @@ export default function App() {
           style: {
             borderRadius: "14px",
             border: "1px solid var(--app-border)",
-            background: "var(--app-surface-raised)",
+            background: "color-mix(in srgb, var(--app-surface-raised) 94%, transparent)",
+            backdropFilter: "blur(12px)",
             color: "var(--app-text)",
             boxShadow: "0 16px 38px rgba(0, 0, 0, 0.22)"
           },
