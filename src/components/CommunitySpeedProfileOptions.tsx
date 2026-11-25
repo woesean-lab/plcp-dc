@@ -18,7 +18,7 @@ export function CommunitySpeedProfileOptions({ value, added = 0, onChange, disab
   className?: string;
   children?: ReactNode;
 }) {
-  return <div className={`${creation ? "community-speed-profile-options" : "monitor-speed-profile-options"} community-member-speed-options${creation && children ? " has-custom-option" : ""} ${className}`} role="group" aria-label="Delivery speed profile">
+  return <div className={`${creation ? "community-speed-profile-options" : "monitor-speed-profile-options"} community-member-speed-options ${className}`} role="group" aria-label="Delivery speed profile">
     {profiles.map(({ key, label, timing, description, Icon }) => <button key={key} type="button" className={value === key ? "is-selected" : ""} aria-pressed={value === key} disabled={disabled}
       onClick={() => onChange(key, getCommunitySpeedPresetDelay(key)!)}>
       <Icon className="h-4 w-4" aria-hidden="true" />

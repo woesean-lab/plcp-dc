@@ -212,7 +212,7 @@ function MemberSpeedExample() {
   const [customDelay, setCustomDelay] = useState(60);
   return <div className="ui-ref-stack">
     <label className="ui-ref-field"><span className="field-label">Delivered members</span><Input type="number" min={0} value={added} onChange={event => setAdded(Math.max(0, Number(event.target.value) || 0))} /></label>
-    <div className="boost-order-block members-order-block"><div className="boost-order-panel"><div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
+    <div className="boost-order-block"><div className="boost-order-panel"><div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
       <CommunitySpeedProfileOptions creation value={profile} added={added} onChange={setProfile}>
         <label className={`community-speed-custom-option ${profile === "custom" ? "is-selected" : ""}`}>
           <Timer className="h-4 w-4" aria-hidden="true" />
@@ -400,7 +400,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
-          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns, or five with creation’s Custom field in the same row.\n// Narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
+          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns in one row; creation’s Custom field spans the next row.\n// Narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
           <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
             <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
           </Example>

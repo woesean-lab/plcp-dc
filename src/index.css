@@ -2135,10 +2135,6 @@
     margin-top: 0.65rem;
   }
 
-  .boost-order-block.members-order-block {
-    max-width: 940px;
-  }
-
   .boost-order-section-heading {
     display: flex;
     align-items: flex-end;
@@ -6939,20 +6935,8 @@
   overflow-x: auto;
 }
 
-.community-speed-profile-options.community-member-speed-options.has-custom-option {
-  grid-template-columns: repeat(5, minmax(110px, 1fr));
-}
-
-.community-member-speed-options.has-custom-option > button,
-.community-member-speed-options.has-custom-option > .community-speed-custom-option {
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 6px;
-}
-
-.community-member-speed-options.has-custom-option > button > em,
-.community-member-speed-options.has-custom-option > .community-speed-custom-option > .community-speed-custom-control {
-  grid-column: 2;
-  justify-self: start;
+.community-member-speed-options > .community-speed-custom-option {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 520px) {
