@@ -2135,6 +2135,10 @@
     margin-top: 0.65rem;
   }
 
+  .boost-order-block.members-order-block {
+    max-width: 940px;
+  }
+
   .boost-order-section-heading {
     display: flex;
     align-items: flex-end;

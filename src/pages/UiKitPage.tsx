@@ -212,7 +212,7 @@ function MemberSpeedExample() {
   const [customDelay, setCustomDelay] = useState(60);
   return <div className="ui-ref-stack">
     <label className="ui-ref-field"><span className="field-label">Delivered members</span><Input type="number" min={0} value={added} onChange={event => setAdded(Math.max(0, Number(event.target.value) || 0))} /></label>
-    <div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
+    <div className="boost-order-block members-order-block"><div className="boost-order-panel"><div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
       <CommunitySpeedProfileOptions creation value={profile} added={added} onChange={setProfile}>
         <label className={`community-speed-custom-option ${profile === "custom" ? "is-selected" : ""}`}>
           <Timer className="h-4 w-4" aria-hidden="true" />
@@ -220,7 +220,7 @@ function MemberSpeedExample() {
           <span className="community-speed-custom-control"><input type="number" min={1} max={1200} aria-label="Sample custom delay in seconds" value={customDelay} onFocus={() => setProfile("custom")} onChange={event => { setCustomDelay(Math.min(1200, Math.max(1, Number(event.target.value) || 1))); setProfile("custom"); }} /><em>s</em></span>
         </label>
       </CommunitySpeedProfileOptions>
-    </div>
+    </div></div></div>
     <CommunitySpeedProfileOptions value={profile} added={added} onChange={setProfile} />
     <CommunitySpeedProfileOptions value="balanced2" added={added} onChange={() => {}} disabled />
   </div>;

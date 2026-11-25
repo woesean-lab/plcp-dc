@@ -3899,7 +3899,7 @@ export default function HomePage() {
                       </div>
                     </div>
                   ) : (
-                    <div className="boost-order-block md:col-span-2">
+                    <div className="boost-order-block members-order-block md:col-span-2">
                       <div className="boost-order-section-heading">
                         <div>
                           <span className={fieldLabelClass}>Member details</span>
