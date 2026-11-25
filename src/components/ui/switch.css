@@ -1,9 +1,9 @@
-.ui-switch { position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; width: 60px; height: 32px; padding: 3px; border: 1px solid var(--app-danger-button-border); border-radius: 999px; background: var(--app-danger-soft); color: var(--app-danger); cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
+.ui-switch { position: relative; display: inline-flex; flex: 0 0 auto; align-items: center; width: 52px; height: 28px; padding: 3px; border: 1px solid var(--app-danger-button-border); border-radius: 999px; background: var(--app-danger-soft); color: var(--app-danger); cursor: pointer; transition: background-color .15s ease, border-color .15s ease; }
 .ui-switch[aria-checked="true"] { border-color: var(--app-success); background: var(--app-success-soft); color: var(--app-success); }
-.ui-switch-thumb { position: absolute; left: 3px; top: 3px; width: 24px; height: 24px; border-radius: 50%; background: var(--app-danger); transform: translateX(0); transition: transform .18s ease, background-color .15s ease; }
-.ui-switch[aria-checked="true"] .ui-switch-thumb { background: var(--app-success); transform: translateX(28px); }
-.ui-switch-state { position: absolute; right: 7px; font-family: var(--app-font-family); font-size: 10px; font-weight: 650; line-height: 1; }
-.ui-switch[aria-checked="true"] .ui-switch-state { left: 8px; right: auto; }
+.ui-switch-thumb { position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--app-danger); transform: translateX(0); transition: transform .18s ease, background-color .15s ease; }
+.ui-switch[aria-checked="true"] .ui-switch-thumb { background: var(--app-success); transform: translateX(24px); }
+.ui-switch-state { position: absolute; right: 6px; font-family: var(--app-font-family); font-size: 9px; font-weight: 650; line-height: 1; }
+.ui-switch[aria-checked="true"] .ui-switch-state { left: 7px; right: auto; }
 .ui-switch:not(:disabled):hover { background: var(--app-danger-hover-soft); border-color: var(--app-danger); }
 .ui-switch[aria-checked="true"]:not(:disabled):hover { background: color-mix(in srgb, var(--app-success) 20%, transparent); border-color: var(--app-success); }
 .ui-switch:focus-visible { outline: 2px solid var(--app-accent-bright); outline-offset: 3px; }
