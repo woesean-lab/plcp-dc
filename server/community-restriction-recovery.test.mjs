@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import ts from "typescript";
+import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 
 const source = fs.readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
 const ast = ts.createSourceFile("index.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
@@ -23,6 +24,7 @@ function fixture(current, failOrderUpdate = false) {
     return { rows: [], rowCount: 1 };
   };
   const scope = {
+    captureCommunityInviteRestriction,
     pool: { query, connect: async () => ({ query, release: () => calls.push({ sql: "RELEASE" }) }) },
     isDiscordGuildId: value => /^\d{17,20}$/.test(String(value)),
     saveTrackedOrderPayload: async order => { calls.push({ sql: "UNGUARDED_SAVE", params: [order] }); },

@@ -7,7 +7,8 @@ import { Skeleton } from "./ui/skeleton";
 import { ListPagination, paginate } from "./ListPagination";
 import { AutoLeaveActionButton, type AutoLeaveActionState } from "./AutoLeaveActionButton";
 import { getOrderPeriod } from "../lib/order-period";
-import { canStartOrderLeave, EMPTY_ORDERS_FILTERS, filterWorkspaceOrders, hasFailedLeave, orderDelivery, orderIsBoost, orderStatus, type OrdersFilters } from "../lib/orders-workspace";
+import { canStartOrderLeave, EMPTY_ORDERS_FILTERS, filterWorkspaceOrders, hasFailedLeave, orderDelivery, orderDeliveryTiming, orderIsBoost, orderStatus, type OrdersFilters } from "../lib/orders-workspace";
+import { communityInviteRestrictionSummary } from "../../shared/community-invite-restriction.mjs";
 import { extractBotInvite } from "../lib/bot-invite";
 import { getOrderReactionOverviews } from "../lib/integration";
 import { OrderReactionSettingsDialog } from "./OrderReactionSettingsDialog";
@@ -65,7 +66,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
   const invitesPaused = String(order.status).toUpperCase().includes("INVITES PAUSED") && !boost;
   const service = boost ? "Server boosts" : order.service === "COMMUNITY-ONLINE" ? "Online members" : "Offline members";
   const joinMethod = order.joinMethod === "directly" ? "Direct join" : order.joinMethod === "experimental_join" ? "Experimental join" : "Create invite";
-  const delay = order.statusDelay ?? order.delay;
+  const delayLabel = orderDeliveryTiming(order);
   const duration = boost ? order.boostStockPool === "rotating" ? "30-day rotating" : order.duration ? `${order.duration}-month boosts` : "Boost delivery" : order.durationMonths ? `${order.durationMonths}-month support` : "Members";
   const reactions = order.customerReactions;
 
@@ -93,7 +94,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
         <div className="od-status" data-tone={status.tone}><i aria-hidden="true" />{status.label}</div>
         <div className="od-delivery-numbers"><span><b>{number(delivery.delivered)}</b><span> / {delivery.total === null ? "—" : number(delivery.total)}</span></span><small>{delivery.remaining === null ? "" : delivery.remaining === 0 ? "Delivered" : `${number(delivery.remaining)} left`}</small></div>
         <div className="od-progress" data-tone={status.tone} role="progressbar" aria-label={`Delivery for ${name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={delivery.total ? Math.round(delivery.percent) : undefined}><span style={{ width: `${delivery.percent}%` }} /></div>
-        {!boost && typeof delay === "number" && delivery.remaining !== 0 ? <span className="od-delivery-delay">{delay}s between members</span> : null}
+        {!boost && delayLabel && delivery.remaining !== 0 ? <span className="od-delivery-delay">{delayLabel}</span> : null}
       </td>
       <td className="od-reaction-cell">
         <span className="od-mobile-caption">Reactions</span>
@@ -139,7 +140,7 @@ function OrderRow({ order, now, onReactionSettings, ...actions }: { order: Track
     </tr>
     {botInvite || invitesPaused ? <tr className="od-notice-row"><td colSpan={6}><div className="od-order-alert" data-tone={invitesPaused ? "danger" : "waiting"}>
       <TriangleAlert aria-hidden="true" />
-      <div className="od-alert-copy"><strong>{botInvite ? "Bot invite required" : "Invites paused"}</strong><span>{botInvite ? "Add the bot to start delivery." : "Check the invite before continuing."}</span></div>
+      <div className="od-alert-copy"><strong>{botInvite ? "Bot invite required" : "Invites paused"}</strong><span>{botInvite ? "Add the bot to start delivery." : communityInviteRestrictionSummary(order.inviteRestriction)}</span></div>
       <div className="od-alert-actions">{botInvite ? <><Button type="button" variant="secondary" size="xs" onClick={() => actions.onCopyInvite(botInvite)}><Copy />Copy invite</Button><Button asChild size="xs"><a href={botInvite} target="_blank" rel="noreferrer">Add bot <ArrowUpRight /></a></Button></> : <Button type="button" variant="destructive" size="xs" disabled={actions.resumingId !== null} onClick={() => actions.onResume(order)}><RotateCcw className={actions.resumingId === order.uniqid ? "animate-spin" : ""} />{actions.resumingId === order.uniqid ? "Continuing…" : "Continue"}</Button>}</div>
     </div></td></tr> : null}
   </tbody>;

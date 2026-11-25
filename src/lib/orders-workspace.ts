@@ -3,6 +3,7 @@ import { isBoostService } from "./services";
 import { getOrderPeriod } from "./order-period";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { isCommunityDeliverySettled } from "../../shared/community-delivery-state.mjs";
+import { getCommunitySpeedRange, getCommunitySpeedLabel } from "../../shared/community-speed.mjs";
 
 export type OrdersFilters = { search: string; service: string; status: string; period: string; sort: string };
 export const EMPTY_ORDERS_FILTERS: OrdersFilters = { search: "", service: "all", status: "all", period: "all", sort: "newest" };
@@ -28,6 +29,13 @@ export function orderDelivery(order: TrackedOrder) {
   const added = typeof order.added === "number" && Number.isFinite(order.added) ? order.added : String(order.status).toUpperCase() === "COMPLETED" ? total ?? 0 : 0;
   const delivered = Math.min(Math.max(0, added), total ?? Number.MAX_SAFE_INTEGER);
   return { total, delivered, remaining: total === null ? null : Math.max(0, total - delivered), percent: total ? Math.min(100, delivered / total * 100) : 0 };
+}
+
+export function orderDeliveryTiming(order: TrackedOrder) {
+  const range = getCommunitySpeedRange(order.speedProfile ?? "custom", order.added);
+  if (range) return `${getCommunitySpeedLabel(order.speedProfile ?? "custom")} · ${range}`;
+  const delay = order.statusDelay ?? order.delay;
+  return typeof delay === "number" && Number.isFinite(delay) ? `${delay}s between members` : "";
 }
 
 export function hasFailedLeave(order: TrackedOrder) {

@@ -20,7 +20,7 @@ function load(relative) {
   return exports;
 }
 
-const { filterWorkspaceOrders, EMPTY_ORDERS_FILTERS, orderDelivery, orderStatus, canStartOrderLeave } = load("src/lib/orders-workspace.ts");
+const { filterWorkspaceOrders, EMPTY_ORDERS_FILTERS, orderDelivery, orderDeliveryTiming, orderStatus, canStartOrderLeave } = load("src/lib/orders-workspace.ts");
 const now = Date.parse("2026-11-19T12:00:00Z");
 const day = 86400_000;
 const at = (days) => new Date(now + days * day).toISOString();
@@ -56,6 +56,14 @@ test("delivery progress is independent of expired support and clamps invalid tot
   assert.equal(orderDelivery({ ...base, added: 900 }).delivered, 500);
   assert.equal(orderDelivery({ ...base, amount: 0 }).percent, 0);
   assert.equal(orderDelivery({ ...base, amount: undefined }).total, null);
+});
+
+test("Orders shows variable speed ranges instead of the nominal 300-second setting", () => {
+  assert.equal(orderDeliveryTiming({ ...base, status: "INVITES PAUSED", amount: 750, added: 124, speedProfile: "balanced2", delay: 300, statusDelay: 300 }), "Balanced 2 · 1–6s");
+  assert.equal(orderDeliveryTiming({ ...base, added: 300, speedProfile: "balanced2", delay: 300 }), "Balanced 2 · 30–60s");
+  assert.equal(orderDeliveryTiming({ ...base, added: 464, speedProfile: "balanced2", delay: 300 }), "Balanced 2 · 30–300s");
+  assert.equal(orderDeliveryTiming({ ...base, speedProfile: "balanced", delay: 300 }), "Balanced · 30–300s");
+  assert.equal(orderDeliveryTiming({ ...base, speedProfile: "custom", delay: 20 }), "20s between members");
 });
 
 test("leave action only targets eligible expired members and cannot repeat finished jobs", () => {

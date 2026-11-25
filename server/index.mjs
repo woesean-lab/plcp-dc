@@ -1,5 +1,6 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
+import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
 import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceRunner, invokeReplacement, withOrderReplacementLock } from "./order-auto-replace.mjs";
 import { registerEldoradoIntegrationSettings } from "./eldorado-integration-settings.mjs";
@@ -7290,6 +7291,7 @@ async function recoverCommunityGuildRestrictionOrder(order) {
       ...order,
       status: "INVITES PAUSED",
       waitingCode: "discord_guild_invites_limited",
+      inviteRestriction: captureCommunityInviteRestriction({ legacy: true, added: Number(order.added) || 0, delay: order.delay, speedProfile: order.speedProfile }),
       details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
       pausedAt: order.pausedAt ?? new Date().toISOString(),
       pausedFromStatus: "PROCESS",
@@ -7494,6 +7496,7 @@ async function runCommunityOrder(order, members, config) {
       );
       await client.query("COMMIT");
       order.delay = nextPayload.delay;
+      order.speedProfile = nextPayload.speedProfile;
       return !deliveryPaused;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {});
@@ -7515,7 +7518,7 @@ async function runCommunityOrder(order, members, config) {
     }
   }
 
-  async function pauseForCommunityBotIssue(startIndex, { waitingCode, details, memberDetails, status = "WAITING" }) {
+  async function pauseForCommunityBotIssue(startIndex, { waitingCode, details, memberDetails, inviteRestriction, status = "WAITING" }) {
     for (let remainingIndex = startIndex; remainingIndex < members.length; remainingIndex += 1) {
       const remainingMember = members[remainingIndex];
       const queuedIndex = results.findIndex((result) => result?.discordUserId === remainingMember.discord_user_id);
@@ -7531,6 +7534,7 @@ async function runCommunityOrder(order, members, config) {
       added,
       status,
       waitingCode,
+      ...(inviteRestriction ? { inviteRestriction: { ...inviteRestriction, added, configuredDelay: order.delay, speedProfile: order.speedProfile } } : {}),
       botInvite: createCommunityBotInvite(config, config.guildId, getCommunityOrderJoinMethod(order)),
       details,
       ...(status === "PAUSED" ? { pausedAt: new Date().toISOString(), pausedFromStatus: "PROCESS" } : {}),
@@ -7690,6 +7694,7 @@ async function runCommunityOrder(order, members, config) {
             botPauseIssue = {
               status: "INVITES PAUSED",
               waitingCode: "discord_guild_invites_limited",
+              inviteRestriction: captureCommunityInviteRestriction({ result: joined }),
               details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member accounts remain active.",
               memberDetails: "Waiting for Discord to restore new member access for this server."
             };
@@ -7886,6 +7891,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
           botPauseIssue = {
             status: "INVITES PAUSED",
             waitingCode: "discord_guild_invites_limited",
+            inviteRestriction: captureCommunityInviteRestriction({ result: joined }),
             details: "Discord has temporarily limited new member access for this server. Delivery is paused and the member account remains active.",
             memberDetails: "Waiting for Discord to restore new member access for this server."
           };
@@ -7959,6 +7965,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
         added,
         status: botPauseIssue.status ?? "WAITING",
         waitingCode: botPauseIssue.waitingCode,
+        ...(botPauseIssue.inviteRestriction ? { inviteRestriction: { ...botPauseIssue.inviteRestriction, added, configuredDelay: order.delay, speedProfile: order.speedProfile } } : {}),
         botInvite: createCommunityBotInvite(config, config.guildId, getCommunityOrderJoinMethod(order)),
         details: botPauseIssue.details,
         ...(botPauseIssue.status === "PAUSED" ? { pausedAt: new Date().toISOString(), pausedFromStatus: "PROCESS" } : {}),
@@ -11751,6 +11758,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       invite,
       serverInfo,
       invitesPaused: true,
+      inviteRestriction: captureCommunityInviteRestriction({ guild: targetGuildAccess.payload }),
       waitingCode: "discord_guild_invites_limited",
       waitingDetails: "Discord has temporarily limited new member access for this server. Check the server restriction before restarting delivery.",
       botInvite: createCommunityBotInvite(config, serverInfo.guildId, normalizedJoinMethod)
@@ -11977,6 +11985,7 @@ async function createCommunityOrder(req, res, next) {
         ? addUtcMonths(createdAt, durationMonths).toISOString()
         : null,
       status: invitesPaused ? "INVITES PAUSED" : waitingForBot ? "WAITING" : "PROCESS",
+      ...(invitesPaused ? { inviteRestriction: resolvedInvite.inviteRestriction } : {}),
       waitingCode: invitesPaused ? "discord_guild_invites_limited" : waitingForBot ? (waitingCode ?? "discord_missing") : null,
       details: waitingForBot || invitesPaused ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
       experimentalJoin: joinMethod === "experimental_join",
@@ -12130,6 +12139,7 @@ async function activateWaitingCommunityOrder(order) {
           },
           ...(isCommunityGuildInvitesRestricted(access.payload) ? {
             invitesPaused: true,
+            inviteRestriction: captureCommunityInviteRestriction({ guild: access.payload }),
             waitingCode: "discord_guild_invites_limited",
             waitingDetails: "Discord has temporarily limited new member access for this server. Check the server restriction before restarting delivery."
           } : {})
@@ -12179,6 +12189,7 @@ async function activateWaitingCommunityOrder(order) {
     const invitesPausedOrder = {
       ...order,
       status: "INVITES PAUSED",
+      inviteRestriction: resolved.inviteRestriction,
       waitingCode: "discord_guild_invites_limited",
       details: resolved.waitingDetails ?? "Discord has temporarily limited new member access for this server."
     };
@@ -12529,7 +12540,7 @@ function sanitizePublicCommunityOrder(order) {
   const customerReactions = getCustomerReactionSummary(order);
   order = hideCommunityLeaveInformation(order);
   // Customer history has counts only; raw assignments belong to the admin view.
-  const { reactionRequests: _reactionRequests, ...publicOrder } = order;
+  const { reactionRequests: _reactionRequests, inviteRestriction: _inviteRestriction, ...publicOrder } = order;
   order = { ...publicOrder, customerReactions };
   if (!Array.isArray(order.communityResults)) return { ...order, canPublicLeaveAll: canLeaveAll };
   const generatedBotInvite = getCommunityOrderJoinMethod(order) !== "directly" && !order.botInvite && isDiscordGuildId(String(order.botApplicationId ?? "")) && isDiscordGuildId(String(order.serverId ?? ""))
@@ -12977,8 +12988,10 @@ async function restartCommunityRestrictedOrder(req, res, next) {
     }
 
     if (isCommunityGuildInvitesRestricted(access.payload)) {
+      const pausedOrder = { ...order, inviteRestriction: captureCommunityInviteRestriction({ guild: access.payload, added: Number(order.added) || 0, delay: order.delay, speedProfile: order.speedProfile }) };
+      await saveTrackedOrderPayload(pausedOrder);
       if (isPublicRequest) publicRestartCooldowns.set(cooldownKey, Date.now() + publicRestartCooldownMs);
-      return res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(order) : order);
+      return res.set("Cache-Control", "no-store").json(isPublicRequest ? sanitizePublicCommunityOrder(pausedOrder) : pausedOrder);
     }
 
     const waitingOrder = {

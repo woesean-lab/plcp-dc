@@ -1,3 +1,5 @@
+import type { CommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
+
 export type CommunityServiceType = "COMMUNITY-OFFLINE" | "COMMUNITY-ONLINE";
 export type BoostServiceType = "DCORD-BOOSTS";
 export type ServiceType = CommunityServiceType | BoostServiceType;
@@ -169,6 +171,7 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  inviteRestriction?: CommunityInviteRestriction;
   autoReplace?: boolean;
   autoReplaceRounds?: number;
   autoReplaceStopped?: string;
@@ -261,6 +264,7 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  inviteRestriction?: CommunityInviteRestriction;
   autoReplace?: boolean;
   autoReplaceRounds?: number;
   autoReplaceStopped?: string;

@@ -1,4 +1,5 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
+import { communityInviteRestrictionSummary } from "../../shared/community-invite-restriction.mjs";
 import { getCommunitySpeedPattern, getCommunityDeliveryEstimateSeconds, getCommunitySpeedLabel, getCommunitySpeedDescription } from "../../shared/community-speed.mjs";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -1333,7 +1334,7 @@ export default function OrderPage() {
               <div>
                 <p className="app-kicker">{isCommunityProvider ? "Server access paused" : "Invites paused"}</p>
                 <strong>{isCommunityProvider ? "Check Discord server restriction" : "Discord invites need attention"}</strong>
-                <span>{isCommunityProvider ? "Discord has limited new member access. No member accounts were disabled." : "Confirm that the server invite works, then restart the order."}</span>
+                <span>{isCommunityProvider ? communityInviteRestrictionSummary(result.inviteRestriction) : "Confirm that the server invite works, then restart the order."}</span>
               </div>
               <Button type="button" variant="destructive" size="sm" onClick={() => void handleRestartOrder()} disabled={restartingOrder}>
                 <RotateCcw className={`h-4 w-4 ${restartingOrder ? "animate-spin" : ""}`} aria-hidden="true" />
