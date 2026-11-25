@@ -17,6 +17,7 @@ import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDialog";
 import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
+import { BoostStockCounts } from "../components/BoostStockCounts";
 import { SolarixProvider, SolarixStockButton, SolarixStockSummary, useSolarix, type SolarixPreviewOutcome } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { OrderAutoReplaceOption } from "../components/OrderAutoReplaceOption";
@@ -195,6 +196,7 @@ function MembersList() {
 function MonitorControlsExample() {
   const [paired, setPaired] = useState(false);
   const [delay, setDelay] = useState("700");
+  const [profile, setProfile] = useState<CommunitySpeedProfile>("safe");
   return <div className="ui-ref-stack">
     <div className="stock-duration-filter" role="group" aria-label="Monitor controls layout">
       <button type="button" className={!paired ? "is-active" : ""} aria-pressed={!paired} onClick={() => setPaired(false)}>Without reactions</button>
@@ -203,6 +205,7 @@ function MonitorControlsExample() {
     <div className={`monitor-order-controls ${paired ? "is-paired" : "is-delay-only"}`}>
       <div className="monitor-control-panel">
         <div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Timer className="h-4 w-4" /></span><div><p className="app-kicker">Delivery control</p><h2>Join delay</h2></div></div>
+        <CommunitySpeedProfileOptions value={profile} added={25} onChange={(value, seconds) => { setProfile(value); setDelay(String(seconds)); }} />
         <div className="monitor-delay-controls"><Input type="number" min={1} max={1200} aria-label="Sample delay in seconds" value={delay} onChange={(event) => setDelay(event.target.value)} /><Button type="button" variant="secondary" onClick={() => toast.success("Sample delay previewed")}><Timer className="h-4 w-4" />Apply custom</Button></div>
       </div>
       {paired ? <ReactionExample /> : null}
@@ -214,6 +217,7 @@ function MemberSpeedExample() {
   const [added, setAdded] = useState(25);
   const [profile, setProfile] = useState<CommunitySpeedProfile>("balanced2");
   const [customDelay, setCustomDelay] = useState(60);
+  const [previewWidth, setPreviewWidth] = useState("560");
   return <div className="ui-ref-stack">
     <label className="ui-ref-field"><span className="field-label">Delivered members</span><Input type="number" min={0} value={added} onChange={event => setAdded(Math.max(0, Number(event.target.value) || 0))} /></label>
     <div className="boost-order-block"><div className="boost-order-panel"><div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
@@ -225,8 +229,8 @@ function MemberSpeedExample() {
         </label>
       </CommunitySpeedProfileOptions>
     </div></div></div>
-    <CommunitySpeedProfileOptions value={profile} added={added} onChange={setProfile} />
-    <CommunitySpeedProfileOptions value="balanced2" added={added} onChange={() => {}} disabled />
+    <FilterDropdown label="Speed preview width" value={previewWidth} onChange={setPreviewWidth} options={[{ value: "900", label: "Wide card" }, { value: "560", label: "Narrow card" }, { value: "280", label: "Mobile card" }]} />
+    <div className="monitor-control-panel" style={{ width: "100%", maxWidth: Number(previewWidth) }}><div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Timer className="h-4 w-4" /></span><div><p className="app-kicker">Delivery control</p><h2>Join delay</h2></div></div><CommunitySpeedProfileOptions value={profile} added={added} onChange={setProfile} /><CommunitySpeedProfileOptions value="balanced2" added={added} onChange={() => {}} disabled /></div>
   </div>;
 }
 
@@ -278,6 +282,25 @@ function MembersStockExample() {
     <MembersStockSummary total={26} available={21} active={24} inactive={2} />
     <section className="app-panel members-stock-list"><header className="members-stock-list-heading"><h3>Stock members<Badge variant="secondary">3</Badge></h3><Button size="sm" variant="secondary" onClick={previewClick}><RefreshCw className="h-3.5 w-3.5" />Refresh</Button></header><div className="members-stock-selection"><span>{selected.length ? `${selected.length} selected` : "Select members to see bulk actions"}</span></div>{selected.length ? <MembersStockBulkActions connection={<><Button size="sm" variant="secondary" onClick={previewClick}><RadioTower className="h-3.5 w-3.5" />Connect</Button><Button size="sm" variant="secondary" title="Reconnect selected accounts using their assigned proxies" onClick={previewClick}><RefreshCw className="h-3.5 w-3.5" />Re-connect</Button><Button size="sm" variant="dangerGhost" onClick={previewClick}>Disconnect</Button></>} transfer={<div className="community-member-transfer-actions"><FilterDropdown label="Transfer destination" showLabel={false} className="community-member-filter community-member-transfer-picker" value="offline" options={[{ value: "offline", label: "To: OAuth Offline" }]} onChange={previewClick} /><Button size="sm" variant="secondary" onClick={previewClick}>Transfer</Button></div>} remove={<Button size="sm" variant="dangerGhost" onClick={previewClick}>Delete selected</Button>} tokens={<><Button size="sm" variant="secondary" onClick={previewClick}>Access tokens</Button><Button size="sm" variant="secondary" onClick={previewClick}>User tokens</Button></>} order={<>{["Top", "Up", "Down", "Bottom"].map(label => <Button key={label} size="sm" variant="secondary" onClick={previewClick}>{label}</Button>)}</>} /> : null}<div role="list">{stockPreviewMembers.map(record => <MembersStockRow key={record.id} record={record} selected={selected.includes(record.id)} onSelect={checked => setSelected(ids => checked ? [...ids, record.id] : ids.filter(id => id !== record.id))} open={open === record.id} onToggle={() => setOpen(value => value === record.id ? null : record.id)} badges={<MembersStockBadges record={record} />} actions={<Button size="icon-sm" variant="dangerGhost" title="Remove sample member" onClick={previewClick}><Trash2 className="h-3.5 w-3.5" /></Button>}><MembersStockMetadata accountId={record.id} authorizedAt={record.authorizedAt} />{record.details ? <p>{record.details}</p> : null}<div className="members-stock-secrets"><MembersStockSecret label="Access token" username={record.username} value={revealed === record.id ? "sample-preview-token" : undefined} busy={false} disabled={false} onToggle={() => setRevealed(value => value === record.id ? null : record.id)} onCopy={previewClick} /><MembersStockSecret label="User token" username={record.username} value={undefined} busy={false} disabled={false} onToggle={previewClick} onCopy={previewClick} /></div></MembersStockRow>)}</div></section>
     {importOpen ? <MembersStockImportDialog busy={false} category="Sample category" onClose={() => setImportOpen(false)}><p className="ui-ref-hint">Sample import window. No accounts are imported.</p></MembersStockImportDialog> : null}
+  </div>;
+}
+
+function BoostStockLoadingExample() {
+  const [loading, setLoading] = useState(true);
+  const [duration, setDuration] = useState(1);
+  return <div className="ui-ref-stack">
+    <Switch checked={loading} onCheckedChange={setLoading} aria-label="Preview stock loading" />
+    <fieldset className="service-selector">
+      <legend className="field-label">Boost stock source</legend>
+      <div className="service-grid boost-duration-grid" data-provider="solarix">
+        {[1, 3].map(months => <label key={months} className={`service-option${duration === months ? " is-selected" : ""}`} data-service={`boost-duration-${months}`}>
+          <input className="sr-only" type="radio" name="previewBoostDuration" checked={duration === months} disabled={loading} onChange={() => setDuration(months)} />
+          <span className="service-option-head" aria-hidden="true"><span className="service-option-icon"><span className="text-sm font-semibold">{months}M</span></span><span className="service-option-state">{duration === months ? "Selected" : "02"}</span></span>
+          <span className="service-option-title">{months} Month</span>
+          <BoostStockCounts loading={loading} tokens={months === 1 ? 60 : 20} boosts={months === 1 ? 120 : 40} requiredTokens={7} />
+        </label>)}
+      </div>
+    </fieldset>
   </div>;
 }
 
@@ -434,9 +457,12 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
-          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns in one row; creation’s Custom field spans the next row.\n// Narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
+          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Equal columns wrap to fit the card; creation’s Custom field spans the next row.\n// Narrow cards wrap to additional rows without horizontal scrolling.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
           <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// SolarixAIO selection loads provider stock into the existing form.\n// Create order calls solarix.startOrder({ invite, amount, duration }); only delivery opens a modal.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// All preview requests and results use local samples only.'}>
             <SolarixExample />
+          </Example>
+          <Example title="Boost stock loading" source="src/components/BoostStockCounts.tsx" code={'<div className="service-grid boost-duration-grid">\n  {/* Keep the standard card widths for every provider. */}\n  <BoostStockCounts loading={loading} tokens={60} boosts={120} requiredTokens={7} />\n</div>'}>
+            <BoostStockLoadingExample />
           </Example>
           <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
           <Example title="On/Off switch" source="src/components/ui/switch.tsx · switch.css" code={'<Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Use bot for new orders" />\n// Green On, red Off, sliding thumb; supports keyboard, focus and disabled states.'}><div className="flex flex-wrap items-center gap-3"><Switch checked={switchOn} onCheckedChange={setSwitchOn} aria-label="Sample new-order setting" /><Switch checked disabled onCheckedChange={() => {}} aria-label="Disabled On switch" /><Switch checked={false} disabled onCheckedChange={() => {}} aria-label="Disabled Off switch" /></div></Example>

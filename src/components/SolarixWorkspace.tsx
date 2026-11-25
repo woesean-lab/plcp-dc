@@ -44,7 +44,7 @@ export function SolarixProvider({ children, preview = false, previewOutcome = "p
   const pending = useRef(false);
   const mounted = useRef(false);
   const previewTimer = useRef<ReturnType<typeof setTimeout>>();
-  const refreshStock = useCallback(() => { setStockRequested(true); setRevision(value => value + 1); }, []);
+  const refreshStock = useCallback(() => { setLoading(true); setError(""); setStockRequested(true); setRevision(value => value + 1); }, []);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; clearTimeout(previewTimer.current); }; }, []);
   useEffect(() => {
     if (!mode && !stockRequested) return;

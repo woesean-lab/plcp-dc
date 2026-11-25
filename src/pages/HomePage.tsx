@@ -167,6 +167,7 @@ import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
+import { BoostStockCounts } from "../components/BoostStockCounts";
 import { useSolarix } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
@@ -3827,10 +3828,7 @@ export default function HomePage() {
                                 </span>
                               </span>
                               <span className="service-option-title">{pool === "rotating" ? "Rotating · 30 Days" : `${duration} Month`}</span>
-                              <span className="service-option-description">
-                                {solarixLoading ? "Loading SolarixAIO stock…" : selectedIsSolarix && !solarixTier ? "Stock unavailable" : <>{tokenStock} tokens available · {requiredTokens} needed</>}
-                              </span>
-                              <span className="service-option-code service-option-code-badge">{solarixLoading ? "Loading…" : boostCapacity === undefined ? "Unavailable" : `${boostCapacity} BOOSTS`}</span>
+                              <BoostStockCounts loading={solarixLoading} tokens={tokenStock} boosts={boostCapacity} requiredTokens={requiredTokens} />
                             </label>
                           );
                         })}
