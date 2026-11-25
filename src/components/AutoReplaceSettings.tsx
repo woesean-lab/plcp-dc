@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, LoaderCircle, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
@@ -12,7 +13,6 @@ export default function AutoReplaceSettings({ preview = false }: { preview?: boo
   const [loading, setLoading] = useState(!preview);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const mounted = useRef(false);
   const pending = useRef(false);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -31,10 +31,10 @@ export default function AutoReplaceSettings({ preview = false }: { preview?: boo
   const dirty = Boolean(saved && (limits.members !== saved.members || limits.boosts !== saved.boosts));
   async function save() {
     if (!valid || !saved || pending.current) return;
-    pending.current = true; setSaving(true); setError(""); setNotice("");
+    pending.current = true; setSaving(true); setError("");
     try {
       const value = preview ? limits : await saveAutoReplaceSettings(limits);
-      if (mounted.current) { setSaved(value); setNotice("Auto-replace limits saved."); }
+      if (mounted.current) { setSaved(value); toast.success("Auto-replace limits saved."); }
     } catch (err) { if (mounted.current) setError(err instanceof Error ? err.message : "Could not save auto-replace limits."); }
     finally { pending.current = false; if (mounted.current) setSaving(false); }
   }
@@ -48,16 +48,15 @@ export default function AutoReplaceSettings({ preview = false }: { preview?: boo
         {(["members", "boosts"] as const).map(key => <label className="settings-field" key={key}>
           <span className="field-label">{key === "members" ? "Members" : "Boosts"} · maximum rounds</span>
           <Input type="number" min={0} max={100} step={1} required disabled={loading || saving || !saved} value={draft[key]}
-            onChange={event => { setDraft(current => ({ ...current, [key]: event.target.value })); setNotice(""); }} />
+            onChange={event => { setDraft(current => ({ ...current, [key]: event.target.value })); }} />
         </label>)}
         <p className="settings-field-note">0 disables auto-replace. Limits apply per order, including existing orders with Auto-replace enabled. Maximum 100 rounds.</p>
-        {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
         {error ? <p className="text-xs text-[var(--app-danger)]" role="alert">{error}</p> : null}
       </div>
       <footer className="settings-card-footer"><div>
         <Button type="submit" size="sm" disabled={loading || saving || !valid || !dirty}>{saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{saving ? "Saving…" : "Save limits"}</Button>
         {error && !saved ? <Button type="button" size="sm" variant="secondary" disabled={loading} onClick={() => void load()}>Retry</Button> : null}
-        {dirty ? <Button type="button" size="sm" variant="ghost" disabled={saving || loading} onClick={() => { if (saved) setDraft({ members: String(saved.members), boosts: String(saved.boosts) }); setNotice(""); }}>Reset</Button> : null}
+        {dirty ? <Button type="button" size="sm" variant="ghost" disabled={saving || loading} onClick={() => { if (saved) setDraft({ members: String(saved.members), boosts: String(saved.boosts) }); }}>Reset</Button> : null}
       </div></footer>
     </form>
   </section>;

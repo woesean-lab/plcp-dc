@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, Copy, KeyRound, LoaderCircle, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
@@ -22,7 +23,6 @@ export default function EldoradoIntegrationSettings({ preview = false, onConfigu
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -61,7 +61,7 @@ export default function EldoradoIntegrationSettings({ preview = false, onConfigu
   }
   async function save(generate: boolean) {
     if (inFlight.current || !settings || loading) return;
-    inFlight.current = true; setBusy(true); setError(""); setNotice("");
+    inFlight.current = true; setBusy(true); setError("");
     try {
       const data: Settings = preview
         ? { ...settings, configured: generate || settings.configured, publicBase: origin, revision: settings.revision + 1,
@@ -74,7 +74,7 @@ export default function EldoradoIntegrationSettings({ preview = false, onConfigu
       const { apiKey: generatedKey, ...safeSettings } = data;
       setSettings(safeSettings); setOrigin(safeSettings.publicBase);
       if (generatedKey) { setApiKey(generatedKey); setCopied(false); }
-      setNotice(generate ? "API key created. Copy it to plcp-mng Admin." : "Monitor URL saved.");
+      toast.success(generate ? "API key created. Copy it to plcp-mng Admin." : "Monitor URL saved.");
       setConfirming(false);
     } catch (err) {
       if (mounted.current) {
@@ -109,9 +109,8 @@ export default function EldoradoIntegrationSettings({ preview = false, onConfigu
           </label>
           <p className="settings-field-note">Shown once. Paste it into plcp-mng Admin → plcp-dc.</p>
           <div className="flex flex-wrap gap-2"><Button type="button" size="sm" variant="secondary" onClick={() => void copyKey()}>{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copied" : "Copy key"}</Button>
-            <Button type="button" size="sm" variant="ghost" onClick={() => { setApiKey(""); setNotice(""); }}>Hide key</Button></div>
+            <Button type="button" size="sm" variant="ghost" onClick={() => { setApiKey(""); }}>Hide key</Button></div>
         </div> : null}
-        {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
         {error && !confirming ? <p className="text-xs text-[var(--app-danger)]" role="alert">{error}</p> : null}
       </div>
       <footer className="settings-card-footer"><div>

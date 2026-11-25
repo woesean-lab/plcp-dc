@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RefreshCw, Search } from "lucide-react";
 import { Button } from "./ui/button";
@@ -30,7 +31,6 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const [defaultUseForNewOrders, setDefaultUseForNewOrders] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [editing, setEditing] = useState<PoolBot | null>(null);
   const [editor, setEditor] = useState<"default" | "pool" | null>(null);
   const [servers, setServers] = useState<{ clientId: string; name: string } | null>(null);
@@ -59,24 +59,24 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   function reset() { setDraft(EMPTY); setEditing(null); setEditor(null); }
   async function save() {
     if (pending.current || disabled || (!editing && (!draft.botToken.trim() || !draft.clientSecret.trim()))) return;
-    pending.current = true; setBusy(true); setError(""); setNotice("");
+    pending.current = true; setBusy(true); setError("");
     try {
       const result = preview ? { bots: editing ? bots.map(bot => bot.clientId === editing.clientId ? { ...bot, name: draft.name || bot.name } : bot)
         : [...bots, { ...PREVIEW_POOL_BOTS[0], clientId: String(Date.now()), name: draft.name || "Preview bot", activeOrders: 0, pendingMembers: 0, totalOrders: 0 }] }
         : await saveCommunityPoolBot(draft, editing?.clientId);
-      if (mounted.current) { setBots(result.bots); reset(); setNotice(editing ? "Bot updated." : "Bot added to pool."); }
+      if (mounted.current) { setBots(result.bots); reset(); toast.success(editing ? "Bot updated." : "Bot added to pool."); }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not save bot."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
   async function toggle(bot: DirectoryBot, useForNewOrders: boolean) {
     if (pending.current || disabled) return;
-    pending.current = true; setBusy(true); setError(""); setNotice("");
+    pending.current = true; setBusy(true); setError("");
     try {
       if (!preview) await saveBotOrderSetting(bot.clientId, useForNewOrders);
       if (mounted.current) {
         if (bot.isDefault) setDefaultUseForNewOrders(useForNewOrders);
         else setBots(current => current.map(item => item.clientId === bot.clientId ? { ...item, enabled: useForNewOrders } : item));
-        setNotice("New-order setting saved.");
+        toast.success(`${bot.name} · New orders ${useForNewOrders ? "enabled" : "disabled"}.`);
       }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update bot."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
@@ -96,17 +96,16 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
       <div className="settings-card-title"><span className="app-kicker">Members delivery</span><h3 id={`${id}-title`}>Bots</h3></div>
       <div className="settings-heading-actions"><Button type="button" size="sm" variant="secondary" disabled={locked} onClick={() => { void load(); onRefreshDefault?.(); }}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} />Refresh</Button>
-      <Button type="button" size="sm" disabled={locked} onClick={() => { reset(); setEditor("pool"); setNotice(""); }}><Plus className="h-3.5 w-3.5" />Add bot</Button></div>
+      <Button type="button" size="sm" disabled={locked} onClick={() => { reset(); setEditor("pool"); }}><Plus className="h-3.5 w-3.5" />Add bot</Button></div>
     </header>
     <div className="settings-card-body bot-pool-body">
       <div className="bot-directory-toolbar"><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Search bots" placeholder="Search bots or application IDs" value={search} onChange={event => setSearch(event.target.value)} /></label><span>{rows.length} bots · {rows.filter(bot => bot.enabled && (!bot.isDefault || defaultUseForNewOrders)).length} for new orders</span></div>
       <p className="settings-field-note">Use for new orders controls participation. Among eligible bots, the fewest remaining members and then active orders determine assignment. Existing orders keep their assigned bot.</p>
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button></div> : null}
-      {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
       {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} accountActions={bot => bot.isDefault ? null : <Button type="button" size="xs" variant="secondary" aria-label={`Sync accounts for ${bot.name}`} aria-haspopup="dialog" disabled={locked || !bot.hasBotToken || !bot.hasClientSecret || (!preview && !config?.configured)} onClick={() => setSyncing(bot)}><RefreshCw className="h-3.5 w-3.5" />Sync</Button>} actions={bot => <>
-        <Button type="button" size="icon-sm" variant={(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "accentGhost" : "secondary"} aria-label={`Use ${bot.name} for new orders`} aria-pressed={bot.isDefault ? defaultUseForNewOrders : bot.enabled} title={`New orders · ${(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "On — click to turn off" : "Off — click to turn on"}`} disabled={locked || !bot.hasBotToken || !bot.hasClientSecret} onClick={() => void toggle(bot, !(bot.isDefault ? defaultUseForNewOrders : bot.enabled))}><Power className="h-3.5 w-3.5" /></Button>
+        <Button type="button" size="icon-sm" variant={(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "successGhost" : "destructive"} aria-label={`Use ${bot.name} for new orders`} aria-pressed={bot.isDefault ? defaultUseForNewOrders : bot.enabled} title={`New orders · ${(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "On — click to turn off" : "Off — click to turn on"}`} disabled={locked || !bot.hasBotToken || !bot.hasClientSecret} onClick={() => void toggle(bot, !(bot.isDefault ? defaultUseForNewOrders : bot.enabled))}><Power className="h-3.5 w-3.5" /></Button>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
-        <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
+        <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); }}><Pencil className="h-3.5 w-3.5" /></Button>
       </>} /> : !error ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>{search ? "No matching bots" : "No bots yet"}</strong><span>{search ? "Try another name or application ID." : "Add a bot to enable automatic assignment."}</span></div> : null}
     </div>
     {editor ? <BotSettingsDialog title={editor === "default" ? "Edit default bot" : editing ? `Edit ${editing.name}` : "Add bot"} busy={busy || disabled} onClose={reset}>

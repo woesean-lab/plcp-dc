@@ -1,3 +1,4 @@
+import toast from "react-hot-toast";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, Globe2, LoaderCircle, LogOut, RefreshCw, Search } from "lucide-react";
 import { getCommunityBotGuilds, getCommunityGuildLeaveProgress, leaveCommunityBotGuilds, type CommunityBotGuild } from "../lib/community";
@@ -15,7 +16,6 @@ export function BotServersDialog({ clientId, name, onClose, preview = false, onC
   const [loading, setLoading] = useState(true);
   const [exact, setExact] = useState(false);
   const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [confirming, setConfirming] = useState(false);
@@ -52,21 +52,20 @@ export function BotServersDialog({ clientId, name, onClose, preview = false, onC
   const selectedGuilds = guilds.filter(guild => selected.includes(guild.id));
   async function leave() {
     if (pending.current || !selected.length || !exact) return;
-    pending.current = true; setBusy(true); setProgress({ completed: 0, total: selected.length }); setError(""); setNotice("");
+    pending.current = true; setBusy(true); setProgress({ completed: 0, total: selected.length }); setError("");
     try {
       const result = preview ? { left: selected.length, alreadyLeftGuildIds: [], leftGuildIds: selected, failed: 0 }
         : await leaveCommunityBotGuilds(selected, clientId);
       const removed = new Set([...result.leftGuildIds, ...result.alreadyLeftGuildIds]);
       setGuilds(current => current.filter(guild => !removed.has(guild.id)));
       setSelected(current => current.filter(id => !removed.has(id)));
-      setConfirming(false); setNotice(`${removed.size} servers removed.${result.failed ? ` ${result.failed} failed; retry the selected servers.` : ""}`); onChanged();
+      setConfirming(false); (result.failed ? toast.error : toast.success)(`${removed.size} servers removed.${result.failed ? ` ${result.failed} failed; retry the selected servers.` : ""}`); onChanged();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not leave servers."); }
     finally { pending.current = false; setBusy(false); }
   }
   return <BotSettingsDialog title={`${name} · Servers`} busy={busy} onClose={onClose}>
     <div className="settings-guild-toolbar"><label className="settings-guild-search"><Search className="h-3.5 w-3.5" /><Input autoFocus type="search" aria-label="Search bot servers" placeholder="Search servers or IDs" value={search} disabled={busy || confirming} onChange={event => setSearch(event.target.value)} /></label><Button type="button" size="icon-sm" variant="secondary" aria-label="Refresh servers" disabled={loading || busy || confirming} onClick={() => void load()}><RefreshCw className="h-3.5 w-3.5" /></Button><Button asChild size="sm" variant="secondary" disabled={busy}><a href={`https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(clientId)}&scope=bot&permissions=0`} onClick={event => { if (preview || busy) event.preventDefault(); }} aria-disabled={busy} target="_blank" rel="noreferrer"><ExternalLink className="h-3.5 w-3.5" />Add to server</a></Button></div>
     {error ? <div className="settings-load-error" role="alert"><span>{error}</span>{!confirming ? <Button size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button> : null}</div> : null}
-    {notice ? <p className="settings-form-meta" role="status">{notice}</p> : null}
     {loading ? <BotServersSkeleton /> : confirming ? <div className="settings-card-body"><p className="settings-field-note">Remove this bot from {selected.length} selected servers? Deliveries and access in those servers will be affected.</p><div className="bot-server-confirm-list">{selectedGuilds.map(guild => <div key={guild.id}><strong>{guild.name}</strong>{guild.configured ? <Badge variant="secondary">Stock server</Badge> : null}{guild.activeOrderCount ? <Badge variant="destructive">{guild.activeOrderCount} active orders</Badge> : null}</div>)}</div></div> : <>
       <div className="settings-guild-toolbar"><span>{guilds.length} servers</span><Button size="xs" variant="secondary" disabled={!visible.length || busy} onClick={() => setSelected(Array.from(new Set([...selected, ...visible.map(guild => guild.id)])).slice(0, 200))}>Select all</Button><Button size="xs" variant="secondary" disabled={!selected.length || busy} onClick={() => setSelected([])}>Clear</Button></div>
       {!exact && !error ? <p className="settings-form-meta" role="alert">Server list is incomplete. Refresh before removing servers.</p> : null}

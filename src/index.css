@@ -2848,6 +2848,28 @@
     transform: translateY(1px);
   }
 
+  .ui-button-success-ghost {
+    border-color: transparent;
+    color: var(--app-success);
+    background: var(--app-success-soft);
+    box-shadow: none;
+  }
+
+  .ui-button-success-ghost:not(:disabled):hover,
+  .ui-button-success-ghost:not(:disabled):focus-visible {
+    border-color: var(--app-success);
+    color: var(--app-success);
+    background: color-mix(in srgb, var(--app-success) 20%, transparent);
+    box-shadow: none;
+    transform: none;
+  }
+
+  .ui-button-success-ghost:not(:disabled):active {
+    border-color: var(--app-success);
+    background: color-mix(in srgb, var(--app-success) 25%, transparent);
+    transform: translateY(1px);
+  }
+
   .ui-button-danger-ghost {
     border-color: transparent;
     color: var(--app-subtle);
