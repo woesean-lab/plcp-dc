@@ -300,20 +300,20 @@ export default function App() {
           style: {
             borderRadius: "14px",
             border: "1px solid var(--app-border)",
-            background: "var(--app-surface)",
+            background: "var(--app-surface-raised)",
             color: "var(--app-text)",
             boxShadow: "0 16px 38px rgba(0, 0, 0, 0.22)"
           },
           success: {
             iconTheme: {
               primary: "var(--app-success)",
-              secondary: "var(--app-surface)"
+              secondary: "var(--app-surface-raised)"
             }
           },
           error: {
             iconTheme: {
               primary: "var(--app-danger)",
-              secondary: "var(--app-surface)"
+              secondary: "var(--app-surface-raised)"
             }
           }
         }}

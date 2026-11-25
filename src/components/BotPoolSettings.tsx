@@ -123,7 +123,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     </form>}
     </BotSettingsDialog> : null}
     {servers ? <BotServersDialog {...servers} preview={preview} onClose={() => setServers(null)} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
-    {syncing ? <BotSyncDialog clientId={syncing.clientId} name={syncing.name} preview={preview} onClose={() => { setSyncing(null); void load(); onRefreshDefault?.(); }} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
+    {syncing ? <BotSyncDialog clientId={syncing.clientId} name={syncing.name} preview={preview} onClose={() => setSyncing(null)} onChanged={() => void load()} /> : null}
 
   </section>;
 }
