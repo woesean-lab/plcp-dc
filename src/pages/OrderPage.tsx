@@ -1,5 +1,5 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
-import { getCommunitySpeedPattern, getCommunitySpeedAverage, getCommunitySpeedLabel, getCommunitySpeedDescription } from "../../shared/community-speed.mjs";
+import { getCommunitySpeedPattern, getCommunityDeliveryEstimateSeconds, getCommunitySpeedLabel, getCommunitySpeedDescription } from "../../shared/community-speed.mjs";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -464,13 +464,13 @@ export default function OrderPage() {
   const categoryAllocations = Array.isArray(result?.categoryAllocations) ? result.categoryAllocations : [];
   const currentDelay = getNumberField(result, ["delay"]);
   const speedProfile = typeof result?.speedProfile === "string" ? result.speedProfile : "custom";
-  const speedPattern = getCommunitySpeedPattern(speedProfile, totalAmount);
+  const speedPattern = getCommunitySpeedPattern(speedProfile, addedAmount);
   const balancedActiveDelay = typeof result?.activeDelay === "number" ? result.activeDelay : speedPattern?.[0];
-  const effectiveEstimateDelay = getCommunitySpeedAverage(speedProfile, currentDelay, totalAmount);
+  const estimatedCompletionSeconds = getCommunityDeliveryEstimateSeconds(speedProfile, currentDelay, totalAmount, addedAmount);
   const expiration = getOrderSupportExpiration(result);
   const estimatedCompletion = isDcordProvider || terminal || isInvitesPaused || isDeliveryPaused
     ? null
-    : formatEstimatedDuration(remainingAmount, effectiveEstimateDelay);
+    : formatEstimatedDuration(1, estimatedCompletionSeconds);
   const dcordTokenResults = getDcordTokenResults(result);
   const dcordTokenCount = getNumberField(result, ["tokenCount"]);
   const hasQueuedDcordTokens = dcordTokenResults.some((item) => item.status.toLowerCase() === "queued");
@@ -1119,7 +1119,7 @@ export default function OrderPage() {
       return;
     }
 
-    const deliveryTiming = getCommunitySpeedDescription(speedProfile, formatTemplateDelay(result?.delay), totalAmount);
+    const deliveryTiming = getCommunitySpeedDescription(speedProfile, formatTemplateDelay(result?.delay));
     const reactions = result?.customerReactions;
     const formatReactionCount = (count: number) => count.toLocaleString("en-US");
     const reactionInstructions = reactions && reactions.dailyLimit > 0
@@ -1411,7 +1411,7 @@ export default function OrderPage() {
                   <strong>{speedPattern ? `${getCommunitySpeedLabel(speedProfile)} · ${balancedActiveDelay}s` : formatDelay(result.delay)}</strong>
                 </div>
                 {isCommunityProvider ? (
-                  <CommunitySpeedProfileOptions className="lookup-speed-profile-options" value={speedProfile} amount={totalAmount} disabled={updatingDelay}
+                  <CommunitySpeedProfileOptions className="lookup-speed-profile-options" value={speedProfile} added={addedAmount} disabled={updatingDelay}
                     onChange={(profile, delay) => void handleUpdateDelay(delay, profile)} />
                 ) : null}
                 <div className="lookup-delay-actions">

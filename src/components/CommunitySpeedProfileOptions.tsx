@@ -5,13 +5,13 @@ import { getCommunitySpeedPresetDelay, getCommunitySpeedRange, type CommunitySpe
 const profiles = [
   { key: "safe", label: "Safe", timing: "700s", description: "Lowest risk", Icon: ShieldCheck },
   { key: "balanced", label: "Balanced", timing: "30–300s", description: "12-step rhythm", Icon: Timer },
-  { key: "balanced2", label: "Balanced 2", timing: "", description: "By order size", Icon: Timer },
+  { key: "balanced2", label: "Balanced 2", timing: "", description: "By delivery progress", Icon: Timer },
   { key: "fast", label: "Fast", timing: "60s", description: "Quick delivery", Icon: Rocket }
 ] as const;
 
-export function CommunitySpeedProfileOptions({ value, amount, onChange, disabled = false, creation = false, className = "", children }: {
+export function CommunitySpeedProfileOptions({ value, added = 0, onChange, disabled = false, creation = false, className = "", children }: {
   value: string;
-  amount?: number;
+  added?: number;
   onChange: (value: CommunitySpeedProfile, delay: number) => void;
   disabled?: boolean;
   creation?: boolean;
@@ -23,8 +23,9 @@ export function CommunitySpeedProfileOptions({ value, amount, onChange, disabled
       onClick={() => onChange(key, getCommunitySpeedPresetDelay(key)!)}>
       <Icon className="h-4 w-4" aria-hidden="true" />
       <span className={creation ? "community-speed-option-copy" : undefined}><strong>{label}</strong><small>{description}</small></span>
-      <em>{key === "balanced2" ? getCommunitySpeedRange(key, amount) : timing}</em>
+      <em>{key === "balanced2" ? getCommunitySpeedRange(key, added) : timing}</em>
     </button>)}
     {children}
+    {value === "balanced2" ? <p className="col-span-full text-xs text-[var(--app-muted)]">Members 1–250: 1–6s · 251–400: 30–60s · 401+: 30–300s</p> : null}
   </div>;
 }

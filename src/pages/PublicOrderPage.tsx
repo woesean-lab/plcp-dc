@@ -1,5 +1,5 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
-import { getCommunitySpeedPattern, getCommunitySpeedAverage, getCommunitySpeedLabel, getCommunitySpeedPresetDelay } from "../../shared/community-speed.mjs";
+import { getCommunitySpeedPattern, getCommunityDeliveryEstimateSeconds, getCommunitySpeedLabel, getCommunitySpeedPresetDelay } from "../../shared/community-speed.mjs";
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -491,12 +491,9 @@ export default function PublicOrderPage() {
     typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const speedProfile = typeof status?.speedProfile === "string" ? status.speedProfile : "custom";
-  const speedPattern = getCommunitySpeedPattern(speedProfile, totalMembers);
+  const speedPattern = getCommunitySpeedPattern(speedProfile, membersAdded);
   const balancedActiveDelay = typeof status?.activeDelay === "number" ? status.activeDelay : speedPattern?.[0];
-  const effectiveEstimateDelay = getCommunitySpeedAverage(speedProfile, currentDelay, totalMembers);
-  const estimatedCompletionSeconds = !isBoostOrder && typeof membersRemaining === "number" && typeof effectiveEstimateDelay === "number"
-    ? membersRemaining * effectiveEstimateDelay
-    : undefined;
+  const estimatedCompletionSeconds = !isBoostOrder ? getCommunityDeliveryEstimateSeconds(speedProfile, currentDelay, totalMembers, membersAdded) : undefined;
   const createdAt = parseTimestamp(status?.createdAt ?? status?.created_at) ?? parseTimestamp(seed.createdAt);
   const expiredAt = parseTimestamp(getOrderSupportExpiration(status) ?? undefined);
   const supportExpired = expiredAt !== undefined && expiredAt <= supportClock;
@@ -819,7 +816,7 @@ export default function PublicOrderPage() {
       </div>
 
       {isCommunityOrder ? (
-        <CommunitySpeedProfileOptions value={speedProfile} amount={totalMembers} disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
+        <CommunitySpeedProfileOptions value={speedProfile} added={membersAdded} disabled={isInvitesPaused || updatingDelay || delayUpdateCooldown > 0}
           onChange={profile => void handleUpdateDelay(profile)} />
       ) : null}
 

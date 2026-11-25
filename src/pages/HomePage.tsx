@@ -3949,7 +3949,7 @@ export default function HomePage() {
                                 <span className="boost-order-label">Delivery speed</span>
                                 <small>Time between member joins.</small>
                               </div>
-                              <CommunitySpeedProfileOptions creation value={form.communitySpeedProfile} amount={Number(form.amount)} disabled={creating}
+                              <CommunitySpeedProfileOptions creation value={form.communitySpeedProfile} disabled={creating}
                                 onChange={(communitySpeedProfile, delay) => setForm(current => ({ ...current, delay, communitySpeedProfile }))}>
                                 <label className={`community-speed-custom-option ${form.communitySpeedProfile === "custom" ? "is-selected" : ""}`}>
                                   <Settings2 className="h-4 w-4" aria-hidden="true" />
@@ -5157,7 +5157,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.autoReplace ? <span><RefreshCw className="h-3.5 w-3.5" />Auto-replace enabled · Settings round limit</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
-                  {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.speedProfile === "balanced2" ? `${getCommunitySpeedLabel(orderConfirmationPayload.speedProfile)} · ${getCommunitySpeedRange(orderConfirmationPayload.speedProfile, orderConfirmationPayload.amount)}` : `${orderConfirmationPayload.delay}s delay`}</span> : null}
+                  {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.speedProfile === "balanced2" ? `${getCommunitySpeedLabel(orderConfirmationPayload.speedProfile)} · ${getCommunitySpeedRange(orderConfirmationPayload.speedProfile)}` : `${orderConfirmationPayload.delay}s delay`}</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) && (orderConfirmationPayload.categoryAllocations?.some((allocation) => communityCategories.find((category) => category.id === allocation.categoryId)?.isPeriodic) || communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.isPeriodic) && orderConfirmationPayload.durationMonths ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.durationMonths} month support</span> : null}
                   {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.amount} first day · {orderConfirmationPayload.reactionLimit} / day after</span> : null}
                 </div>

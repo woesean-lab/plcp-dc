@@ -201,15 +201,15 @@ function MonitorControlsExample() {
 }
 
 function MemberSpeedExample() {
-  const [amount, setAmount] = useState(250);
+  const [added, setAdded] = useState(25);
   const [profile, setProfile] = useState<CommunitySpeedProfile>("balanced2");
   return <div className="ui-ref-stack">
-    <label className="ui-ref-field"><span className="field-label">Total members</span><Input type="number" min={1} value={amount} onChange={event => setAmount(Math.max(1, Number(event.target.value) || 1))} /></label>
+    <label className="ui-ref-field"><span className="field-label">Delivered members</span><Input type="number" min={0} value={added} onChange={event => setAdded(Math.max(0, Number(event.target.value) || 0))} /></label>
     <div className="community-speed-profile-field"><div className="community-speed-profile-copy"><span className="boost-order-label">Delivery speed</span><small>Time between member joins.</small></div>
-      <CommunitySpeedProfileOptions creation value={profile} amount={amount} onChange={setProfile} />
+      <CommunitySpeedProfileOptions creation value={profile} added={added} onChange={setProfile} />
     </div>
-    <CommunitySpeedProfileOptions value={profile} amount={amount} onChange={setProfile} />
-    <CommunitySpeedProfileOptions value="balanced2" amount={amount} onChange={() => {}} disabled />
+    <CommunitySpeedProfileOptions value={profile} added={added} onChange={setProfile} />
+    <CommunitySpeedProfileOptions value="balanced2" added={added} onChange={() => {}} disabled />
   </div>;
 }
 
@@ -385,7 +385,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
-          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} amount={order.amount}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// creation uses the existing create-order option styles.\n// Balanced 2 uses the total order size: ≤250: 1–6s, 251–400: 30–60s, >400: 30–300s.'}><MemberSpeedExample /></Example>
+          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
           <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
             <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
           </Example>

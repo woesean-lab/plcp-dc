@@ -7547,7 +7547,7 @@ async function runCommunityOrder(order, members, config) {
     let lastBotCheckAt = Date.now();
     while (true) {
       const control = await pool.query(
-        "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile, payload->>'amount' AS amount FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
+        "SELECT payload->>'status' AS status, payload->>'delay' AS delay, payload->>'speedProfile' AS speed_profile, payload->>'added' AS added FROM tracked_orders WHERE uniqid = $1 LIMIT 1",
         [order.uniqid]
       );
       if (!control.rowCount || ["CANCELLED", "PAUSED"].includes(String(control.rows[0]?.status ?? "").toUpperCase())) return false;
@@ -7557,7 +7557,7 @@ async function runCommunityOrder(order, members, config) {
         ? currentDelay
         : Number.isFinite(originalDelay) && originalDelay >= 0 ? originalDelay : 1;
       const speedProfile = normalizeCommunitySpeedProfile(control.rows[0]?.speed_profile);
-      const delaySeconds = getCommunitySpeedDelay(speedProfile, configuredDelay, patternIndex, control.rows[0]?.amount ?? order.amount);
+      const delaySeconds = getCommunitySpeedDelay(speedProfile, configuredDelay, patternIndex, control.rows[0]?.added ?? added);
       const delayEndsAt = delayStartedAt + delaySeconds * 1_000;
       const nextMemberAt = new Date(delayEndsAt).toISOString();
       const activeDelayUpdate = await pool.query(
