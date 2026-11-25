@@ -2,7 +2,7 @@ import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from ".
 import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
-import { managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
+import { BOT_GATEWAY_PROTOCOL_VERSION, managedWorkerStatus, createManagedBotStarter, managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
@@ -1628,6 +1628,9 @@ function getDiscordOnlinerRuntime(accountId) {
 
 function serializeDiscordOnlinerRuntime(runtime) {
   return {
+    connectionRevision: runtime.connectionRevision ?? null,
+    identifyMode: runtime.identifyMode ?? null,
+    gatewayIntents: runtime.gatewayIntents ?? null,
     authorizationRouteKey: runtime.authorizationRouteKey ?? null,
     currentActivity: runtime.currentActivity,
     connectionState: runtime.state,
@@ -1780,6 +1783,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       richPresenceEnabled: isBot ? false : account?.richPresenceEnabled !== false,
       isBot,
       connectionRevision: isBot ? String(account?.connectionRevision || "").slice(0, 80) : null,
+      connectionRequestedAt: isBot && Number.isFinite(Date.parse(account?.connectionRequestedAt)) ? new Date(account.connectionRequestedAt).toISOString() : null,
       communityBotClientId: isDiscordGuildId(String(account?.communityBotClientId ?? "")) ? String(account.communityBotClientId) : null,
       discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
@@ -2325,7 +2329,7 @@ function getDiscordOnlinerSnapshot(config) {
 }
 
 async function getDiscordOnlinerSnapshotForApi(config) {
-  if (serviceRunsOnliner) return getDiscordOnlinerSnapshot(config);
+  if (serviceRunsOnliner && discordOnlinerWorkerLockClient) return getDiscordOnlinerSnapshot(config);
   const [runtimeResult, logsResult, workerResult] = await Promise.all([
     pool.query("SELECT account_id, payload FROM discord_onliner_runtime WHERE account_id = ANY($1::text[])", [config.accounts.map((account) => account.id)]),
     pool.query("SELECT id, timestamp, level, account_id, message FROM discord_onliner_persisted_logs WHERE message NOT LIKE 'DISPATCH %' ORDER BY id DESC LIMIT 100"),
@@ -2345,6 +2349,7 @@ async function getDiscordOnlinerSnapshotForApi(config) {
       isBot: account.isBot === true,
       richPresenceEnabled: account.richPresenceEnabled !== false,
       currentActivity: saved.currentActivity ?? null,
+      connectionRevision: saved.connectionRevision ?? null,
       connectionState: workerOnline ? saved.connectionState ?? "disconnected" : "disconnected",
       bot: saved.bot ?? null,
       guildCount: Math.max(0, Number(saved.guildCount) || 0),
@@ -2762,6 +2767,9 @@ async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
 function connectDiscordOnliner(config, account, runtime, generation) {
   if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
+  runtime.connectionRevision = account.connectionRevision || null;
+  runtime.identifyMode = account.isBot ? "bot" : "account";
+  runtime.gatewayIntents = account.isBot ? 1 : null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   runtime.heartbeatAcknowledged = true;
   runtime.heartbeatIntervalMs = null;
@@ -2995,6 +3003,7 @@ function connectDiscordOnliner(config, account, runtime, generation) {
       appendDiscordOnlinerLog("success", `READY as ${runtime.bot.tag || runtime.bot.username}.`, account.id);
       scheduleDiscordOnlinerActivityRotation(runtime.config ?? config, account, runtime, generation);
       advanceDiscordOnlinerConnectionQueue(runtime, "connected");
+      queueDiscordOnlinerRuntimePersist(runtime);
       return;
     }
     if (payload.t === "RESUMED") {
@@ -3462,7 +3471,9 @@ async function processDiscordOnlinerWorkerCommands() {
         const accountId = String(command.payload?.accountId ?? "");
         const account = config.accounts.find((item) => item.id === accountId);
         if (!account) throw new Error("Bot profile not found.");
-        reconnectDiscordOnlinerAccount(config, account);
+        const revision = command.payload?.connectionRevision;
+        const alreadyStarted = revision && discordOnlinerRuntimes.get(accountId)?.connectionRevision === revision;
+        if (!revision || (account.connectionRevision === revision && !alreadyStarted)) reconnectDiscordOnlinerAccount(config, account);
         discordOnlinerWorkerCurrentConfig = config;
       } else if (command.command_type === "stop_all") {
         discordOnlinerConnectionsPaused = true;
@@ -3840,9 +3851,9 @@ async function activateDiscordOnlinerWorker(lockClient) {
   discordOnlinerConnectionsPaused = controlResult.rows[0]?.connection_paused === true;
   await pool.query(`
     UPDATE discord_onliner_worker_state
-    SET worker_id = $1, status = 'online', started_at = NOW(), heartbeat_at = NOW(), last_error = NULL
+    SET worker_id = $1, protocol_worker_id = $1, protocol_version = $2, status = 'online', started_at = NOW(), heartbeat_at = NOW(), last_error = NULL
     WHERE singleton = TRUE
-  `, [discordOnlinerWorkerId]);
+  `, [discordOnlinerWorkerId, BOT_GATEWAY_PROTOCOL_VERSION]);
   const deploymentRevision = String(
     process.env.RENDER_GIT_COMMIT
       ?? process.env.RAILWAY_GIT_COMMIT_SHA
@@ -8889,6 +8900,8 @@ async function initializeDiscordOnlinerDatabase() {
     )
   `);
   await pool.query("ALTER TABLE discord_onliner_worker_state ADD COLUMN IF NOT EXISTS connection_paused BOOLEAN NOT NULL DEFAULT FALSE");
+  await pool.query("ALTER TABLE discord_onliner_worker_state ADD COLUMN IF NOT EXISTS protocol_version INTEGER NOT NULL DEFAULT 0");
+  await pool.query("ALTER TABLE discord_onliner_worker_state ADD COLUMN IF NOT EXISTS protocol_worker_id TEXT");
   await pool.query(`
     INSERT INTO discord_onliner_worker_state (singleton, status)
     VALUES (TRUE, 'offline')
@@ -10195,14 +10208,16 @@ registerBotOnlinerManagement(app, requireSession, createBotOnlinerManagement({
   saveConfig: config => saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(config)),
   selectProxy: selectDiscordOnlinerProxy, normalize: normalizeDiscordOnlinerConfig,
   snapshot: getDiscordOnlinerSnapshotForApi,
-  start: (config, account) => {
-    if (serviceRunsOnliner) {
-      const runtime = discordOnlinerRuntimes.get(account.id);
-      if (runtime) stopDiscordOnlinerRuntime(runtime, { resetIdentity: true });
-      startDiscordOnlinerAccounts(config, [account]);
+  getWorkerStatus: async () => managedWorkerStatus((await pool.query("SELECT worker_id, protocol_worker_id, protocol_version, status, heartbeat_at, connection_paused FROM discord_onliner_worker_state WHERE singleton=TRUE")).rows[0]),
+  start: createManagedBotStarter({
+    ownsWorker: () => Boolean(serviceRunsOnliner && discordOnlinerWorkerLockClient),
+    reconnect: reconnectDiscordOnlinerAccount,
+    setCurrentConfig: config => { discordOnlinerWorkerCurrentConfig = config; },
+    enqueue: async payload => {
+      await pool.query("INSERT INTO discord_onliner_commands (command_type, payload) VALUES ('reconnect_account',$1::jsonb)",
+        [JSON.stringify(payload)]);
     }
-    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) discordOnlinerWorkerCurrentConfig = config;
-  }
+  })
 }));
 registerBotAuthorizations(app, requireSession, botAuthorizations);
 

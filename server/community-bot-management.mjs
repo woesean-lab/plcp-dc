@@ -1,5 +1,28 @@
 import crypto from "node:crypto";
 
+export const BOT_GATEWAY_PROTOCOL_VERSION = 1;
+export function managedWorkerStatus(row, now = Date.now()) {
+  return {
+    online: row?.status === "online" && now - Date.parse(row.heartbeat_at) < 15_000,
+    botGatewaySupported: Boolean(row?.worker_id && row.protocol_worker_id === row.worker_id && Number(row.protocol_version) >= BOT_GATEWAY_PROTOCOL_VERSION),
+    paused: row?.connection_paused === true
+  };
+}
+export function createManagedBotStarter({ ownsWorker, reconnect, setCurrentConfig, enqueue }) {
+  return async (config, account) => {
+    if (!config.enabled) return;
+    if (ownsWorker()) {
+      reconnect(config, account);
+      setCurrentConfig(config);
+    } else {
+      await enqueue({ accountId: account.id, connectionRevision: account.connectionRevision });
+    }
+  };
+}
+const workerProblem = worker => !worker.online ? "The Onliner worker is offline. Start the Onliner service before reconnecting this bot."
+  : !worker.botGatewaySupported ? "This Onliner worker has not reported support for the current bot Gateway connection. Update the Onliner worker to the same version as the web service."
+    : worker.paused ? "Gateway connections are paused. Continue Onliner before reconnecting this bot." : null;
+
 export function createManagedBotResolver({ getSharedConfig, loadPoolConfig }) {
   return async clientId => {
     const fail = (message, statusCode) => Object.assign(new Error(message), { statusCode });
@@ -40,7 +63,7 @@ export function safeBotConnectionError(message, account) {
   return value.replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+@/gi, "$1[redacted]@").slice(0, 600) || null;
 }
 
-export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, selectProxy, normalize, start, snapshot, limit = 3000 }) {
+export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, selectProxy, normalize, start, snapshot, getWorkerStatus, limit = 3000 }) {
   let connecting = false;
   const fail = (message, statusCode = 409) => Object.assign(new Error(message), { statusCode });
   async function status(clientIds) {
@@ -48,12 +71,26 @@ export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, 
     const ids = new Set(clientIds);
     const accounts = current.accounts.filter(account => ids.has(account.communityBotClientId));
     const state = accounts.length ? await snapshot({ ...current, accounts }) : null;
+    const worker = current.enabled && accounts.length && getWorkerStatus ? await getWorkerStatus() : null;
     return { bots: accounts.map(account => {
       const runtime = state?.accounts?.find(item => item.id === account.id);
-      const connectionState = !current.enabled ? "disabled" : state?.worker?.connectionPaused ? "paused"
+      let connectionState = !current.enabled ? "disabled" : state?.worker?.connectionPaused ? "paused"
         : runtime?.connectionState || "disconnected";
+      let lastError = connectionState === "connected" ? null : safeBotConnectionError(runtime?.lastError, account);
+      if (worker) {
+        const problem = workerProblem(worker);
+        if (problem && connectionState !== "connected") {
+          connectionState = !worker.online ? "disconnected" : worker.paused ? "paused" : "error";
+          lastError = lastError ? `${lastError} ${problem}` : problem;
+        }
+        else if (worker.botGatewaySupported && account.connectionRevision && runtime?.connectionRevision !== account.connectionRevision) {
+          const waiting = Date.now() - Date.parse(account.connectionRequestedAt) < 30_000;
+          connectionState = waiting ? "connecting" : "error";
+          lastError = waiting ? null : "This bot's reconnect request has not been acknowledged. Check its Onliner connection logs.";
+        }
+      }
       return { clientId: account.communityBotClientId, linked: true, state: connectionState,
-        lastError: connectionState === "connected" ? null : safeBotConnectionError(runtime?.lastError, account) };
+        lastError };
     }) };
   }
   async function connect(clientId) {
@@ -62,12 +99,17 @@ export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, 
     try {
       const bot = await resolveBot(clientId);
       const current = await getConfig();
+      if (current.enabled && getWorkerStatus) {
+        const worker = await getWorkerStatus();
+        const problem = !worker.online || worker.paused ? workerProblem(worker) : null;
+        if (problem) throw fail(problem);
+      }
       const existing = current.accounts.find(account => account.communityBotClientId === bot.clientId || account.botToken === bot.botToken);
       if (!existing && current.accounts.length >= limit) throw fail("Onliner capacity reached. Remove a profile before connecting this bot.");
       const proxyUrl = existing?.proxyUrl || selectProxy(current);
       if (!proxyUrl) throw fail("Add at least one proxy to the Onliner proxy pool first.");
       const account = { ...existing, id: existing?.id || crypto.randomUUID(), botToken: bot.botToken, proxyUrl,
-        isBot: true, communityBotClientId: bot.clientId, connectionRevision: crypto.randomUUID(), richPresenceEnabled: false };
+        isBot: true, communityBotClientId: bot.clientId, connectionRevision: crypto.randomUUID(), connectionRequestedAt: new Date().toISOString(), richPresenceEnabled: false };
       const candidate = normalize({ ...current, accounts: existing
         ? current.accounts.map(item => item.id === existing.id ? account : item) : [...current.accounts, account] });
       await saveConfig(candidate);

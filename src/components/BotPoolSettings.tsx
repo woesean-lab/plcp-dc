@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Bot, Check, CheckCircle2, Clock3, Globe2, Layers3, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw } from "lucide-react";
+import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -140,10 +140,10 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
             {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "secondary"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
           </span>
           <MetricGrid className="bot-pool-row-metrics" label={`${bot.name} delivery metrics`} items={[
-            { label: "Delivered members", value: bot.deliveredMembers || 0, icon: <CheckCircle2 className="h-3.5 w-3.5" />, tone: "success" },
-            { label: "Total orders", value: bot.totalOrders, icon: <Layers3 className="h-3.5 w-3.5" /> },
-            { label: "Active orders", value: bot.activeOrders, icon: <RadioTower className="h-3.5 w-3.5" /> },
-            { label: "Remaining members", value: bot.pendingMembers, icon: <Clock3 className="h-3.5 w-3.5" /> }
+            { label: "Delivered", value: bot.deliveredMembers || 0, tone: "success" },
+            { label: "Orders", value: bot.totalOrders },
+            { label: "Active", value: bot.activeOrders },
+            { label: "Remaining", value: bot.pendingMembers }
           ]} />
         </div>;
       })}</>}</PaginatedList></div> : !error && !loading ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bots yet</strong><span>Add a bot to enable automatic assignment.</span></div> : null}

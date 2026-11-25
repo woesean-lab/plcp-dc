@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { botGatewayIdentify, managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement, safeBotConnectionError } from "./community-bot-management.mjs";
+import fs from "node:fs";
+import vm from "node:vm";
+import { EventEmitter } from "node:events";
+import ts from "typescript";
+import { BOT_GATEWAY_PROTOCOL_VERSION, managedWorkerStatus, createManagedBotStarter, botGatewayIdentify, managedOnlinerAccounts, onlinerGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement, safeBotConnectionError } from "./community-bot-management.mjs";
 
 const sharedId = "111111111111111111", poolId = "222222222222222222";
 test("bot management resolves the selected application's credentials without changing the shared configuration", async () => {
@@ -140,4 +144,129 @@ test("every bot Onliner route requires the admin session", () => {
   registerBotOnlinerManagement({ get: (...args) => routes.push(args), post: (...args) => routes.push(args) }, session, {});
   assert.equal(routes.length, 2);
   assert.ok(routes.every(route => route[1] === session));
+});
+
+test("bot reconnect explicitly reaches the worker that owns the sockets, including standby all-role processes", async () => {
+  const queued = [], started = [], configs = [];
+  let owns = false;
+  const start = createManagedBotStarter({ ownsWorker: () => owns,
+    reconnect: (config, account) => started.push(account), setCurrentConfig: config => configs.push(config),
+    enqueue: async command => queued.push(command)
+  });
+  const account = { id: "only-this-bot", connectionRevision: "revision-one" };
+  await start({ enabled: true }, account);
+  assert.deepEqual(queued, [{ accountId: account.id, connectionRevision: "revision-one" }]);
+  assert.equal(started.length, 0, "a process without the worker lock must not open a duplicate connection");
+  owns = true;
+  await start({ enabled: true }, account);
+  assert.deepEqual(started, [account]);
+  assert.equal(configs.length, 1);
+  assert.equal(queued.length, 1);
+  await start({ enabled: false }, account);
+  assert.equal(started.length, 1, "linking a disabled Onliner does not start it");
+});
+
+test("worker protocol support belongs to the active lock owner and cannot be inherited from a previous worker", () => {
+  const now = Date.now();
+  const current = { worker_id: "current", protocol_worker_id: "current", protocol_version: BOT_GATEWAY_PROTOCOL_VERSION, status: "online", heartbeat_at: new Date(now).toISOString() };
+  assert.deepEqual(managedWorkerStatus(current, now), { online: true, paused: false, botGatewaySupported: true });
+  assert.equal(managedWorkerStatus({ ...current, worker_id: "different" }, now).botGatewaySupported, false);
+  assert.equal(managedWorkerStatus({ ...current, heartbeat_at: new Date(now - 60_000).toISOString() }, now).online, false);
+  assert.equal(managedWorkerStatus(undefined, now).online, false);
+});
+
+test("a running worker without new capability metadata still receives the requested reconnect", async () => {
+  const f = fixture();
+  let started = false;
+  const service = createBotOnlinerManagement({
+    resolveBot: async () => ({ clientId: poolId, botToken: "saved-token" }),
+    getConfig: f.config, saveConfig: async () => {}, selectProxy: () => "http://existing:8080",
+    normalize: value => value, start: async () => { started = true; },
+    getWorkerStatus: async () => ({ online: true, paused: false, botGatewaySupported: false })
+  });
+  await service.connect(poolId);
+  assert.equal(started, true, "missing diagnostic metadata must not block a healthy running service");
+});
+
+test("only the matching acknowledged reconnect clears the previous error; queued attempts do not replay stale 4013 errors", async () => {
+  let runtime = { id: "bot", connectionRevision: "old", connectionState: "error", lastError: "old error 4013" };
+  const account = { id: "bot", communityBotClientId: poolId, botToken: "secret", connectionRevision: "new", connectionRequestedAt: new Date().toISOString() };
+  const service = createBotOnlinerManagement({ getConfig: async () => ({ enabled: true, accounts: [account] }),
+    snapshot: async () => ({ accounts: [runtime] }),
+    getWorkerStatus: async () => ({ online: true, paused: false, botGatewaySupported: true })
+  });
+  let state = (await service.status([poolId])).bots[0];
+  assert.equal(state.state, "connecting");
+  assert.equal(state.lastError, null);
+  runtime = { ...runtime, connectionRevision: "new", lastError: "new error 4013" };
+  state = (await service.status([poolId])).bots[0];
+  assert.equal(state.state, "error");
+  assert.equal(state.lastError, "new error 4013", "an error from this attempt stays visible");
+  runtime = { ...runtime, connectionState: "connected" };
+  state = (await service.status([poolId])).bots[0];
+  assert.equal(state.state, "connected");
+  assert.equal(state.lastError, null);
+  runtime = { ...runtime, connectionRevision: "old" };
+  account.connectionRequestedAt = new Date(Date.now() - 60_000).toISOString();
+  state = (await service.status([poolId])).bots[0];
+  assert.equal(state.state, "error");
+  assert.match(state.lastError, /not been acknowledged/);
+});
+
+const serverSource = fs.readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
+const serverAst = ts.createSourceFile("index.mjs", serverSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+const functionCode = name => serverAst.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(serverAst);
+
+test("the real Onliner HELLO handler sends bot intents and READY acknowledges this exact reconnect", () => {
+  const sockets = [], persisted = [], logs = [];
+  class Socket extends EventEmitter {
+    static OPEN = 1;
+    constructor() { super(); this.readyState = 1; this.sent = []; sockets.push(this); }
+    send(data) { this.sent.push(JSON.parse(data)); }
+  }
+  const context = { URL, WebSocket: Socket, onlinerGatewayIdentify, Date, Math, Number,
+    getDiscordOnlinerProxyEndpoint: () => "proxy", createDiscordOnlinerProxyAgent: () => ({}),
+    onlinerAuthorizationRouteKey: () => "route", appendDiscordOnlinerLog: (_level, message) => logs.push(message),
+    buildDiscordOnlinerAccountPresence: () => ({ status: "online", activities: [], since: null, afk: false }),
+    createDiscordGatewayIdentityProperties: () => ({ browser: "account-client" }), createDiscordGatewayClientState: () => ({}),
+    setTimeout: () => ({ unref() {} }), clearTimeout() {}, clearInterval() {},
+    queueDiscordOnlinerRuntimePersist: runtime => persisted.push({ ...runtime }),
+    scheduleDiscordOnlinerActivityRotation() {}, advanceDiscordOnlinerConnectionQueue() {},
+    isDiscordGuildId: id => /^\d{16,22}$/.test(id)
+  };
+  vm.runInNewContext(functionCode("connectDiscordOnliner") + ";this.connect=connectDiscordOnliner;", context);
+  const runtime = { generation: 1, guildIds: new Set(), state: "error", reconnectAttempt: 0 };
+  const account = { id: "bot", isBot: true, botToken: "private", proxyUrl: "http://proxy:8080", connectionRevision: "request-42" };
+  context.connect({ enabled: true }, account, runtime, 1);
+  assert.equal(sockets.length, 1);
+  sockets[0].emit("message", JSON.stringify({ op: 10, d: { heartbeat_interval: 45000 } }));
+  assert.equal(sockets[0].sent[0].op, 2);
+  assert.equal(sockets[0].sent[0].d.intents, 1);
+  assert.ok(!("client_state" in sockets[0].sent[0].d));
+  assert.ok(logs.some(message => message.includes("bot · intents=1")));
+  sockets[0].emit("message", JSON.stringify({ op: 0, s: 1, t: "READY", d: { user: { id: poolId, username: "bot" }, guilds: [] } }));
+  assert.equal(runtime.state, "connected");
+  assert.equal(runtime.connectionRevision, "request-42");
+  assert.equal(runtime.identifyMode, "bot");
+  assert.equal(runtime.gatewayIntents, 1);
+  assert.equal(runtime.lastError, null);
+  assert.ok(persisted.some(value => value.connectionRevision === "request-42"));
+});
+
+test("worker reconnect commands skip an already started revision and never reconnect unrelated profiles", async () => {
+  let commands = [];
+  const calls = [], runtime = new Map();
+  const account = { id: "target", connectionRevision: "latest" };
+  const context = { pool: { query: async sql => sql.includes("RETURNING id, command_type, payload") ? { rows: commands } : { rows: [] } },
+    discordOnlinerConnectionsPaused: false, getDiscordOnlinerConfig: async () => ({ enabled: true, accounts: [account, { id: "other" }] }),
+    discordOnlinerRuntimes: runtime, reconnectDiscordOnlinerAccount: (_config, value) => { calls.push(value.id); runtime.set(value.id, { connectionRevision: value.connectionRevision }); }
+  };
+  vm.runInNewContext(functionCode("processDiscordOnlinerWorkerCommands") + ";this.process=processDiscordOnlinerWorkerCommands;", context);
+  commands = [{ id: 1, command_type: "reconnect_account", payload: { accountId: "target", connectionRevision: "latest" } }];
+  await context.process();
+  await context.process();
+  assert.deepEqual(calls, ["target"]);
+  commands = [{ id: 2, command_type: "reconnect_account", payload: { accountId: "target", connectionRevision: "stale" } }];
+  await context.process();
+  assert.deepEqual(calls, ["target"]);
 });
