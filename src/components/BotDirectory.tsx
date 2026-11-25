@@ -18,18 +18,20 @@ export function BotDirectory({ bots, loading = false, actions, accountActions }:
       <tbody>{loading ? [0, 1, 2].map(index => <tr key={index} className="bot-directory-skeleton">
         <td><div className="bot-directory-identity"><Skeleton className="h-9 w-9 shrink-0 rounded-lg" /><div className="bot-directory-copy"><Skeleton className="h-4 w-24" /><Skeleton className="h-3 w-36 max-w-full" /></div></div></td>
         {[0, 1, 2, 3].map(metric => <td key={metric}><Skeleton className="h-4 w-12" /><Skeleton className="mt-2 h-3 w-14" /></td>)}<td><Skeleton className="h-8 w-24" /></td>
-      </tr>) : items.map(bot => <tr key={bot.isDefault ? "default" : bot.clientId}>
+      </tr>) : items.map(bot => {
+        const accountAction = accountActions?.(bot);
+        return <tr key={bot.isDefault ? "default" : bot.clientId}>
         <td><div className="bot-directory-identity"><BotAvatar url={bot.avatarUrl} /><div className="bot-directory-copy">
           <div className="bot-directory-name"><strong>{bot.name}</strong>{bot.isDefault ? <Badge variant="secondary">Default</Badge> : null}<Badge variant={bot.enabled ? "success" : "secondary"}>{bot.isDefault ? bot.enabled ? "Configured" : "Not configured" : bot.enabled ? "Enabled" : "Disabled"}</Badge></div>
           <span className="bot-directory-id">{bot.clientId === "default" ? "Set up the default bot" : bot.clientId}</span>
           {bot.serverCount ? <span className="bot-directory-detail">{bot.serverCount} servers</span> : null}
         </div></div></td>
-        <td><span className="bot-directory-mobile-label">Accounts</span><strong className="bot-directory-number">{count(bot.authorizedAccounts)}</strong><span className="bot-directory-detail">{count(bot.activeAccounts)} unexpired</span>{accountActions ? <div className="bot-directory-account-actions">{accountActions(bot)}</div> : null}</td>
+        <td><span className="bot-directory-mobile-label">Accounts</span><strong className="bot-directory-number">{count(bot.authorizedAccounts)}</strong><span className="bot-directory-detail">{count(bot.activeAccounts)} unexpired</span>{accountAction ? <div className="bot-directory-account-actions">{accountAction}</div> : null}</td>
         <td><span className="bot-directory-mobile-label">Delivered</span><strong className="bot-directory-number" data-tone="success">{count(bot.deliveredMembers)}</strong><span className="bot-directory-detail">members</span></td>
         <td><span className="bot-directory-mobile-label">Orders</span><strong className="bot-directory-number">{count(bot.totalOrders)}</strong><span className="bot-directory-detail">{count(bot.activeOrders)} active</span></td>
         <td><span className="bot-directory-mobile-label">Remaining</span><strong className="bot-directory-number">{count(bot.pendingMembers)}</strong><span className="bot-directory-detail">members</span></td>
         <td><span className="community-member-row-actions">{actions(bot)}</span></td>
-      </tr>)}</tbody>
+      </tr>; })}</tbody>
     </table>}</PaginatedList>
     {loading ? <span className="sr-only" role="status">Loading bots</span> : null}
   </div>;
