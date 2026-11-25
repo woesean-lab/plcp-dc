@@ -393,7 +393,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("fields") ? <Section id="fields">
-          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
+          <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns in one row; narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
           <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
             <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
           </Example>

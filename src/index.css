@@ -6931,7 +6931,8 @@
 
 .community-speed-profile-options.community-member-speed-options,
 .monitor-speed-profile-options.community-member-speed-options {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  overflow-x: auto;
 }
 
 .community-member-speed-options > .community-speed-custom-option {
