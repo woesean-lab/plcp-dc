@@ -1,4 +1,4 @@
-.bot-directory { min-width: 0; container: bot-directory / inline-size; overflow: hidden; }
+.bot-directory { min-width: 0; container: bot-directory / inline-size; overflow: hidden; border-radius: var(--app-radius-md); }
 .bot-directory-table { width: 100%; border-collapse: collapse; text-align: left; }
 .bot-directory-table th { padding: 12px 16px; color: var(--app-muted); font-size: 10px; font-weight: 500; background: var(--app-control-bg); border-bottom: 1px solid var(--app-divider); }
 .bot-directory-table td { padding: 18px 16px; vertical-align: middle; border-bottom: 1px solid var(--app-divider); }
