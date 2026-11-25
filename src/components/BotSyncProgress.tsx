@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, Clock3, Copy, Search, TriangleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "./ui/button";
@@ -14,6 +14,22 @@ const labels = { verification: "Verification required", credentials: "Authentica
 async function copy(value: string, label: string) {
   try { await navigator.clipboard.writeText(value); toast.success(`${label} copied.`); }
   catch { toast.error("Could not copy. Select and copy the text manually."); }
+}
+
+function BotSyncErrorRow({ error }: { error: BotSyncJob["errors"][number] & ReturnType<typeof describeBotSyncError> }) {
+  const [expanded, setExpanded] = useState(false);
+  const detailsId = useId();
+  return <article className="bot-sync-error-row">
+    <div className="bot-sync-error-heading">
+      <button type="button" className="bot-sync-error-toggle" aria-label={`Technical details for account ${error.userId}`} aria-expanded={expanded} aria-controls={detailsId} onClick={() => setExpanded(value => !value)}>
+        <TriangleAlert className="h-4 w-4" aria-hidden="true" />
+        <span><strong>{error.userId}</strong><small>{error.title}</small></span>
+        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+      </button>
+      <span className="community-member-row-actions"><Button type="button" variant="secondary" size="icon-sm" aria-label={`Copy account ID ${error.userId}`} title="Copy account ID" onClick={() => void copy(error.userId, "Account ID")}><Copy className="h-3.5 w-3.5" /></Button></span>
+    </div>
+    <div id={detailsId} className="bot-sync-error-response" hidden={!expanded}><p>{error.detail}</p><span>Technical details</span><pre>{error.message}</pre></div>
+  </article>;
 }
 
 export function BotSyncProgress({ job, categoryName }: { job: BotSyncJob; categoryName: string }) {
@@ -40,13 +56,7 @@ export function BotSyncProgress({ job, categoryName }: { job: BotSyncJob; catego
             <FilterDropdown label="Error type" size="compact" showLabel={false} placement="top" value={type} onChange={setType} options={[{ value: "all", label: `All errors (${errors.length})` }, ...BOT_SYNC_ERROR_TYPES.filter(value => errors.some(error => error.type === value)).map(value => ({ value, label: `${labels[value]} (${errors.filter(error => error.type === value).length})` }))]} />
             <Button type="button" variant="secondary" size="xs" disabled={!filtered.length} onClick={() => void copy(filtered.map(error => error.userId).join("\n"), "Account IDs")}><Copy className="h-3.5 w-3.5" />Copy IDs</Button>
           </div>
-          <div className="bot-sync-error-list"><PaginatedList key={`${search}:${type}`} items={filtered} label="Sync error pages">{items => items.map(error => <article className="bot-sync-error-row" key={error.userId}>
-            <details className="bot-sync-error-detail">
-              <summary aria-label={`Technical details for account ${error.userId}`}><TriangleAlert className="h-4 w-4" aria-hidden="true" /><span><strong>{error.userId}</strong><small>{error.title}</small></span><ChevronDown className="h-3.5 w-3.5" aria-hidden="true" /></summary>
-              <div className="bot-sync-error-response"><p>{error.detail}</p><span>Technical details</span><pre>{error.message}</pre></div>
-            </details>
-            <span className="community-member-row-actions"><Button type="button" variant="secondary" size="icon-sm" aria-label={`Copy account ID ${error.userId}`} title="Copy account ID" onClick={() => void copy(error.userId, "Account ID")}><Copy className="h-3.5 w-3.5" /></Button></span>
-          </article>)}</PaginatedList>{!filtered.length ? <div className="stock-empty-state"><Search className="h-5 w-5" /><strong>No matching errors</strong><span>Try another account ID or error type.</span></div> : null}</div>
+          <div className="bot-sync-error-list"><PaginatedList key={`${search}:${type}`} items={filtered} label="Sync error pages">{items => items.map(error => <BotSyncErrorRow key={error.userId} error={error} />)}</PaginatedList>{!filtered.length ? <div className="stock-empty-state" role="status"><Search className="h-5 w-5" /><strong>No matching errors</strong><span>Try another account ID or error type.</span></div> : null}</div>
         </> : null}
       </div>
     </details> : null}
