@@ -1,7 +1,8 @@
 import toast from "react-hot-toast";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RefreshCw, Search } from "lucide-react";
+import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, RefreshCw, Search } from "lucide-react";
 import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
 import { SecretField } from "./ui/secret-field";
 import { BotDirectory, type DirectoryBot } from "./BotDirectory";
@@ -103,7 +104,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
       <p className="settings-field-note">Use for new orders controls participation. Among eligible bots, the fewest remaining members and then active orders determine assignment. Existing orders keep their assigned bot.</p>
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button></div> : null}
       {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} accountActions={bot => bot.isDefault ? null : <Button type="button" size="xs" variant="secondary" aria-label={`Sync accounts for ${bot.name}`} aria-haspopup="dialog" disabled={locked || !bot.hasBotToken || !bot.hasClientSecret || (!preview && !config?.configured)} onClick={() => setSyncing(bot)}><RefreshCw className="h-3.5 w-3.5" />Sync</Button>} actions={bot => <>
-        <Button type="button" size="icon-sm" variant={(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "successGhost" : "destructive"} aria-label={`Use ${bot.name} for new orders`} aria-pressed={bot.isDefault ? defaultUseForNewOrders : bot.enabled} title={`New orders · ${(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "On — click to turn off" : "Off — click to turn on"}`} disabled={locked || !bot.hasBotToken || !bot.hasClientSecret} onClick={() => void toggle(bot, !(bot.isDefault ? defaultUseForNewOrders : bot.enabled))}><Power className="h-3.5 w-3.5" /></Button>
+        <Switch checked={bot.isDefault ? defaultUseForNewOrders : bot.enabled} aria-label={`Use ${bot.name} for new orders`} title={`New orders · ${(bot.isDefault ? defaultUseForNewOrders : bot.enabled) ? "On" : "Off"}`} disabled={locked || !bot.hasBotToken || !bot.hasClientSecret} onCheckedChange={checked => void toggle(bot, checked)} />
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); }}><Pencil className="h-3.5 w-3.5" /></Button>
       </>} /> : !error ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>{search ? "No matching bots" : "No bots yet"}</strong><span>{search ? "Try another name or application ID." : "Add a bot to enable automatic assignment."}</span></div> : null}
