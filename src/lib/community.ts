@@ -1,6 +1,6 @@
 import type { CommunityJoinMethod } from "../types";
 
-export type PoolBot = { clientId: string; name: string; enabled: boolean; activeOrders: number; pendingMembers: number; totalOrders: number; authorizedAccounts?: number; activeAccounts?: number; expiredAccounts?: number; hasBotToken: boolean; hasClientSecret: boolean; createdAt?: string; updatedAt?: string };
+export type PoolBot = { clientId: string; name: string; avatarUrl?: string | null; enabled: boolean; activeOrders: number; pendingMembers: number; totalOrders: number; authorizedAccounts?: number; activeAccounts?: number; expiredAccounts?: number; hasBotToken: boolean; hasClientSecret: boolean; createdAt?: string; updatedAt?: string };
 export type BotAuthorizationJob = { id: string; clientId: string; status: string; categoryId: string; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
 export function getBotAuthorizationJob(clientId: string, signal?: AbortSignal) {
   return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotAuthorizationJob | null>);
@@ -139,6 +139,8 @@ export type CommunityAdminStatus = CommunityJoinSummary & {
 };
 
 export type CommunityConfig = {
+  botName?: string | null;
+  botAvatarUrl?: string | null;
   authorizedAccounts?: number;
   activeAccounts?: number;
   configured: boolean;

@@ -50,7 +50,21 @@ LEFT JOIN LATERAL (
   FROM community_bot_pool_reservations r WHERE r.client_id = b.client_id AND r.expires_at > NOW()
 ) leases ON TRUE`;
 
-export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getSharedConfig }) {
+export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getSharedConfig, getBotIdentity }) {
+  const identities = new Map();
+  async function identity(row) {
+    if (!getBotIdentity) return null;
+    const cached = identities.get(row.client_id);
+    if (cached?.encrypted === row.encrypted_value && cached.expiresAt > Date.now()) return cached.value;
+    const value = Promise.resolve().then(() => {
+      const config = JSON.parse(decrypt(row.encrypted_value));
+      if (config.clientId !== row.client_id) return null;
+      return getBotIdentity(config);
+    }).catch(() => null);
+    if (identities.size >= 200) identities.delete(identities.keys().next().value);
+    identities.set(row.client_id, { encrypted: row.encrypted_value, expiresAt: Date.now() + 60_000, value });
+    return value;
+  }
   const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
   const safe = row => ({ clientId: row.client_id, name: row.name, enabled: row.enabled,
     activeOrders: Number(row.active_orders) || 0, pendingMembers: Number(row.pending_members) || 0,
@@ -71,7 +85,11 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
       } catch { count.expiredAccounts++; }
       counts.set(grant.client_id, count);
     }
-    return result.rows.map(row => ({ ...safe(row), ...(counts.get(row.client_id) || { authorizedAccounts: 0, activeAccounts: 0, expiredAccounts: 0 }) }));
+    return Promise.all(result.rows.map(async row => {
+      const bot = await identity(row);
+      return { ...safe(row), avatarUrl: bot?.avatarUrl || null,
+        ...(counts.get(row.client_id) || { authorizedAccounts: 0, activeAccounts: 0, expiredAccounts: 0 }) };
+    }));
   }
 
   async function save(input, expectedId = null) {

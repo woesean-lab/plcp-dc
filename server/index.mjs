@@ -557,7 +557,7 @@ const orderBotService = createOrderBotService({ pool, request: requestDiscord, e
 });
 
 const communityBotPool = createCommunityBotPool({ pool, encrypt: encryptCredential, decrypt: decryptCredential,
-  verify: orderBotService.prepare, getSharedConfig: getCommunityOAuthConfig });
+  verify: orderBotService.prepare, getSharedConfig: getCommunityOAuthConfig, getBotIdentity: loadCommunityBotSafe });
 const botAuthorizations = createBotAuthorizations({ pool, getConfig: getCommunityOAuthConfig,
   loadBot: communityBotPool.load, token: orderBotService.token, encrypt: encryptCredential, decrypt: decryptCredential,
   request: requestDiscord, refresh: exchangeCommunityOAuthRefreshToken, parseExpiry: parseCommunityAccessTokenExpiry,
@@ -10212,6 +10212,8 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       activeAccounts: Number(accountCounts.rows[0]?.current) || 0,
       activeGuildCount: guildCount.count,
       activeGuildCountExact: guildCount.exact,
+      botName: bot?.name || null,
+      botAvatarUrl: bot?.avatarUrl || null,
       botVerified: bot?.verified === true,
       serverLimit: bot?.verified === true ? null : 100
     });
@@ -10313,6 +10315,8 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       guildName: String(guildResult.payload?.name ?? "Discord server"),
       activeGuildCount: guildCount.count,
       activeGuildCountExact: guildCount.exact,
+      botName: bot?.name || null,
+      botAvatarUrl: bot?.avatarUrl || null,
       botVerified: bot?.verified === true,
       serverLimit: bot?.verified === true ? null : 100
     });

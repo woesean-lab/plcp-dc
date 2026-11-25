@@ -275,7 +275,7 @@ function StockNavigationExample() {
 function SettingsExample() {
   const [saltaConfigured, setSaltaConfigured] = useState(false);
   const [saltaKey, setSaltaKey] = useState("");
-  const [config, setConfig] = useState({ configured: true, stored: true, clientId: "123456789012345678", guildId: "234567890123456789", hasClientSecret: true, hasBotToken: true, guildName: "Sample Members server", activeGuildCount: 3, activeGuildCountExact: true, botVerified: true, serverLimit: 100 });
+  const [config, setConfig] = useState({ configured: true, stored: true, clientId: "123456789012345678", guildId: "234567890123456789", hasClientSecret: true, hasBotToken: true, guildName: "Sample Members server", botName: "Members", botAvatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png", authorizedAccounts: 6895, activeAccounts: 5997, activeGuildCount: 3, activeGuildCountExact: true, botVerified: true, serverLimit: 100 });
   const [draft, setDraft] = useState({ clientId: config.clientId, guildId: config.guildId, clientSecret: "", botToken: "" });
   const [configured, setConfigured] = useState(true);
   const [key, setKey] = useState("");

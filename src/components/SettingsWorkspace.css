@@ -13,11 +13,23 @@
 .settings-content, .settings-content > [role="tabpanel"] { min-width: 0; }
 .bot-pool-body { display: grid; gap: 14px; }
 .bot-pool-body > .settings-field-note { margin-top: 0; }
-.bot-pool-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--app-divider); }
+.bot-settings-list { min-width: 0; container: bots / inline-size; }
+.bot-pool-row { display: grid; grid-template-columns: 35px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid var(--app-divider); }
 .bot-pool-row:last-child { border-bottom: 0; }
-.bot-pool-row-copy { display: grid; flex: 1; min-width: 140px; gap: 5px; overflow-wrap: anywhere; }
-.bot-pool-row-copy strong { font-size: 12px; color: var(--app-text); }
+.bot-pool-row-copy { display: grid; min-width: 0; gap: 7px; overflow-wrap: anywhere; line-height: 1.5; }
+.bot-pool-row-title { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; }
+.bot-pool-row-title > strong { font-size: 12px; color: var(--app-text); }
 .bot-pool-row-copy small { font-size: 11px; color: var(--app-muted); }
+.bot-pool-row-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; color: var(--app-muted); font-size: 11px; }
+.bot-pool-row-stats strong { color: var(--app-text-secondary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.bot-settings-editor { border-top: 1px solid var(--app-divider); }
+.bot-settings-servers { margin-top: 18px; }
+.bot-settings-servers > summary { padding: 16px 22px; }
+.bot-settings-servers > .settings-card { margin-top: 12px; }
+@container bots (max-width: 440px) {
+  .bot-pool-row { grid-template-columns: 35px minmax(0, 1fr); padding: 14px 12px; }
+  .bot-pool-row > .community-member-row-actions { grid-column: 2; justify-self: end; }
+}
 .bot-pool-full-width { grid-column: 1 / -1; }
 .bot-pool-option-status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--app-text-secondary); font-size: 12px; }
 .bot-pool-option-status > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
@@ -44,6 +56,7 @@
 .settings-secret-action { position: absolute; top: 50%; right: 5px; transform: translateY(-50%); }
 .settings-bot-identity { display: flex; min-width: 0; align-items: center; flex-wrap: wrap; gap: 10px; margin: 20px 22px 0; padding: 13px; border: 1px solid var(--app-border); border-radius: var(--app-radius-md); background: var(--app-surface-soft); }
 .settings-bot-avatar { display: grid; flex-shrink: 0; place-items: center; width: 35px; height: 35px; border-radius: 9px; background: var(--app-accent-soft); color: var(--app-accent-bright); }
+.settings-bot-avatar > img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
 .settings-bot-identity > span:nth-child(2) { flex: 1; min-width: 100px; }
 .settings-bot-identity strong { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--app-text); font-size: 11px; }
 .settings-bot-identity small { display: block; margin-top: 3px; color: var(--app-muted); font-size: 10px; }
@@ -89,7 +102,7 @@
   .settings-navigation { position: static; gap: 0; }
   .settings-navigation-label, .settings-storage-note { display: none; }
   .settings-section-tabs.stock-category-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .settings-section-tabs.stock-category-tabs.settings-preference-tabs { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .settings-section-tabs.stock-category-tabs.settings-preference-tabs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .settings-section-tabs.stock-category-tabs button { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
   .settings-section-tabs.stock-category-tabs small { display: none; }
 }

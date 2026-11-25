@@ -50,9 +50,8 @@ export type SettingsWorkspaceProps = {
 };
 
 const SECTIONS = [
-  { id: "connections", label: "Connections", description: "Bot & API credentials", Icon: Settings2 },
-  { id: "bot-pool", label: "Bot pool", description: "Members delivery bots", Icon: Bot },
-  { id: "servers", label: "Bot servers", description: "Access & memberships", Icon: Globe2 }
+  { id: "connections", label: "Connections", description: "APIs & integrations", Icon: Settings2 },
+  { id: "bot-pool", label: "Bots", description: "Default bot & pool", Icon: Bot }
 ] as const;
 type Section = typeof SECTIONS[number]["id"];
 
@@ -67,7 +66,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   const [searchParams, setSearchParams] = useSearchParams();
   const [integrationConfigured, setIntegrationConfigured] = useState(false);
   const requestedSection = searchParams.get("settings");
-  const section: Section = SECTIONS.some(item => item.id === requestedSection) ? requestedSection as Section : "connections";
+  const section: Section = requestedSection === "servers" ? "bot-pool" : SECTIONS.some(item => item.id === requestedSection) ? requestedSection as Section : "connections";
   const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
   const workspace = useRef<HTMLElement | null>(null);
@@ -84,7 +83,6 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   }, [guilds.items, search]);
   const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured)) + Number(integrationConfigured);
   const connectionCount = salta7 ? 4 : 3;
-  const serverCount = config?.activeGuildCount == null ? "—" : `${config.activeGuildCountExact ? "" : "≥ "}${config.activeGuildCount.toLocaleString("en-US")}${config.serverLimit ? ` / ${config.serverLimit.toLocaleString("en-US")}` : ""}`;
   const canSaveMembers = !membersBusy && Boolean(members.draft.clientId.trim())
     && Boolean(config?.hasClientSecret || members.draft.clientSecret.trim()) && Boolean(config?.hasBotToken || members.draft.botToken.trim());
   useEffect(() => {
@@ -94,9 +92,6 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     observer.observe(node);
     return () => observer.disconnect();
   }, []);
-  useEffect(() => {
-    if (section === "servers" && config?.configured) guilds.onOpen();
-  }, [section, config?.configured, guilds.onOpen]);
   function selectSection(next: Section) {
     setSearchParams(current => { const params = new URLSearchParams(current); params.set("settings", next); return params; }, { replace: true });
   }
@@ -110,6 +105,17 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   function resetMembers() {
     members.onDraftChange({ clientId: config?.clientId ?? "", guildId: config?.guildId ?? "", clientSecret: "", botToken: "" });
   }
+
+  const defaultBotEditor = <form onSubmit={members.onSave} className="settings-connection-form" aria-label="Members bot settings">
+    <div className="settings-card-body settings-field-grid">
+      <label className="settings-field"><span className="field-label">Client ID</span><Input autoFocus disabled={membersBusy} value={members.draft.clientId} onChange={(event) => members.onDraftChange({ ...members.draft, clientId: event.target.value })} placeholder="Discord application ID" inputMode="numeric" required /></label>
+      <label className="settings-field"><span className="field-label">Stock server ID</span><Input disabled={membersBusy} value={members.draft.guildId} onChange={(event) => members.onDraftChange({ ...members.draft, guildId: event.target.value })} placeholder="Discord server ID" inputMode="numeric" /></label>
+      <SecretField label="Client secret" saved={config?.hasClientSecret} disabled={membersBusy} value={members.draft.clientSecret} onChange={(event) => members.onDraftChange({ ...members.draft, clientSecret: event.target.value })} placeholder={config?.hasClientSecret ? "Keep saved value" : "Discord client secret"} autoComplete="new-password" />
+      <SecretField label="Bot token" saved={config?.hasBotToken} disabled={membersBusy} value={members.draft.botToken} onChange={(event) => members.onDraftChange({ ...members.draft, botToken: event.target.value })} placeholder={config?.hasBotToken ? "Keep saved value" : "Discord bot token"} autoComplete="new-password" />
+    </div>
+    <div className="settings-form-meta"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Blank secret fields keep the saved values.{membersDirty ? <span className="settings-dirty-dot">Unsaved changes</span> : null}</div>
+    <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={!canSaveMembers}>{members.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{members.saving ? "Verifying…" : config?.configured ? "Save changes" : "Verify & save"}</Button>{membersDirty ? <Button type="button" size="sm" variant="ghost" disabled={membersBusy} onClick={resetMembers}>Reset</Button> : null}</div>{config?.stored ? <Button type="button" size="sm" variant="dangerGhost" disabled={membersBusy} onClick={members.onRemove}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Remove</Button> : null}</footer>
+  </form>;
 
   return <section ref={workspace} className="settings-workspace" aria-label="Workspace settings">
     <header className="page-heading settings-page-heading">
@@ -134,26 +140,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
       <div className="settings-content">
         {error ? <div className="settings-load-error app-panel-soft" role="alert"><span>{error}</span><Button type="button" variant="secondary" size="xs" disabled={loading} onClick={onRefresh}>Retry</Button></div> : null}
         <div id={`${id}-connections-panel`} role="tabpanel" aria-labelledby={`${id}-connections-tab`} hidden={section !== "connections"} tabIndex={0}>
-          <div className="settings-section-heading"><div><h2>Connections</h2><p>Credentials for Members and Boosts.</p></div><span className="settings-section-index">01</span></div>
+          <div className="settings-section-heading"><div><h2>Connections</h2><p>Boost APIs, integrations and automation.</p></div><span className="settings-section-index">01</span></div>
           <div className="settings-connections-grid">
-            <section className="app-panel settings-card" aria-labelledby={`${id}-members-title`}>
-              <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Members stock</span><h3 id={`${id}-members-title`}>Members bot</h3></div><Badge variant={config?.configured ? "success" : "secondary"}>{loading && !config ? "Loading" : config?.configured ? "Configured" : "Not configured"}</Badge></header>
-              {loading && !config ? <div className="settings-card-body settings-form-skeleton" aria-label="Loading Members settings"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div> : <>
-                {config?.configured ? <div className="settings-bot-identity"><span className="settings-bot-avatar" aria-hidden="true"><Bot className="h-5 w-5" /></span><span><strong title={config.guildName}>{config.guildName || "Members bot"}</strong><small>{config.guildId || "No stock server selected"}</small></span><span className="settings-server-count"><Globe2 className="h-3.5 w-3.5" aria-hidden="true" />{serverCount}<small>servers</small></span></div> : null}
-                {config?.configured ? <p className="settings-form-meta">{config.authorizedAccounts || 0} authorized accounts · {config.activeAccounts || 0} unexpired</p> : null}
-                <form onSubmit={members.onSave} className="settings-connection-form" aria-label="Members bot settings">
-                  <div className="settings-card-body settings-field-grid">
-                    <label className="settings-field"><span className="field-label">Client ID</span><Input disabled={membersBusy} value={members.draft.clientId} onChange={(event) => members.onDraftChange({ ...members.draft, clientId: event.target.value })} placeholder="Discord application ID" inputMode="numeric" required /></label>
-                    <label className="settings-field"><span className="field-label">Stock server ID</span><Input disabled={membersBusy} value={members.draft.guildId} onChange={(event) => members.onDraftChange({ ...members.draft, guildId: event.target.value })} placeholder="Discord server ID" inputMode="numeric" /></label>
-                    <SecretField label="Client secret" saved={config?.hasClientSecret} disabled={membersBusy} value={members.draft.clientSecret} onChange={(event) => members.onDraftChange({ ...members.draft, clientSecret: event.target.value })} placeholder={config?.hasClientSecret ? "Keep saved value" : "Discord client secret"} autoComplete="new-password" />
-                    <SecretField label="Bot token" saved={config?.hasBotToken} disabled={membersBusy} value={members.draft.botToken} onChange={(event) => members.onDraftChange({ ...members.draft, botToken: event.target.value })} placeholder={config?.hasBotToken ? "Keep saved value" : "Discord bot token"} autoComplete="new-password" />
-                  </div>
-                  <div className="settings-form-meta"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Blank secret fields keep the saved values.{membersDirty ? <span className="settings-dirty-dot">Unsaved changes</span> : null}</div>
-                  <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={!canSaveMembers}>{members.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{members.saving ? "Verifying…" : config?.configured ? "Save changes" : "Verify & save"}</Button>{membersDirty ? <Button type="button" size="sm" variant="ghost" disabled={membersBusy} onClick={resetMembers}>Reset</Button> : null}</div>{config?.stored ? <Button type="button" size="sm" variant="dangerGhost" disabled={membersBusy} onClick={members.onRemove}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Remove</Button> : null}</footer>
-                </form>
-              </>}
-            </section>
-
             <section className="app-panel settings-card settings-dcord-card" aria-labelledby={`${id}-dcord-title`}>
               <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><KeyRound className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Boost delivery</span><h3 id={`${id}-dcord-title`}>Dcord API</h3></div><Badge variant={dcord.configured ? "success" : "secondary"}>{dcord.configured ? "Configured" : "Not configured"}</Badge></header>
               <form onSubmit={dcord.onSave} className="settings-connection-form" aria-label="Dcord settings">
@@ -178,11 +166,10 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
         </div>
 
         <div id={`${id}-bot-pool-panel`} role="tabpanel" aria-labelledby={`${id}-bot-pool-tab`} hidden={section !== "bot-pool"} tabIndex={0}>
-          <div className="settings-section-heading"><div><h2>Bot pool</h2><p>Saved bots for automatic Members order assignment.</p></div><span className="settings-section-index">02</span></div>
-          {section === "bot-pool" ? <BotPoolSettings preview={integrationPreview} /> : null}
-        </div>
-        <div id={`${id}-servers-panel`} role="tabpanel" aria-labelledby={`${id}-servers-tab`} hidden={section !== "servers"} tabIndex={0}>
-          <div className="settings-section-heading"><div><h2>Bot servers</h2><p>Servers joined by the Members bot.</p></div><span className="settings-section-index">03</span></div>
+          <div className="settings-section-heading"><div><h2>Bots</h2><p>Manage the default bot and pool bots together.</p></div><span className="settings-section-index">02</span></div>
+          {section === "bot-pool" ? <BotPoolSettings preview={integrationPreview} defaultConfig={config} defaultEditor={defaultBotEditor} disabled={membersBusy} onRefreshDefault={onRefresh} /> : null}
+          <details className="lookup-technical-details bot-settings-servers" open={requestedSection === "servers" || undefined} onToggle={event => { if (event.currentTarget.open && config?.configured) guilds.onOpen(); }}>
+            <summary><span><Globe2 className="h-3.5 w-3.5" aria-hidden="true" />Default bot servers</span><small>{config?.botName || "Default bot"}</small></summary>
           <section className="app-panel settings-card" aria-label="Members bot servers">
             <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Server access</span><h3>Connected servers</h3></div><Button type="button" size="sm" variant="secondary" disabled={!config?.configured || guilds.loading || guilds.leaving} onClick={guilds.onRefresh}><RefreshCw className={`h-3.5 w-3.5${guilds.loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh</Button></header>
             {!config?.configured ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bot configured</strong><span>Server access is unavailable.</span></div> : <>
@@ -195,6 +182,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
               <footer className="settings-card-footer"><span className="settings-selection-count"><strong>{selectedGuilds.length}</strong> selected</span><Button type="button" size="sm" variant="dangerGhost" disabled={guilds.loading || guilds.leaving || !selectedGuilds.length} onClick={guilds.onLeave}>{guilds.leaving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}{guilds.leaving ? "Leaving…" : "Leave selected"}</Button></footer>
             </>}
           </section>
+          </details>
         </div>
 
 

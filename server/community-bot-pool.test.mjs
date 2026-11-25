@@ -11,6 +11,61 @@ const a = "222222222222222222", b = "333333333333333333", guild = "4444444444444
 const encrypt = value => Buffer.from(value).toString("base64");
 const decrypt = value => Buffer.from(value, "base64").toString();
 
+test("existing pool bots load cached Discord avatars without changing credentials or exposing them", async () => {
+  let calls = 0;
+  let credential = encrypt(JSON.stringify({ clientId: a, botToken: "token-one", clientSecret: "private-secret" }));
+  const queries = [];
+  const service = createCommunityBotPool({ encrypt, decrypt,
+    pool: { query: async sql => {
+      queries.push(sql);
+      return { rows: sql.includes("FROM community_bot_pool_credentials") ? [] : [
+        { client_id: a, name: "Custom label", enabled: true, encrypted_value: credential, active_orders: 2, pending_members: 90 }
+      ] };
+    } },
+    getBotIdentity: async config => {
+      calls++;
+      assert.equal(config.clientId, a);
+      if (config.botToken === "token-two") throw new Error("Discord unavailable");
+      return { name: "Discord name", avatarUrl: "https://cdn.discordapp.com/avatars/example.png", botToken: config.botToken };
+    }
+  });
+  const [first, concurrent] = await Promise.all([service.list(), service.list()]);
+  assert.equal(calls, 1, "concurrent reads share the identity request");
+  assert.equal(first[0].name, "Custom label");
+  assert.equal(first[0].avatarUrl, "https://cdn.discordapp.com/avatars/example.png");
+  assert.equal(first[0].activeOrders, 2);
+  assert.deepEqual(first, concurrent);
+  assert.equal(first[0].authorizedAccounts, 0);
+  assert.ok(!JSON.stringify(first).includes("private-secret"));
+  assert.ok(!JSON.stringify(first).includes("token-one"));
+  await service.list();
+  assert.equal(calls, 1);
+  credential = encrypt(JSON.stringify({ clientId: a, botToken: "token-two", clientSecret: "private-secret" }));
+  const unavailable = await service.list();
+  assert.equal(calls, 2, "changed credentials invalidate the cached identity");
+  assert.equal(unavailable[0].avatarUrl, null);
+  assert.equal(unavailable[0].name, "Custom label");
+  assert.equal(unavailable[0].enabled, true);
+  await service.list();
+  assert.equal(calls, 2, "failed identity reads are cached to avoid repeated requests");
+  assert.ok(queries.every(sql => sql.trim().startsWith("SELECT")), "viewing profiles never rewrites settings or credentials");
+});
+
+test("unreadable pool credentials still produce a usable row without a Discord request", async () => {
+  let called = false;
+  const service = createCommunityBotPool({ encrypt, decrypt,
+    pool: { query: async sql => ({ rows: sql.includes("FROM community_bot_pool_credentials") ? [] : [
+      { client_id: a, name: "Existing bot", enabled: false, encrypted_value: "unreadable" }
+    ] }) },
+    getBotIdentity: async () => { called = true; return {}; }
+  });
+  const bots = await service.list();
+  assert.equal(bots[0].name, "Existing bot");
+  assert.equal(bots[0].avatarUrl, null);
+  assert.equal(bots[0].enabled, false);
+  assert.equal(called, false);
+});
+
 async function fixture(run) {
   const { PGlite } = await import(pgRuntime.href);
   const db = new PGlite();
