@@ -102,3 +102,31 @@ test("compact stock polling retains member runtime state without returning token
   assert.equal(res.body.accounts[0].connectionState, "disconnected");
   assert.equal(res.body.accounts[0].lastError, "Onliner worker is offline.");
 });
+
+test("fresh bot authorization loads only saved proxy/account settings, preserving the chosen account route", async () => {
+  const calls = [];
+  const member = { discord_user_id: userId, encrypted_account_token: "encrypted-account" };
+  const config = { clientId: "pool-app", guildId: "stock", redirectUri: "https://example.com/callback" };
+  const linked = { id: "onliner-member", botToken: "account-token", proxyUrl: "http://account-proxy:8080" };
+  const scope = {
+    decryptCredential: () => "account-token",
+    getDiscordOnlinerConfig: async options => {
+      assert.equal(options.hydrateMedia, false);
+      return { accounts: [linked], proxyPool: [linked.proxyUrl] };
+    },
+    normalizeDiscordOnlinerProxyUrl: value => value,
+    selectDiscordOnlinerProxy: () => { assert.fail("The account's existing proxy must be retained"); },
+    authorizeCommunityStockAccount: async input => {
+      calls.push(input);
+      return { discordUserId: userId, oauth: { accessToken: "new-access" } };
+    },
+    runWithHumanizerGatewaySession() {}, getConnectedCommunityAuthorizationGatewayUser() {}, requestDiscordThroughProxy() {}, exchangeCommunityOAuthAuthorizationCode() {}
+  };
+  vm.runInNewContext(`${functionCode("authorizeStockMemberForBot")};this.authorize = authorizeStockMemberForBot;`, scope);
+  const result = await scope.authorize(config, member);
+  assert.equal(result.accessToken, "new-access");
+  assert.equal(result.authorizationProxy, linked.proxyUrl);
+  assert.equal(calls[0].gatewayBeforeAuth, true);
+  assert.equal(calls[0].onlinerAccount, linked);
+  assert.equal(calls[0].accountToken, "account-token");
+});

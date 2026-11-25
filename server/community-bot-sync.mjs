@@ -6,6 +6,24 @@ export const BOT_SYNC_STORAGE_SQL = `CREATE TABLE IF NOT EXISTS community_bot_sy
 );
 CREATE UNIQUE INDEX IF NOT EXISTS community_bot_sync_one_active ON community_bot_sync_jobs(client_id) WHERE status IN ('queued','running','paused');`;
 
+// Keep the existing minimum cadence, without waiting for an interval boundary
+// after slow account work. Only one tick is in flight at a time.
+export function startBotSyncWorker({ tick, onError, intervalMs = 2_000, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout }) {
+  let stopped = false, timer;
+  const schedule = delay => {
+    timer = setTimer(() => { timer = undefined; void run(); }, delay);
+    timer?.unref?.();
+  };
+  const run = async () => {
+    const startedAt = now();
+    try { await tick(); }
+    catch (error) { onError(error); }
+    finally { if (!stopped) schedule(Math.max(0, intervalMs - (now() - startedAt))); }
+  };
+  schedule(intervalMs);
+  return () => { stopped = true; if (timer !== undefined) clearTimer(timer); };
+}
+
 export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, legacy }) {
   let running = false;
   const fail = (message, statusCode = 409) => Object.assign(new Error(message), { statusCode });

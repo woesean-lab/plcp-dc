@@ -4,7 +4,7 @@ import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-
 import { createBotOrderSettings, registerBotOrderSettings } from "./community-bot-order-settings.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
 import { createManagedBotResolver, withoutManagedBotProfiles } from "./community-bot-management.mjs";
-import { createBotSync, registerBotSync, BOT_SYNC_STORAGE_SQL } from "./community-bot-sync.mjs";
+import { createBotSync, registerBotSync, startBotSyncWorker, BOT_SYNC_STORAGE_SQL } from "./community-bot-sync.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
@@ -537,7 +537,7 @@ async function authorizeStockMemberForBot(config, member) {
   }
   if (!encryptedAccountToken) throw new Error("This member needs a stored account token to authorize the order bot.");
   const accountToken = decryptCredential(encryptedAccountToken);
-  const onliner = await getDiscordOnlinerConfig();
+  const onliner = await getDiscordOnlinerConfig({ hydrateMedia: false });
   const linked = onliner.accounts.find(account => account.botToken === accountToken);
   const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
   if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
@@ -15862,8 +15862,7 @@ if (serviceRunsWeb) {
   const communityAutoLeaveTimer = setInterval(runCommunityAutoLeaveJobs, communityAutoLeavePollMs);
   const botAuthorizationTimer = setInterval(() => void botAuthorizations.tick().catch(error => console.error("Bot authorization job failed:", error.message)), 2_000);
   botAuthorizationTimer.unref();
-  const botSyncTimer = setInterval(() => void botSync.tick().catch(error => console.error("Bot sync failed:", error.message)), 2_000);
-  botSyncTimer.unref();
+  startBotSyncWorker({ tick: () => botSync.tick(), onError: error => console.error("Bot sync failed:", error.message) });
   communityAutoLeaveTimer.unref();
   const communityAutoLeaveInitialTimer = setTimeout(runCommunityAutoLeaveJobs, 1_000);
   communityAutoLeaveInitialTimer.unref();
