@@ -6929,15 +6929,20 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-@media (max-width: 760px) {
-  .community-speed-profile-options.community-member-speed-options {
-    grid-template-columns: 1fr;
-  }
+.community-member-speed-options > .community-speed-custom-option {
+  grid-column: 1 / -1;
 }
 
 @media (max-width: 520px) {
-  .monitor-speed-profile-options.community-member-speed-options {
-    grid-template-columns: 1fr;
+  .community-speed-profile-options.community-member-speed-options button,
+  .monitor-speed-profile-options.community-member-speed-options button {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .community-member-speed-options button em {
+    grid-column: 2;
+    justify-self: start;
   }
 }
 

@@ -26,6 +26,5 @@ export function CommunitySpeedProfileOptions({ value, added = 0, onChange, disab
       <em>{key === "balanced2" ? getCommunitySpeedRange(key, added) : timing}</em>
     </button>)}
     {children}
-    {value === "balanced2" ? <p className="col-span-full text-xs text-[var(--app-muted)]">Members 1–250: 1–6s · 251–400: 30–60s · 401+: 30–300s</p> : null}
   </div>;
 }
