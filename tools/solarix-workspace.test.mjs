@@ -14,17 +14,19 @@ const text = node => typeof node === "string" || typeof node === "number" ? Stri
 function nodes(node, type) { return !node ? [] : Array.isArray(node) ? node.flatMap(item => nodes(item, type)) : typeof node === "object" && node.props ? [...(node.type === type ? [node] : []), ...nodes(node.props.children, type)] : []; }
 class SolarixRequestError extends Error { constructor(message, status) { super(message); this.status = status; } }
 function fixture({ restore, configured = true, unavailable = false } = {}) {
-  const slots = [], effects = [], timers = new Map(), submissions = [], reads = [], saved = new Map(restore ? [["solarix-aio:last-request", restore.id]] : []);
+  const slots = [], effects = [], timers = new Map(), submissions = [], reads = [], navigations = [], saved = new Map(restore ? [["solarix-aio:last-request", restore.id]] : []);
   let cursor = 0, dirty = true, mounted = true, tree, counter = 0, receipt = restore;
   const dependencies = {
     react: {
       createContext: () => ({ Provider: "context" }), useContext() {},
+      useCallback(fn, deps) { const index = cursor++; const previous = slots[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) slots[index] = { deps, fn }; return slots[index].fn; },
       useId() { cursor++; return "test"; },
       useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = typeof initial === "function" ? initial() : initial; return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; dirty = true; }]; },
       useRef(value) { const index = cursor++; if (!(index in slots)) slots[index] = { current: value }; return slots[index]; },
       useEffect(fn, deps) { const index = cursor++; const previous = slots[index]; if (!previous || deps.some((value, i) => value !== previous.deps[i])) effects.push(() => { previous?.cleanup?.(); slots[index] = { deps, cleanup: fn() }; }); }
     },
     "react/jsx-runtime": jsx, "react-hot-toast": { default: { success() {}, error() {} } },
+    "react-router-dom": { useNavigate: () => path => navigations.push(path) },
     "lucide-react": Object.fromEntries(["CheckCircle2", "Copy", "Gem", "LoaderCircle", "RefreshCw", "TriangleAlert"].map(name => [name, "svg"])),
     "./BotSettingsDialog": { BotSettingsDialog: "dialog" }, "./ui/badge": { Badge: "badge" }, "./ui/button": { Button: "button" }, "./ui/input": { Input: "input" }, "./ui/filter-dropdown": { FilterDropdown: "select" }, "./ui/skeleton": { Skeleton: "skeleton" }, "./SolarixSettings": { SolarixSetupLink: "setup" },
     "../lib/solarix-aio": {
@@ -39,10 +41,11 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
   vm.runInNewContext(code, scope);
   function render() { cursor = 0; dirty = false; tree = scope.exports.SolarixProvider({ children: null }); effects.splice(0).forEach(fn => fn()); }
   async function flush() { for (let i = 0; i < 10; i++) { if (dirty && mounted) render(); await new Promise(resolve => setImmediate(resolve)); if (!dirty) break; } }
-  return { flush, submissions, reads, saved, setReceipt: value => { receipt = value; }, get receipt() { return receipt; }, get tree() { return tree; },
-    async open() { tree.props.value.openOrder(input); await flush(); },
+  return { flush, submissions, reads, saved, navigations, setReceipt: value => { receipt = value; }, get receipt() { return receipt; }, get tree() { return tree; },
+    async open() { tree.props.value.openOrder(); await flush(); },
+    async refresh() { tree.props.value.refreshStock(); await flush(); },
     button(label) { const value = nodes(tree, "button").find(node => text(node) === label || node.props["aria-label"] === label); assert.ok(value, `Missing ${label}`); return value.props; },
-    submit() { const form = nodes(tree, "form")[0]; assert.ok(form); form.props.onSubmit({ preventDefault() {} }); },
+    submit(value = input) { tree.props.value.startOrder(value); },
     async close() { nodes(tree, "dialog")[0].props.onClose(); await flush(); },
     async tick() { assert.ok(timers.size); const [id, fn] = timers.entries().next().value; timers.delete(id); fn(); await flush(); },
     stop() { mounted = false; slots.forEach(slot => slot?.cleanup?.()); }
@@ -50,8 +53,8 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
 }
 
 test("double submit sends one delivery and closing the dialog preserves result polling", async () => {
-  const f = fixture(); await f.flush(); await f.open();
-  assert.equal(f.button("Place order").disabled, false);
+  const f = fixture(); await f.flush(); await f.refresh();
+  assert.equal(nodes(f.tree, "dialog").length, 0);
   f.submit(); f.submit(); await f.flush();
   assert.equal(f.submissions.length, 1); assert.equal(f.saved.get("solarix-aio:last-request"), f.receipt.id);
   await f.close(); assert.equal(nodes(f.tree, "dialog").length, 0);
@@ -60,10 +63,10 @@ test("double submit sends one delivery and closing the dialog preserves result p
   assert.ok(text(f.tree).includes("Partially delivered")); assert.ok(text(f.tree).includes("Sample server"));
   assert.equal(f.submissions.length, 1);
   let prevented = false;
-  f.button("New order").onClick({ preventDefault() { prevented = true; } }); await f.flush();
+  f.button("Back to order form").onClick({ preventDefault() { prevented = true; } }); await f.flush();
   assert.equal(prevented, true);
-  assert.equal(nodes(f.tree, "form").length, 1);
-  assert.equal(f.button("Place order").type, "submit");
+  assert.equal(nodes(f.tree, "dialog").length, 0);
+  assert.deepEqual(f.navigations, ["/manage?tab=create&boostService=solarix"]);
   assert.equal(f.submissions.length, 1);
   f.stop();
 });
@@ -78,8 +81,21 @@ test("reloading a saved request reads its receipt without making a new order", a
 
 test("an unconfigured integration and unavailable stock disable submission", async () => {
   for (const options of [{ configured: false }, { unavailable: true }]) {
-    const f = fixture(options); await f.flush(); await f.open();
-    assert.equal(f.button("Place order").disabled, true); f.submit(); await f.flush();
+    const f = fixture(options); await f.flush(); await f.refresh();
+    f.submit(); await f.flush();
     assert.equal(f.submissions.length, 0); f.stop();
   }
+});
+
+test("Create order submits the existing form values directly and exposes no second editor", async () => {
+  const f = fixture(); await f.flush(); await f.refresh();
+  const selected = { invite: "chosen-server", amount: 14, duration: "3m" };
+  f.submit(selected); await f.flush();
+  assert.equal(f.submissions.length, 1);
+  assert.equal(f.submissions[0].invite, selected.invite);
+  assert.equal(f.submissions[0].amount, selected.amount);
+  assert.equal(f.submissions[0].duration, selected.duration);
+  assert.equal(nodes(f.tree, "form").length, 0);
+  assert.equal(nodes(f.tree, "input").length, 0);
+  f.stop();
 });

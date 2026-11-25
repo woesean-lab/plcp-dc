@@ -166,7 +166,7 @@ import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, BoostUs
 import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
-import { BoostServiceField } from "../components/BoostServiceField";
+import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
 import { useSolarix } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
@@ -180,7 +180,7 @@ const EMPTY_FORM = {
   delay: 1,
   duration: 1 as 1 | 3,
   boostStockPool: "regular" as "regular" | "rotating",
-  boostProvider: "salta7" as "dcord" | "salta7",
+  boostProvider: "salta7" as BoostServiceChoice,
   removeTwoFactor: true,
   autoReplace: false,
   useProxy: true,
@@ -575,7 +575,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
 
 export default function HomePage() {
   const solarix = useSolarix();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const activeTab = normalizeAdminTab(searchParams.get("tab"));
 
@@ -773,6 +773,15 @@ export default function HomePage() {
   const runningAutoLeaveOrderKey = runningAutoLeaveOrderIds.join("|");
 
   const selectedIsBoost = isBoostService(form.service);
+  const selectedIsSolarix = selectedIsBoost && form.boostProvider === "solarix";
+  const solarixLoading = Boolean(selectedIsSolarix && (solarix?.loading || (!solarix?.config && !solarix?.error)));
+  const solarixCapacity = solarix?.stock?.tiers.find(tier => tier.duration === (form.duration === 3 ? "3m" : "1m"))?.boosts;
+  useEffect(() => { if (selectedIsSolarix) solarix?.refreshStock(); }, [selectedIsSolarix, solarix?.refreshStock]);
+  useEffect(() => {
+    if (searchParams.get("boostService") !== "solarix") return;
+    setForm(current => ({ ...current, service: "DCORD-BOOSTS", boostProvider: "solarix", boostStockPool: "regular" }));
+    const next = new URLSearchParams(searchParams); next.delete("boostService"); setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
   const selectedIsCommunity = isCommunityService(form.service);
   const communityCategories = communityStatus?.stockCategories ?? [];
   const selectedCommunityAllocations = form.communityMultiCategory
@@ -812,8 +821,9 @@ export default function HomePage() {
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
-  const selectedApiConfigured = selectedIsBoost ? (form.boostProvider === "salta7" ? salta7Configured : dcordConfigured) : Boolean(communityStatus?.configured);
+  const selectedApiConfigured = selectedIsSolarix ? Boolean(solarix?.config?.configured) : selectedIsBoost ? (form.boostProvider === "salta7" ? salta7Configured : dcordConfigured) : Boolean(communityStatus?.configured);
   const selectedCanCreate = selectedApiConfigured && (
+    selectedIsSolarix ? !solarixLoading && !solarix?.error && Boolean(form.serverId.trim()) && Number.isInteger(form.amount) && form.amount >= 2 && form.amount % 2 === 0 && form.amount <= Math.min(1000, solarixCapacity ?? 0) :
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
       !checkingAvailability &&
@@ -830,7 +840,7 @@ export default function HomePage() {
     setForm((current) => ({ ...current, communityJoinMethod: selectedCommunityJoinMethods[0] }));
   }, [form.communityJoinMethod, selectedCommunityJoinMethods.join("|"), selectedIsCommunity]);
   const rotatingCapacity = rotatingAccounts.filter((row) => row.status === "available").length * 2;
-  const selectedBoostCapacity = form.boostStockPool === "rotating" ? rotatingCapacity : form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
+  const selectedBoostCapacity = selectedIsSolarix ? Math.min(1000, solarixCapacity ?? 0) : form.boostStockPool === "rotating" ? rotatingCapacity : form.duration === 3 ? boostStock.threeMonth * 2 : boostStock.oneMonth * 2;
 
   const regularUsedBoostTokens = useMemo(() => usedBoostTokens.filter((item) => item.boostStockPool !== "rotating"), [usedBoostTokens]);
   const rotatingUsedBoostTokens = useMemo(() => usedBoostTokens.filter((item) => item.boostStockPool === "rotating"), [usedBoostTokens]);
@@ -1284,7 +1294,7 @@ export default function HomePage() {
 
     const requestId = ++availabilityRequestRef.current;
 
-    if (!form.serverId.trim()) {
+    if (!form.serverId.trim() || selectedIsSolarix) {
       setAvailability("");
       setAvailabilityMaximum(null);
       setCommunityAvailability({});
@@ -1301,7 +1311,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.boostStockPool, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.boostStockPool, form.boostProvider, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -3087,6 +3097,10 @@ export default function HomePage() {
 
   function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
+    if (selectedIsSolarix) {
+      if (selectedCanCreate) solarix?.startOrder({ invite: form.serverId.trim(), amount: form.amount, duration: form.duration === 3 ? "3m" : "1m" });
+      return;
+    }
 
     if (selectedIsCommunity && (checkingAvailability || availabilityMaximum === null)) {
       notifyError("Wait for the available member count to load.");
@@ -3108,7 +3122,7 @@ export default function HomePage() {
       delay: selectedIsBoost ? undefined : form.delay,
       duration: selectedIsBoost ? form.duration : undefined,
       boostStockPool: selectedIsBoost ? form.boostStockPool : undefined,
-      boostProvider: selectedIsBoost ? form.boostProvider : undefined,
+      boostProvider: selectedIsBoost && form.boostProvider !== "solarix" ? form.boostProvider : undefined,
       removeTwoFactor: selectedIsBoost ? form.removeTwoFactor : undefined,
       autoReplace: form.autoReplace,
       useProxy: selectedIsBoost ? form.boostProvider !== "salta7" && form.boostStockPool !== "rotating" : undefined,
@@ -3758,15 +3772,16 @@ export default function HomePage() {
                       <div className="service-selector-heading">
                         <div>
                           <span className={fieldLabelClass}>Boost stock source</span>
-                          <p className="service-selector-copy">Stock pool for this order.</p>
+                          <p className="service-selector-copy">{selectedIsSolarix ? "SolarixAIO stock for this order." : "Stock pool for this order."}</p>
                         </div>
-                        <span className="service-selector-count">3 stock options</span>
+                        <span className="service-selector-count">{selectedIsSolarix ? "2" : "3"} stock options</span>
                       </div>
-                      <div className="service-grid boost-duration-grid">
-                        {([{ duration: 1, pool: "regular" }, { duration: 3, pool: "regular" }, { duration: 1, pool: "rotating" }] as const).map(({ duration, pool }, index) => {
+                      <div className="service-grid boost-duration-grid" data-provider={selectedIsSolarix ? "solarix" : undefined}>
+                        {([{ duration: 1, pool: "regular" }, { duration: 3, pool: "regular" }, { duration: 1, pool: "rotating" }] as const).filter(option => !selectedIsSolarix || option.pool !== "rotating").map(({ duration, pool }, index) => {
                           const selected = form.duration === duration && form.boostStockPool === pool;
-                          const tokenStock = pool === "rotating" ? rotatingCapacity / 2 : duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
-                          const boostCapacity = tokenStock * 2;
+                          const solarixTier = selectedIsSolarix ? solarix?.stock?.tiers.find(tier => tier.duration === (duration === 3 ? "3m" : "1m")) : null;
+                          const tokenStock = selectedIsSolarix ? solarixTier?.tokens : pool === "rotating" ? rotatingCapacity / 2 : duration === 3 ? boostStock.threeMonth : boostStock.oneMonth;
+                          const boostCapacity = selectedIsSolarix ? solarixTier?.boosts : (tokenStock ?? 0) * 2;
                           const requiredTokens = Math.max(1, Math.ceil((Number(form.amount) || 0) / 2));
 
                           return (
@@ -3781,9 +3796,10 @@ export default function HomePage() {
                                 name="boostDuration"
                                 value={`${pool}-${duration}`}
                                 checked={selected}
+                                disabled={selectedIsSolarix && (solarixLoading || Boolean(solarix?.error) || !solarixTier)}
                                 onChange={() =>
                                   setForm((current) => {
-                                    const nextCapacity = boostCapacity;
+                                    const nextCapacity = boostCapacity ?? 0;
                                     const nextAmount = nextCapacity > 0 ? Math.min(current.amount, nextCapacity) : current.amount;
                                     return {
                                       ...current,
@@ -3812,13 +3828,15 @@ export default function HomePage() {
                               </span>
                               <span className="service-option-title">{pool === "rotating" ? "Rotating · 30 Days" : `${duration} Month`}</span>
                               <span className="service-option-description">
-                                {tokenStock} tokens available · {requiredTokens} needed
+                                {solarixLoading ? "Loading SolarixAIO stock…" : selectedIsSolarix && !solarixTier ? "Stock unavailable" : <>{tokenStock} tokens available · {requiredTokens} needed</>}
                               </span>
-                              <span className="service-option-code service-option-code-badge">{boostCapacity} BOOSTS</span>
+                              <span className="service-option-code service-option-code-badge">{solarixLoading ? "Loading…" : boostCapacity === undefined ? "Unavailable" : `${boostCapacity} BOOSTS`}</span>
                             </label>
                           );
                         })}
                       </div>
+                      {selectedIsSolarix && solarix?.error ? <div className="settings-load-error app-panel-soft mt-3" role="alert"><span>{solarix.error}</span><Button type="button" variant="secondary" size="xs" disabled={solarix.loading} onClick={solarix.refreshStock}>Retry stock</Button></div> : null}
+                      {selectedIsSolarix && !solarixLoading && solarix?.stock && !solarix.error ? <p className="settings-field-note">Stock checked at {new Date(solarix.stock.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}. <Button type="button" variant="link" size="xs" onClick={solarix.refreshStock}>Refresh stock</Button></p> : null}
                     </fieldset>
                   ) : null}
 
@@ -3831,8 +3849,8 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
-                        <BoostServiceField useProxy={form.boostStockPool !== "rotating"} value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} onSolarix={() => solarix?.openOrder({ invite: form.serverId, amount: form.amount, duration: form.duration === 3 ? "3m" : "1m" })} />
-                        <div className="boost-order-grid">
+                        <BoostServiceField useProxy={form.boostStockPool !== "rotating"} value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider, boostStockPool: boostProvider === "solarix" ? "regular" : current.boostStockPool }))} />
+                        <div className="boost-order-grid" data-provider={selectedIsSolarix ? "solarix" : undefined}>
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Boosts</span>
                             <div className="boost-amount-control">
@@ -3882,7 +3900,7 @@ export default function HomePage() {
                             </div>
                           </label>
 
-                          <label className="boost-order-field">
+                          {!selectedIsSolarix ? <><label className="boost-order-field">
                             <span className="boost-order-label">Concurrency</span>
                             <input
                               className="boost-number-input"
@@ -3917,6 +3935,7 @@ export default function HomePage() {
                             <strong>Eldorado sale?</strong>
                             <small>Show Eldorado promotion on the customer monitor.</small>
                           </label>
+                          </> : null}
                         </div>
                       </div>
                     </div>
@@ -4096,11 +4115,11 @@ export default function HomePage() {
                     {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Plus className="h-4 w-4" aria-hidden="true" />}
                     {creating ? "Creating..." : "Create order"}
                   </Button>
-                  {!selectedApiConfigured ? (
+                  {!selectedApiConfigured && !solarixLoading ? (
                     <Button asChild variant="secondary" className="max-sm:w-full">
                       <Link to="/manage?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
-                        Configure {selectedIsBoost ? form.boostProvider === "salta7" ? "Salta7" : "Dcord" : "Members bot"}
+                        Configure {selectedIsSolarix ? "SolarixAIO" : selectedIsBoost ? form.boostProvider === "salta7" ? "Salta7" : "Dcord" : "Members bot"}
                       </Link>
                     </Button>
                   ) : null}

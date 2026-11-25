@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, Layers3, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
@@ -16,8 +16,8 @@ import { AutoLeaveActionButton } from "../components/AutoLeaveActionButton";
 import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "../components/ReactionPanel";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDialog";
-import { BoostServiceField } from "../components/BoostServiceField";
-import { SolarixProvider, SolarixStockButton, useSolarix, type SolarixPreviewOutcome } from "../components/SolarixWorkspace";
+import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
+import { SolarixProvider, SolarixStockButton, SolarixStockSummary, useSolarix, type SolarixPreviewOutcome } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { OrderAutoReplaceOption } from "../components/OrderAutoReplaceOption";
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
@@ -283,8 +283,12 @@ function MembersStockExample() {
 
 function SolarixExampleActions() {
   const workspace = useSolarix();
-  const [provider, setProvider] = useState<"dcord" | "salta7">("salta7");
-  return <div className="ui-ref-stack"><div className="ui-ref-row"><Button type="button" variant="secondary" size="xs" disabled><Users className="h-3.5 w-3.5" />Members check</Button><SolarixStockButton /></div><BoostServiceField value={provider} onChange={setProvider} onSolarix={() => workspace?.openOrder({ invite: "sample-server", amount: 10, duration: "1m" })} /></div>;
+  const [provider, setProvider] = useState<BoostServiceChoice>("salta7");
+  const [invite, setInvite] = useState("sample-server");
+  const [amount, setAmount] = useState(10);
+  const [duration, setDuration] = useState("1m");
+  useEffect(() => { if (provider === "solarix") workspace?.refreshStock(); }, [provider, workspace?.refreshStock]);
+  return <div className="ui-ref-stack"><div className="ui-ref-row"><Button type="button" variant="secondary" size="xs" disabled><Users className="h-3.5 w-3.5" />Members check</Button><SolarixStockButton /></div><BoostServiceField value={provider} onChange={setProvider} />{provider === "solarix" ? <>{workspace?.stock ? <SolarixStockSummary stock={workspace.stock} /> : <Skeleton className="h-24 w-full" />}<form className="ui-ref-stack" onSubmit={event => { event.preventDefault(); workspace?.startOrder({ invite, amount, duration: duration as "1m" | "3m" }); }}><label className="settings-field"><span className="field-label">Sample server invite</span><Input required value={invite} onChange={event => setInvite(event.target.value)} /></label><div className="settings-field-grid"><label className="settings-field"><span className="field-label">Sample boost amount</span><Input type="number" min={2} max={1000} step={2} required value={amount} onChange={event => setAmount(Number(event.target.value))} /></label><FilterDropdown label="Sample boost duration" value={duration} onChange={setDuration} options={[{ value: "1m", label: "1 Month" }, { value: "3m", label: "3 Months" }]} /></div><div><Button type="submit" disabled={workspace?.loading || !workspace?.stock}>Create order</Button></div></form></> : null}</div>;
 }
 
 function SolarixExample() {
@@ -431,7 +435,7 @@ export default function UiKitPage() {
 
         {visible("fields") ? <Section id="fields">
           <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns in one row; creation’s Custom field spans the next row.\n// Narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
-          <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider}\n  onSolarix={() => solarix.openOrder({ invite, amount, duration })} />\n// SolarixAIO opens its own modal using provider stock.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// All preview requests and results use local samples only.'}>
+          <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// SolarixAIO selection loads provider stock into the existing form.\n// Create order calls solarix.startOrder({ invite, amount, duration }); only delivery opens a modal.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// All preview requests and results use local samples only.'}>
             <SolarixExample />
           </Example>
           <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
