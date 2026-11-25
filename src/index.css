@@ -6935,8 +6935,20 @@
   overflow-x: auto;
 }
 
-.community-member-speed-options > .community-speed-custom-option {
-  grid-column: 1 / -1;
+.community-speed-profile-options.community-member-speed-options.has-custom-option {
+  grid-template-columns: repeat(5, minmax(110px, 1fr));
+}
+
+.community-member-speed-options.has-custom-option > button,
+.community-member-speed-options.has-custom-option > .community-speed-custom-option {
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px;
+}
+
+.community-member-speed-options.has-custom-option > button > em,
+.community-member-speed-options.has-custom-option > .community-speed-custom-option > .community-speed-custom-control {
+  grid-column: 2;
+  justify-self: start;
 }
 
 @media (max-width: 520px) {
