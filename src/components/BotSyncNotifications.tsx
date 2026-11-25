@@ -19,6 +19,7 @@ export function BotSyncToast({ job, stale = false, preview = false }: { job: Bot
   const progress = job.total ? Math.min(100, job.processed / job.total * 100) : job.status === "completed" ? 100 : 0;
   return <div className="bot-sync-toast">
     <strong>{job.botName} · {label}</strong>
+    {job.categoryName || job.categoryId ? <span>{job.categoryName || job.categoryId}</span> : null}
     <span>{job.processed.toLocaleString("en-US")} / {job.total.toLocaleString("en-US")} processed · {job.failed.toLocaleString("en-US")} failed</span>
     <div className="monitor-live-progress-track" role="progressbar" aria-label={`${job.botName} account sync`} aria-valuemin={0} aria-valuemax={Math.max(1, job.total)} aria-valuenow={job.processed}><span style={{ width: `${progress}%` }} /></div>
     {stale ? <span>Reconnecting to progress… The server job continues.</span> : job.status === "paused" ? <span>{job.details || "Review this sync before resuming."}</span> : null}
@@ -43,7 +44,7 @@ export function BotSyncNotifications() {
     const signatures = new Map<string, string>();
     const displayed = new Set<string>();
     const render = (job: BotSyncNotification, stale = false) => {
-      const signature = JSON.stringify([job.status, job.processed, job.total, job.succeeded, job.failed, job.details, job.botName, stale]);
+      const signature = JSON.stringify([job.status, job.processed, job.total, job.succeeded, job.failed, job.details, job.botName, job.categoryId, job.categoryName, stale]);
       if (signatures.get(job.id) === signature) return;
       jobs.set(job.id, job); signatures.set(job.id, signature); displayed.add(job.id);
       showBotSyncToast(job, stale);

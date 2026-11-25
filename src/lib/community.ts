@@ -12,20 +12,24 @@ export function controlBotAuthorizationJob(clientId: string, action: "resume" | 
   return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations/${action}`, { method: "POST", credentials: "same-origin" }).then(parseResponse<BotAuthorizationJob>);
 }
 
-export type BotSyncSummary = { totalAccounts: number; pending: number; upToDate: number; unavailable: number };
-export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
+export type BotSyncCategory = { id: string; name: string };
+export type BotSyncSummary = { categoryId?: string | null; categoryName?: string | null; totalAccounts: number; pending: number; upToDate: number; unavailable: number };
+export type BotSyncJob = { id: string; clientId: string; legacy?: boolean; categoryId?: string | null; categoryName?: string | null; status: "queued" | "running" | "paused" | "cancelled" | "completed"; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
 export type BotSyncNotification = BotSyncJob & { botName: string; updatedAt: string };
 export function getBotSyncNotifications(signal?: AbortSignal) {
   return fetch("/api/community/bot-sync-jobs", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncNotification[]>);
 }
-export function getBotSyncPreview(clientId: string, signal?: AbortSignal) {
-  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/preview`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncSummary>);
+export function getBotSyncCategories(clientId: string, signal?: AbortSignal) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/categories`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncCategory[]>);
+}
+export function getBotSyncPreview(clientId: string, signal?: AbortSignal, categoryId?: string) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/preview${categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : ""}`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncSummary>);
 }
 export function getBotSyncJob(clientId: string, signal?: AbortSignal) {
   return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotSyncJob | null>);
 }
-export function startBotSync(clientId: string, retryFailed = false) {
-  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retryFailed }) }).then(parseResponse<BotSyncJob>);
+export function startBotSync(clientId: string, retryFailed = false, categoryId = "") {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ retryFailed, categoryId }) }).then(parseResponse<BotSyncJob>);
 }
 export function controlBotSync(clientId: string, action: "resume" | "cancel") {
   return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/sync/${action}`, { method: "POST", credentials: "same-origin" }).then(parseResponse<BotSyncJob>);

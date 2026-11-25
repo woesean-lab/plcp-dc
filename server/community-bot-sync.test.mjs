@@ -17,11 +17,12 @@ const expiry = days => new Date(Date.now() + days * 86_400_000).toISOString();
 async function fixture(run) {
   const { PGlite } = await import(runtime.href);
   const db = new PGlite();
-  await db.exec(`CREATE TABLE community_stock_categories (guild_id TEXT,id TEXT);
+  await db.exec(`CREATE TABLE community_stock_categories (guild_id TEXT,id TEXT,name TEXT);
     CREATE TABLE community_oauth_joins (guild_id TEXT,stock_type TEXT,discord_user_id TEXT,sort_position INT,
       encrypted_account_token TEXT,encrypted_access_token TEXT,encrypted_refresh_token TEXT,access_token_expires_at TIMESTAMPTZ,
       status TEXT DEFAULT 'authorized', details TEXT, authorized_at TIMESTAMPTZ);`);
   await db.exec(BOT_POOL_STORAGE_SQL); await db.exec(BOT_AUTHORIZATION_STORAGE_SQL); await db.exec(BOT_SYNC_STORAGE_SQL);
+  for (const id of ["online", "offline", "new", "empty"]) await db.query("INSERT INTO community_stock_categories VALUES ($1,$2,$2)", [guild, id]);
   for (const id of [bot, other]) await db.query("INSERT INTO community_bot_pool(client_id,name,encrypted_value) VALUES ($1,'Bot',$2)", [id, encrypt(JSON.stringify({ clientId: id }))]);
   const query = async (sql, args) => { const result = await db.query(sql, args); return { ...result, rowCount: result.rows.length || result.affectedRows || 0 }; };
   const pool = { query };
@@ -168,8 +169,62 @@ test("invalid input saves no job, and healthy-only stock completes without OAuth
 test("all sync routes require an authenticated session", () => {
   const routes = [], auth = () => {};
   registerBotSync({ get: (...args) => routes.push(args), post: (...args) => routes.push(args) }, auth, {});
-  assert.equal(routes.length, 6); assert.ok(routes.every(route => route[1] === auth));
+  assert.equal(routes.length, 7); assert.ok(routes.every(route => route[1] === auth));
 });
+
+test("category selection scopes both preview counts and persisted worker progress without moving or duplicating stock", options, () => fixture(async ({ api, add, grant, db, controller, calls }) => {
+  await add(0, "new"); await add(1, "online"); await add(2, "new"); await add(3, "new", { raw: false }); await grant(bot, 2);
+  const before = (await db.query("SELECT * FROM community_oauth_joins ORDER BY discord_user_id")).rows;
+  assert.deepEqual(await api.preview(bot, "new"), { categoryId: "new", categoryName: "new", totalAccounts: 3, pending: 1, upToDate: 1, unavailable: 1 });
+  const job = await api.start(bot, { categoryId: "new" }); assert.equal(job.total, 1); assert.equal(job.categoryId, "new");
+  await controller().tick(); assert.deepEqual(calls.map(call => call.userId), [ids[0]]);
+  const latest = await api.latest(bot); assert.equal(latest.status, "completed"); assert.equal(latest.categoryName, "new");
+  const notification = (await api.notifications())[0]; assert.equal(notification.categoryId, "new"); assert.equal(notification.categoryName, "new");
+  assert.deepEqual((await db.query("SELECT * FROM community_oauth_joins ORDER BY discord_user_id")).rows, before);
+}));
+
+test("all categories stays available and category lists are limited to this bot's shared stock guild", options, () => fixture(async ({ api, db, add }) => {
+  await db.query("INSERT INTO community_stock_categories VALUES ($1,'private','Private category')", [other]);
+  assert.deepEqual((await api.categories(bot)).map(category => category.id), ["empty", "new", "offline", "online"]);
+  await add(0, "new"); await add(1, "online");
+  assert.equal((await api.preview(bot, "")).totalAccounts, 2);
+  assert.equal((await api.start(bot, { categoryId: "" })).total, 2);
+}));
+
+test("invalid, deleted or other-guild categories cannot preview or create a job; empty categories are a safe no-op", options, () => fixture(async ({ api, db, add, calls }) => {
+  await add(0);
+  await db.query("INSERT INTO community_stock_categories VALUES ($1,'private','Private category')", [other]);
+  for (const categoryId of ["missing", "private", 7, ["online"], {}, "x".repeat(101)]) {
+    await assert.rejects(api.preview(bot, categoryId), error => error.statusCode === 400);
+    await assert.rejects(api.start(bot, { categoryId }), error => error.statusCode === 400);
+  }
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM community_bot_sync_jobs")).rows[0].n, 0);
+  const job = await api.start(bot, { categoryId: "empty" }); assert.equal(job.status, "completed"); assert.equal(job.total, 0);
+  await api.tick(); assert.equal(calls.length, 0);
+}));
+
+test("paused category jobs resume in their original scope and retries cannot switch to another category", options, () => fixture(async ({ api, add, setBehavior, calls }) => {
+  await add(0, "new"); await add(1, "online");
+  await api.start(bot, { categoryId: "new" });
+  setBehavior(async () => { throw Object.assign(Error("Limited"), { statusCode: 429 }); }); await api.tick();
+  const paused = await api.latest(bot); assert.equal(paused.status, "paused"); assert.equal(paused.categoryId, "new");
+  await assert.rejects(api.start(bot, { categoryId: "online" }), error => error.statusCode === 409);
+  await api.resume(bot); setBehavior(async () => { throw Error("Failed account"); }); await api.tick();
+  await assert.rejects(api.start(bot, { retryFailed: true, categoryId: "online" }), error => error.statusCode === 400);
+  const retried = await api.start(bot, { retryFailed: true }); assert.equal(retried.categoryId, "new"); assert.equal(retried.total, 1);
+  setBehavior(async () => {}); await api.tick();
+  assert.ok(calls.every(call => call.userId === ids[0]));
+}));
+
+test("accounts moved out of the selected category before processing are skipped without authorization", options, () => fixture(async ({ api, add, db, calls }) => {
+  await add(0, "new"); await add(1, "new"); await api.start(bot, { categoryId: "new" });
+  await db.query("UPDATE community_oauth_joins SET stock_type='online' WHERE discord_user_id=$1", [ids[0]]);
+  await api.tick(); await api.tick();
+  assert.deepEqual(calls.map(call => call.userId), [ids[1]]);
+  const done = await api.latest(bot); assert.equal(done.failed, 1); assert.equal(done.succeeded, 1);
+  await assert.rejects(api.start(bot, { retryFailed: true, categoryId: "online" }), error => error.statusCode === 400);
+  const retry = await api.start(bot, { retryFailed: true }); assert.equal(retry.total, 0); assert.equal(retry.status, "completed");
+}));
 
 test("notification feed restores server progress across controllers, includes paused/legacy work and exposes no credential or member lists", options, () => fixture(async ({ api, controller, add, db }) => {
   await add(0); await add(1, "offline");

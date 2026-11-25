@@ -23,11 +23,23 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     if (credentials.clientId !== clientId) throw fail("The bot configuration no longer matches this application.");
     return { ...credentials, clientId, guildId: base.guildId, isDefault, configured: true, ...(!isDefault ? { poolBotId: clientId } : {}) };
   }
-  async function plan(clientId, onlyIds) {
+  async function categories(clientId) {
     const config = await configFor(clientId);
+    return (await pool.query("SELECT id,name FROM community_stock_categories WHERE guild_id=$1 ORDER BY name,id", [config.guildId])).rows;
+  }
+  async function plan(clientId, onlyIds, categoryId = null) {
+    const config = await configFor(clientId);
+    let categoryName;
+    if (categoryId !== null && categoryId !== undefined && categoryId !== "") {
+      if (typeof categoryId !== "string" || categoryId.length > 100) throw fail("Choose a valid stock category.", 400);
+      const category = (await pool.query("SELECT id,name FROM community_stock_categories WHERE guild_id=$1 AND id=$2", [config.guildId, categoryId])).rows[0];
+      if (!category) throw fail("This stock category is no longer available. Refresh categories.", 400);
+      categoryName = category.name;
+    } else categoryId = null;
     const records = await pool.query(`SELECT discord_user_id, encrypted_account_token, encrypted_access_token,
       encrypted_refresh_token, access_token_expires_at FROM community_oauth_joins WHERE guild_id=$1
-      AND ($2::text[] IS NULL OR discord_user_id=ANY($2::text[])) ORDER BY sort_position, discord_user_id`, [config.guildId, onlyIds || null]);
+      AND ($2::text[] IS NULL OR discord_user_id=ANY($2::text[])) AND ($3::text IS NULL OR stock_type=$3)
+      ORDER BY sort_position, discord_user_id`, [config.guildId, onlyIds || null, categoryId]);
     const grants = config.isDefault ? [] : (await pool.query("SELECT discord_user_id, encrypted_value FROM community_bot_pool_credentials WHERE client_id=$1", [clientId])).rows;
     const byUser = new Map(grants.map(grant => [grant.discord_user_id, grant.encrypted_value]));
     const ids = []; let upToDate = 0, unavailable = 0;
@@ -45,10 +57,10 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
       else if (record.encrypted_account_token || refresh) ids.push(record.discord_user_id);
       else unavailable++;
     }
-    return { config, ids, totalAccounts: records.rows.length, pending: ids.length, upToDate, unavailable };
+    return { config, ids, ...(categoryId ? { categoryId, categoryName } : {}), totalAccounts: records.rows.length, pending: ids.length, upToDate, unavailable };
   }
-  async function preview(clientId) {
-    const { config, ids, ...summary } = await plan(clientId);
+  async function preview(clientId, categoryId) {
+    const { config, ids, ...summary } = await plan(clientId, undefined, categoryId);
     return summary;
   }
   async function latest(clientId) {
@@ -63,7 +75,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     const result = await pool.query(`SELECT jobs.id,jobs.client_id,jobs.status,jobs.legacy,jobs.updated_at,
       COALESCE(bots.name,CASE WHEN payload->>'isDefault'='true' THEN 'Default bot' ELSE 'Bot '||jobs.client_id END) AS bot_name,
       jsonb_build_object('total',payload->'total','processed',payload->'processed','succeeded',payload->'succeeded',
-        'failed',payload->'failed','details',payload->'details') AS payload
+        'failed',payload->'failed','details',payload->'details','categoryId',payload->'categoryId','categoryName',payload->'categoryName') AS payload
       FROM (SELECT DISTINCT ON (client_id) * FROM (
         SELECT id,client_id,status,payload,created_at,updated_at,FALSE AS legacy FROM community_bot_sync_jobs
         UNION ALL
@@ -78,12 +90,15 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
     if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Choose a valid sync action.", 400);
     if (input.retryFailed !== undefined && typeof input.retryFailed !== "boolean") throw fail("Choose a valid retry action.", 400);
     let onlyIds;
+    let categoryId = input.categoryId;
     if (input.retryFailed) {
       const previous = (await pool.query("SELECT * FROM community_bot_sync_jobs WHERE client_id=$1 ORDER BY created_at DESC LIMIT 1", [clientId])).rows[0];
       if (!previous || !["completed", "cancelled"].includes(previous.status) || !previous.payload.failedIds?.length) throw fail("No failed accounts are available to retry.");
       onlyIds = previous.payload.failedIds;
+      if (categoryId !== undefined && (categoryId || null) !== (previous.payload.categoryId || null)) throw fail("Retry failed uses the previous sync's category. Select that category before retrying.", 400);
+      categoryId = previous.payload.categoryId || null;
     }
-    const { config, ids, ...summary } = await plan(clientId, onlyIds);
+    const { config, ids, ...summary } = await plan(clientId, onlyIds, categoryId);
     const occupied = await pool.query(`SELECT id FROM community_bot_sync_jobs WHERE client_id=$1 AND
       (status IN ('queued','running','paused') OR (worker_token IS NOT NULL AND lease_until>NOW()))`, [clientId]);
     if (occupied.rows.length) throw fail("This bot already has a sync in progress. Resume or stop it first.");
@@ -136,6 +151,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
         } catch (error) { error.syncConfigurationInvalid = true; throw error; }
         const member = (await pool.query("SELECT * FROM community_oauth_joins WHERE guild_id=$1 AND discord_user_id=$2", [progress.guildId, userId])).rows[0];
         if (!member) throw new Error("This account is no longer in stock.");
+        if (progress.categoryId && member.stock_type !== progress.categoryId) throw new Error("This account is no longer in the selected category.");
         await synchronize({ ...config, redirectUri: progress.redirectUri }, member);
         progress.succeeded++;
       } catch (error) {
@@ -152,14 +168,15 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
         worker_token=NULL,lease_until=NULL,updated_at=NOW() WHERE id=$1 AND worker_token=$4`, [row.id, JSON.stringify(progress), status, owner]);
     } finally { if (heartbeat) clearInterval(heartbeat); running = false; }
   }
-  return { preview, latest, notifications, start, resume, cancel, tick };
+  return { categories, preview, latest, notifications, start, resume, cancel, tick };
 }
 
 export function registerBotSync(app, requireSession, service) {
   const wrap = action => async (req, res, next) => { try { res.set("Cache-Control", "no-store").json(await action(req)); } catch (error) { next(error); } };
   const base = "/api/community/bots/:clientId/sync";
   app.get("/api/community/bot-sync-jobs", requireSession, wrap(() => service.notifications()));
-  app.get(`${base}/preview`, requireSession, wrap(req => service.preview(req.params.clientId)));
+  app.get(`${base}/categories`, requireSession, wrap(req => service.categories(req.params.clientId)));
+  app.get(`${base}/preview`, requireSession, wrap(req => service.preview(req.params.clientId, req.query?.categoryId)));
   app.get(base, requireSession, wrap(req => service.latest(req.params.clientId)));
   app.post(base, requireSession, wrap(req => service.start(req.params.clientId, req.body, `${req.protocol}://${req.get("host")}/api/community/oauth/callback`)));
   app.post(`${base}/resume`, requireSession, wrap(req => service.resume(req.params.clientId)));

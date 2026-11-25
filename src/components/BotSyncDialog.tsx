@@ -4,14 +4,20 @@ import { BotSettingsDialog } from "./BotSettingsDialog";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
+import { FilterDropdown } from "./ui/filter-dropdown";
 import { notifyBotSyncChange, showBotSyncToast } from "./BotSyncNotifications";
-import { controlBotSync, getBotSyncJob, getBotSyncPreview, startBotSync, type BotSyncJob, type BotSyncSummary } from "../lib/community";
+import { controlBotSync, getBotSyncCategories, getBotSyncJob, getBotSyncPreview, startBotSync, type BotSyncCategory, type BotSyncJob, type BotSyncSummary } from "../lib/community";
+
+const isActive = (job: BotSyncJob | null) => Boolean(job && ["queued", "running", "paused"].includes(job.status));
+const previewCategories = [{ id: "online", name: "OAuth Online" }, { id: "offline", name: "OAuth Offline" }];
 
 export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = false }: {
   clientId: string; name: string; onClose: () => void; onChanged: () => void; preview?: boolean;
 }) {
   const [summary, setSummary] = useState<BotSyncSummary | null>(null);
   const [job, setJob] = useState<BotSyncJob | null>(null);
+  const [categories, setCategories] = useState<BotSyncCategory[]>([]);
+  const [categoryId, setCategoryId] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -22,14 +28,22 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
-    void (preview ? Promise.resolve([{ totalAccounts: 750, pending: 50, upToDate: 700, unavailable: 0 }, null] as const)
-      : Promise.all([getBotSyncPreview(clientId, controller.signal), getBotSyncJob(clientId, controller.signal)]))
-      .then(([nextSummary, nextJob]) => { if (!controller.signal.aborted) { setSummary(nextSummary); setJob(nextJob); } })
+    setLoading(true); setError(""); setSummary(null);
+    void (preview ? Promise.resolve([previewCategories, null] as const)
+      : Promise.all([getBotSyncCategories(clientId, controller.signal), getBotSyncJob(clientId, controller.signal)]))
+      .then(async ([nextCategories, nextJob]) => {
+        if (controller.signal.aborted) return;
+        setCategories(nextCategories); if (!preview) setJob(nextJob);
+        const scope = isActive(nextJob) ? nextJob?.categoryId || "" : categoryId;
+        if (scope !== categoryId) { setCategoryId(scope); return; }
+        const nextSummary = preview ? { totalAccounts: scope ? 375 : 750, pending: scope ? 25 : 50, upToDate: scope ? 350 : 700, unavailable: 0 }
+          : await getBotSyncPreview(clientId, controller.signal, scope);
+        if (!controller.signal.aborted) setSummary(nextSummary);
+      })
       .catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load sync status."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [clientId, preview, revision]);
+  }, [clientId, preview, revision, categoryId]);
   useEffect(() => {
     if (busy || !job || !["queued", "running"].includes(job.status)) return;
     const controller = new AbortController(); let timer: ReturnType<typeof setTimeout>;
@@ -41,7 +55,7 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
         if (next && !["queued", "running"].includes(next.status)) {
           changed.current();
           if (!preview) {
-            try { const summary = await getBotSyncPreview(clientId, controller.signal); if (!controller.signal.aborted) setSummary(summary); }
+            try { const summary = await getBotSyncPreview(clientId, controller.signal, categoryId); if (!controller.signal.aborted) setSummary(summary); }
             catch (reason) { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not refresh account counts."); }
           } else setSummary(current => current ? { ...current, pending: Math.max(0, current.pending - next.succeeded), upToDate: current.upToDate + next.succeeded } : null);
         }
@@ -50,14 +64,14 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
     };
     timer = setTimeout(poll, 2000);
     return () => { controller.abort(); clearTimeout(timer); };
-  }, [clientId, preview, job, busy]);
+  }, [clientId, preview, job, busy, categoryId]);
   async function act(action: "start" | "retry" | "resume" | "cancel") {
     if (pending.current) return;
     pending.current = true; setBusy(true); setError("");
     try {
       const next = preview ? action === "cancel" || action === "resume" ? { ...job!, status: action === "cancel" ? "cancelled" as const : "queued" as const }
-        : { ...summary!, id: "preview", clientId, total: summary?.pending || 0, processed: 0, succeeded: 0, failed: 0, errors: [], status: "queued" as const }
-        : action === "cancel" || action === "resume" ? await controlBotSync(clientId, action) : await startBotSync(clientId, action === "retry");
+        : { ...summary!, id: "preview", clientId, categoryId, categoryName: categories.find(category => category.id === categoryId)?.name, total: summary?.pending || 0, processed: 0, succeeded: 0, failed: 0, errors: [], status: "queued" as const }
+        : action === "cancel" || action === "resume" ? await controlBotSync(clientId, action) : await startBotSync(clientId, action === "retry", categoryId);
       if (preview) showBotSyncToast({ ...next, id: "preview-bot-sync", botName: name }, false, true);
       else notifyBotSyncChange(next, name);
       if (mounted.current) {
@@ -68,23 +82,28 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update sync."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
-  const active = job && ["queued", "running", "paused"].includes(job.status);
+  const active = isActive(job);
   const completed = job?.status === "completed";
+  const selectedMissing = Boolean(categoryId && !categories.some(category => category.id === categoryId));
+  const scopeName = (item: BotSyncJob) => item.categoryName || categories.find(category => category.id === item.categoryId)?.name || (item.categoryId ? "Unavailable category" : "All categories");
   return <BotSettingsDialog title={`${name} · Sync accounts`} busy={busy} onClose={onClose}>
     <div className="settings-card-body bot-sync-body">
-      <p className="settings-field-note">Sync missing or expiring OAuth permissions across all stock categories.</p>
+      <p className="settings-field-note">Sync missing or expiring OAuth permissions in the selected category.</p>
+      <FilterDropdown label="Stock category" value={categoryId} options={[{ value: "", label: "All categories" }, ...categories.map(category => ({ value: category.id, label: category.name })), ...(selectedMissing ? [{ value: categoryId, label: "Unavailable category" }] : [])]} onChange={value => { setLoading(true); setSummary(null); setCategoryId(value); }} disabled={loading || busy || active} />
       <p className="settings-field-note">Runs on the server. You can close this window or refresh the page; progress appears in a notification.</p>
       {loading ? <div role="status" aria-label="Loading sync status"><Skeleton className="h-12 w-full" /><Skeleton className="mt-3 h-12 w-full" /></div> : summary ? <dl className="bot-sync-summary app-panel-soft">
         <div><dt>Accounts</dt><dd>{summary.totalAccounts.toLocaleString("en-US")}</dd></div><div><dt>Up to date</dt><dd>{summary.upToDate.toLocaleString("en-US")}</dd></div><div><dt>To sync</dt><dd>{summary.pending.toLocaleString("en-US")}</dd></div><div><dt>Unavailable</dt><dd>{summary.unavailable.toLocaleString("en-US")}</dd></div>
       </dl> : null}
       {summary?.unavailable ? <p className="settings-field-note">{summary.unavailable} accounts need a saved account token or renewable OAuth permission.</p> : null}
-      {job?.legacy ? <p className="settings-field-note">An earlier category authorization is still active. Resume or stop it here before syncing all categories.</p> : null}
+      {active ? <p className="settings-field-note">This sync keeps its category until it finishes or is stopped.</p> : null}
+      {job?.legacy ? <p className="settings-field-note">An earlier category authorization is still active. Resume or stop it here before starting another sync.</p> : null}
+      {!loading && job ? <p className="settings-field-note">{active ? "Current sync" : "Last sync"}: {scopeName(job)}</p> : null}
       {!loading && job ? <div className="bot-sync-progress" role="status"><div className="bot-sync-status"><Badge variant={completed ? "success" : "secondary"}>{job.status === "completed" ? "Completed" : job.status === "cancelled" ? "Stopped" : job.status === "paused" ? "Paused" : "Syncing"}</Badge><span>{job.processed} / {job.total} processed</span></div><div className="monitor-live-progress-track" role="progressbar" aria-label="Account sync" aria-valuenow={job.processed} aria-valuemin={0} aria-valuemax={Math.max(1, job.total)}><span style={{ width: `${job.total ? Math.min(100, job.processed / job.total * 100) : completed ? 100 : 0}%` }} /></div><p className="settings-field-note">{job.succeeded} synced · {job.failed} failed</p>{job.details ? <p className="settings-field-note">{job.details}</p> : null}{job.errors.length ? <details><summary>Failed accounts ({job.failed})</summary>{job.errors.map(item => <p className="settings-field-note" key={item.userId}>{item.userId}: {item.message}</p>)}</details> : null}</div> : null}
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button size="xs" variant="secondary" disabled={busy} onClick={() => setRevision(value => value + 1)}>Refresh</Button></div> : null}
     </div>
     <footer className="settings-card-footer"><Button type="button" size="sm" variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><div>
       {job?.status === "paused" ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => void act("resume")}><Play className="h-3.5 w-3.5" />Resume</Button> : null}
-      {active ? <Button size="sm" variant="dangerGhost" disabled={busy} onClick={() => void act("cancel")}><Square className="h-3.5 w-3.5" />Stop</Button> : <>{job?.failed ? <Button size="sm" variant="secondary" disabled={busy || loading} onClick={() => void act("retry")}>Retry failed</Button> : null}<Button size="sm" variant="secondary" disabled={busy || loading || !summary} onClick={() => void act("start")}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Sync</Button></>}
+      {active ? <Button size="sm" variant="dangerGhost" disabled={busy} onClick={() => void act("cancel")}><Square className="h-3.5 w-3.5" />Stop</Button> : <>{job?.failed && (job.categoryId || "") === categoryId ? <Button size="sm" variant="secondary" disabled={busy || loading || !summary} onClick={() => void act("retry")}>Retry failed</Button> : null}<Button size="sm" variant="secondary" disabled={busy || loading || !summary} onClick={() => void act("start")}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Sync</Button></>}
     </div></footer>
   </BotSettingsDialog>;
 }
