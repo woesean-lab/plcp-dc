@@ -1,5 +1,11 @@
 import type { CommunityJoinMethod } from "../types";
 
+export function inspectCommunityOrderBot(botToken: string, guildId: string, signal?: AbortSignal) {
+  return fetch("/api/community/order-bot/inspect", { method: "POST", credentials: "same-origin", cache: "no-store", signal,
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ botToken, guildId })
+  }).then(parseResponse<{ clientId: string; botName: string; guildId: string; guildName: string | null; botInGuild: boolean }>);
+}
+
 export type CommunityGuild = {
   id: string;
   name: string;

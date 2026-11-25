@@ -124,6 +124,7 @@ export type OrderStatus =
   | string;
 
 export interface CreateOrderPayload {
+  newBot?: { botToken: string; clientSecret: string };
   autoReplace?: boolean;
   boostProvider?: BoostProvider;
   removeTwoFactor?: boolean;
@@ -171,6 +172,9 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  customBot?: boolean;
+  botName?: string;
+  botApplicationId?: string;
   inviteRestriction?: CommunityInviteRestriction;
   autoReplace?: boolean;
   autoReplaceRounds?: number;
@@ -264,6 +268,9 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  customBot?: boolean;
+  botName?: string;
+  botApplicationId?: string;
   inviteRestriction?: CommunityInviteRestriction;
   autoReplace?: boolean;
   autoReplaceRounds?: number;

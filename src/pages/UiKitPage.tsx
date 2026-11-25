@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, ArrowUpRight, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, Layers3, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, type ButtonProps } from "../components/ui/button";
+import { OrderBotOption, EMPTY_ORDER_BOT } from "../components/OrderBotOption";
 import { Badge } from "../components/ui/badge";
 import { StatusField } from "../components/ui/status-field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
@@ -338,6 +339,7 @@ export default function UiKitPage() {
   const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
   const [removeTwoFactor, setRemoveTwoFactor] = useState(true);
   const [autoReplace, setAutoReplace] = useState(false);
+  const [orderBot, setOrderBot] = useState({ ...EMPTY_ORDER_BOT, enabled: true, clientId: "1544546102458720276", botName: "Nova Community" });
   const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -391,6 +393,7 @@ export default function UiKitPage() {
           </Example>
           <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
           <Example title="Order auto-replace" source="src/components/OrderAutoReplaceOption.tsx" code={'<OrderAutoReplaceOption checked={enabled} onChange={setEnabled} disabled={creating} />'}><div className="ui-ref-stack"><OrderAutoReplaceOption checked={autoReplace} onChange={setAutoReplace} /><OrderAutoReplaceOption checked onChange={() => {}} disabled /></div></Example>
+          <Example title="Order bot" source="src/components/OrderBotOption.tsx" code={'<OrderBotOption value={draft} onChange={setDraft} guildId={server.id} serverName={server.name} disabled={creating} />'}><div className="ui-ref-stack"><OrderBotOption value={orderBot} onChange={setOrderBot} guildId="1572718952801632447" serverName="Nova Community" preview /><OrderBotOption value={EMPTY_ORDER_BOT} onChange={() => {}} disabled preview /></div></Example>
           <Example title="Inputs & compact search" source="src/components/ui/input.tsx · community-member-search" code={'import { Input } from "@/components/ui/input";\n\n<label><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label>\n<label className="community-member-search">\n  <Search className="h-3.5 w-3.5" />\n  <Input type="search" aria-label="Search members" placeholder="Search username, name or ID…" />\n</label>'}>
             <div className="ui-ref-grid"><label className="ui-ref-field"><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label><label className="ui-ref-field"><span className="field-label">Disabled field</span><Input disabled value="Unavailable" readOnly /></label><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Sample member search" placeholder="Search username, name or ID…" /></label></div>
           </Example>

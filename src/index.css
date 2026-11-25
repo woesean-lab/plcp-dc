@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
+.order-bot-option { grid-column: 1 / -1; min-width: 0; display: grid; gap: 12px; container-type: inline-size; }
+.order-bot-option .boost-proxy-toggle strong { overflow-wrap: anywhere; }
+.order-bot-fields { min-width: 0; padding: 16px; display: grid; gap: 12px; }
+.order-bot-field-grid { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.order-bot-fields .settings-field-note { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+@container (max-width: 560px) { .order-bot-field-grid { grid-template-columns: minmax(0, 1fr); } }
+
 @layer base {
   :root {
     --app-font-family: Inter, "Avenir Next", Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;

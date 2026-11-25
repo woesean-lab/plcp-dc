@@ -1,5 +1,6 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
+import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
 import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceRunner, invokeReplacement, withOrderReplacementLock } from "./order-auto-replace.mjs";
@@ -519,10 +520,39 @@ function normalizeCommunityOAuthConfig(value = {}) {
   if (!botToken) missing.push("DISCORD_BOT_TOKEN");
   if (!isDiscordGuildId(guildId)) missing.push("DISCORD_TARGET_GUILD_ID");
 
-  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, guildId };
+  return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, guildId,
+    ...(value.orderBotId ? { orderBotId: value.orderBotId, redirectUri: value.redirectUri, stockGuildId: value.stockGuildId } : {}) };
 }
 
-async function getCommunityOAuthConfig() {
+const orderBotService = createOrderBotService({ pool, request: requestDiscord, encrypt: encryptCredential, decrypt: decryptCredential,
+  refresh: exchangeCommunityOAuthRefreshToken,
+  requestIdentity: (accessToken, oauth) => oauth.authorizationProxy
+    ? requestDiscordThroughProxy("oauth2/@me", oauth.authorizationProxy, { headers: { Authorization: `Bearer ${accessToken}` } })
+    : requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } }),
+  authorize: async (config, member) => {
+    let encryptedAccountToken = member.encrypted_account_token;
+    if (!encryptedAccountToken) {
+      const saved = await pool.query("SELECT encrypted_account_token FROM community_oauth_joins WHERE discord_user_id = $1 AND guild_id = $2", [member.discord_user_id, config.guildId]);
+      encryptedAccountToken = saved.rows[0]?.encrypted_account_token;
+    }
+    if (!encryptedAccountToken) throw new Error("This member needs a stored account token to authorize the order bot.");
+    const accountToken = decryptCredential(encryptedAccountToken);
+    const onliner = await getDiscordOnlinerConfig();
+    const linked = onliner.accounts.find(account => account.botToken === accountToken);
+    const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
+    if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
+    const result = await authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount: linked,
+      redirectUri: config.redirectUri, gatewayBeforeAuth: true }, {
+      normalizeProxy: normalizeDiscordOnlinerProxyUrl, withGatewaySession: runWithHumanizerGatewaySession,
+      getConnectedGatewayUser: getConnectedCommunityAuthorizationGatewayUser,
+      requestThroughProxy: requestDiscordThroughProxy, exchangeCode: exchangeCommunityOAuthAuthorizationCode
+    });
+    if (String(result.discordUserId) !== String(member.discord_user_id)) throw new Error("The stored account token belongs to another member.");
+    return { ...result.oauth, authorizationProxy: proxyUrl };
+  }
+});
+
+async function getCommunityOAuthConfig(order = null) {
   let stored = null;
   const raw = await loadEncryptedSetting("community_oauth_config");
   if (raw) {
@@ -533,12 +563,13 @@ async function getCommunityOAuthConfig() {
     }
   }
 
-  return normalizeCommunityOAuthConfig(stored ?? {
+  const config = normalizeCommunityOAuthConfig(stored ?? {
     clientId: process.env.DISCORD_OAUTH_CLIENT_ID,
     clientSecret: process.env.DISCORD_OAUTH_CLIENT_SECRET,
     botToken: process.env.DISCORD_BOT_TOKEN,
     guildId: process.env.DISCORD_TARGET_GUILD_ID
   });
+  return orderBotService.load(order, config);
 }
 
 async function requestDiscord(pathname, init = {}) {
@@ -6194,7 +6225,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
     error.statusCode = 400;
     throw error;
   }
-  const config = await getCommunityOAuthConfig();
+  const config = await getCommunityOAuthConfig(order);
   const targetGuildId = String(order.serverId ?? "").trim();
   if (!config.configured || !isDiscordGuildId(targetGuildId)) {
     const error = new Error("To check members, please add the bot to your Discord server.");
@@ -6318,7 +6349,9 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
       let accessToken = null;
       try {
         const expiresAt = new Date(record?.access_token_expires_at).getTime();
-        if (record?.encrypted_refresh_token && (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
+        if (config.orderBotId) {
+          accessToken = await orderBotService.token(config, { discord_user_id: discordUserId }, { allowAuthorize: false });
+        } else if (record?.encrypted_refresh_token && (!record?.encrypted_access_token || !Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
           accessToken = (await refreshStoredCommunityOAuthCredential(config, record)).accessToken;
         } else if (record?.encrypted_access_token && Number.isFinite(expiresAt) && expiresAt > Date.now()) {
           accessToken = decryptCredential(record.encrypted_access_token);
@@ -6336,9 +6369,11 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
             headers: { Authorization: `Bearer ${accessToken}` }
           });
         }
-        if (identity.response.status === 401 && record?.encrypted_refresh_token) {
+        if (identity.response.status === 401 && (config.orderBotId || record?.encrypted_refresh_token)) {
           try {
-            accessToken = (await refreshStoredCommunityOAuthCredential(config, record, { force: true })).accessToken;
+            accessToken = config.orderBotId
+              ? await orderBotService.token(config, { discord_user_id: discordUserId }, { force: true, allowAuthorize: false })
+              : (await refreshStoredCommunityOAuthCredential(config, record, { force: true })).accessToken;
             identity = await requestDiscord("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } });
           } catch (error) {
             if (error?.oauthRefreshInvalid || error?.oauthAccessInvalid) {
@@ -6373,7 +6408,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
 
   const inactiveUserIds = [...checks.entries()].filter(([, check]) => check.status === "inactive").map(([discordUserId]) => discordUserId);
   const activeUserIds = [...checks.entries()].filter(([, check]) => check.status === "active").map(([discordUserId]) => discordUserId);
-  if (inactiveUserIds.length) {
+  if (!config.orderBotId && inactiveUserIds.length) {
     await pool.query(
       `UPDATE community_oauth_joins
        SET status = 'failed', details = 'OAuth authorization expired or became invalid and could not be refreshed.', reserved_order_id = NULL
@@ -6381,7 +6416,7 @@ async function checkCommunityOrderAuthorizations(order, onProgress = () => {}, o
        [config.guildId, inactiveUserIds]
     );
   }
-  if (activeUserIds.length) {
+  if (!config.orderBotId && activeUserIds.length) {
     await pool.query(
       `UPDATE community_oauth_joins
        SET status = 'authorized', details = NULL
@@ -7319,6 +7354,7 @@ async function recoverCommunityGuildRestrictionOrder(order) {
 }
 
 async function loadCommunityAccessToken(member, config) {
+  if (config.orderBotId) return orderBotService.token(config, member);
   const expiresAt = new Date(member?.access_token_expires_at).getTime();
   if (member?.encrypted_refresh_token && (!Number.isFinite(expiresAt) || expiresAt <= Date.now() + communityOAuthRefreshEarlyMs)) {
     return (await refreshStoredCommunityOAuthCredential(config, member)).accessToken;
@@ -7658,6 +7694,7 @@ async function runCommunityOrder(order, members, config) {
           added += 1;
         }
       } else if (joinMethod === "experimental_join") {
+        if (config.orderBotId) await loadCommunityAccessToken(member, config);
         const application = await submitCommunityJoinRequest(config, order.serverInvite, member);
         if (application.alreadyMember) {
           state = "already_member";
@@ -7716,6 +7753,10 @@ async function runCommunityOrder(order, members, config) {
       }
     } catch (error) {
       details = error instanceof Error ? error.message : details;
+      if (config.orderBotId && error?.statusCode === 429) {
+        botPauseIssue = { status: "PAUSED", waitingCode: "order_bot_authorization_rate_limited",
+          details: "Discord is limiting order bot authorizations. Wait before resuming delivery.", memberDetails: "Waiting to authorize the order bot." };
+      }
       memberAuthorizationInvalid = communityJoinMethodUsesAccountToken(joinMethod)
         ? isCommunityAccountTokenInvalid(error)
         : isDiscordMemberAuthorizationInactive(error);
@@ -7762,7 +7803,7 @@ async function runCommunityOrder(order, members, config) {
       };
     }
     const memberFailed = state === "failed";
-    const memberShouldBeInactive = memberFailed && memberAuthorizationInvalid;
+    const memberShouldBeInactive = !config.orderBotId && memberFailed && memberAuthorizationInvalid;
     results[resultIndex] = resetCommunityResultVerification(results[resultIndex], {
       discordUserId: member.discord_user_id,
       username: member.username,
@@ -7858,6 +7899,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
           : "Replacement member joined through the Dcord Join API with its assigned Onliner proxy.";
       }
     } else if (normalizedJoinMethod === "experimental_join") {
+      if (config.orderBotId) await loadCommunityAccessToken(member, config);
       const application = await submitCommunityJoinRequest(config, serverInvite, member);
       if (application.alreadyMember) {
         state = "already_member";
@@ -7913,6 +7955,10 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
     }
   } catch (error) {
     details = error instanceof Error ? error.message : details;
+    if (config.orderBotId && error?.statusCode === 429) {
+      botPauseIssue = { status: "PAUSED", waitingCode: "order_bot_authorization_rate_limited",
+        details: "Discord is limiting order bot authorizations. Wait before resuming delivery.", memberDetails: "Waiting to authorize the order bot." };
+    }
     memberAuthorizationInvalid = communityJoinMethodUsesAccountToken(normalizedJoinMethod)
       ? isCommunityAccountTokenInvalid(error)
       : isDiscordMemberAuthorizationInactive(error);
@@ -7926,7 +7972,7 @@ async function processCommunityReplacement(orderId, resultIndex, member, config,
   }
 
   if (!botPauseIssue) {
-    const memberFailed = state === "failed" && memberAuthorizationInvalid;
+    const memberFailed = !config.orderBotId && state === "failed" && memberAuthorizationInvalid;
     await pool.query(
       `UPDATE community_oauth_joins
        SET reserved_order_id = NULL,
@@ -8913,6 +8959,7 @@ async function initializeDatabase() {
   await pool.query(COMMUNITY_ORDER_CATEGORY_GUARD_SQL);
   await pool.query(CUSTOMER_REACTION_SETTINGS_GUARD_SQL);
   await pool.query(AUTO_REPLACE_GUARD_SQL);
+  await pool.query(ORDER_BOT_STORAGE_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -10119,6 +10166,12 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
   } catch (error) {
     next(error);
   }
+});
+
+app.post("/api/community/order-bot/inspect", requireSession, async (req, res, next) => {
+  try {
+    res.set("Cache-Control", "no-store").json(await orderBotService.inspect(req.body?.botToken, String(req.body?.guildId ?? "")));
+  } catch (error) { next(error); }
 });
 
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
@@ -11593,9 +11646,9 @@ function createCommunityBotGuildAccessError(status, context = {}) {
   return error;
 }
 
-async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite", resolvedServerInfo = null } = {}) {
+async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBot = false, joinMethod = "create_invite", resolvedServerInfo = null, configOverride = null } = {}) {
   const normalizedJoinMethod = normalizeCommunityJoinMethod(joinMethod);
-  let config = await getCommunityOAuthConfig();
+  let config = configOverride ?? await getCommunityOAuthConfig();
   if (!config.configured) {
     const error = new Error("Configure the Members integration before creating an order.");
     error.statusCode = 503;
@@ -11699,7 +11752,7 @@ async function resolveConfiguredCommunityInvite(inviteValue, { allowWaitingForBo
       // Keep a server-specific stock view so active orders on other servers can
       // continue without their reservations being moved underneath them.
       await copyCommunityStockForGuild(client, config.guildId, nextConfig.guildId);
-      await client.query(
+      if (!config.orderBotId) await client.query(
         `INSERT INTO app_settings (setting_key, encrypted_value, updated_at)
          VALUES ('community_oauth_config', $1, NOW())
          ON CONFLICT (setting_key) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value, updated_at = NOW()`,
@@ -11810,7 +11863,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
          AND (($3::boolean = TRUE AND encrypted_account_token IS NOT NULL)
            OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))`,
-      [config.guildId, stockType, communityJoinMethodUsesAccountToken(joinMethod)]
+      [config.guildId, stockType, (communityJoinMethodUsesAccountToken(joinMethod) || req.query?.newBot === "true")]
     );
     const delivered = new Set(unavailableGroups.deliveredUserIds);
     const activeAssignments = new Set(unavailableGroups.activeAssignmentUserIds);
@@ -11848,9 +11901,15 @@ async function createCommunityOrder(req, res, next) {
     if (!isCommunityServiceType(service) || !Number.isInteger(amount) || amount <= 0 || !Number.isInteger(delay) || delay < 1 || delay > 1200) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
+    const uniqid = req.integrationOrderId || createCommunityOrderId();
+    const customConfig = req.body?.newBot ? await orderBotService.prepare(req.body.newBot, await getCommunityOAuthConfig(), {
+      orderId: uniqid, redirectUri: `${req.protocol}://${req.get("host")}/api/community/oauth/callback`
+    }) : null;
+    if (customConfig && joinMethod === "directly") return res.status(400).json({ message: "New bot is available for bot-based join methods." });
     const resolvedInvite = await resolveConfiguredCommunityInvite(req.body?.id, {
       allowWaitingForBot: true,
       joinMethod,
+      configOverride: customConfig,
       resolvedServerInfo: normalizeSubmittedDiscordResolution(req.body)
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
@@ -11911,7 +11970,6 @@ async function createCommunityOrder(req, res, next) {
       return res.status(400).json({ message: "Choose an order duration between 1 and 6 months." });
     }
     const reactionDailyLimit = validateCustomerReactionLimit(categoryResult.rows, req.body?.reactionLimit);
-    const uniqid = req.integrationOrderId || createCommunityOrderId();
     client = await pool.connect();
     await client.query("BEGIN");
     const createdAt = new Date();
@@ -11930,7 +11988,7 @@ async function createCommunityOrder(req, res, next) {
          ORDER BY random()
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
+        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(customConfig))]
       );
       if (selected.rowCount < allocation.amount) {
         await client.query("ROLLBACK");
@@ -11990,6 +12048,7 @@ async function createCommunityOrder(req, res, next) {
       details: waitingForBot || invitesPaused ? (waitingDetails ?? "Add the Members bot to this server to start delivery.") : `0/${amount} members delivered.`,
       experimentalJoin: joinMethod === "experimental_join",
       botApplicationId: config.clientId,
+      ...(customConfig ? { customBot: true, botName: customConfig.botName } : {}),
       botInvite,
       communityResults: selectedMembers.map((row) => ({
         discordUserId: row.discord_user_id,
@@ -12006,6 +12065,7 @@ async function createCommunityOrder(req, res, next) {
        VALUES ($1, $2::jsonb, NOW(), NOW())`,
       [uniqid, JSON.stringify(order)]
     );
+    if (customConfig) await orderBotService.save(client, { ...config, botName: customConfig.botName });
     await client.query("COMMIT");
     if (!waitingForBot && !invitesPaused) {
       void processCommunityOrder(order, selectedMembers, config).catch(async (error) => {
@@ -12079,7 +12139,7 @@ async function activateWaitingCommunityOrder(order) {
   const activationStatus = String(order.status ?? "").toUpperCase();
   if (!["WAITING", "RECOVERING"].includes(activationStatus)) return order;
 
-  const latestConfig = await getCommunityOAuthConfig();
+  const latestConfig = await getCommunityOAuthConfig(order);
   const targetGuildId = String(order.serverId ?? "").trim();
   const joinMethod = getCommunityOrderJoinMethod(order);
   if (joinMethod !== "directly" && latestConfig.configured && isDiscordGuildId(targetGuildId)) {
@@ -12169,7 +12229,7 @@ async function activateWaitingCommunityOrder(order) {
     return waitingOrder;
   }
   try {
-    resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite, { joinMethod });
+    resolved ??= await resolveConfiguredCommunityInvite(order.serverInvite, { joinMethod, configOverride: order.customBot ? latestConfig : null });
   } catch (error) {
     if (error?.statusCode === 409) {
       const waitingOrder = {
@@ -12256,7 +12316,7 @@ async function activateWaitingCommunityOrder(order) {
            OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, eligiblePendingUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
+      [resolved.config.guildId, eligiblePendingUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot))]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -12294,7 +12354,7 @@ async function activateWaitingCommunityOrder(order) {
            ORDER BY random()
            LIMIT $3
            FOR UPDATE SKIP LOCKED`,
-          [resolved.config.guildId, categoryId, categoryMissing, categoryExcludedUserIds, communityJoinMethodUsesAccountToken(joinMethod)]
+          [resolved.config.guildId, categoryId, categoryMissing, categoryExcludedUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot))]
         );
         for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
         members = [...members, ...extra.rows];
@@ -12453,7 +12513,7 @@ async function reconcileCommunityPendingJoinResults(order) {
   );
   if (!candidates.length) return order;
 
-  const config = await getCommunityOAuthConfig();
+  const config = await getCommunityOAuthConfig(order);
   if (!config.configured || config.guildId !== String(order.serverId)) return order;
 
   const joinedUserIds = new Set();
@@ -12958,7 +13018,7 @@ async function restartCommunityRestrictedOrder(req, res, next) {
       return res.status(409).json({ message: "This order is not waiting for a Discord server restriction check." });
     }
 
-    const latestConfig = await getCommunityOAuthConfig();
+    const latestConfig = await getCommunityOAuthConfig(order);
     const targetGuildId = String(order.serverId ?? "").trim();
     const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
     if (!targetConfig.configured || !isDiscordGuildId(targetGuildId)) {
@@ -13071,8 +13131,8 @@ const reactionWorkspaceBotAccessCache = new Map();
 const reactionWorkspaceMemberCheckCache = new Map();
 const reactionWorkspaceMemberCheckMaxAgeMs = 10 * 60_000;
 
-async function loadReactionWorkspaceBotContext(guildId) {
-  const config = await getCommunityOAuthConfig();
+async function loadReactionWorkspaceBotContext(guildId, orders = []) {
+  const config = await getCommunityOAuthConfig(orders.find(order => order.customBot));
   if (!config.configured) {
     const error = new Error("Configure the Members integration before using Reactions.");
     error.statusCode = 503;
@@ -13304,7 +13364,7 @@ app.get("/api/reactions/inspect", requireSession, async (req, res, next) => {
     if (!orders.length) {
       return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
     }
-    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId);
+    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId, orders);
     if (!botContext.access.accessible) return sendReactionWorkspaceBotRequired(res, botContext);
     const summary = buildReactionWorkspaceSummary(reactionMessage, orders);
     res.set("Cache-Control", "no-store").json(summary);
@@ -13336,7 +13396,7 @@ app.post("/api/reactions/check-members", requireSession, async (req, res, next) 
     if (!orders.length) {
       return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
     }
-    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId);
+    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId, orders);
     if (!botContext.access.accessible) return sendReactionWorkspaceBotRequired(res, botContext);
     const checked = await refreshReactionWorkspaceMembers(orders, reactionMessage.guildId, checkCount);
     res.set("Cache-Control", "no-store").json(buildReactionWorkspaceSummary(reactionMessage, checked.orders));
@@ -13367,7 +13427,7 @@ app.post("/api/reactions/requests", requireSession, async (req, res, next) => {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "No Members orders were found for this Discord server. Create and deliver a Members order first." });
     }
-    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId);
+    const botContext = await loadReactionWorkspaceBotContext(reactionMessage.guildId, orders);
     if (!botContext.access.accessible) {
       await client.query("ROLLBACK");
       return sendReactionWorkspaceBotRequired(res, botContext);
@@ -13738,7 +13798,7 @@ app.post("/api/community/orders/:uniqid/retry-failed", requireSession, async (re
     );
     await client.query("COMMIT");
 
-    const config = normalizeCommunityOAuthConfig({ ...(await getCommunityOAuthConfig()), guildId: String(order.serverId ?? "") });
+    const config = normalizeCommunityOAuthConfig({ ...(await getCommunityOAuthConfig(order)), guildId: String(order.serverId ?? "") });
     void processCommunityOrder(retryOrder, memberResult.rows, config).catch(async (error) => {
       console.error("Members retry failed:", error instanceof Error ? error.message : error);
       await saveTrackedOrderPayload({ ...retryOrder, status: "ERROR", details: error instanceof Error ? error.message : "Members retry failed." }).catch(() => {});
@@ -13767,7 +13827,6 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
       return res.status(429).json({ message: `Wait ${retrySeconds}s before trying this replacement again.` });
     }
 
-    const baseConfig = await getCommunityOAuthConfig();
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
     let order = tracked.rows[0]?.payload;
@@ -13781,6 +13840,7 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
       return res.status(410).json({ message: "This order's member support period has expired." });
     }
 
+    const baseConfig = await getCommunityOAuthConfig(order);
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
     const joinMethod = getCommunityOrderJoinMethod(order);
@@ -13788,7 +13848,7 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members integration before replacing members." });
     }
-    await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
+    await copyCommunityStockForGuild(client, baseConfig.stockGuildId ?? baseConfig.guildId, targetGuildId);
     if (joinMethod !== "directly") {
       const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
       if (!botAccess.accessible) {
@@ -13868,7 +13928,7 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
          ORDER BY random()
          LIMIT $5
          FOR UPDATE SKIP LOCKED`,
-        [targetGuildId, categoryUsedUserIds, usedUsernames, categoryId, categoryIndices.length, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
+        [targetGuildId, categoryUsedUserIds, usedUsernames, categoryId, categoryIndices.length, (communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot))]
       );
       replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
     }
@@ -13965,7 +14025,6 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       return res.status(429).json({ message: `Wait ${retrySeconds}s before trying this replacement again.` });
     }
 
-    const baseConfig = await getCommunityOAuthConfig();
 
     await client.query("BEGIN");
     const tracked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [uniqid]);
@@ -13979,6 +14038,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This order's member support period has expired." });
     }
+    const baseConfig = await getCommunityOAuthConfig(order);
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
     const joinMethod = getCommunityOrderJoinMethod(order);
@@ -13986,7 +14046,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members integration before replacing a member." });
     }
-    await copyCommunityStockForGuild(client, baseConfig.guildId, targetGuildId);
+    await copyCommunityStockForGuild(client, baseConfig.stockGuildId ?? baseConfig.guildId, targetGuildId);
     if (joinMethod !== "directly") {
       const botAccess = await checkCommunityBotGuildAccess(config, targetGuildId);
       if (!botAccess.accessible) {
@@ -14109,7 +14169,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, failedCategoryId, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order))]
+      [config.guildId, usedUserIds, usedUsernames, failedCategoryId, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot)]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -15543,7 +15603,7 @@ app.delete("/api/orders/:uniqid", requireSession, async (req, res, next) => {
     await client.query("DELETE FROM tracked_orders WHERE uniqid = $1", [uniqid]);
     await client.query(
       "DELETE FROM app_settings WHERE setting_key = ANY($1::text[])",
-      [[getDcordOrderTokensSettingKey(uniqid), getDcordOrderProxiesSettingKey(uniqid)]]
+      [[getDcordOrderTokensSettingKey(uniqid), getDcordOrderProxiesSettingKey(uniqid), `community_order_bot:${uniqid}`]]
     );
     await client.query("COMMIT");
     res.json({ removed: true });

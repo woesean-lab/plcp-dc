@@ -59,7 +59,7 @@ export function SettingsWorkspaceSkeleton() {
   </section>;
 }
 
-function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; saved?: boolean }) {
+export function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; saved?: boolean }) {
   const id = useId();
   const [visible, setVisible] = useState(false);
   return <div className="settings-field">
