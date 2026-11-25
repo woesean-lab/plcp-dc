@@ -226,7 +226,7 @@ const EMPTY_ONLINER_DRAFT = {
 };
 
 const EMPTY_ONLINER_ACCOUNT_DRAFT = { botToken: "", richPresenceEnabled: true };
-const EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT = { ...EMPTY_ONLINER_ACCOUNT_DRAFT, proxyUrl: "" };
+const EMPTY_ONLINER_ACCOUNT_EDIT_DRAFT = { ...EMPTY_ONLINER_ACCOUNT_DRAFT, proxyUrl: "", isBot: false };
 
 function parseOnlinerBulkLines(value: string) {
   return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -1676,6 +1676,7 @@ export default function HomePage() {
       setOnlinerEditDraft({
         botToken: credentials.botToken,
         proxyUrl: credentials.proxyUrl,
+        isBot: credentials.isBot === true,
         richPresenceEnabled: credentials.richPresenceEnabled
       });
     } catch (error) {
@@ -5320,12 +5321,12 @@ export default function HomePage() {
               <label className="onliner-enabled-card">
                 <input
                   type="checkbox"
-                  checked={onlinerEditDraft.richPresenceEnabled}
+                  checked={!onlinerEditDraft.isBot && onlinerEditDraft.richPresenceEnabled}
                   onChange={(event) => setOnlinerEditDraft((current) => ({ ...current, richPresenceEnabled: event.target.checked }))}
-                  disabled={loadingOnlinerCredentials || savingOnlinerAccount}
+                  disabled={loadingOnlinerCredentials || savingOnlinerAccount || onlinerEditDraft.isBot}
                 />
                 <span className="stat-icon" aria-hidden="true"><Star className="h-4 w-4" /></span>
-                <span><strong>Use Rich Presence</strong><small>Shows account activities.</small></span>
+                <span><strong>Use Rich Presence</strong><small>{onlinerEditDraft.isBot ? "Off for bot profiles." : "Shows account activities."}</small></span>
               </label>
               <div className="onliner-edit-note">
                 <KeyRound className="h-4 w-4" aria-hidden="true" />

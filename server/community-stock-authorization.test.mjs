@@ -178,6 +178,15 @@ const normalizerContext = {
 };
 vm.runInNewContext(functionCode("normalizeDiscordOnlinerConfig")+";this.normalize=normalizeDiscordOnlinerConfig;",normalizerContext);
 const normalizeConfig=normalizerContext.normalize;
+test("bot profiles retain Rich Presence off while ordinary account settings remain editable", () => {
+  const config = normalizeConfig({ accounts: [
+    { id: "bot-profile", botToken: "bot-token", isBot: true, richPresenceEnabled: true },
+    { id: "user-profile", botToken: token, richPresenceEnabled: true }
+  ] });
+  assert.equal(config.accounts[0].richPresenceEnabled, false);
+  assert.equal(config.accounts[0].isBot, true);
+  assert.equal(config.accounts[1].richPresenceEnabled, true);
+});
 function response() { return { statusCode:200,status(code){this.statusCode=code;return this;},set(){return this;},json(value){this.body=value;return this;} }; }
 function accountRoute({connect=true,proxyAvailable=true,authFailure=false,customProxy=false,occupied=false,linked=false,gatewayBeforeAuth}={}) {
   const writes=[];const stored=[];const starts=[];const stops=[];const authEvents=[];

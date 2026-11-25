@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
+import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement, safeBotConnectionError } from "./community-bot-management.mjs";
 
 const sharedId = "111111111111111111", poolId = "222222222222222222";
 test("bot management resolves the selected application's credentials without changing the shared configuration", async () => {
@@ -54,7 +54,7 @@ test("linking a saved bot preserves other profiles, uses bot mode and reconnects
   assert.equal(f.config().accounts[1].id, linked.id);
   assert.notEqual(f.config().accounts[1].connectionRevision, linked.connectionRevision);
   const state = await f.service.status([poolId]);
-  assert.deepEqual(state, { bots: [{ clientId: poolId, linked: true, state: "connected" }] });
+  assert.deepEqual(state, { bots: [{ clientId: poolId, linked: true, state: "connected", lastError: null }] });
   assert.ok(!JSON.stringify(state).includes("private"));
   assert.deepEqual(await f.service.status([sharedId]), { bots: [] });
 });
@@ -85,6 +85,23 @@ test("bot identify uses unprivileged bot intents and never requests user session
   assert.equal(payload.d.properties.browser, "Pulcip Onliner");
   assert.ok(!("capabilities" in payload.d));
   assert.ok(!("client_state" in payload.d));
+  assert.deepEqual(botGatewayIdentify({ botToken: "private" }, { ...presence, activities: [{ name: "Must stay off" }] }).d.presence.activities, []);
+});
+
+test("connection error details keep the diagnostic code and redact saved tokens and proxy credentials", async () => {
+  const account = { id: "linked", communityBotClientId: poolId, botToken: "private-token", proxyUrl: "http://user:password@proxy:8080" };
+  const message = "Proxy authentication failed (HTTP 407). http://user:password@proxy:8080 token=private-token";
+  const service = createBotOnlinerManagement({
+    getConfig: async () => ({ enabled: true, accounts: [account] }),
+    snapshot: async () => ({ accounts: [{ id: "linked", connectionState: "error", lastError: message }] })
+  });
+  const result = (await service.status([poolId])).bots[0];
+  assert.equal(result.state, "error");
+  assert.match(result.lastError, /HTTP 407/);
+  assert.ok(!JSON.stringify(result).includes("private-token"));
+  assert.ok(!JSON.stringify(result).includes("password"));
+  assert.equal(safeBotConnectionError("", account), null);
+  assert.equal(safeBotConnectionError("Other socks5://name:secret@host:1234", account), "Other socks5://[redacted]@host:1234");
 });
 
 test("every bot Onliner route requires the admin session", () => {

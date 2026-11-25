@@ -31,19 +31,33 @@ CREATE TABLE IF NOT EXISTS community_bot_pool_credential_leases (
 );`;
 
 const ACTIVE = "('NEW','WAITING','PROCESS','RECOVERING','PAUSED','INVITES PAUSED')";
+const ORDER_METRICS = `COUNT(*) FILTER (WHERE UPPER(payload->>'status') IN ${ACTIVE}) AS active_orders,
+    SUM(CASE WHEN UPPER(payload->>'status') IN ${ACTIVE} THEN
+      GREATEST(COALESCE((payload->>'amount')::int,0) - COALESCE((payload->>'added')::int,0),0) ELSE 0 END) AS pending_members,
+    COUNT(*) AS total_orders,
+    SUM(GREATEST(COALESCE((payload->>'added')::int,0),0)) AS delivered_members`;
+const metrics = row => ({ activeOrders: Number(row?.active_orders) || 0, pendingMembers: Number(row?.pending_members) || 0,
+  totalOrders: Number(row?.total_orders) || 0, deliveredMembers: Number(row?.delivered_members) || 0 });
+
+export async function loadBotDeliveryMetrics(pool, clientId, { includeLegacy = false } = {}) {
+  const result = await pool.query(`SELECT ${ORDER_METRICS} FROM tracked_orders
+    WHERE payload->>'provider'='community' AND COALESCE(payload->>'joinMethod','') <> 'directly'
+      AND (payload->>'botApplicationId'=$1 OR ($2::boolean AND NULLIF(payload->>'botApplicationId','') IS NULL
+        AND COALESCE(payload->>'customBot','false') <> 'true'))`, [clientId, includeLegacy]);
+  return metrics(result.rows[0]);
+}
 export const BOT_POOL_LOAD_SQL = `SELECT b.*,
   COALESCE(work.active_orders, 0)::int AS active_orders,
   COALESCE(work.pending_members, 0)::int AS pending_members,
   COALESCE(work.total_orders, 0)::int AS total_orders,
+  COALESCE(work.delivered_members, 0)::bigint AS delivered_members,
   COALESCE(leases.reservations, 0)::int AS reservations,
   COALESCE(leases.pending_members, 0)::int AS reserved_members
 FROM community_bot_pool b
 LEFT JOIN LATERAL (
-  SELECT COUNT(*) FILTER (WHERE UPPER(payload->>'status') IN ${ACTIVE}) AS active_orders,
-    SUM(CASE WHEN UPPER(payload->>'status') IN ${ACTIVE} THEN
-      GREATEST(COALESCE((payload->>'amount')::int,0) - COALESCE((payload->>'added')::int,0),0) ELSE 0 END) AS pending_members,
-    COUNT(*) AS total_orders
+  SELECT ${ORDER_METRICS}
   FROM tracked_orders WHERE payload->>'provider' = 'community' AND payload->>'botApplicationId' = b.client_id
+    AND COALESCE(payload->>'joinMethod','') <> 'directly'
 ) work ON TRUE
 LEFT JOIN LATERAL (
   SELECT COUNT(*) AS reservations, SUM(amount) AS pending_members
@@ -67,8 +81,7 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
   }
   const fail = (message, statusCode = 400) => Object.assign(new Error(message), { statusCode });
   const safe = row => ({ clientId: row.client_id, name: row.name, enabled: row.enabled,
-    activeOrders: Number(row.active_orders) || 0, pendingMembers: Number(row.pending_members) || 0,
-    totalOrders: Number(row.total_orders) || 0, hasBotToken: true, hasClientSecret: true,
+    ...metrics(row), hasBotToken: true, hasClientSecret: true,
     createdAt: row.created_at, updatedAt: row.updated_at });
 
   async function list() {

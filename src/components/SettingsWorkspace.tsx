@@ -99,7 +99,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     members.onDraftChange({ clientId: config?.clientId ?? "", guildId: config?.guildId ?? "", clientSecret: "", botToken: "" });
   }
 
-  const defaultBotEditor = <form onSubmit={members.onSave} className="settings-connection-form" aria-label="Members bot settings">
+  const defaultBotEditor = (onCancel: () => void) => <form onSubmit={members.onSave} className="settings-connection-form" aria-label="Members bot settings">
     <div className="settings-card-body settings-field-grid">
       <label className="settings-field"><span className="field-label">Client ID</span><Input autoFocus disabled={membersBusy} value={members.draft.clientId} onChange={(event) => members.onDraftChange({ ...members.draft, clientId: event.target.value })} placeholder="Discord application ID" inputMode="numeric" required /></label>
       <label className="settings-field"><span className="field-label">Stock server ID</span><Input disabled={membersBusy} value={members.draft.guildId} onChange={(event) => members.onDraftChange({ ...members.draft, guildId: event.target.value })} placeholder="Discord server ID" inputMode="numeric" /></label>
@@ -107,7 +107,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
       <SecretField label="Bot token" saved={config?.hasBotToken} disabled={membersBusy} value={members.draft.botToken} onChange={(event) => members.onDraftChange({ ...members.draft, botToken: event.target.value })} placeholder={config?.hasBotToken ? "Keep saved value" : "Discord bot token"} autoComplete="new-password" />
     </div>
     <div className="settings-form-meta"><ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Blank secret fields keep the saved values.{membersDirty ? <span className="settings-dirty-dot">Unsaved changes</span> : null}</div>
-    <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={!canSaveMembers}>{members.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{members.saving ? "Verifying…" : config?.configured ? "Save changes" : "Verify & save"}</Button>{membersDirty ? <Button type="button" size="sm" variant="ghost" disabled={membersBusy} onClick={resetMembers}>Reset</Button> : null}</div>{config?.stored ? <Button type="button" size="sm" variant="dangerGhost" disabled={membersBusy} onClick={members.onRemove}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Remove</Button> : null}</footer>
+    <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={!canSaveMembers}>{members.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{members.saving ? "Verifying…" : config?.configured ? "Save changes" : "Verify & save"}</Button><Button type="button" size="sm" variant="secondary" disabled={membersBusy} onClick={onCancel}>Cancel</Button>{membersDirty ? <Button type="button" size="sm" variant="secondary" disabled={membersBusy} onClick={resetMembers}>Reset</Button> : null}</div>{config?.stored ? <Button type="button" size="sm" variant="dangerGhost" disabled={membersBusy} onClick={members.onRemove}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Remove</Button> : null}</footer>
   </form>;
 
   return <section ref={workspace} className="settings-workspace" aria-label="Workspace settings">

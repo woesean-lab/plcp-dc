@@ -15,7 +15,15 @@ export function botGatewayIdentify(account, presence) {
   // https://github.com/discord/discord-api-docs/blob/main/developers/events/gateway-events.mdx#identify
   return { op: 2, d: { token: account.botToken, intents: 0,
     properties: { os: process.platform, browser: "Pulcip Onliner", device: "Pulcip Onliner" },
-    presence, compress: false } };
+    presence: { ...presence, activities: [] }, compress: false } };
+}
+
+export function safeBotConnectionError(message, account) {
+  let value = String(message || "");
+  for (const secret of [account.botToken, account.proxyUrl]) {
+    if (secret) value = value.split(secret).join("[redacted]");
+  }
+  return value.replace(/([a-z][a-z\d+.-]*:\/\/)[^\s/@]+@/gi, "$1[redacted]@").slice(0, 600) || null;
 }
 
 export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, selectProxy, normalize, start, snapshot, limit = 3000 }) {
@@ -26,9 +34,13 @@ export function createBotOnlinerManagement({ resolveBot, getConfig, saveConfig, 
     const ids = new Set(clientIds);
     const accounts = current.accounts.filter(account => ids.has(account.communityBotClientId));
     const state = accounts.length ? await snapshot({ ...current, accounts }) : null;
-    return { bots: accounts.map(account => ({ clientId: account.communityBotClientId, linked: true,
-      state: !current.enabled ? "disabled" : state?.worker?.connectionPaused ? "paused"
-        : state?.accounts?.find(item => item.id === account.id)?.connectionState || "disconnected" })) };
+    return { bots: accounts.map(account => {
+      const runtime = state?.accounts?.find(item => item.id === account.id);
+      const connectionState = !current.enabled ? "disabled" : state?.worker?.connectionPaused ? "paused"
+        : runtime?.connectionState || "disconnected";
+      return { clientId: account.communityBotClientId, linked: true, state: connectionState,
+        lastError: connectionState === "connected" ? null : safeBotConnectionError(runtime?.lastError, account) };
+    }) };
   }
   async function connect(clientId) {
     if (connecting) throw fail("A bot connection is already being saved. Try again shortly.");

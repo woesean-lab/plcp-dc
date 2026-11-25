@@ -13,6 +13,7 @@ export type DiscordOnlinerLogEntry = {
 };
 
 export type DiscordOnlinerAccount = {
+  isBot?: boolean;
   id: string;
   hasBotToken: boolean;
   hasProxy: boolean;
@@ -97,6 +98,7 @@ export type DiscordOnlinerInput = {
 };
 
 export type DiscordOnlinerAccountCredentials = {
+  isBot?: boolean;
   accountId: string;
   botToken: string;
   proxyUrl: string;

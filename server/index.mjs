@@ -1,7 +1,7 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
-import { createCommunityBotPool, registerCommunityBotPool, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
+import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
 import { botGatewayIdentify, createManagedBotResolver, createBotOnlinerManagement, registerBotOnlinerManagement } from "./community-bot-management.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
@@ -1776,7 +1776,7 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       id,
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
-      richPresenceEnabled: account?.richPresenceEnabled !== false,
+      richPresenceEnabled: account?.isBot === true ? false : account?.richPresenceEnabled !== false,
       isBot: account?.isBot === true,
       connectionRevision: account?.isBot === true ? String(account?.connectionRevision || "").slice(0, 80) : null,
       communityBotClientId: isDiscordGuildId(String(account?.communityBotClientId ?? "")) ? String(account.communityBotClientId) : null,
@@ -2307,6 +2307,7 @@ function getDiscordOnlinerSnapshot(config) {
       id: account.id,
       hasBotToken: Boolean(account.botToken),
       hasProxy: Boolean(account.proxyUrl),
+      isBot: account.isBot === true,
       richPresenceEnabled: account.richPresenceEnabled !== false,
       ...serializeDiscordOnlinerRuntime(runtime)
     };
@@ -2336,6 +2337,7 @@ async function getDiscordOnlinerSnapshotForApi(config) {
       id: account.id,
       hasBotToken: Boolean(account.botToken),
       hasProxy: Boolean(account.proxyUrl),
+      isBot: account.isBot === true,
       richPresenceEnabled: account.richPresenceEnabled !== false,
       currentActivity: saved.currentActivity ?? null,
       connectionState: workerOnline ? saved.connectionState ?? "disconnected" : "disconnected",
@@ -2656,7 +2658,7 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
 }
 
 function buildDiscordOnlinerAccountPresence(config, account, runtime, chooseNext = false) {
-  if (account.richPresenceEnabled !== false) return buildDiscordOnlinerPresence(config, runtime, chooseNext);
+  if (!account.isBot && account.richPresenceEnabled !== false) return buildDiscordOnlinerPresence(config, runtime, chooseNext);
   if (chooseNext || !runtime.currentStatus) {
     runtime.currentStatus = chooseDiscordOnlinerStatus(config, runtime);
   }
@@ -2669,7 +2671,7 @@ function buildDiscordOnlinerAccountPresence(config, account, runtime, chooseNext
 function scheduleDiscordOnlinerActivityRotation(config, account, runtime, generation) {
   if (runtime.activityTimer) clearTimeout(runtime.activityTimer);
   runtime.activityTimer = null;
-  if (generation !== runtime.generation || account.richPresenceEnabled === false || !config.randomizeEnabled) return;
+  if (generation !== runtime.generation || account.isBot || account.richPresenceEnabled === false || !config.randomizeEnabled) return;
   const intervalMinutes = config.rotationMinMinutes + Math.random() * (config.rotationMaxMinutes - config.rotationMinMinutes);
   runtime.activityTimer = setTimeout(() => {
     if (generation !== runtime.generation || runtime.socket?.readyState !== WebSocket.OPEN) return;
@@ -9871,6 +9873,7 @@ app.get("/api/onliner/accounts/:accountId/credentials", requireSession, async (r
       accountId: account.id,
       botToken: account.botToken,
       proxyUrl: account.proxyUrl,
+      isBot: account.isBot === true,
       richPresenceEnabled: account.richPresenceEnabled !== false
     });
   } catch (error) {
@@ -10213,13 +10216,14 @@ app.post("/api/community/order-bot/inspect", requireSession, async (req, res, ne
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
-    const [storedResult, bot, guildCount, accountCounts] = await Promise.all([
+    const [storedResult, bot, guildCount, accountCounts, deliveryMetrics] = await Promise.all([
       pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'community_oauth_config' LIMIT 1"),
       config.configured ? loadCommunityBotSafe(config) : Promise.resolve(null),
       config.configured ? loadCommunityBotGuildCountSafe(config) : Promise.resolve({ count: null, exact: false }),
       pool.query(`SELECT COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL)::int AS total,
         COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW())::int AS current
-        FROM community_oauth_joins WHERE guild_id=$1`, [config.guildId])
+        FROM community_oauth_joins WHERE guild_id=$1`, [config.guildId]),
+      loadBotDeliveryMetrics(pool, config.clientId, { includeLegacy: true })
     ]);
     res.set("Cache-Control", "no-store").json({
       configured: config.configured,
@@ -10230,6 +10234,7 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       hasBotToken: Boolean(config.botToken),
       authorizedAccounts: Number(accountCounts.rows[0]?.total) || 0,
       activeAccounts: Number(accountCounts.rows[0]?.current) || 0,
+      ...deliveryMetrics,
       activeGuildCount: guildCount.count,
       activeGuildCountExact: guildCount.exact,
       botName: bot?.name || null,
@@ -10321,9 +10326,10 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
     communityBotCache = null;
     communityBotGuildCountCache = null;
     stopCommunityPresenceGateway();
-    const [bot, guildCount] = await Promise.all([
+    const [bot, guildCount, deliveryMetrics] = await Promise.all([
       loadCommunityBotSafe(candidate),
-      loadCommunityBotGuildCountSafe(candidate)
+      loadCommunityBotGuildCountSafe(candidate),
+      loadBotDeliveryMetrics(pool, candidate.clientId, { includeLegacy: true })
     ]);
     res.json({
       configured: true,
@@ -10333,6 +10339,7 @@ app.put("/api/community/config", requireSession, async (req, res, next) => {
       hasClientSecret: true,
       hasBotToken: true,
       guildName: String(guildResult.payload?.name ?? "Discord server"),
+      ...deliveryMetrics,
       activeGuildCount: guildCount.count,
       activeGuildCountExact: guildCount.exact,
       botName: bot?.name || null,

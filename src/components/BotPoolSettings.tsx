@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { Link } from "react-router-dom";
 import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -11,16 +12,16 @@ import { BotServersDialog } from "./BotServersDialog";
 import { connectCommunityBotOnliner, getCommunityBotsOnliner, getCommunityBotPool, saveCommunityPoolBot, setCommunityPoolBotEnabled, type BotOnlinerStatus, type CommunityConfig, type PoolBot } from "../lib/community";
 
 export const PREVIEW_POOL_BOTS: PoolBot[] = [
-  { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, totalOrders: 6, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
-  { clientId: "1544546102458720277", name: "Members 02", avatarUrl: "https://cdn.discordapp.com/embed/avatars/2.png", enabled: true, activeOrders: 1, pendingMembers: 50, totalOrders: 3, authorizedAccounts: 300, activeAccounts: 300, expiredAccounts: 0, hasBotToken: true, hasClientSecret: true },
-  { clientId: "1544546102458720278", name: "Members 03", enabled: false, activeOrders: 0, pendingMembers: 0, totalOrders: 1, hasBotToken: true, hasClientSecret: true }
+  { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, totalOrders: 6, deliveredMembers: 1200, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
+  { clientId: "1544546102458720277", name: "Members 02", avatarUrl: "https://cdn.discordapp.com/embed/avatars/2.png", enabled: true, activeOrders: 1, pendingMembers: 50, totalOrders: 3, deliveredMembers: 900, authorizedAccounts: 300, activeAccounts: 300, expiredAccounts: 0, hasBotToken: true, hasClientSecret: true },
+  { clientId: "1544546102458720278", name: "Members 03", enabled: false, activeOrders: 0, pendingMembers: 0, totalOrders: 1, deliveredMembers: 100, hasBotToken: true, hasClientSecret: true }
 ];
 const EMPTY = { name: "", botToken: "", clientSecret: "" };
 
 export default function BotPoolSettings({ preview = false, defaultConfig, defaultEditor, disabled = false, onRefreshDefault, openDefaultServers = false }: {
   preview?: boolean;
   defaultConfig?: CommunityConfig | null;
-  defaultEditor?: ReactNode;
+  defaultEditor?: ReactNode | ((onCancel: () => void) => ReactNode);
   disabled?: boolean;
   onRefreshDefault?: () => void;
   openDefaultServers?: boolean;
@@ -34,7 +35,11 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const [editing, setEditing] = useState<PoolBot | null>(null);
   const [editor, setEditor] = useState<"default" | "pool" | null>(null);
   const [servers, setServers] = useState<{ clientId: string; name: string } | null>(null);
-  const [onliner, setOnliner] = useState<BotOnlinerStatus[]>([]);
+  const [onliner, setOnliner] = useState<BotOnlinerStatus[]>(preview ? [
+    { clientId: PREVIEW_POOL_BOTS[0].clientId, linked: true, state: "error", lastError: "Example only: proxy authentication failed (HTTP 407)." },
+    { clientId: PREVIEW_POOL_BOTS[1].clientId, linked: true, state: "connected" }
+  ] : []);
+  const [onlinerDetails, setOnlinerDetails] = useState<PoolBot | null>(null);
   const [onlinerRevision, setOnlinerRevision] = useState(0);
   const [draft, setDraft] = useState(EMPTY);
   const pending = useRef(false);
@@ -93,7 +98,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
       if (mounted.current) {
         setOnliner(current => [...current.filter(item => item.clientId !== bot.clientId), { clientId: bot.clientId, linked: true, state: result.enabled ? "connecting" : "disabled" }]);
         setOnlinerRevision(current => current + 1);
-        setNotice(result.enabled ? `${bot.name} linked to Onliner. Connection status updates here.` : `${bot.name} linked. Start Onliner to connect it.`);
+        setOnlinerDetails(null);
       }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not connect bot to Onliner."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
@@ -101,7 +106,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const config = defaultConfig;
   const rows: Array<PoolBot & { isDefault?: boolean }> = [
     ...(defaultEditor ? [{ clientId: config?.clientId || "default", name: config?.botName || "Default bot", avatarUrl: config?.botAvatarUrl,
-      enabled: Boolean(config?.configured), isDefault: true, activeOrders: 0, pendingMembers: 0, totalOrders: 0,
+      enabled: Boolean(config?.configured), isDefault: true, activeOrders: config?.activeOrders || 0, pendingMembers: config?.pendingMembers || 0, totalOrders: config?.totalOrders || 0, deliveredMembers: config?.deliveredMembers || 0,
       authorizedAccounts: config?.authorizedAccounts, activeAccounts: config?.activeAccounts,
       hasBotToken: Boolean(config?.hasBotToken), hasClientSecret: Boolean(config?.hasClientSecret) }] : []),
     ...bots.filter(bot => bot.clientId !== config?.clientId)
@@ -118,24 +123,28 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button></div> : null}
       {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
       {loading ? <BotsSkeleton /> : null}
-      {!loading && rows.length ? <div className="app-panel-soft bot-settings-list"><PaginatedList items={rows} label="Bot pages">{items => <>{items.map(bot => <div className="bot-pool-row" key={bot.isDefault ? "default" : bot.clientId}>
+      {!loading && rows.length ? <div className="app-panel-soft bot-settings-list"><PaginatedList items={rows} label="Bot pages">{items => <>{items.map(bot => {
+        const connection = onliner.find(item => item.clientId === bot.clientId);
+        return <div className="bot-pool-row" key={bot.isDefault ? "default" : bot.clientId}>
           <BotAvatar url={bot.avatarUrl} />
           <div className="bot-pool-row-copy">
-            <div className="bot-pool-row-title"><strong>{bot.name}</strong>{bot.isDefault ? <Badge variant="secondary">Default</Badge> : null}<Badge variant={bot.enabled ? "success" : "secondary"}>{bot.isDefault ? bot.enabled ? "Configured" : "Not configured" : bot.enabled ? "Enabled" : "Disabled"}</Badge>{onliner.find(item => item.clientId === bot.clientId) ? <Badge variant={onliner.find(item => item.clientId === bot.clientId)?.state === "connected" ? "success" : "secondary"}>Onliner · {onliner.find(item => item.clientId === bot.clientId)?.state}</Badge> : null}</div>
+            <div className="bot-pool-row-title"><strong>{bot.name}</strong>{bot.isDefault ? <Badge variant="secondary">Default</Badge> : null}<Badge variant={bot.enabled ? "success" : "secondary"}>{bot.isDefault ? bot.enabled ? "Configured" : "Not configured" : bot.enabled ? "Enabled" : "Disabled"}</Badge>{connection ? <Badge variant={connection.state === "connected" ? "success" : connection.state === "error" ? "destructive" : "secondary"} title={connection.lastError || undefined}>Onliner · {connection.state}</Badge> : null}</div>
             <small>{bot.clientId === "default" ? "Set up the default Members bot" : bot.clientId}</small>
-            <div className="bot-pool-row-stats"><span><strong>{(bot.authorizedAccounts || 0).toLocaleString("en-US")}</strong> authorized accounts</span><span><strong>{(bot.activeAccounts || 0).toLocaleString("en-US")}</strong> unexpired</span>{bot.isDefault ? config?.activeGuildCount != null ? <span><strong>{config.activeGuildCountExact ? "" : "≥ "}{config.activeGuildCount}{config.serverLimit ? ` / ${config.serverLimit}` : ""}</strong> servers</span> : null : <><span><strong>{bot.activeOrders}</strong> active orders</span><span><strong>{bot.pendingMembers.toLocaleString("en-US")}</strong> remaining</span></>}</div>
+            <div className="bot-pool-row-stats"><span><strong>{(bot.deliveredMembers || 0).toLocaleString("en-US")}</strong> delivered</span><span><strong>{bot.totalOrders.toLocaleString("en-US")}</strong> total orders</span><span><strong>{bot.activeOrders.toLocaleString("en-US")}</strong> active orders</span><span><strong>{bot.pendingMembers.toLocaleString("en-US")}</strong> remaining</span></div>
+            <div className="bot-pool-row-stats"><span><strong>{(bot.authorizedAccounts || 0).toLocaleString("en-US")}</strong> authorized accounts</span><span><strong>{(bot.activeAccounts || 0).toLocaleString("en-US")}</strong> unexpired</span>{bot.isDefault && config?.activeGuildCount != null ? <span><strong>{config.activeGuildCountExact ? "" : "≥ "}{config.activeGuildCount}{config.serverLimit ? ` / ${config.serverLimit}` : ""}</strong> servers</span> : null}</div>
           </div>
           <span className="community-member-row-actions">
-            <Button type="button" size="icon-sm" variant="ghost" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
-            <Button type="button" size="icon-sm" variant="accentGhost" aria-label={`Connect ${bot.name} to Onliner`} title={onliner.find(item => item.clientId === bot.clientId)?.state === "connected" ? "Connected to Onliner" : "Connect to Onliner"} disabled={locked || !bot.hasBotToken || onliner.some(item => item.clientId === bot.clientId && item.state === "connected")} onClick={() => void connectOnliner(bot)}><RadioTower className="h-3.5 w-3.5" /></Button>
-            <Button type="button" size="icon-sm" variant="ghost" aria-label={`Edit ${bot.name}`} title="Edit bot" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
-            {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "ghost"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
+            <Button type="button" size="icon-sm" variant="secondary" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
+            <Button type="button" size="icon-sm" variant="secondary" aria-label={`${connection?.lastError || connection?.state === "error" ? "View Onliner error for" : "Connect to Onliner:"} ${bot.name}`} title={connection?.lastError || connection?.state === "error" ? "View Onliner error" : connection?.state === "connected" ? "Connected to Onliner" : "Connect to Onliner"} disabled={locked || !bot.hasBotToken || connection?.state === "connected"} onClick={() => connection?.lastError || connection?.state === "error" ? setOnlinerDetails(bot) : void connectOnliner(bot)}><RadioTower className="h-3.5 w-3.5" /></Button>
+            <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
+            {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "secondary"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
           </span>
-        </div>)}</>}</PaginatedList></div> : !error && !loading ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bots yet</strong><span>Add a bot to enable automatic assignment.</span></div> : null}
+        </div>;
+      })}</>}</PaginatedList></div> : !error && !loading ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bots yet</strong><span>Add a bot to enable automatic assignment.</span></div> : null}
     </div>
     {editor ? <BotSettingsDialog title={editor === "default" ? "Edit default bot" : editing ? `Edit ${editing.name}` : "Add bot"} busy={busy || disabled} onClose={reset}>
       {error ? <div className="settings-load-error" role="alert">{error}</div> : null}
-      {editor === "default" ? defaultEditor : <form className="settings-connection-form" aria-label={editing ? "Edit pool bot" : "Add pool bot"} onSubmit={event => { event.preventDefault(); void save(); }}>
+      {editor === "default" ? typeof defaultEditor === "function" ? defaultEditor(reset) : defaultEditor : <form className="settings-connection-form" aria-label={editing ? "Edit pool bot" : "Add pool bot"} onSubmit={event => { event.preventDefault(); void save(); }}>
       <div className="settings-card-body settings-field-grid">
         <label className="settings-field"><span className="field-label">Bot label</span><Input ref={nameRef} value={draft.name} maxLength={100} placeholder="Uses the bot name if empty" disabled={locked} onChange={event => setDraft(current => ({ ...current, name: event.target.value }))} /></label>
         <label className="settings-field"><span className="field-label">OAuth redirect URL</span><Input readOnly value={`${window.location.origin}/api/community/oauth/callback`} /></label>
@@ -143,11 +152,14 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
         <SecretField label="Client secret" saved={Boolean(editing)} disabled={locked} value={draft.clientSecret} autoComplete="new-password" placeholder={editing ? "Keep saved value" : "Discord client secret"} onChange={event => setDraft(current => ({ ...current, clientSecret: event.target.value }))} />
         <p className="settings-field-note bot-pool-full-width">Register this redirect URL in the application's OAuth2 settings. Client ID and bot name are detected from the token.</p>
       </div>
-      <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={locked || (!editing && (!draft.botToken.trim() || !draft.clientSecret.trim()))}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : editing ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}{busy ? "Verifying…" : editing ? "Save bot" : "Verify & add bot"}</Button>
-        <Button type="button" size="sm" variant="ghost" disabled={locked} onClick={reset}>Cancel</Button></div></footer>
+      <footer className="settings-card-footer"><div><Button type="button" size="sm" variant="secondary" disabled={locked} onClick={reset}>Cancel</Button><Button type="submit" size="sm" disabled={locked || (!editing && (!draft.botToken.trim() || !draft.clientSecret.trim()))}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : editing ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}{busy ? "Verifying…" : editing ? "Save bot" : "Verify & add bot"}</Button></div></footer>
     </form>}
     </BotSettingsDialog> : null}
     {servers ? <BotServersDialog {...servers} preview={preview} onClose={() => setServers(null)} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
+    {onlinerDetails ? <BotSettingsDialog title={`${onlinerDetails.name} · Onliner`} busy={busy} onClose={() => setOnlinerDetails(null)}>
+      <div className="settings-card-body bot-pool-body"><Badge variant="secondary">Rich Presence · Off</Badge><p className="settings-field-note" role="alert">{onliner.find(item => item.clientId === onlinerDetails.clientId)?.lastError || "No detailed error was recorded. Open Onliner logs to inspect this connection."}</p>{error ? <p className="settings-field-note" role="alert">{error}</p> : null}</div>
+      <footer className="settings-card-footer"><Button asChild size="sm" variant="secondary" disabled={busy}><Link to="/manage?tab=onliner" aria-disabled={busy} tabIndex={busy ? -1 : undefined} onClick={event => { if (busy) event.preventDefault(); }}>Open Onliner</Link></Button><div><Button size="sm" variant="secondary" disabled={busy} onClick={() => setOnlinerDetails(null)}>Cancel</Button><Button size="sm" variant="secondary" disabled={busy} onClick={() => void connectOnliner(onlinerDetails)}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Reconnect</Button></div></footer>
+    </BotSettingsDialog> : null}
   </section>;
 }
 

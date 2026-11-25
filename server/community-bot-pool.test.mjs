@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { BOT_POOL_STORAGE_SQL, createCommunityBotPool, registerCommunityBotPool } from "./community-bot-pool.mjs";
+import { BOT_POOL_STORAGE_SQL, createCommunityBotPool, loadBotDeliveryMetrics, registerCommunityBotPool } from "./community-bot-pool.mjs";
 import { createOrderBotService } from "./community-order-bot.mjs";
 
 const pgRuntime = new URL("../output/category-transfer-test/node_modules/@electric-sql/pglite/dist/index.js", import.meta.url);
@@ -97,6 +97,27 @@ test("pool credentials are encrypted, lists contain no secrets and duplicate app
   assert.equal((await service.list())[0].name, "Renamed");
   assert.equal((await service.load(a)).clientSecret, `secret-${a}`);
   await assert.rejects(service.save({ botToken: b, clientSecret: "wrong-app" }, a), /same Discord application/);
+}));
+
+test("delivery metrics isolate each bot, include partial/completed deliveries and preserve legacy default history", options, () => fixture(async ({ service, add, write, pool }) => {
+  await add(a); await add(b);
+  await write({ uniqid: "a-finished", botApplicationId: a, status: "COMPLETED", amount: 500, added: 500 });
+  await write({ uniqid: "a-running", botApplicationId: a, status: "PROCESS", amount: 100, added: 35 });
+  await write({ uniqid: "a-stopped", botApplicationId: a, status: "STOPPED", amount: 50, added: 10 });
+  await write({ uniqid: "b-finished", botApplicationId: b, status: "COMPLETED", amount: 200, added: 200 });
+  await write({ uniqid: "shared-finished", botApplicationId: sharedId, status: "COMPLETED", amount: 30, added: 30 });
+  await write({ uniqid: "shared-old", status: "COMPLETED", amount: 20, added: 20 });
+  await write({ uniqid: "legacy-custom", customBot: true, status: "COMPLETED", amount: 800, added: 800 });
+  await write({ uniqid: "direct", botApplicationId: sharedId, joinMethod: "directly", status: "COMPLETED", amount: 900, added: 900 });
+  const bots = await service.list();
+  const first = bots.find(bot => bot.clientId === a);
+  assert.equal(first.deliveredMembers, 545);
+  assert.equal(first.totalOrders, 3);
+  assert.equal(first.activeOrders, 1);
+  assert.equal(first.pendingMembers, 65);
+  assert.equal(bots.find(bot => bot.clientId === b).deliveredMembers, 200);
+  assert.deepEqual(await loadBotDeliveryMetrics(pool, a), { deliveredMembers: 545, totalOrders: 3, activeOrders: 1, pendingMembers: 65 });
+  assert.deepEqual(await loadBotDeliveryMetrics(pool, sharedId, { includeLegacy: true }), { deliveredMembers: 50, totalOrders: 2, activeOrders: 0, pendingMembers: 0 });
 }));
 
 test("selection uses remaining members before order count, ignores completed work and keeps sticky bindings", options, () => fixture(async ({ service, add, write, acquire }) => {
