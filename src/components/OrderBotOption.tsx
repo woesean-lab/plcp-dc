@@ -1,56 +1,47 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { Bot, LoaderCircle } from "lucide-react";
-import { Input } from "./ui/input";
-import { SecretField } from "./SettingsWorkspace";
-import { inspectCommunityOrderBot } from "../lib/community";
+import { Link } from "react-router-dom";
+import { Bot, LoaderCircle, RefreshCw } from "lucide-react";
+import { Button } from "./ui/button";
+import { getCommunityBotPool, type PoolBot } from "../lib/community";
 
-export type OrderBotDraft = { enabled: boolean; botToken: string; clientSecret: string; clientId: string; botName: string };
-export const EMPTY_ORDER_BOT: OrderBotDraft = { enabled: false, botToken: "", clientSecret: "", clientId: "", botName: "" };
+export type OrderBotDraft = { enabled: boolean };
+export const EMPTY_ORDER_BOT: OrderBotDraft = { enabled: false };
 
-export function OrderBotOption({ value, onChange, guildId = "", serverName = "", disabled = false, unavailable = false, preview = false }: {
-  value: OrderBotDraft; onChange: (value: OrderBotDraft) => void; guildId?: string; serverName?: string;
-  disabled?: boolean; unavailable?: boolean; preview?: boolean;
+export function OrderBotOption({ value, onChange, onAvailabilityChange, serverName = "", disabled = false, unavailable = false, preview = false }: {
+  value: OrderBotDraft; onChange: (value: OrderBotDraft) => void; onAvailabilityChange?: (ready: boolean) => void;
+  serverName?: string; disabled?: boolean; unavailable?: boolean; preview?: boolean;
 }) {
+  const id = useId();
   const [loading, setLoading] = useState(false);
-  const fieldsId = useId();
+  const [bots, setBots] = useState<PoolBot[]>([]);
   const [error, setError] = useState("");
-  const latest = useRef({ value, onChange });
-  latest.current = { value, onChange };
+  const [revision, setRevision] = useState(0);
+  const ready = useRef(onAvailabilityChange);
+  ready.current = onAvailabilityChange;
   useEffect(() => {
-    setError("");
-    setLoading(false);
-    if (!value.enabled || !value.botToken.trim() || preview) return;
+    ready.current?.(false);
+    if (!value.enabled || preview) { if (preview) ready.current?.(true); return; }
     const controller = new AbortController();
-    setLoading(true);
-    const timer = window.setTimeout(() => {
-      void inspectCommunityOrderBot(value.botToken.trim(), guildId, controller.signal).then(identity => {
-        if (!controller.signal.aborted) latest.current.onChange({ ...latest.current.value, clientId: identity.clientId, botName: identity.botName });
-      }).catch(reason => {
-        if (!controller.signal.aborted) {
-          setError(reason instanceof Error ? reason.message : "Bot could not be verified.");
-          latest.current.onChange({ ...latest.current.value, clientId: "", botName: "" });
-        }
-      }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    }, 600);
-    return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [value.enabled, value.botToken, guildId, preview]);
+    setLoading(true); setError("");
+    void getCommunityBotPool(controller.signal).then(result => {
+      if (!controller.signal.aborted) { setBots(result.bots); ready.current?.(result.bots.some(bot => bot.enabled)); }
+    }).catch(reason => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load bot pool."); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [value.enabled, revision, preview]);
+  const count = preview ? 2 : bots.filter(bot => bot.enabled).length;
   return <div className="order-bot-option">
-    <label className={`boost-proxy-toggle ${value.enabled ? "is-enabled" : ""}`}>
-      <input type="checkbox" checked={value.enabled} disabled={disabled || unavailable} onChange={event => onChange({ ...value, enabled: event.target.checked })} aria-controls={fieldsId} aria-expanded={value.enabled} />
-      <span><Bot className="h-4 w-4" aria-hidden="true" /></span>
-      <strong>New bot{serverName ? ` · ${serverName}` : ""}</strong>
-      <small>{unavailable ? "Available for bot-based delivery." : "Use a separate bot for this order."}</small>
+    <label className={"boost-proxy-toggle " + (value.enabled ? "is-enabled" : "")}>
+      <input type="checkbox" checked={value.enabled} disabled={disabled || unavailable} onChange={event => onChange({ enabled: event.target.checked })} aria-controls={id} aria-expanded={value.enabled} />
+      <span><Bot className="h-4 w-4" aria-hidden="true" /></span><strong>Bot pool{serverName ? " · " + serverName : ""}</strong>
+      <small>{unavailable ? "Available for bot-based delivery." : "Automatically assign the least loaded bot."}</small>
     </label>
-    {value.enabled ? <div id={fieldsId} className="app-panel-soft order-bot-fields">
-      <div className="order-bot-field-grid">
-        <label className="settings-field"><span className="field-label">Client ID</span><Input value={value.clientId} readOnly placeholder="Detected from bot token" /></label>
-        <label className="settings-field"><span className="field-label">Stock server ID</span><Input value={guildId} readOnly placeholder="Detected from server invite" /></label>
-        <SecretField label="Client secret" value={value.clientSecret} disabled={disabled} autoComplete="new-password" placeholder="Discord client secret" onChange={event => onChange({ ...value, clientSecret: event.target.value })} />
-        <SecretField label="Bot token" value={value.botToken} disabled={disabled} autoComplete="new-password" placeholder="Discord bot token" onChange={event => onChange({ ...value, botToken: event.target.value, clientId: "", botName: "" })} />
+    {value.enabled ? <div id={id} className="app-panel-soft order-bot-fields">
+      <div className="bot-pool-option-status" role="status">{loading ? <><LoaderCircle className="h-4 w-4 animate-spin" />Loading bot pool…</> : error ? <span role="alert">{error}</span> : <span>{count ? count + " enabled bot" + (count === 1 ? "" : "s") + " · Assigned when the order is created." : "No enabled bots. Add a bot in Settings."}</span>}
+        <Button type="button" size="xs" variant="secondary" disabled={disabled || loading} onClick={() => setRevision(current => current + 1)}><RefreshCw className="h-3.5 w-3.5" />{error ? "Retry" : "Refresh"}</Button>
       </div>
-      <p className="settings-field-note">{loading ? <><LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />Checking bot…</> : value.botName ? `Bot: ${value.botName}` : "Enter the new bot credentials."}</p>
-      <label className="settings-field"><span className="field-label">OAuth redirect URL</span><Input value={`${window.location.origin}/api/community/oauth/callback`} readOnly /></label>
-      {error ? <p className="text-sm text-[var(--app-danger)]" role="alert">{error}</p> : null}
+      <p className="settings-field-note">The assigned bot stays with this order for delivery and replacements.</p>
+      {disabled ? <Button type="button" size="sm" variant="ghost" disabled>Manage bot pool</Button> : <Button asChild size="sm" variant="ghost"><Link to="/manage?tab=settings&settings=bot-pool">Manage bot pool</Link></Button>}
     </div> : null}
   </div>;
 }

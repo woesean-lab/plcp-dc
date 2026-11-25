@@ -1,5 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type FormEventHandler, type InputHTMLAttributes, type KeyboardEvent } from "react";
-import { Bot, Check, CheckCircle2, Eye, EyeOff, Globe2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
+import { SecretField } from "./ui/secret-field";
+import BotPoolSettings from "./BotPoolSettings";
+import { useSearchParams } from "react-router-dom";
+import { useEffect, useId, useMemo, useRef, useState, type FormEventHandler, type KeyboardEvent } from "react";
+import { Bot, Check, CheckCircle2, Globe2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, Search, Settings2, ShieldCheck, Trash2 } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -48,6 +51,7 @@ export type SettingsWorkspaceProps = {
 
 const SECTIONS = [
   { id: "connections", label: "Connections", description: "Bot & API credentials", Icon: Settings2 },
+  { id: "bot-pool", label: "Bot pool", description: "Members delivery bots", Icon: Bot },
   { id: "servers", label: "Bot servers", description: "Access & memberships", Icon: Globe2 }
 ] as const;
 type Section = typeof SECTIONS[number]["id"];
@@ -55,25 +59,15 @@ type Section = typeof SECTIONS[number]["id"];
 export function SettingsWorkspaceSkeleton() {
   return <section className="settings-workspace" role="status" aria-busy="true" aria-label="Loading settings">
     <header className="page-heading settings-page-heading"><div><Skeleton className="h-3 w-20" /><Skeleton className="mt-3 h-10 w-40" /><Skeleton className="mt-3 h-4 w-64 max-w-full" /></div><Skeleton className="h-9 w-36" /></header>
-    <div className="settings-layout"><aside className="settings-navigation"><div className="stock-category-tabs settings-section-tabs">{Array.from({ length: 2 }, (_, index) => <Skeleton key={index} className="h-16 w-full" />)}</div></aside><div className="settings-content"><Skeleton className="mb-6 h-10 w-56 max-w-full" /><div className="settings-connections-grid">{[0, 1].map((index) => <section key={index} className="app-panel settings-card"><header className="settings-card-heading"><Skeleton className="h-8 w-8" /><Skeleton className="h-7 w-36" /></header><div className="settings-card-body settings-form-skeleton">{Array.from({ length: index === 0 ? 4 : 2 }, (_, field) => <Skeleton key={field} className="h-14 w-full" />)}</div><footer className="settings-card-footer"><Skeleton className="h-9 w-28" /></footer></section>)}</div></div></div>
+    <div className="settings-layout"><aside className="settings-navigation"><div className="stock-category-tabs settings-section-tabs settings-preference-tabs">{SECTIONS.map(({ id }) => <Skeleton key={id} className="h-16 w-full" />)}</div></aside><div className="settings-content"><Skeleton className="mb-6 h-10 w-56 max-w-full" /><div className="settings-connections-grid">{[0, 1].map((index) => <section key={index} className="app-panel settings-card"><header className="settings-card-heading"><Skeleton className="h-8 w-8" /><Skeleton className="h-7 w-36" /></header><div className="settings-card-body settings-form-skeleton">{Array.from({ length: index === 0 ? 4 : 2 }, (_, field) => <Skeleton key={field} className="h-14 w-full" />)}</div><footer className="settings-card-footer"><Skeleton className="h-9 w-28" /></footer></section>)}</div></div></div>
   </section>;
 }
 
-export function SecretField({ label, saved, ...props }: InputHTMLAttributes<HTMLInputElement> & { label: string; saved?: boolean }) {
-  const id = useId();
-  const [visible, setVisible] = useState(false);
-  return <div className="settings-field">
-    <div className="settings-field-heading"><label className="field-label" htmlFor={id}>{label}</label>{saved ? <span className="settings-saved"><Check className="h-3 w-3" aria-hidden="true" />Saved</span> : null}</div>
-    <div className="settings-secret-input">
-      <Input {...props} id={id} type={visible ? "text" : "password"} />
-      <span className="community-member-row-actions settings-secret-action"><Button type="button" size="icon-sm" variant="ghost" disabled={props.disabled} aria-label={`${visible ? "Hide" : "Show"} ${label.toLowerCase()}`} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>{visible ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}</Button></span>
-    </div>
-  </div>;
-}
-
 export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, salta7, guilds, integrationPreview = false }: SettingsWorkspaceProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [integrationConfigured, setIntegrationConfigured] = useState(false);
-  const [section, setSection] = useState<Section>("connections");
+  const requestedSection = searchParams.get("settings");
+  const section: Section = SECTIONS.some(item => item.id === requestedSection) ? requestedSection as Section : "connections";
   const [search, setSearch] = useState("");
   const [compactNavigation, setCompactNavigation] = useState(false);
   const workspace = useRef<HTMLElement | null>(null);
@@ -104,7 +98,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     if (section === "servers" && config?.configured) guilds.onOpen();
   }, [section, config?.configured, guilds.onOpen]);
   function selectSection(next: Section) {
-    setSection(next);
+    setSearchParams(current => { const params = new URLSearchParams(current); params.set("settings", next); return params; }, { replace: true });
   }
   function handleTabKey(event: KeyboardEvent<HTMLButtonElement>, index: number) {
     const next = ["ArrowRight", "ArrowDown"].includes(event.key) ? (index + 1) % SECTIONS.length
@@ -129,7 +123,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
     <div className="settings-layout">
       <aside className="settings-navigation">
         <span className="app-kicker settings-navigation-label">Preferences</span>
-        <div className="stock-category-tabs settings-section-tabs" role="tablist" aria-label="Settings sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>{SECTIONS.map(({ id: key, label, description, Icon }, index) => <button
+        <div className="stock-category-tabs settings-section-tabs settings-preference-tabs" role="tablist" aria-label="Settings sections" aria-orientation={compactNavigation ? "horizontal" : "vertical"}>{SECTIONS.map(({ id: key, label, description, Icon }, index) => <button
           ref={(node) => { tabs.current[index] = node; }} key={key} id={`${id}-${key}-tab`} type="button" role="tab" className={section === key ? "is-active" : undefined}
           aria-selected={section === key} aria-controls={`${id}-${key}-panel`} tabIndex={section === key ? 0 : -1} onKeyDown={(event) => handleTabKey(event, index)} onClick={() => selectSection(key)}>
           <Icon className="h-4 w-4" aria-hidden="true" /><span><strong>{label}</strong><small>{description}</small></span>
@@ -146,6 +140,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
               <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Members stock</span><h3 id={`${id}-members-title`}>Members bot</h3></div><Badge variant={config?.configured ? "success" : "secondary"}>{loading && !config ? "Loading" : config?.configured ? "Configured" : "Not configured"}</Badge></header>
               {loading && !config ? <div className="settings-card-body settings-form-skeleton" aria-label="Loading Members settings"><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /><Skeleton className="h-14 w-full" /></div> : <>
                 {config?.configured ? <div className="settings-bot-identity"><span className="settings-bot-avatar" aria-hidden="true"><Bot className="h-5 w-5" /></span><span><strong title={config.guildName}>{config.guildName || "Members bot"}</strong><small>{config.guildId || "No stock server selected"}</small></span><span className="settings-server-count"><Globe2 className="h-3.5 w-3.5" aria-hidden="true" />{serverCount}<small>servers</small></span></div> : null}
+                {config?.configured ? <p className="settings-form-meta">{config.authorizedAccounts || 0} authorized accounts · {config.activeAccounts || 0} unexpired</p> : null}
                 <form onSubmit={members.onSave} className="settings-connection-form" aria-label="Members bot settings">
                   <div className="settings-card-body settings-field-grid">
                     <label className="settings-field"><span className="field-label">Client ID</span><Input disabled={membersBusy} value={members.draft.clientId} onChange={(event) => members.onDraftChange({ ...members.draft, clientId: event.target.value })} placeholder="Discord application ID" inputMode="numeric" required /></label>
@@ -182,8 +177,12 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
           </div>
         </div>
 
+        <div id={`${id}-bot-pool-panel`} role="tabpanel" aria-labelledby={`${id}-bot-pool-tab`} hidden={section !== "bot-pool"} tabIndex={0}>
+          <div className="settings-section-heading"><div><h2>Bot pool</h2><p>Saved bots for automatic Members order assignment.</p></div><span className="settings-section-index">02</span></div>
+          {section === "bot-pool" ? <BotPoolSettings preview={integrationPreview} /> : null}
+        </div>
         <div id={`${id}-servers-panel`} role="tabpanel" aria-labelledby={`${id}-servers-tab`} hidden={section !== "servers"} tabIndex={0}>
-          <div className="settings-section-heading"><div><h2>Bot servers</h2><p>Servers joined by the Members bot.</p></div><span className="settings-section-index">02</span></div>
+          <div className="settings-section-heading"><div><h2>Bot servers</h2><p>Servers joined by the Members bot.</p></div><span className="settings-section-index">03</span></div>
           <section className="app-panel settings-card" aria-label="Members bot servers">
             <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Globe2 className="h-4 w-4" /></span><div className="settings-card-title"><span className="app-kicker">Server access</span><h3>Connected servers</h3></div><Button type="button" size="sm" variant="secondary" disabled={!config?.configured || guilds.loading || guilds.leaving} onClick={guilds.onRefresh}><RefreshCw className={`h-3.5 w-3.5${guilds.loading ? " animate-spin" : ""}`} aria-hidden="true" />Refresh</Button></header>
             {!config?.configured ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>No bot configured</strong><span>Server access is unavailable.</span></div> : <>

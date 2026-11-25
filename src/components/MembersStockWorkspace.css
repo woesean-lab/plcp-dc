@@ -1,4 +1,13 @@
 .members-stock-workspace { display: grid; min-width: 0; gap: 24px; container: members-stock / inline-size; }
+.stock-bot-authorizations { display: grid; min-width: 0; gap: 12px; padding: 16px; }
+.stock-bot-authorization-heading, .stock-bot-authorization-actions, .stock-bot-job { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; min-width: 0; }
+.stock-bot-authorization-heading > div:first-child { flex: 1; min-width: 180px; }
+.stock-bot-authorizations .settings-field-note { margin: 0; }
+.stock-bot-authorization-actions > span:not(.status-badge) { font-size: 11px; color: var(--app-muted); }
+.stock-bot-job > span { display: grid; flex: 1; min-width: 170px; gap: 5px; }
+.stock-bot-job strong { font-size: 12px; color: var(--app-text); }
+.stock-bot-job small, .stock-bot-job details { font-size: 11px; color: var(--app-muted); overflow-wrap: anywhere; }
+.stock-bot-job details { flex-basis: 100%; }
 .members-stock-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
 .members-stock-heading-identity { display: flex; align-items: center; flex-wrap: wrap; min-width: 0; gap: 12px; }
 .members-stock-heading-identity > div { min-width: 0; }

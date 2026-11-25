@@ -1,5 +1,30 @@
 import type { CommunityJoinMethod } from "../types";
 
+export type PoolBot = { clientId: string; name: string; enabled: boolean; activeOrders: number; pendingMembers: number; totalOrders: number; authorizedAccounts?: number; activeAccounts?: number; expiredAccounts?: number; hasBotToken: boolean; hasClientSecret: boolean; createdAt?: string; updatedAt?: string };
+export type BotAuthorizationJob = { id: string; clientId: string; status: string; categoryId: string; total: number; processed: number; succeeded: number; failed: number; details?: string; errors: Array<{ userId: string; message: string }> };
+export function getBotAuthorizationJob(clientId: string, signal?: AbortSignal) {
+  return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations`, { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotAuthorizationJob | null>);
+}
+export function startBotAuthorizationJob(clientId: string, categoryId: string, discordUserIds?: string[]) {
+  return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId, discordUserIds }) }).then(parseResponse<BotAuthorizationJob>);
+}
+export function controlBotAuthorizationJob(clientId: string, action: "resume" | "cancel") {
+  return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}/authorizations/${action}`, { method: "POST", credentials: "same-origin" }).then(parseResponse<BotAuthorizationJob>);
+}
+export function getCommunityBotPool(signal?: AbortSignal) {
+  return fetch("/api/community/bot-pool", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<{ bots: PoolBot[] }>);
+}
+export function saveCommunityPoolBot(input: { name: string; botToken: string; clientSecret: string }, clientId?: string) {
+  return fetch(`/api/community/bot-pool${clientId ? `/${encodeURIComponent(clientId)}` : ""}`, { method: clientId ? "PUT" : "POST", credentials: "same-origin", cache: "no-store",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)
+  }).then(parseResponse<{ bots: PoolBot[] }>);
+}
+export function setCommunityPoolBotEnabled(clientId: string, enabled: boolean) {
+  return fetch(`/api/community/bot-pool/${encodeURIComponent(clientId)}`, { method: "PATCH", credentials: "same-origin", cache: "no-store",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled })
+  }).then(parseResponse<{ bots: PoolBot[] }>);
+}
+
 export function inspectCommunityOrderBot(botToken: string, guildId: string, signal?: AbortSignal) {
   return fetch("/api/community/order-bot/inspect", { method: "POST", credentials: "same-origin", cache: "no-store", signal,
     headers: { "Content-Type": "application/json" }, body: JSON.stringify({ botToken, guildId })
@@ -114,6 +139,8 @@ export type CommunityAdminStatus = CommunityJoinSummary & {
 };
 
 export type CommunityConfig = {
+  authorizedAccounts?: number;
+  activeAccounts?: number;
   configured: boolean;
   stored: boolean;
   clientId: string;
@@ -376,13 +403,13 @@ export function getCommunityGuildLeaveProgress() {
   }).then(parseResponse<CommunityGuildLeaveProgress>);
 }
 
-export function importCommunityOAuthStock(records: unknown[], categoryId: CommunityStockType) {
+export function importCommunityOAuthStock(records: unknown[], categoryId: CommunityStockType, poolBotId?: string) {
   return fetch("/api/community/import-oauth-stock", {
     method: "POST",
     cache: "no-store",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records, categoryId })
+    body: JSON.stringify({ records, categoryId, poolBotId })
   }).then(parseResponse<CommunityOAuthImportResult>);
 }
 
@@ -402,8 +429,8 @@ export function addCommunityAccount(accountToken: string, categoryId: CommunityS
   }).then(parseResponse<CommunityAccountAuthorizationResult>);
 }
 
-export function exportCommunityOAuthStock(categoryId: CommunityStockType) {
-  return fetch(`/api/community/export-oauth-stock?categoryId=${encodeURIComponent(categoryId)}`, {
+export function exportCommunityOAuthStock(categoryId: CommunityStockType, poolBotId?: string) {
+  return fetch(`/api/community/export-oauth-stock?categoryId=${encodeURIComponent(categoryId)}${poolBotId ? `&poolBotId=${encodeURIComponent(poolBotId)}` : ""}`, {
     cache: "no-store",
     credentials: "same-origin"
   }).then(parseResponse<CommunityOAuthExportRecord[]>);

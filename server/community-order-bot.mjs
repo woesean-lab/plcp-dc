@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS community_order_bot_credentials (
   PRIMARY KEY (order_id, discord_user_id)
 );`;
 
-export function createOrderBotService({ pool, request, encrypt, decrypt, authorize, refresh,
+export function createOrderBotService({ pool, request, encrypt, decrypt, authorize, refresh, loadPoolConfig, withPoolGrantLock,
   requestIdentity = accessToken => request("oauth2/@me", { headers: { Authorization: `Bearer ${accessToken}` } }) }) {
   const pending = new Map();
   const key = id => `community_order_bot:${id}`;
@@ -55,21 +55,33 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
     if (!result.rows[0]) throw Object.assign(new Error("This order's bot configuration is missing."), { statusCode: 409 });
     const config = JSON.parse(decrypt(result.rows[0].encrypted_value));
     if (config.orderBotId !== order.uniqid || config.clientId !== order.botApplicationId) throw fail("The order bot configuration does not match this order.");
-    return { ...config, guildId: order.serverId, stockGuildId: config.stockGuildId || base.guildId };
+    const pooled = config.poolBotId ? await loadPoolConfig(config.poolBotId) : {};
+    if (config.poolBotId && config.poolBotId !== config.clientId) throw fail("The order pool bot does not match its application.");
+    return { ...config, ...pooled, guildId: order.serverId, stockGuildId: config.stockGuildId || base.guildId };
   }
 
   async function token(config, member, { force = false, allowAuthorize = true } = {}) {
     const userId = String(member?.discord_user_id ?? "");
     if (!/^\d{16,22}$/.test(userId)) throw fail("A valid member is required for bot authorization.");
-    const jobKey = `${config.orderBotId}:${userId}`;
+    const pooled = Boolean(config.poolBotId);
+    const grantId = config.poolBotId || config.orderBotId;
+    const table = pooled ? "community_bot_pool_credentials" : "community_order_bot_credentials";
+    const keyColumn = pooled ? "client_id" : "order_id";
+    const jobKey = `${table}:${grantId}:${userId}`;
     if (pending.has(jobKey)) return pending.get(jobKey);
-    const job = (async () => {
-      const result = await pool.query("SELECT encrypted_value FROM community_order_bot_credentials WHERE order_id = $1 AND discord_user_id = $2", [config.orderBotId, userId]);
+    const run = async () => {
+      const result = await pool.query(`SELECT encrypted_value FROM ${table} WHERE ${keyColumn} = $1 AND discord_user_id = $2`, [grantId, userId]);
       const stored = result.rows[0] ? JSON.parse(decrypt(result.rows[0].encrypted_value)) : null;
       if (stored && stored.clientId !== config.clientId) throw fail("Member authorization belongs to another application.");
       if (!force && stored?.accessToken && Date.parse(stored.expiresAt) > Date.now() + 48 * 60 * 60 * 1000) return stored.accessToken;
       let oauth;
-      if (stored?.refreshToken) oauth = await refresh(config, stored.refreshToken);
+      if (stored?.refreshToken) {
+        try { oauth = await refresh(config, stored.refreshToken); }
+        catch (error) {
+          if (!allowAuthorize || !error.oauthRefreshInvalid) throw error;
+          oauth = await authorize(config, member);
+        }
+      }
       else {
         if (!allowAuthorize) throw Object.assign(new Error("This member has not authorized the order bot."), { oauthAccessInvalid: true });
         oauth = await authorize(config, member);
@@ -78,11 +90,12 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
       if (identity.response.status === 429) throw fail("Discord is limiting order bot authorizations. Wait before resuming delivery.", 429);
       if (!identity.response.ok || String(identity.payload?.user?.id) !== userId || String(identity.payload?.application?.id) !== config.clientId
         || !Array.isArray(identity.payload?.scopes) || !identity.payload.scopes.includes("guilds.join")) throw fail("Discord returned an authorization for a different member or application, or without guilds.join.");
-      await pool.query(`INSERT INTO community_order_bot_credentials (order_id, discord_user_id, encrypted_value) VALUES ($1, $2, $3)
-        ON CONFLICT (order_id, discord_user_id) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value`,
-      [config.orderBotId, userId, encrypt(JSON.stringify({ accessToken: oauth.accessToken, refreshToken: oauth.refreshToken, expiresAt: oauth.expiresAt, clientId: config.clientId }))]);
+      await pool.query(`INSERT INTO ${table} (${keyColumn}, discord_user_id, encrypted_value) VALUES ($1, $2, $3)
+        ON CONFLICT (${keyColumn}, discord_user_id) DO UPDATE SET encrypted_value = EXCLUDED.encrypted_value`,
+      [grantId, userId, encrypt(JSON.stringify({ accessToken: oauth.accessToken, refreshToken: oauth.refreshToken, expiresAt: oauth.expiresAt, clientId: config.clientId }))]);
       return oauth.accessToken;
-    })().finally(() => pending.delete(jobKey));
+    };
+    const job = (pooled && withPoolGrantLock ? withPoolGrantLock(grantId, userId, run) : run()).finally(() => pending.delete(jobKey));
     pending.set(jobKey, job);
     return job;
   }

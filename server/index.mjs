@@ -1,6 +1,8 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
 import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-bot.mjs";
+import { createCommunityBotPool, registerCommunityBotPool, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
+import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
 import { normalizeCommunitySpeedProfile, getCommunitySpeedDelay, getCommunitySpeedPresetDelay } from "../shared/community-speed.mjs";
 import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceRunner, invokeReplacement, withOrderReplacementLock } from "./order-auto-replace.mjs";
@@ -521,10 +523,12 @@ function normalizeCommunityOAuthConfig(value = {}) {
   if (!isDiscordGuildId(guildId)) missing.push("DISCORD_TARGET_GUILD_ID");
 
   return { configured: missing.length === 0, missing: [...new Set(missing)], clientId, clientSecret, botToken, guildId,
-    ...(value.orderBotId ? { orderBotId: value.orderBotId, redirectUri: value.redirectUri, stockGuildId: value.stockGuildId } : {}) };
+    ...(value.orderBotId ? { orderBotId: value.orderBotId, poolBotId: value.poolBotId, redirectUri: value.redirectUri, stockGuildId: value.stockGuildId } : {}) };
 }
 
 const orderBotService = createOrderBotService({ pool, request: requestDiscord, encrypt: encryptCredential, decrypt: decryptCredential,
+  loadPoolConfig: clientId => communityBotPool.load(clientId),
+  withPoolGrantLock: (clientId, userId, run) => communityBotPool.withGrantLock(clientId, userId, run),
   refresh: exchangeCommunityOAuthRefreshToken,
   requestIdentity: (accessToken, oauth) => oauth.authorizationProxy
     ? requestDiscordThroughProxy("oauth2/@me", oauth.authorizationProxy, { headers: { Authorization: `Bearer ${accessToken}` } })
@@ -551,6 +555,13 @@ const orderBotService = createOrderBotService({ pool, request: requestDiscord, e
     return { ...result.oauth, authorizationProxy: proxyUrl };
   }
 });
+
+const communityBotPool = createCommunityBotPool({ pool, encrypt: encryptCredential, decrypt: decryptCredential,
+  verify: orderBotService.prepare, getSharedConfig: getCommunityOAuthConfig });
+const botAuthorizations = createBotAuthorizations({ pool, getConfig: getCommunityOAuthConfig,
+  loadBot: communityBotPool.load, token: orderBotService.token, encrypt: encryptCredential, decrypt: decryptCredential,
+  request: requestDiscord, refresh: exchangeCommunityOAuthRefreshToken, parseExpiry: parseCommunityAccessTokenExpiry,
+  withGrantLock: communityBotPool.withGrantLock });
 
 async function getCommunityOAuthConfig(order = null) {
   let stored = null;
@@ -8960,6 +8971,8 @@ async function initializeDatabase() {
   await pool.query(CUSTOMER_REACTION_SETTINGS_GUARD_SQL);
   await pool.query(AUTO_REPLACE_GUARD_SQL);
   await pool.query(ORDER_BOT_STORAGE_SQL);
+  await pool.query(BOT_POOL_STORAGE_SQL);
+  await pool.query(BOT_AUTHORIZATION_STORAGE_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -10168,6 +10181,9 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
   }
 });
 
+registerCommunityBotPool(app, requireSession, communityBotPool);
+registerBotAuthorizations(app, requireSession, botAuthorizations);
+
 app.post("/api/community/order-bot/inspect", requireSession, async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store").json(await orderBotService.inspect(req.body?.botToken, String(req.body?.guildId ?? "")));
@@ -10177,10 +10193,13 @@ app.post("/api/community/order-bot/inspect", requireSession, async (req, res, ne
 app.get("/api/community/config", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
-    const [storedResult, bot, guildCount] = await Promise.all([
+    const [storedResult, bot, guildCount, accountCounts] = await Promise.all([
       pool.query("SELECT 1 FROM app_settings WHERE setting_key = 'community_oauth_config' LIMIT 1"),
       config.configured ? loadCommunityBotSafe(config) : Promise.resolve(null),
-      config.configured ? loadCommunityBotGuildCountSafe(config) : Promise.resolve({ count: null, exact: false })
+      config.configured ? loadCommunityBotGuildCountSafe(config) : Promise.resolve({ count: null, exact: false }),
+      pool.query(`SELECT COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL)::int AS total,
+        COUNT(*) FILTER (WHERE encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW())::int AS current
+        FROM community_oauth_joins WHERE guild_id=$1`, [config.guildId])
     ]);
     res.set("Cache-Control", "no-store").json({
       configured: config.configured,
@@ -10189,6 +10208,8 @@ app.get("/api/community/config", requireSession, async (_req, res, next) => {
       guildId: config.guildId,
       hasClientSecret: Boolean(config.clientSecret),
       hasBotToken: Boolean(config.botToken),
+      authorizedAccounts: Number(accountCounts.rows[0]?.total) || 0,
+      activeAccounts: Number(accountCounts.rows[0]?.current) || 0,
       activeGuildCount: guildCount.count,
       activeGuildCountExact: guildCount.exact,
       botVerified: bot?.verified === true,
@@ -10697,6 +10718,7 @@ app.post("/api/community/categories/:categoryId/accounts", requireSession, async
 
 app.post("/api/community/import-oauth-stock", requireSession, async (req, res, next) => {
   try {
+    if (req.body?.poolBotId) return res.set("Cache-Control", "no-store").json(await botAuthorizations.importRecords(String(req.body.poolBotId), req.body));
     const config = await getCommunityOAuthConfig();
     if (!config.configured) {
       return res.status(503).json({ message: "Configure the Members bot before importing OAuth stock." });
@@ -10855,6 +10877,7 @@ app.post("/api/community/import-oauth-stock", requireSession, async (req, res, n
 
 app.get("/api/community/export-oauth-stock", requireSession, async (req, res, next) => {
   try {
+    if (req.query?.poolBotId) return res.set("Cache-Control", "no-store, private").json(await botAuthorizations.exportRecords(String(req.query.poolBotId),req.query.categoryId));
     const config = await getCommunityOAuthConfig();
     if (!config.configured) {
       return res.status(503).json({ message: "Configure the Members bot before exporting OAuth stock." });
@@ -11849,6 +11872,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     // calculation can remain server-specific without consuming the web
     // service's shared Discord invite rate-limit bucket.
     const config = stockConfig;
+    const poolGrantUserIds = req.query?.useBotPool === "true" && joinMethod === "create_invite" ? await communityBotPool.grantUserIds() : [];
     const resolvedGuildId = String(req.query?.guildId ?? "").trim();
     const availabilityGuildId = isDiscordGuildId(resolvedGuildId)
       ? resolvedGuildId
@@ -11858,12 +11882,12 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
     }
     const unavailableGroups = await loadCommunityUnavailableUserIdGroups(pool, availabilityGuildId);
     const result = await pool.query(
-      `SELECT discord_user_id, reserved_order_id
+      `SELECT discord_user_id, reserved_order_id, encrypted_account_token IS NOT NULL AS has_account_token
        FROM community_oauth_joins
        WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
          AND (($3::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))`,
-      [config.guildId, stockType, (communityJoinMethodUsesAccountToken(joinMethod) || req.query?.newBot === "true")]
+           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($4::text[]))`,
+      [config.guildId, stockType, (communityJoinMethodUsesAccountToken(joinMethod) || req.query?.newBot === "true" || req.query?.useBotPool === "true"), poolGrantUserIds]
     );
     const delivered = new Set(unavailableGroups.deliveredUserIds);
     const activeAssignments = new Set(unavailableGroups.activeAssignmentUserIds);
@@ -11882,6 +11906,17 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
       else if (atServerCapacity.has(discordUserId)) breakdown.serverLimit += 1;
       else available += 1;
     }
+    if (req.query?.useBotPool === "true" && joinMethod === "create_invite") {
+      const bots = (await communityBotPool.list()).filter(bot => bot.enabled && bot.clientId !== config.clientId);
+      let maximum = 0;
+      for (const bot of bots) {
+        const grants = new Set(await communityBotPool.grantUserIds(bot.clientId));
+        const count = result.rows.filter(row => (row.has_account_token || grants.has(row.discord_user_id))
+          && !delivered.has(row.discord_user_id) && !activeAssignments.has(row.discord_user_id) && !atServerCapacity.has(row.discord_user_id)).length;
+        maximum = Math.max(maximum,count);
+      }
+      available = maximum;
+    }
     res.set("Cache-Control", "no-store").json({ available, maximum: available, breakdown });
   } catch (error) {
     next(error);
@@ -11890,6 +11925,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
 
 async function createCommunityOrder(req, res, next) {
   let client = null;
+  let poolReservationId = null;
   try {
     if (req.body?.autoReplace !== undefined && typeof req.body.autoReplace !== "boolean") return res.status(400).json({ message: "Auto-replace must be enabled or disabled." });
     const amount = Number.parseInt(req.body?.amount, 10);
@@ -11902,9 +11938,21 @@ async function createCommunityOrder(req, res, next) {
       return res.status(400).json({ message: "A valid Members 2 mode, member amount and delay are required." });
     }
     const uniqid = req.integrationOrderId || createCommunityOrderId();
-    const customConfig = req.body?.newBot ? await orderBotService.prepare(req.body.newBot, await getCommunityOAuthConfig(), {
+    if (req.body?.useBotPool !== undefined && typeof req.body.useBotPool !== "boolean") return res.status(400).json({ message: "Choose whether to use the bot pool." });
+    if (req.body?.useBotPool && req.body?.newBot) return res.status(400).json({ message: "Choose a pool bot or new bot credentials, not both." });
+    if (req.body?.useBotPool && joinMethod === "directly") return res.status(400).json({ message: "Bot pool is available for bot-based join methods." });
+    const customConfig = req.body?.useBotPool ? await communityBotPool.acquire({ orderId: uniqid, amount,
+      stockAllocations: Array.isArray(req.body?.categoryAllocations) && req.body.categoryAllocations.length
+        ? req.body.categoryAllocations.map(item => ({ categoryId: parseCommunityCategoryId(item.categoryId), amount: Number(item.amount) }))
+        : [{ categoryId: parseCommunityCategoryId(req.body?.categoryId ?? getCommunityStockTypeFromService(service)), amount }],
+      excludedUserIds: isDiscordGuildId(String(req.body?.resolvedGuildId || req.body?.id || ""))
+        ? await loadCommunityUnavailableUserIds(pool,String(req.body.resolvedGuildId || req.body.id)) : [],
+      accountTokenOnly: joinMethod !== "create_invite",
+      base: await getCommunityOAuthConfig(), redirectUri: `${req.protocol}://${req.get("host")}/api/community/oauth/callback`
+    }) : req.body?.newBot ? await orderBotService.prepare(req.body.newBot, await getCommunityOAuthConfig(), {
       orderId: uniqid, redirectUri: `${req.protocol}://${req.get("host")}/api/community/oauth/callback`
     }) : null;
+    if (customConfig?.poolBotId) poolReservationId = uniqid;
     if (customConfig && joinMethod === "directly") return res.status(400).json({ message: "New bot is available for bot-based join methods." });
     const resolvedInvite = await resolveConfiguredCommunityInvite(req.body?.id, {
       allowWaitingForBot: true,
@@ -11913,6 +11961,7 @@ async function createCommunityOrder(req, res, next) {
       resolvedServerInfo: normalizeSubmittedDiscordResolution(req.body)
     });
     const { config, serverInfo, invitesPaused } = resolvedInvite;
+    const poolGrantUserIds = config.poolBotId && joinMethod === "create_invite" ? await communityBotPool.grantUserIds(config.poolBotId) : [];
     let { waitingForBot, waitingDetails, waitingCode, botInvite } = resolvedInvite;
     let deliveryInvite = String(req.body?.id ?? "").trim();
     let serverInviteCreatedByBot = false;
@@ -11983,12 +12032,12 @@ async function createCommunityOrder(req, res, next) {
          FROM community_oauth_joins
          WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
            AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-             OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
+             OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($6::text[]))
            AND NOT (discord_user_id = ANY($4::text[]))
          ORDER BY random()
          LIMIT $3
          FOR UPDATE SKIP LOCKED`,
-        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(customConfig))]
+        [config.guildId, allocation.categoryId, allocation.amount, previouslyDeliveredUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(customConfig)), poolGrantUserIds]
       );
       if (selected.rowCount < allocation.amount) {
         await client.query("ROLLBACK");
@@ -12049,6 +12098,7 @@ async function createCommunityOrder(req, res, next) {
       experimentalJoin: joinMethod === "experimental_join",
       botApplicationId: config.clientId,
       ...(customConfig ? { customBot: true, botName: customConfig.botName } : {}),
+      ...(customConfig?.poolBotId ? { poolBotId: customConfig.poolBotId } : {}),
       botInvite,
       communityResults: selectedMembers.map((row) => ({
         discordUserId: row.discord_user_id,
@@ -12096,6 +12146,7 @@ async function createCommunityOrder(req, res, next) {
     next(error);
   } finally {
     client?.release();
+    if (poolReservationId) await communityBotPool.release(poolReservationId).catch(error => console.error("Bot pool reservation cleanup failed:", error.message));
   }
 }
 app.post("/api/community/orders", requireSession, createCommunityOrder);
@@ -12176,6 +12227,7 @@ async function activateWaitingCommunityOrder(order) {
   let storedGuildAccess = null;
   const waitingCode = String(order.waitingCode ?? "");
   const targetConfig = normalizeCommunityOAuthConfig({ ...latestConfig, guildId: targetGuildId });
+  const poolGrantUserIds = targetConfig.poolBotId && joinMethod === "create_invite" ? await communityBotPool.grantUserIds(targetConfig.poolBotId) : [];
   const shouldUseStoredGuildRecovery = joinMethod !== "directly" && targetConfig.configured && (
     activationStatus === "RECOVERING"
     || ["server_restart_resume", "inventory_recovery_retry", "restriction_check"].includes(String(order.waitingCode ?? ""))
@@ -12313,10 +12365,10 @@ async function activateWaitingCommunityOrder(order) {
        FROM community_oauth_joins
         WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) AND status = 'authorized'
          AND (($3::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
+           OR ($3::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($4::text[]))
        ORDER BY array_position($2::text[], discord_user_id)
        FOR UPDATE`,
-      [resolved.config.guildId, eligiblePendingUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot))]
+      [resolved.config.guildId, eligiblePendingUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot)), poolGrantUserIds]
     )).rows;
 
     const usedDiscordUserIds = Array.isArray(current.communityResults)
@@ -12349,12 +12401,12 @@ async function activateWaitingCommunityOrder(order) {
            FROM community_oauth_joins
            WHERE guild_id = $1 AND stock_type = $2 AND status = 'authorized'
              AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-               OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
+               OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($6::text[]))
              AND NOT (discord_user_id = ANY($4::text[]))
            ORDER BY random()
            LIMIT $3
            FOR UPDATE SKIP LOCKED`,
-          [resolved.config.guildId, categoryId, categoryMissing, categoryExcludedUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot))]
+          [resolved.config.guildId, categoryId, categoryMissing, categoryExcludedUserIds, (communityJoinMethodUsesAccountToken(joinMethod) || Boolean(order.customBot)), poolGrantUserIds]
         );
         for (const member of extra.rows) excludedUserIds.add(String(member.discord_user_id));
         members = [...members, ...extra.rows];
@@ -13844,6 +13896,7 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
     const joinMethod = getCommunityOrderJoinMethod(order);
+    const poolGrantUserIds = config.poolBotId && joinMethod === "create_invite" ? await communityBotPool.grantUserIds(config.poolBotId) : [];
     if (!config.configured) {
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members integration before replacing members." });
@@ -13922,13 +13975,13 @@ async function replaceAllCommunityMembersHandler(req, res, next, { automatic = f
            AND stock_type = $4
            AND status = 'authorized'
            AND (($6::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-             OR ($6::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
+             OR ($6::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($7::text[]))
            AND NOT (discord_user_id = ANY($2::text[]))
            AND NOT (username = ANY($3::text[]))
          ORDER BY random()
          LIMIT $5
          FOR UPDATE SKIP LOCKED`,
-        [targetGuildId, categoryUsedUserIds, usedUsernames, categoryId, categoryIndices.length, (communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot))]
+        [targetGuildId, categoryUsedUserIds, usedUsernames, categoryId, categoryIndices.length, (communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot)), poolGrantUserIds]
       );
       replacements.rows.forEach((member, index) => replacementPairs.push({ member, resultIndex: categoryIndices[index] }));
     }
@@ -14042,6 +14095,7 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
     const targetGuildId = String(order.serverId ?? "").trim();
     const config = normalizeCommunityOAuthConfig({ ...baseConfig, guildId: targetGuildId });
     const joinMethod = getCommunityOrderJoinMethod(order);
+    const poolGrantUserIds = config.poolBotId && joinMethod === "create_invite" ? await communityBotPool.grantUserIds(config.poolBotId) : [];
     if (!config.configured) {
       await client.query("ROLLBACK");
       return res.status(503).json({ message: "Configure the Members integration before replacing a member." });
@@ -14163,13 +14217,13 @@ app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) 
          AND stock_type = $4
          AND status = 'authorized'
          AND (($5::boolean = TRUE AND encrypted_account_token IS NOT NULL)
-           OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()))
+           OR ($5::boolean = FALSE AND encrypted_access_token IS NOT NULL AND access_token_expires_at > NOW()) OR discord_user_id=ANY($6::text[]))
          AND NOT (discord_user_id = ANY($2::text[]))
          AND NOT (username = ANY($3::text[]))
        ORDER BY random()
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
-      [config.guildId, usedUserIds, usedUsernames, failedCategoryId, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot)]
+      [config.guildId, usedUserIds, usedUsernames, failedCategoryId, communityJoinMethodUsesAccountToken(getCommunityOrderJoinMethod(order)) || Boolean(order.customBot), poolGrantUserIds]
     );
     if (!replacement.rowCount) {
       await client.query("COMMIT");
@@ -15741,6 +15795,8 @@ if (serviceRunsWeb) {
     console.error("Members Auto Leave scan failed:", error instanceof Error ? error.message : error);
   });
   const communityAutoLeaveTimer = setInterval(runCommunityAutoLeaveJobs, communityAutoLeavePollMs);
+  const botAuthorizationTimer = setInterval(() => void botAuthorizations.tick().catch(error => console.error("Bot authorization job failed:", error.message)), 2_000);
+  botAuthorizationTimer.unref();
   communityAutoLeaveTimer.unref();
   const communityAutoLeaveInitialTimer = setTimeout(runCommunityAutoLeaveJobs, 1_000);
   communityAutoLeaveInitialTimer.unref();

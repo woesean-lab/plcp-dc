@@ -1,5 +1,7 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
 import { OrderBotOption, EMPTY_ORDER_BOT } from "../components/OrderBotOption";
+import StockBotAuthorizations from "../components/StockBotAuthorizations";
+import type { PoolBot } from "../lib/community";
 import { getCommunitySpeedRange, getCommunitySpeedLabel } from "../../shared/community-speed.mjs";
 import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
@@ -614,6 +616,7 @@ export default function HomePage() {
   const [communityStatusError, setCommunityStatusError] = useState("");
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [orderBotDraft, setOrderBotDraft] = useState(EMPTY_ORDER_BOT);
+  const [poolBotsAvailable, setPoolBotsAvailable] = useState(false);
   const [orderBotServer, setOrderBotServer] = useState({ invite: "", guildId: "", guildName: "" });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -739,6 +742,9 @@ export default function HomePage() {
   const [autoLeavingOrderId, setAutoLeavingOrderId] = useState<string | null>(null);
   const [communityMemberPendingDeletion, setCommunityMemberPendingDeletion] = useState<CommunityAdminStatus["recent"][number] | null>(null);
   const [selectedCommunityMemberIds, setSelectedCommunityMemberIds] = useState<string[]>([]);
+  const [stockAuthorizationBotId, setStockAuthorizationBotId] = useState("");
+  const [stockPoolBots, setStockPoolBots] = useState<PoolBot[]>([]);
+  const [stockBotRevision, setStockBotRevision] = useState(0);
   const [expandedCommunityMemberId, setExpandedCommunityMemberId] = useState<string | null>(null);
   const [communityImportOpen, setCommunityImportOpen] = useState(false);
   const [communityBulkDeleteOpen, setCommunityBulkDeleteOpen] = useState(false);
@@ -809,7 +815,7 @@ export default function HomePage() {
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
   const selectedApiConfigured = selectedIsBoost ? (form.boostProvider === "salta7" ? salta7Configured : dcordConfigured) : Boolean(communityStatus?.configured);
-  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || !orderBotDraft.enabled || Boolean(orderBotDraft.clientId && orderBotDraft.clientSecret.trim()) && effectiveCommunityJoinMethod !== "directly") && (
+  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || !orderBotDraft.enabled || poolBotsAvailable && effectiveCommunityJoinMethod !== "directly") && (
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
       !checkingAvailability &&
@@ -2401,7 +2407,7 @@ export default function HomePage() {
       const importBatchSize = 100;
       for (let start = 0; start < sanitizedRecords.length; start += importBatchSize) {
         const batch = sanitizedRecords.slice(start, start + importBatchSize);
-        const batchResult = await importCommunityOAuthStock(batch, communityStockType);
+        const batchResult = await importCommunityOAuthStock(batch, communityStockType, stockAuthorizationBotId || undefined);
         result.imported += batchResult.imported;
         result.failed += batchResult.failed;
         result.skipped += batchResult.skipped;
@@ -2409,11 +2415,12 @@ export default function HomePage() {
         for (const [message, count] of Object.entries(batchResult.errorCounts ?? {})) {
           result.errorCounts[message] = (result.errorCounts[message] ?? 0) + count;
         }
-        result.categoryName = batchResult.categoryName ?? result.categoryName;
+        result.categoryName = batchResult.categoryName || communityVisibleCategory?.name || result.categoryName;
         setCommunityImportProgress({ processed: Math.min(start + batch.length, sanitizedRecords.length), total: sanitizedRecords.length });
       }
       await refreshCommunityStatus();
       setCommunityImportFile(null);
+      setStockBotRevision(current => current+1);
       if (communityImportInputRef.current) communityImportInputRef.current.value = "";
       const summary = `${result.imported} imported to ${result.categoryName ?? communityVisibleCategory?.name ?? "category"}, ${result.skipped} skipped, ${result.failed} failed.`;
       if (result.failed) {
@@ -2432,7 +2439,7 @@ export default function HomePage() {
   async function handleExportCommunityStock() {
     try {
       setExportingCommunityStock(true);
-      const records = await exportCommunityOAuthStock(communityStockType);
+      const records = await exportCommunityOAuthStock(communityStockType, stockAuthorizationBotId || undefined);
       if (!records.length) throw new Error("There are no OAuth records in this category to export.");
 
       const blob = new Blob([JSON.stringify(records, null, 2)], { type: "application/json;charset=utf-8" });
@@ -2444,7 +2451,7 @@ export default function HomePage() {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "") || "stock";
       link.href = url;
-      link.download = `members-${categoryName}-oauth-stock.json`;
+      link.download = `members-${categoryName}${stockAuthorizationBotId ? `-${stockAuthorizationBotId}` : ""}-oauth-stock.json`;
       link.click();
       URL.revokeObjectURL(url);
       notifySuccess(`${records.length} OAuth record${records.length === 1 ? "" : "s"} exported.`);
@@ -3052,8 +3059,8 @@ export default function HomePage() {
   function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
 
-    if (selectedIsCommunity && orderBotDraft.enabled && (!orderBotDraft.clientId || !orderBotDraft.clientSecret.trim() || effectiveCommunityJoinMethod === "directly")) {
-      notifyError("Verify the new bot token, enter its client secret and choose a bot-based join method.");
+    if (selectedIsCommunity && orderBotDraft.enabled && (!poolBotsAvailable || effectiveCommunityJoinMethod === "directly")) {
+      notifyError("Enable a bot in Settings and choose a bot-based join method.");
       return;
     }
 
@@ -3071,7 +3078,7 @@ export default function HomePage() {
     }
 
     const payload: CreateOrderPayload = {
-      ...(selectedIsCommunity && orderBotDraft.enabled ? { newBot: { botToken: orderBotDraft.botToken.trim(), clientSecret: orderBotDraft.clientSecret.trim() } } : {}),
+      ...(selectedIsCommunity && orderBotDraft.enabled ? { useBotPool: true } : {}),
       service: form.service,
       id: form.serverId.trim(),
       amount: form.amount,
@@ -3195,7 +3202,7 @@ export default function HomePage() {
   const communityStockPanel = communityStockLoading ? <MembersStockSkeleton /> : (
     <div className="members-stock-workspace">
       <header className="members-stock-heading">
-        <div className="members-stock-heading-identity"><span className="monitor-panel-icon" aria-hidden="true">{communityStatus?.bot?.avatarUrl ? <img className="h-full w-full object-cover" src={communityStatus.bot.avatarUrl} alt="" /> : <Users className="h-4 w-4" />}</span><div><h2>Members Stock</h2><p title={communityStatus?.bot?.name}>{communityStatus?.bot?.name ?? "Discord accounts"}</p></div><Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge></div>
+        <div className="members-stock-heading-identity"><span className="monitor-panel-icon" aria-hidden="true"><Users className="h-4 w-4" /></span><div><h2>Members Stock</h2><p>Shared inventory · {stockPoolBots.length} pool bots</p></div><Badge variant={communityStockBadge.variant}>{communityStockBadge.label}</Badge></div>
         <div className="members-stock-heading-actions">
           <Button type="button" variant="secondary" size="sm" disabled={!communityStockConfigured || importingCommunityStock} onClick={() => setCommunityImportOpen(true)}><UploadCloud className="h-3.5 w-3.5" />Import stock</Button>
           <Button type="button" variant="ghost" size="sm" disabled={!communityStockConfigured || !communityCategoryRecords.length || exportingCommunityStock} onClick={() => void handleExportCommunityStock()}>
@@ -3232,6 +3239,8 @@ export default function HomePage() {
           })}
         </div>
       </section>
+      <StockBotAuthorizations categoryId={communityStockType} categoryName={communityVisibleCategory?.name || "category"} selectedIds={selectedCommunityMemberIds}
+        value={stockAuthorizationBotId} onChange={setStockAuthorizationBotId} onBotsChange={setStockPoolBots} sharedName={communityStatus?.bot?.name} revision={stockBotRevision} disabled={importingCommunityStock || exportingCommunityStock} />
       <MembersStockSummary total={communityTotalUsers} available={communityVisibleSummary.ready} active={communityVisibleSummary.authorized} inactive={communityVisibleSummary.failed} />
       {communityStatusError ? <div className="app-panel-soft members-stock-load-error" role="alert"><span>{communityStatusError}</span><Button type="button" size="sm" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>Retry</Button></div> : !communityStockConfigured ? <div className="app-panel-soft members-stock-setup"><TriangleAlert className="h-4 w-4" />Members Stock bot is not configured.</div> : null}
       <section className="app-panel members-stock-list" aria-label="Stock members">
@@ -3435,7 +3444,7 @@ export default function HomePage() {
           <div className="members-stock-list-footer"><ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" /></div>
         </> : <div className="stock-empty-state"><Users className="h-6 w-6" /><strong>{communityCategoryRecords.length ? "No matching members" : "No members in this pool"}</strong><span>{communityCategoryRecords.length ? "No members match the selected filters." : communityVisibleCategory?.name ?? "Members Stock"}</span></div>}
       </section>
-      {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import">        <input
+      {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import"><p className="settings-field-note">OAuth target: {stockPoolBots.find(bot => bot.clientId === stockAuthorizationBotId)?.name || communityStatus?.bot?.name || "Shared bot"}{stockAuthorizationBotId ? " · Existing accounts in this category only." : ""}</p>        <input
           ref={communityImportInputRef}
           id="community-oauth-stock-file"
           className="sr-only"
@@ -4045,8 +4054,7 @@ export default function HomePage() {
 
                           <OrderAutoReplaceOption checked={form.autoReplace} disabled={creating} onChange={autoReplace => setForm(current => ({ ...current, autoReplace }))} />
 
-                          {selectedIsCommunity ? <OrderBotOption value={orderBotDraft} onChange={setOrderBotDraft} disabled={creating} unavailable={effectiveCommunityJoinMethod === "directly"}
-                            guildId={orderBotServer.invite === form.serverId.trim() ? orderBotServer.guildId : ""}
+                          {selectedIsCommunity ? <OrderBotOption value={orderBotDraft} onChange={setOrderBotDraft} onAvailabilityChange={setPoolBotsAvailable} disabled={creating} unavailable={effectiveCommunityJoinMethod === "directly"}
                             serverName={orderBotServer.invite === form.serverId.trim() ? orderBotServer.guildName : ""} /> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
@@ -4826,7 +4834,7 @@ export default function HomePage() {
             <span className="confirm-modal-icon is-success" aria-hidden="true"><UserPlus className="h-5 w-5" /></span>
             <p className="app-kicker text-[var(--app-accent)]">Members Stock · {communityAccountCategory.name}</p>
             <h2 id="community-account-title">Add Discord {communityAccountMode === "bulk" ? "accounts" : "account"}</h2>
-            <p>Authorizes Discord accounts and adds them to stock.</p>
+            <p>Adds accounts to shared stock. Pool bots can be authorized from Inventory.</p>
             <div className="community-account-mode" role="group" aria-label="Account add mode">
               <Button
                 type="button"
@@ -5176,7 +5184,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><Bot className="h-3.5 w-3.5" />{orderConfirmationPayload.boostProvider === "salta7" ? "Salta7" : "Dcord"}</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.removeTwoFactor ? <span><ShieldCheck className="h-3.5 w-3.5" />Remove 2FA field · request only</span> : null}
                   {orderConfirmationPayload.autoReplace ? <span><RefreshCw className="h-3.5 w-3.5" />Auto-replace enabled · Settings round limit</span> : null}
-                  {orderConfirmationPayload.newBot ? <span><Bot className="h-3.5 w-3.5" />New bot · {orderBotDraft.botName}</span> : null}
+                  {orderConfirmationPayload.useBotPool ? <span><Bot className="h-3.5 w-3.5" />Bot pool · Automatic assignment</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.speedProfile === "balanced2" ? `${getCommunitySpeedLabel(orderConfirmationPayload.speedProfile)} · ${getCommunitySpeedRange(orderConfirmationPayload.speedProfile)}` : `${orderConfirmationPayload.delay}s delay`}</span> : null}

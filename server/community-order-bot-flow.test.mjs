@@ -32,12 +32,18 @@ function fixture({ waiting = false, paused = false, stockCount = 1 } = {}) {
       },
       async save(connection, config) { assert.equal(connection, client); calls.push({ sql: "SAVE_BOT", config }); }
     },
+    communityBotPool: {
+      async grantUserIds() { return [userId]; },
+      async acquire(options) { calls.push({ sql: "ACQUIRE_POOL", options }); return { configured: true, clientId, poolBotId: clientId, orderBotId: options.orderId, guildId: options.base.guildId, botName: "Pool bot" }; },
+      async release(orderId) { calls.push({ sql: "RELEASE_POOL", orderId }); }
+    },
     async resolveConfiguredCommunityInvite(invite, options) {
       calls.push({ sql: "RESOLVE", options });
       return { config: { ...(options.configOverride || { clientId: "shared", guildId: stockId }), guildId },
         serverInfo: { guildId, guildName: "Nova" }, waitingForBot: waiting, invitesPaused: paused, botInvite: "https://example.com/bot" };
     },
     isCommunityServiceType: () => true, normalizeCommunitySpeedProfile: () => "safe",
+    isDiscordGuildId: value => /^\d{16,22}$/.test(String(value)),
     normalizeCommunityJoinMethod: value => value || "create_invite", normalizeSubmittedDiscordResolution: () => null,
     parseCommunityCategoryJoinMethods: value => value, getCommunityStockTypeFromService: () => "offline", parseCommunityCategoryId: value => value,
     validateCustomerReactionLimit: () => 0, createCommunityOrderId: () => "order-one",
@@ -98,4 +104,36 @@ test("leaving New bot off preserves the existing shared application path", async
   assert.ok(!calls.some(call => call.sql === "PREPARE" || call.sql === "SAVE_BOT"));
   assert.equal(calls.find(call => call.sql === "PROCESS").config.clientId, "shared");
   assert.equal(calls.find(call => call.sql.includes("FROM community_oauth_joins")).args[4], false);
+});
+
+test("pool orders pin their selected bot and release the reservation after committing the order", async () => {
+  const { calls, req, run } = fixture();
+  delete req.body.newBot; req.body.useBotPool = true;
+  await run();
+  const order = JSON.parse(calls.find(call => call.sql.includes("INSERT INTO tracked_orders")).args[1]);
+  assert.equal(order.poolBotId, clientId);
+  assert.equal(order.botApplicationId, clientId);
+  assert.equal(order.customBot, true);
+  assert.equal(calls.find(call => call.sql === "PROCESS").config.poolBotId, clientId);
+  assert.equal(calls.find(call => call.sql.includes("FROM community_oauth_joins")).args[4], true);
+  assert.ok(calls.findIndex(call => call.sql === "COMMIT") < calls.findIndex(call => call.sql === "RELEASE_POOL"));
+});
+
+test("failed pool orders release reservations without saving credentials or starting delivery", async () => {
+  const { calls, req, res, run } = fixture({ stockCount: 0 });
+  delete req.body.newBot; req.body.useBotPool = true;
+  await run();
+  assert.equal(res.statusCode, 409);
+  assert.equal(calls.filter(call => call.sql === "RELEASE_POOL").length, 1);
+  assert.ok(!calls.some(call => call.sql === "SAVE_BOT" || call.sql === "PROCESS"));
+});
+
+test("invalid pool flags and mixed selection are rejected before acquiring a bot", async () => {
+  for (const flag of [true, "yes"]) {
+    const { calls, req, res, run } = fixture();
+    req.body.useBotPool = flag;
+    await run();
+    assert.equal(res.statusCode, 400);
+    assert.ok(!calls.some(call => call.sql === "ACQUIRE_POOL"));
+  }
 });

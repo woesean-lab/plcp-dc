@@ -28,6 +28,8 @@ import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
+import BotPoolSettings from "../components/BotPoolSettings";
+import StockBotAuthorizations from "../components/StockBotAuthorizations";
 import { StockWorkspace } from "../components/StockWorkspace";
 import { MembersStockBadges, MembersStockBulkActions, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSummary } from "../components/MembersStockWorkspace";
 import type { CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
@@ -339,7 +341,8 @@ export default function UiKitPage() {
   const [gatewayBeforeAuth, setGatewayBeforeAuth] = useState(false);
   const [removeTwoFactor, setRemoveTwoFactor] = useState(true);
   const [autoReplace, setAutoReplace] = useState(false);
-  const [orderBot, setOrderBot] = useState({ ...EMPTY_ORDER_BOT, enabled: true, clientId: "1544546102458720276", botName: "Nova Community" });
+  const [orderBot, setOrderBot] = useState({ ...EMPTY_ORDER_BOT, enabled: true });
+  const [stockAuthorizationBot, setStockAuthorizationBot] = useState("1544546102458720276");
   const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -393,7 +396,7 @@ export default function UiKitPage() {
           </Example>
           <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
           <Example title="Order auto-replace" source="src/components/OrderAutoReplaceOption.tsx" code={'<OrderAutoReplaceOption checked={enabled} onChange={setEnabled} disabled={creating} />'}><div className="ui-ref-stack"><OrderAutoReplaceOption checked={autoReplace} onChange={setAutoReplace} /><OrderAutoReplaceOption checked onChange={() => {}} disabled /></div></Example>
-          <Example title="Order bot" source="src/components/OrderBotOption.tsx" code={'<OrderBotOption value={draft} onChange={setDraft} guildId={server.id} serverName={server.name} disabled={creating} />'}><div className="ui-ref-stack"><OrderBotOption value={orderBot} onChange={setOrderBot} guildId="1572718952801632447" serverName="Nova Community" preview /><OrderBotOption value={EMPTY_ORDER_BOT} onChange={() => {}} disabled preview /></div></Example>
+          <Example title="Order bot pool" source="src/components/OrderBotOption.tsx" code={'<OrderBotOption value={draft} onChange={setDraft} onAvailabilityChange={setPoolReady} serverName={server.name} disabled={creating} />'}><div className="ui-ref-stack"><OrderBotOption value={orderBot} onChange={setOrderBot} serverName="Nova Community" preview /><OrderBotOption value={EMPTY_ORDER_BOT} onChange={() => {}} disabled preview /></div></Example>
           <Example title="Inputs & compact search" source="src/components/ui/input.tsx · community-member-search" code={'import { Input } from "@/components/ui/input";\n\n<label><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label>\n<label className="community-member-search">\n  <Search className="h-3.5 w-3.5" />\n  <Input type="search" aria-label="Search members" placeholder="Search username, name or ID…" />\n</label>'}>
             <div className="ui-ref-grid"><label className="ui-ref-field"><span className="field-label">Server invite</span><Input placeholder="discord.gg/yourcode" /></label><label className="ui-ref-field"><span className="field-label">Disabled field</span><Input disabled value="Unavailable" readOnly /></label><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Sample member search" placeholder="Search username, name or ID…" /></label></div>
           </Example>
@@ -429,6 +432,8 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">
+          <Example title="Stock bot authorizations" source="src/components/StockBotAuthorizations.tsx" code={'<StockBotAuthorizations categoryId={category.id} categoryName={category.name}\n  selectedIds={selectedIds} value={botId} onChange={setBotId}\n  onBotsChange={setBots} sharedName={sharedBot.name} />\n// Bulk jobs persist progress; OAuth imports stay scoped to their selected application.'}><StockBotAuthorizations categoryId="offline" categoryName="Offline" selectedIds={["123456789012345678"]} value={stockAuthorizationBot} onChange={setStockAuthorizationBot} onBotsChange={() => {}} sharedName="Members bot" preview /></Example>
+          <Example title="Members bot pool" source="src/components/BotPoolSettings.tsx · ui/secret-field.tsx" code={'<BotPoolSettings preview />\n// Settings: encrypted credentials, automatic assignment and enabled/disabled bots.\n// Preview actions only update sample state.'}><BotPoolSettings preview /></Example>
           <Example title="Members Stock workspace" source="src/components/MembersStockWorkspace.tsx · MembersStockWorkspace.css" code={'// Independent pools, summary cards and one member-list surface.\n<MembersStockCategory category={pool} selected={selected} actions={poolActions} />\n<MembersStockSummary total={total} available={ready} active={active} inactive={inactive} />\n<MembersStockRow record={member} open={openId === member.id}\n  actions={rowActions} badges={statuses} onToggle={toggleDetails}>\n  <MembersStockSecret label="Access token" {...tokenControls} />\n</MembersStockRow>\n// Bulk actions appear only with a selection. Tokens load only on reveal.\n// Mobile pools scroll horizontally; all shared action geometry stays unchanged.'}><MembersStockExample /></Example>
           <Example title="Settings workspace" source="src/components/SettingsWorkspace.tsx · SettingsWorkspace.css" code={'<SettingsWorkspace loading={loading} error={error} onRefresh={refresh}\n  members={membersSettings} dcord={dcordSettings}\n  guilds={botServerSettings} />\n// Shared tab, field, button, badge and pagination styles.\n// Drafts stay in the parent; status refresh does not discard edits.\n// Server removal retains its confirmation flow.'}><SettingsExample /></Example>
           <Example title="Orders overview cards" source="src/components/OrdersWorkspace.tsx · OrdersWorkspace.css" code={'<div className="orderdesk"><div className="od-metrics">\n  <button className="app-panel" aria-pressed={selected}>\n    <span className="od-metric-title">All orders<Layers3 /></span>\n    <strong>3,359</strong>\n    <span className="od-metric-detail">Your complete order history<ArrowUpRight /></span>\n  </button>\n</div></div>\n// Metric cards isolate their rounded surfaces and do not blur the scrolling backdrop.'}><OrderOverviewExample /></Example>
