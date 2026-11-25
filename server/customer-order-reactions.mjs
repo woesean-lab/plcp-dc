@@ -64,19 +64,22 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
   const allRequests = (Array.isArray(order?.reactionRequests) ? order.reactionRequests : []).filter((request) => request?.source === "customer");
   const totalUsed = allRequests.reduce((total, request) => total + (Array.isArray(request.assignments) && request.assignments.length
     ? request.assignments.filter((assignment) => !["failed", "cancelled"].includes(assignment.reactionState)).length : Math.max(0, Number(request.assignedCount) || 0)), 0);
-  const requests = allRequests
+  const summarizeRequest = (request) => {
+    const assignments = Array.isArray(request.assignments) ? request.assignments : [];
+    const completedCount = assignments.filter((assignment) => assignment.reactionState === "completed").length;
+    const failedCount = assignments.filter((assignment) => assignment.reactionState === "failed").length;
+    const cancelledCount = assignments.filter((assignment) => assignment.reactionState === "cancelled").length;
+    return { id: request.id, messageLink: request.messageLink, requestedCount: request.requestedCount,
+      assignedCount: assignments.length || Math.max(0, Number(request.assignedCount) || 0),
+      emojiCount: request.emojiCount, emojis: request.emojis, createdAt: request.createdAt,
+      completedCount, failedCount, cancelledCount };
+  };
+  // History spans the full order; only quota accounting belongs to the current day.
+  const requests = allRequests.map(summarizeRequest);
+  const todayRequests = allRequests
     .filter((request) => (request.quotaDay || customerReactionDay(new Date(request.createdAt).getTime())) === day)
-    .map((request) => {
-      const assignments = Array.isArray(request.assignments) ? request.assignments : [];
-      const completedCount = assignments.filter((assignment) => assignment.reactionState === "completed").length;
-      const failedCount = assignments.filter((assignment) => assignment.reactionState === "failed").length;
-      const cancelledCount = assignments.filter((assignment) => assignment.reactionState === "cancelled").length;
-      return { id: request.id, messageLink: request.messageLink, requestedCount: request.requestedCount,
-        assignedCount: assignments.length || Math.max(0, Number(request.assignedCount) || 0),
-        emojiCount: request.emojiCount, emojis: request.emojis, createdAt: request.createdAt,
-        completedCount, failedCount, cancelledCount };
-    });
-  const used = requests.reduce((total, request) => total + request.assignedCount - request.failedCount - request.cancelledCount, 0);
+    .map(summarizeRequest);
+  const used = todayRequests.reduce((total, request) => total + request.assignedCount - request.failedCount - request.cancelledCount, 0);
   const disabled = order?.reactionDisabled === true;
   const enabled = order?.provider === "community" && !disabled && limit > 0 && active.length > 0;
   return {
@@ -86,8 +89,8 @@ export function getCustomerReactionSummary(order, now = Date.now()) {
     ready: ["PARTIAL", "COMPLETED"].includes(String(order?.status).toUpperCase()),
     dailyLimit: limit, todayLimit, firstDay, firstDayLimit, enabledAt: enabledAt || null, totalUsed,
     used, remaining: enabled ? Math.max(0, todayLimit - used) : 0,
-    completed: requests.reduce((total, request) => total + request.completedCount, 0),
-    failed: requests.reduce((total, request) => total + request.failedCount, 0),
+    completed: todayRequests.reduce((total, request) => total + request.completedCount, 0),
+    failed: todayRequests.reduce((total, request) => total + request.failedCount, 0),
     eligibleMembers: (Array.isArray(order?.communityResults) ? order.communityResults : []).filter((member) => customerReactionMemberEligible(order, member, now)).length,
     expiresAt: active.length ? new Date(Math.max(...active.map((portion) => new Date(portion.expiredAt).getTime()))).toISOString() : null,
     quotaDay: day, resetsAt: new Date(Date.parse(`${day}T00:00:00+03:00`) + dayMs).toISOString(), requests

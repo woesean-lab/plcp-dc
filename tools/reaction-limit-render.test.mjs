@@ -4,10 +4,11 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
 import React from "react";
+import { getCustomerReactionSummary } from "../server/customer-order-reactions.mjs";
 import { renderToStaticMarkup } from "react-dom/server";
 
 const output = await build({
-  stdin: { contents: 'export { ReactionPanel } from "./src/components/ReactionPanel.tsx";', resolveDir: fileURLToPath(new URL("../", import.meta.url)), loader: "tsx" },
+  stdin: { contents: 'export { ReactionPanel } from "./src/components/ReactionPanel.tsx"; export { CustomerOrderReactionPanel } from "./src/components/CustomerOrderReactionPanel.tsx";', resolveDir: fileURLToPath(new URL("../", import.meta.url)), loader: "tsx" },
   bundle: true, write: false, jsx: "automatic", format: "cjs", platform: "node", packages: "external",
   loader: { ".css": "empty" }, define: { "import.meta.env": "{}" }, logLevel: "silent"
 });
@@ -54,4 +55,23 @@ test("customer summary keeps its progress block and countdown without the repeat
   assert.equal((html.match(/class="reaction-reset-countdown"/g) || []).length, 1);
   const workspace = render({ collapsible: false, limit: 100, completed: 0, remaining: 100 });
   assert.ok(workspace.includes('class="monitor-reaction-overview"'), "the full admin workspace keeps its overview");
+});
+
+
+test("admin and Monitor keep the complete request history after the daily allowance renews", () => {
+  const boundary = Date.parse("2026-11-24T21:00:00.000Z");
+  const order = { provider: "community", status: "COMPLETED", reactionDailyLimit: 50,
+    categoryAllocations: [{ categoryId: "pool", reactionUseEnabled: true, isPeriodic: true, expiredAt: "2099-01-01" }],
+    reactionRequests: [{ id: "previous-day", source: "customer", quotaDay: "2026-11-24", createdAt: "2026-11-24T20:00:00Z", messageLink: "https://discord.com/channels/1/2/3", requestedCount: 2,
+      assignments: [{ reactionState: "completed" }, { reactionState: "completed" }] }]
+  };
+  const summary = getCustomerReactionSummary(order, boundary);
+  assert.equal(summary.remaining, 50); assert.equal(summary.completed, 0);
+  for (const access of ["admin", "public"]) {
+    const html = renderToStaticMarkup(React.createElement(module.exports.CustomerOrderReactionPanel, { uniqid: "order", summary, access, onUpdate() {} }));
+    assert.ok(html.includes("Request history")); assert.ok(html.includes("1 total"));
+    assert.ok(html.includes("2 reactions")); assert.ok(html.includes("2/2"));
+    assert.ok(html.includes("0 of 50 reactions delivered"));
+    assert.ok(html.includes('href="https://discord.com/channels/1/2/3"'));
+  }
 });

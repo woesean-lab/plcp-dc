@@ -316,3 +316,47 @@ test("member-check upserts preserve current reaction reservations and their prog
     assert.equal(reenabled.rows[0].payload.reactionDisabled, false, "stale disabled snapshots cannot undo re-enabling");
   } finally { await db.close(); }
 });
+
+
+test("midnight renews daily counters without removing older customer history", () => {
+  const order = { ...base, reactionRequests: [
+    { ...request(["completed"], "2026-11-19T20:00:00Z"), id: "older" },
+    { ...request(["completed", "pending", "failed", "cancelled"]), id: "yesterday" },
+    { ...request(["pending"], undefined, "admin"), id: "private-admin" }
+  ] };
+  const original = structuredClone(order);
+  const before = getCustomerReactionSummary(order, now);
+  const after = getCustomerReactionSummary(order, now + 1000);
+  assert.equal(before.used, 2); assert.equal(before.completed, 1); assert.equal(before.failed, 1);
+  assert.equal(after.used, 0); assert.equal(after.completed, 0); assert.equal(after.failed, 0); assert.equal(after.remaining, 50);
+  assert.deepEqual(after.requests, before.requests);
+  assert.deepEqual(after.requests.map(row => row.id), ["older", "yesterday"]);
+  assert.equal(after.requests[1].completedCount, 1); assert.equal(after.requests[1].failedCount, 1); assert.equal(after.requests[1].cancelledCount, 1);
+  assert.equal(after.totalUsed, 3);
+  assert.ok(!JSON.stringify(after.requests).includes("private-member")); assert.ok(!JSON.stringify(after.requests).includes("assignments"));
+  assert.ok(!JSON.stringify(after.requests).includes("private-admin")); assert.deepEqual(order, original);
+});
+
+test("today's quota uses quotaDay while previous-day pending requests remain in history", () => {
+  const old = { ...request(["pending"]), id: "overnight", quotaDay: "2026-11-20" };
+  const current = { ...request(["completed", "pending", "failed", "cancelled"]), id: "new-day", quotaDay: "2026-11-21" };
+  const order = { ...base, reactionRequests: [old, current] };
+  const summary = getCustomerReactionSummary(order, now + 1000);
+  assert.deepEqual(summary.requests.map(row => row.id), ["overnight", "new-day"]);
+  assert.equal(summary.used, 2); assert.equal(summary.remaining, 48); assert.equal(summary.completed, 1); assert.equal(summary.failed, 1);
+  old.assignments[0].reactionState = "cancelled";
+  const cancelled = getCustomerReactionSummary(order, now + 2000);
+  assert.equal(cancelled.requests[0].cancelledCount, 1); assert.equal(cancelled.used, 2); assert.equal(cancelled.remaining, 48);
+  const changed = planCustomerReactionSettings(order, 100, now + 2000);
+  assert.equal(getCustomerReactionSummary(changed, now + 2000).requests.length, 2);
+  assert.equal(getCustomerReactionSummary(changed, now + 2000).remaining, 98);
+});
+
+test("legacy requests without quotaDay retain their history and use the Türkiye midnight boundary", () => {
+  const order = { ...base, reactionRequests: [
+    { ...request(["completed"], "2026-11-20T20:59:59.999Z"), id: "before-midnight" },
+    { ...request(["pending"], "2026-11-20T21:00:00.000Z"), id: "after-midnight" }
+  ] };
+  const summary = getCustomerReactionSummary(order, now + 1000);
+  assert.equal(summary.requests.length, 2); assert.equal(summary.used, 1); assert.equal(summary.completed, 0); assert.equal(summary.remaining, 49);
+});
