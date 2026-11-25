@@ -1,5 +1,4 @@
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
-import { OrderBotOption, EMPTY_ORDER_BOT } from "../components/OrderBotOption";
 import { OAuthBotTargetField } from "../components/OAuthBotTargetField";
 import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { getCommunitySpeedRange, getCommunitySpeedLabel } from "../../shared/community-speed.mjs";
@@ -615,9 +614,6 @@ export default function HomePage() {
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityStatusError, setCommunityStatusError] = useState("");
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
-  const [orderBotDraft, setOrderBotDraft] = useState(EMPTY_ORDER_BOT);
-  const [poolBotsAvailable, setPoolBotsAvailable] = useState(false);
-  const [orderBotServer, setOrderBotServer] = useState({ invite: "", guildId: "", guildName: "" });
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState("");
   const [communityConfigDraft, setCommunityConfigDraft] = useState(EMPTY_COMMUNITY_CONFIG_DRAFT);
@@ -808,14 +804,11 @@ export default function HomePage() {
   const effectiveCommunityJoinMethod = selectedCommunityJoinMethods.includes(form.communityJoinMethod)
     ? form.communityJoinMethod
     : selectedCommunityJoinMethods[0] ?? form.communityJoinMethod;
-  useEffect(() => {
-    if (effectiveCommunityJoinMethod === "directly") setOrderBotDraft(current => current.enabled ? { ...current, enabled: false } : current);
-  }, [effectiveCommunityJoinMethod]);
   const selectedCommunityAmount = selectedCommunityAllocations.reduce((total, allocation) => total + allocation.amount, 0);
   const selectedCommunityReady = selectedCommunityCategory?.summary.ready ?? 0;
   const selectedCommunityOrderLimit = availabilityMaximum ?? selectedCommunityReady;
   const selectedApiConfigured = selectedIsBoost ? (form.boostProvider === "salta7" ? salta7Configured : dcordConfigured) : Boolean(communityStatus?.configured);
-  const selectedCanCreate = selectedApiConfigured && (!selectedIsCommunity || !orderBotDraft.enabled || poolBotsAvailable && effectiveCommunityJoinMethod !== "directly") && (
+  const selectedCanCreate = selectedApiConfigured && (
     !selectedIsCommunity || (
       Boolean(form.serverId.trim()) &&
       !checkingAvailability &&
@@ -1288,7 +1281,7 @@ export default function HomePage() {
 
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, form.service, form.serverId, form.duration, form.boostStockPool, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod, orderBotDraft.enabled]);
+  }, [activeTab, form.service, form.serverId, form.duration, form.boostStockPool, form.communityCategoryId, form.communityMultiCategory, form.communityCategoryAmounts, effectiveCommunityJoinMethod]);
 
   useEffect(() => {
     if (activeTab === "create" && selectedIsBoost) void refreshDcordProxies();
@@ -2469,7 +2462,6 @@ export default function HomePage() {
       if (selectedIsCommunity) {
         const resolvedServer = await resolveDiscordGuildInfo(serverId);
         if (requestId !== availabilityRequestRef.current) return;
-        setOrderBotServer({ invite: serverId, guildId: resolvedServer.guildId, guildName: resolvedServer.guildName ?? "Discord server" });
         const allocations = form.communityMultiCategory
           ? communityCategories.flatMap((category) => Number(form.communityCategoryAmounts[category.id] ?? 0) > 0 ? [category] : [])
           : communityCategories.filter((category) => category.id === form.communityCategoryId);
@@ -2482,8 +2474,7 @@ export default function HomePage() {
             category.id,
             effectiveCommunityJoinMethod,
             resolvedServer.guildId,
-            "regular",
-            orderBotDraft.enabled
+            "regular"
           );
           return [category.id, {
             ...data,
@@ -3036,6 +3027,7 @@ export default function HomePage() {
       concurrency: payloadIsBoost ? payload.concurrency : undefined,
       cost: created.cost,
       botInvite: created.bot_invite,
+      botApplicationId: created.botApplicationId, botName: created.botName, poolBotId: created.poolBotId, customBot: created.customBot, automaticBot: created.automaticBot,
       categoryId: created.categoryId,
       categoryName: created.categoryName,
       categoryAllocations: created.categoryAllocations,
@@ -3051,7 +3043,6 @@ export default function HomePage() {
     };
 
     persistOrders([nextOrder, ...orders]);
-    setOrderBotDraft(EMPTY_ORDER_BOT);
     notifySuccess(`Order created: ${created.uniqid}`);
     const providerQuery = payloadIsBoost ? "&provider=dcord" : "&provider=community";
     navigate(`/orders?uniqid=${encodeURIComponent(created.uniqid)}${providerQuery}`);
@@ -3059,11 +3050,6 @@ export default function HomePage() {
 
   function handleCreateOrder(event: FormEvent) {
     event.preventDefault();
-
-    if (selectedIsCommunity && orderBotDraft.enabled && (!poolBotsAvailable || effectiveCommunityJoinMethod === "directly")) {
-      notifyError("Enable a bot in Settings and choose a bot-based join method.");
-      return;
-    }
 
     if (selectedIsCommunity && (checkingAvailability || availabilityMaximum === null)) {
       notifyError("Wait for the available member count to load.");
@@ -3079,7 +3065,6 @@ export default function HomePage() {
     }
 
     const payload: CreateOrderPayload = {
-      ...(selectedIsCommunity && orderBotDraft.enabled ? { useBotPool: true } : {}),
       service: form.service,
       id: form.serverId.trim(),
       amount: form.amount,
@@ -4056,8 +4041,6 @@ export default function HomePage() {
 
                           <OrderAutoReplaceOption checked={form.autoReplace} disabled={creating} onChange={autoReplace => setForm(current => ({ ...current, autoReplace }))} />
 
-                          {selectedIsCommunity ? <OrderBotOption value={orderBotDraft} onChange={setOrderBotDraft} onAvailabilityChange={setPoolBotsAvailable} disabled={creating} unavailable={effectiveCommunityJoinMethod === "directly"}
-                            serverName={orderBotServer.invite === form.serverId.trim() ? orderBotServer.guildName : ""} /> : null}
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
@@ -5186,7 +5169,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.duration ? <span><Bot className="h-3.5 w-3.5" />{orderConfirmationPayload.boostProvider === "salta7" ? "Salta7" : "Dcord"}</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.removeTwoFactor ? <span><ShieldCheck className="h-3.5 w-3.5" />Remove 2FA field · request only</span> : null}
                   {orderConfirmationPayload.autoReplace ? <span><RefreshCw className="h-3.5 w-3.5" />Auto-replace enabled · Settings round limit</span> : null}
-                  {orderConfirmationPayload.useBotPool ? <span><Bot className="h-3.5 w-3.5" />Bot pool · Automatic assignment</span> : null}
+                  {isCommunityService(orderConfirmationPayload.service) && orderConfirmationPayload.joinMethod !== "directly" ? <span><Bot className="h-3.5 w-3.5" />Automatic bot assignment</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.speedProfile === "balanced2" ? `${getCommunitySpeedLabel(orderConfirmationPayload.speedProfile)} · ${getCommunitySpeedRange(orderConfirmationPayload.speedProfile)}` : `${orderConfirmationPayload.delay}s delay`}</span> : null}

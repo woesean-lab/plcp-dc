@@ -20,8 +20,6 @@
 .bot-server-confirm-list { display: grid; gap: 12px; margin-top: 18px; }
 .bot-server-confirm-list > div { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--app-text); font-size: 12px; overflow-wrap: anywhere; }
 .bot-pool-full-width { grid-column: 1 / -1; }
-.bot-pool-option-status { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: var(--app-text-secondary); font-size: 12px; }
-.bot-pool-option-status > span { min-width: 0; flex: 1; overflow-wrap: anywhere; }
 .settings-content > [role="tabpanel"]:focus-visible { outline: 2px solid var(--app-accent); outline-offset: 5px; border-radius: var(--app-radius-md); }
 .settings-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; margin-bottom: 18px; }
 .settings-section-heading h2 { margin: 0; color: var(--app-text); font-size: 18px; font-weight: 650; letter-spacing: -.025em; }

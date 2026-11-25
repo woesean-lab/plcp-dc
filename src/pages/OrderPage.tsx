@@ -1222,7 +1222,7 @@ export default function OrderPage() {
                 <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
                   <OrderStatusIndicator status={result.status ?? "UNKNOWN"} />
-                  {result.customBot ? <Badge variant="secondary" title={result.botApplicationId}><Bot aria-hidden="true" />{result.botName || "Order bot"}</Badge> : null}
+                  {result.customBot || result.automaticBot ? <Badge variant="secondary" title={result.botApplicationId}><Bot aria-hidden="true" />{result.botName || "Order bot"}</Badge> : null}
                   {result.autoReplace ? <Badge variant={result.autoReplaceStopped ? "secondary" : "default"}><RefreshCw aria-hidden="true" />Auto-replace · {result.autoReplaceRounds ?? 0} rounds{result.autoReplaceStopped === "limit_reached" ? " · Limit reached" : result.autoReplaceStopped ? " · Stopped" : ""}</Badge> : null}
                   <span className="lookup-service-name">
                     <small>Service</small>

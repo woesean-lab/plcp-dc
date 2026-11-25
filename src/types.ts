@@ -153,6 +153,11 @@ export interface CreateOrderPayload {
 }
 
 export interface CreateOrderResponse {
+  automaticBot?: boolean;
+  botApplicationId?: string;
+  botName?: string;
+  poolBotId?: string;
+  customBot?: boolean;
   uniqid: string;
   bot_invite?: string;
   serverId?: string;
@@ -173,6 +178,7 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  automaticBot?: boolean;
   poolBotId?: string;
   customBot?: boolean;
   botName?: string;
@@ -270,6 +276,7 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  automaticBot?: boolean;
   poolBotId?: string;
   customBot?: boolean;
   botName?: string;

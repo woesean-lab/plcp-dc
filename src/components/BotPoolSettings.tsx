@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RefreshCw, Search } from "lucide-react";
+import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, RefreshCw, Search } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { SecretField } from "./ui/secret-field";
@@ -7,7 +7,7 @@ import { BotDirectory, type DirectoryBot } from "./BotDirectory";
 import { BotSettingsDialog } from "./BotSettingsDialog";
 import { BotServersDialog } from "./BotServersDialog";
 import { BotSyncDialog } from "./BotSyncDialog";
-import { getCommunityBotPool, saveCommunityPoolBot, setCommunityPoolBotEnabled, type CommunityConfig, type PoolBot } from "../lib/community";
+import { getCommunityBotPool, getBotOrderSettings, saveBotOrderSetting, saveCommunityPoolBot, type CommunityConfig, type PoolBot } from "../lib/community";
 
 export const PREVIEW_POOL_BOTS: PoolBot[] = [
   { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, totalOrders: 6, deliveredMembers: 1200, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
@@ -27,6 +27,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const id = useId();
   const [bots, setBots] = useState<PoolBot[]>(preview ? PREVIEW_POOL_BOTS : []);
   const [loading, setLoading] = useState(!preview);
+  const [defaultUseForNewOrders, setDefaultUseForNewOrders] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -47,11 +48,14 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   async function load() {
     if (pending.current) return;
     pending.current = true; setLoading(true); setError("");
-    try { const result = preview ? { bots } : await getCommunityBotPool(); if (mounted.current) setBots(result.bots); }
+    try {
+      const [result, settings] = preview ? [{ bots }, { defaultUseForNewOrders }] : await Promise.all([getCommunityBotPool(), getBotOrderSettings()]);
+      if (mounted.current) { setBots(result.bots); setDefaultUseForNewOrders(settings.defaultUseForNewOrders); }
+    }
     catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not load bot pool."); }
     finally { pending.current = false; if (mounted.current) setLoading(false); }
   }
-  useEffect(() => { if (!preview) void load(); }, [preview]);
+  useEffect(() => { if (!preview) { setDefaultUseForNewOrders(false); void load(); } }, [preview, defaultConfig?.clientId]);
   function reset() { setDraft(EMPTY); setEditing(null); setEditor(null); }
   async function save() {
     if (pending.current || disabled || (!editing && (!draft.botToken.trim() || !draft.clientSecret.trim()))) return;
@@ -64,13 +68,16 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not save bot."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
-  async function toggle(bot: PoolBot) {
+  async function toggle(bot: DirectoryBot, useForNewOrders: boolean) {
     if (pending.current || disabled) return;
     pending.current = true; setBusy(true); setError(""); setNotice("");
     try {
-      const result = preview ? { bots: bots.map(item => item.clientId === bot.clientId ? { ...item, enabled: !item.enabled } : item) }
-        : await setCommunityPoolBotEnabled(bot.clientId, !bot.enabled);
-      if (mounted.current) setBots(result.bots);
+      if (!preview) await saveBotOrderSetting(bot.clientId, useForNewOrders);
+      if (mounted.current) {
+        if (bot.isDefault) setDefaultUseForNewOrders(useForNewOrders);
+        else setBots(current => current.map(item => item.clientId === bot.clientId ? { ...item, enabled: useForNewOrders } : item));
+        setNotice("New-order setting saved.");
+      }
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update bot."); }
     finally { pending.current = false; if (mounted.current) setBusy(false); }
   }
@@ -92,13 +99,13 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
       <Button type="button" size="sm" disabled={locked} onClick={() => { reset(); setEditor("pool"); setNotice(""); }}><Plus className="h-3.5 w-3.5" />Add bot</Button></div>
     </header>
     <div className="settings-card-body bot-pool-body">
-      <div className="bot-directory-toolbar"><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Search bots" placeholder="Search bots or application IDs" value={search} onChange={event => setSearch(event.target.value)} /></label><span>{rows.length} bots · {bots.filter(bot => bot.enabled).length} enabled in pool</span></div>
+      <div className="bot-directory-toolbar"><label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Search bots" placeholder="Search bots or application IDs" value={search} onChange={event => setSearch(event.target.value)} /></label><span>{rows.length} bots · {rows.filter(bot => bot.enabled && (!bot.isDefault || defaultUseForNewOrders)).length} for new orders</span></div>
+      <p className="settings-field-note">Use for new orders controls participation. Among eligible bots, the fewest remaining members and then active orders determine assignment. Existing orders keep their assigned bot.</p>
       {error ? <div className="settings-load-error" role="alert"><span>{error}</span><Button type="button" size="xs" variant="secondary" disabled={busy || loading} onClick={() => void load()}>Retry</Button></div> : null}
       {notice ? <p className="settings-field-note" role="status">{notice}</p> : null}
-      {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} accountActions={bot => bot.isDefault ? null : <Button type="button" size="xs" variant="secondary" aria-label={`Sync accounts for ${bot.name}`} aria-haspopup="dialog" disabled={locked || !bot.hasBotToken || !bot.hasClientSecret || (!preview && !config?.configured)} onClick={() => setSyncing(bot)}><RefreshCw className="h-3.5 w-3.5" />Sync</Button>} actions={bot => <>
+      {loading || filtered.length ? <BotDirectory bots={filtered} loading={loading} settings={bot => <label className="bot-directory-order-setting"><input type="checkbox" className="community-member-checkbox" aria-label={`Use ${bot.name} for new orders`} checked={bot.isDefault ? defaultUseForNewOrders : bot.enabled} disabled={locked || !bot.hasBotToken || !bot.hasClientSecret} onChange={event => void toggle(bot, event.target.checked)} /><span>Use for new orders</span></label>} accountActions={bot => bot.isDefault ? null : <Button type="button" size="xs" variant="secondary" aria-label={`Sync accounts for ${bot.name}`} aria-haspopup="dialog" disabled={locked || !bot.hasBotToken || !bot.hasClientSecret || (!preview && !config?.configured)} onClick={() => setSyncing(bot)}><RefreshCw className="h-3.5 w-3.5" />Sync</Button>} actions={bot => <>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Manage servers for ${bot.name}`} title="Manage servers" aria-haspopup="dialog" disabled={locked || !bot.hasBotToken} onClick={() => setServers({ clientId: bot.clientId, name: bot.name })}><Globe2 className="h-3.5 w-3.5" /></Button>
         <Button type="button" size="icon-sm" variant="secondary" aria-label={`Edit ${bot.name}`} title="Edit bot" aria-haspopup="dialog" disabled={locked} onClick={() => { setEditing(bot.isDefault ? null : bot); setEditor(bot.isDefault ? "default" : "pool"); setDraft({ ...EMPTY, name: bot.name }); setNotice(""); }}><Pencil className="h-3.5 w-3.5" /></Button>
-        {!bot.isDefault ? <Button type="button" size="icon-sm" variant={bot.enabled ? "dangerGhost" : "secondary"} aria-label={`${bot.enabled ? "Disable" : "Enable"} ${bot.name}`} title={bot.enabled ? "Disable for new orders" : "Enable for new orders"} disabled={locked} onClick={() => void toggle(bot)}><Power className="h-3.5 w-3.5" /></Button> : null}
       </>} /> : !error ? <div className="stock-empty-state settings-empty"><Bot className="h-6 w-6" /><strong>{search ? "No matching bots" : "No bots yet"}</strong><span>{search ? "Try another name or application ID." : "Add a bot to enable automatic assignment."}</span></div> : null}
     </div>
     {editor ? <BotSettingsDialog title={editor === "default" ? "Edit default bot" : editing ? `Edit ${editing.name}` : "Add bot"} busy={busy || disabled} onClose={reset}>

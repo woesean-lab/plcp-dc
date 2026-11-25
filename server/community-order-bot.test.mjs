@@ -43,6 +43,42 @@ test("inspection returns identity without secrets, and supports a bot not yet in
   assert.ok(!("botToken" in safe));
 });
 
+test("OAuth-only delivery cannot authorize raw stock accounts, including when authorization is explicitly requested", async () => {
+  const { service, calls, tokens } = fixture();
+  await assert.rejects(service.token({ ...config(), oauthOnly: true }, { discord_user_id: user, encrypted_account_token: "raw-account" }, { allowAuthorize: true }), error => error.oauthAccessInvalid);
+  assert.equal(calls.authorize.length, 0); assert.equal(tokens.size, 0);
+  assert.equal(await service.token(config(), { discord_user_id: user, encrypted_account_token: "raw-account" }), "order-one-access");
+  assert.equal(calls.authorize.length, 1, "existing orders without the new policy keep their original behavior");
+});
+
+test("OAuth-only delivery can use an unexpired access token without a refresh token and never reauthorize after expiry", async () => {
+  const { service, calls, tokens } = fixture();
+  tokens.set(`order-one:${user}`, encrypt(JSON.stringify({ clientId: appId, accessToken: "synced-access", expiresAt: new Date(Date.now() + 3600000).toISOString() })));
+  assert.equal(await service.token({ ...config(), oauthOnly: true }, { discord_user_id: user }), "synced-access");
+  tokens.set(`order-one:${user}`, encrypt(JSON.stringify({ clientId: appId, accessToken: "expired-access", expiresAt: new Date(0).toISOString() })));
+  await assert.rejects(service.token({ ...config(), oauthOnly: true }, { discord_user_id: user, encrypted_account_token: "raw-account" }), error => error.oauthAccessInvalid);
+  assert.equal(calls.authorize.length, 0); assert.equal(calls.refresh.length, 0);
+});
+
+test("OAuth-only policy survives saved configuration loading and allows existing refresh grants", async () => {
+  const { service, pool, tokens, calls } = fixture();
+  await service.save(pool, { ...config(), oauthOnly: true });
+  const loaded = await service.load({ customBot: true, uniqid: "order-one", serverId: config().guildId, botApplicationId: appId }, base);
+  assert.equal(loaded.oauthOnly, true);
+  tokens.set(`order-one:${user}`, encrypt(JSON.stringify({ clientId: appId, accessToken: "expired", refreshToken: "saved-refresh", expiresAt: new Date(0).toISOString() })));
+  assert.equal(await service.token(loaded, { discord_user_id: user }), "order-one-refreshed-access");
+  assert.equal(calls.refresh.length, 1); assert.equal(calls.authorize.length, 0);
+});
+
+test("an invalid refresh on an OAuth-only order cannot fall back to raw account authorization", async () => {
+  const queries = [], stored = encrypt(JSON.stringify({ clientId: appId, refreshToken: "invalid-refresh", expiresAt: new Date(0).toISOString() }));
+  let authorized = 0;
+  const service = createOrderBotService({ encrypt, decrypt, pool: { query: async sql => { queries.push(sql); return { rows: [{ encrypted_value: stored }] }; } },
+    authorize: async () => { authorized++; }, refresh: async () => { throw Object.assign(Error("Invalid refresh"), { oauthRefreshInvalid: true }); } });
+  await assert.rejects(service.token({ ...config(), oauthOnly: true }, { discord_user_id: user, encrypted_account_token: "raw" }), error => error.oauthRefreshInvalid);
+  assert.equal(authorized, 0); assert.equal(queries.length, 1);
+});
+
 test("prepared credentials are encrypted separately; loading a missing order bot never falls back to the shared bot", async () => {
   const { service, pool, settings } = fixture();
   const prepared = await service.prepare({ botToken: "a-valid-bot-token-long-enough", clientSecret: "private-secret" }, base,

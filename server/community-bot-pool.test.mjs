@@ -11,6 +11,18 @@ const a = "222222222222222222", b = "333333333333333333", guild = "4444444444444
 const encrypt = value => Buffer.from(value).toString("base64");
 const decrypt = value => Buffer.from(value, "base64").toString();
 
+async function automaticStock(db, count = 3) {
+  await db.exec(`CREATE TABLE community_oauth_joins (discord_user_id TEXT,guild_id TEXT,stock_type TEXT,status TEXT,
+    encrypted_account_token TEXT,encrypted_access_token TEXT,access_token_expires_at TIMESTAMPTZ)`);
+  for (let index = 0; index < count; index++) await db.query("INSERT INTO community_oauth_joins VALUES ($1,$2,'offline','authorized','raw','shared-access',NOW()+INTERVAL '7 days')", [String(BigInt(user) + BigInt(index)), guild]);
+}
+async function syncStock(db, botIds) {
+  const members = (await db.query("SELECT discord_user_id FROM community_oauth_joins")).rows;
+  for (const clientId of botIds) for (const member of members) await db.query("INSERT INTO community_bot_pool_credentials VALUES ($1,$2,$3)",
+    [clientId, member.discord_user_id, encrypt(JSON.stringify({ clientId, accessToken: "synced-access", refreshToken: "synced-refresh", expiresAt: new Date(Date.now() + 7 * 86400000).toISOString() }))]);
+}
+const autoArgs = (orderId, amount = 1) => ({ orderId, amount, base: { configured: true, clientId: sharedId, guildId: guild, botToken: "default-secret", clientSecret: "shared-secret" }, stockAllocations: [{ categoryId: "offline", amount }], redirectUri: "https://example.com/callback" });
+
 test("existing pool bots load cached Discord avatars without changing credentials or exposing them", async () => {
   let calls = 0;
   let credential = encrypt(JSON.stringify({ clientId: a, botToken: "token-one", clientSecret: "private-secret" }));
@@ -233,4 +245,144 @@ test("existing pooled orders load updated credentials without changing applicati
   assert.equal(config.poolBotId, a);
   assert.equal(config.orderBotId, "existing");
   assert.equal(base.botToken, "shared-token");
+}));
+
+test("automatic assignment never falls back to default-only stock when the pool is empty", options, () => fixture(async ({ db, service }) => {
+  await automaticStock(db);
+  await assert.rejects(service.acquire(autoArgs("default-only")), error => error.statusCode === 409);
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM community_bot_pool_reservations")).rows[0].n, 0);
+  const rows = [{ discord_user_id: user, has_account_token: true, has_shared_grant: true }];
+  assert.equal(await service.availableCount({ clientId: sharedId }, rows), 0);
+}));
+
+test("automatic assignment balances enabled pool bots and ignores historical delivered totals", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b);
+  await syncStock(db, [a, b]);
+  await write({ uniqid: "default-legacy", status: "PROCESS", amount: 1000, added: 200 });
+  await write({ uniqid: "a-history", botApplicationId: a, status: "COMPLETED", amount: 100000, added: 100000 });
+  await write({ uniqid: "a-current", botApplicationId: a, status: "PROCESS", amount: 100, added: 70 });
+  await write({ uniqid: "b-current", botApplicationId: b, status: "WAITING", amount: 50, added: 0 });
+  assert.equal((await service.acquire(autoArgs("least-pending"))).poolBotId, a);
+  await service.setEnabled(a, false);
+  assert.equal((await service.acquire(autoArgs("disabled-skipped"))).poolBotId, b);
+}));
+
+test("raw account tokens and shared default OAuth cannot supply pool eligibility before Sync", options, () => fixture(async ({ db, service, add }) => {
+  await automaticStock(db, 1); await add(a);
+  await assert.rejects(service.acquire(autoArgs("shared-only")), error => error.statusCode === 409);
+  assert.equal(await service.availableCount({ clientId: sharedId }, [{ discord_user_id: user, has_account_token: true, has_shared_grant: true }]), 0);
+  await db.query("INSERT INTO community_bot_pool_credentials VALUES ($1,$2,$3)", [a, user, encrypt(JSON.stringify({ clientId: a, accessToken: "pool-grant", expiresAt: new Date(Date.now() + 86400000).toISOString() }))]);
+  const selected = await service.acquire(autoArgs("pool-authorized"));
+  assert.equal(selected.poolBotId, a); assert.equal(selected.oauthOnly, true);
+  await db.exec("DELETE FROM community_bot_pool_credentials");
+  await assert.rejects(service.acquire(autoArgs("none-eligible")), error => error.statusCode === 409);
+}));
+
+test("in-flight pool assignments participate in load balancing before order commit and expired reservations recover", options, () => fixture(async ({ db, service, add }) => {
+  await automaticStock(db); await add(a); await add(b);
+  await syncStock(db, [a, b]);
+  const first = await service.acquire(autoArgs("first-reserved", 2)); assert.equal(first.poolBotId, a);
+  const next = await service.acquire(autoArgs("next-reserved", 2)); assert.equal(next.poolBotId, b);
+  await service.release("first-reserved"); assert.equal((await service.acquire(autoArgs("released"))).poolBotId, a);
+  await db.exec("UPDATE community_bot_pool_reservations SET expires_at=NOW()-INTERVAL '1 second'");
+  await service.acquire(autoArgs("after-expiry"));
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM community_bot_pool_reservations")).rows[0].n, 1);
+}));
+
+test("one assigned bot must cover every category and respect target-server exclusions", options, () => fixture(async ({ db, service, add }) => {
+  await automaticStock(db, 2); await add(a); await add(b);
+  const secondUser = String(BigInt(user) + 1n);
+  await db.query("UPDATE community_oauth_joins SET stock_type='online' WHERE discord_user_id=$1", [secondUser]);
+  await db.exec("UPDATE community_oauth_joins SET encrypted_account_token=NULL,encrypted_access_token=NULL");
+  const grant = async (bot, member) => db.query("INSERT INTO community_bot_pool_credentials VALUES ($1,$2,$3)", [bot, member, encrypt(JSON.stringify({ clientId: bot, refreshToken: "refresh" }))]);
+  await grant(a, user); await grant(b, secondUser);
+  const args = { ...autoArgs("mixed-bots"), amount: 2, stockAllocations: [{ categoryId: "offline", amount: 1 }, { categoryId: "online", amount: 1 }] };
+  await assert.rejects(service.acquire(args), error => error.statusCode === 409);
+  await grant(b, user);
+  assert.equal((await service.acquire({ ...args, orderId: "one-complete-bot" })).poolBotId, b);
+  await assert.rejects(service.acquire({ ...args, orderId: "already-delivered", excludedUserIds: [user] }), error => error.statusCode === 409);
+}));
+
+test("availability is the largest enabled pool capacity and excludes the shared bot", options, () => fixture(async ({ service, add, db }) => {
+  await add(a); await add(b);
+  const rows = Array.from({ length: 4 }, (_, index) => ({ discord_user_id: String(BigInt(user) + BigInt(index)), has_account_token: false, has_shared_grant: index < 2 }));
+  for (const row of rows.slice(1)) await db.query("INSERT INTO community_bot_pool_credentials VALUES ($1,$2,$3)", [b, row.discord_user_id, encrypt(JSON.stringify({ clientId: b, refreshToken: "refresh" }))]);
+  assert.equal(await service.availableCount({ clientId: sharedId }, rows), 3);
+  await service.setEnabled(b, false); assert.equal(await service.availableCount({ clientId: sharedId }, rows), 0);
+  assert.equal(await service.availableCount({ clientId: sharedId }, rows, true), 0);
+}));
+
+test("existing reservation foreign key is migrated without changing bot credentials or existing reservations", options, () => fixture(async ({ db, service, add }) => {
+  await add(a); await db.query("INSERT INTO community_bot_pool_reservations VALUES ('existing',$1,100,NOW()+INTERVAL '1 hour')", [a]);
+  await db.exec("ALTER TABLE community_bot_pool_reservations ADD CONSTRAINT community_bot_pool_reservations_client_id_fkey FOREIGN KEY(client_id) REFERENCES community_bot_pool(client_id)");
+  const before = (await db.query("SELECT encrypted_value FROM community_bot_pool")).rows[0].encrypted_value;
+  await db.exec(BOT_POOL_STORAGE_SQL);
+  assert.equal((await db.query("SELECT encrypted_value FROM community_bot_pool")).rows[0].encrypted_value, before);
+  assert.equal((await db.query("SELECT COUNT(*)::int AS n FROM community_bot_pool_reservations")).rows[0].n, 1);
+  await service.release("existing");
+}));
+
+test("new pool assignment preserves all active/waiting/default order bindings, saved settings and existing grants", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b);
+  await syncStock(db, [b]);
+  await write({ uniqid: "default-running", automaticBot: true, botApplicationId: sharedId, status: "PROCESS", amount: 500, added: 100 });
+  await write({ uniqid: "pool-waiting", customBot: true, poolBotId: a, botApplicationId: a, status: "WAITING", amount: 500, added: 0 });
+  await db.query("INSERT INTO app_settings VALUES ('community_oauth_config',$1,NOW())", [encrypt(JSON.stringify({ clientId: sharedId, botToken: "saved-default-token" }))]);
+  await db.query("INSERT INTO community_bot_pool_reservations VALUES ('already-started',$1,100,NOW()+INTERVAL '1 hour')", [sharedId]);
+  await db.query("INSERT INTO community_bot_pool_credentials VALUES ($1,$2,$3)", [a, user, encrypt(JSON.stringify({ clientId: a, accessToken: "existing-grant" }))]);
+  const snapshot = async () => ({
+    orders: (await db.query("SELECT * FROM tracked_orders ORDER BY uniqid")).rows,
+    settings: (await db.query("SELECT * FROM app_settings ORDER BY setting_key")).rows,
+    grants: (await db.query("SELECT * FROM community_bot_pool_credentials ORDER BY client_id,discord_user_id")).rows
+  });
+  const before = await snapshot();
+  assert.equal((await service.acquire(autoArgs("new-order"))).poolBotId, b);
+  assert.deepEqual(await snapshot(), before);
+  assert.equal((await db.query("SELECT client_id FROM community_bot_pool_reservations WHERE order_id='already-started'")).rows[0].client_id, sharedId);
+  assert.equal((await service.load(a)).clientId, a);
+}));
+
+test("a low-load unsynced bot is skipped, and insufficient synced OAuth cannot be filled from raw account tokens", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db, 3); await add(a); await add(b);
+  await syncStock(db, [b]);
+  await write({ uniqid: "synced-busy", botApplicationId: b, status: "PROCESS", amount: 100, added: 0 });
+  const chosen = await service.acquire(autoArgs("oauth-only", 3)); assert.equal(chosen.poolBotId, b);
+  await service.release("oauth-only");
+  await db.query("DELETE FROM community_bot_pool_credentials WHERE client_id=$1 AND discord_user_id=$2", [b, user]);
+  await assert.rejects(service.acquire(autoArgs("needs-one-more", 3)), error => error.statusCode === 409 && /Sync/.test(error.message));
+  assert.equal(await service.availableCount({ clientId: sharedId }, (await db.query("SELECT discord_user_id,TRUE AS has_account_token FROM community_oauth_joins")).rows), 2);
+}));
+
+test("enabling default participation includes it in the same pending/active load balancing rules", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b); await syncStock(db, [a, b]);
+  await write({ uniqid: "a-busy", botApplicationId: a, status: "PROCESS", amount: 100, added: 40 });
+  await write({ uniqid: "b-busy", botApplicationId: b, status: "PROCESS", amount: 100, added: 20 });
+  const first = await service.acquire({ ...autoArgs("default-participates"), includeDefault: true });
+  assert.equal(first.isDefault, true);
+  await service.release("default-participates");
+  await write({ uniqid: "default-busy", status: "PROCESS", amount: 1000, added: 100 });
+  assert.equal((await service.acquire({ ...autoArgs("lighter-pool"), includeDefault: true })).poolBotId, a, "the setting does not force selection of the default bot");
+  assert.equal((await service.availableCount({ clientId: sharedId }, [{ discord_user_id: user, has_shared_grant: true }], false, true)), 1);
+}));
+
+test("turning off new-order participation preserves existing order bindings and eligible grants", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await syncStock(db, [a]);
+  await write({ uniqid: "already-running", customBot: true, poolBotId: a, botApplicationId: a, status: "PROCESS", amount: 100, added: 10 });
+  const before = (await db.query("SELECT * FROM tracked_orders")).rows;
+  await service.setEnabled(a, false);
+  await assert.rejects(service.acquire(autoArgs("new-blocked")), error => error.statusCode === 409);
+  assert.equal((await service.load(a)).clientId, a);
+  assert.equal((await service.grantUserIds(a)).length, 3, "existing delivery and replacement keep access to the assigned bot's grants");
+  assert.deepEqual((await db.query("SELECT * FROM tracked_orders")).rows, before);
+}));
+
+test("participating bots with equal pending members keep the active-order tie breaker", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b); await syncStock(db, [a, b]);
+  await write({ uniqid: "default-one", status: "PROCESS", amount: 50, added: 0 });
+  await write({ uniqid: "pool-a-one", botApplicationId: a, status: "PROCESS", amount: 25, added: 0 });
+  await write({ uniqid: "pool-a-two", botApplicationId: a, status: "WAITING", amount: 25, added: 0 });
+  await write({ uniqid: "pool-b-one", botApplicationId: b, status: "PROCESS", amount: 80, added: 0 });
+  assert.equal((await service.acquire({ ...autoArgs("equal-pending"), includeDefault: true })).isDefault, true);
+  await service.release("equal-pending");
+  assert.equal((await service.acquire(autoArgs("default-setting-off"))).poolBotId, a);
 }));

@@ -1,10 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-.order-bot-option { grid-column: 1 / -1; min-width: 0; display: grid; gap: 12px; container-type: inline-size; }
-.order-bot-option .boost-proxy-toggle strong { overflow-wrap: anywhere; }
-.order-bot-fields { min-width: 0; padding: 16px; display: grid; gap: 12px; }
-.order-bot-fields .settings-field-note { display: flex; align-items: center; gap: 6px; overflow-wrap: anywhere; }
 
 @layer base {
   :root {

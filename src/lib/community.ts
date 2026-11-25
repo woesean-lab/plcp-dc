@@ -33,6 +33,13 @@ export function controlBotSync(clientId: string, action: "resume" | "cancel") {
 export function getCommunityBotPool(signal?: AbortSignal) {
   return fetch("/api/community/bot-pool", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<{ bots: PoolBot[] }>);
 }
+export type BotOrderSettings = { defaultClientId: string; defaultUseForNewOrders: boolean };
+export function getBotOrderSettings(signal?: AbortSignal) {
+  return fetch("/api/community/bots/order-settings", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotOrderSettings>);
+}
+export function saveBotOrderSetting(clientId: string, useForNewOrders: boolean) {
+  return fetch("/api/community/bots/order-settings", { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clientId, useForNewOrders }) }).then(parseResponse<{ clientId: string; useForNewOrders: boolean }>);
+}
 export function saveCommunityPoolBot(input: { name: string; botToken: string; clientSecret: string }, clientId?: string) {
   return fetch(`/api/community/bot-pool${clientId ? `/${encodeURIComponent(clientId)}` : ""}`, { method: clientId ? "PUT" : "POST", credentials: "same-origin", cache: "no-store",
     headers: { "Content-Type": "application/json" }, body: JSON.stringify(input)

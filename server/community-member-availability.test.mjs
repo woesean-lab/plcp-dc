@@ -39,6 +39,8 @@ function fixture(){
     isCommunityServiceType:()=>true,normalizeCommunityStockType:value=>value,
     normalizeCommunityJoinMethod:()=> "create_invite",parseCommunityCategoryJoinMethods:value=>value,
     communityJoinMethodUsesAccountToken:()=>false,
+    communityBotPool:{grantUserIds:async()=>[],availableCount:async(_config,rows)=>rows.length},
+    botOrderSettings:{read:async()=>({defaultUseForNewOrders:false})},
     requireSession(){},app:{get(_path,_auth,handler){scope.handler=handler;}}
   };
   const names=["loadCommunityPreviouslyDeliveredUserIds","loadCommunityUnavailableUserIdGroups","loadCommunityUnavailableUserIds"];

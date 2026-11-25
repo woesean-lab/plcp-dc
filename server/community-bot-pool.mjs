@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS community_bot_pool (
 );
 CREATE TABLE IF NOT EXISTS community_bot_pool_reservations (
   order_id TEXT PRIMARY KEY,
-  client_id TEXT NOT NULL REFERENCES community_bot_pool(client_id),
+  client_id TEXT NOT NULL,
   amount INTEGER NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL
 );
@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS community_bot_pool_credential_leases (
   owner_token TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL,
   PRIMARY KEY (client_id, discord_user_id)
-);`;
+);
+ALTER TABLE community_bot_pool_reservations DROP CONSTRAINT IF EXISTS community_bot_pool_reservations_client_id_fkey;`;
 
 const ACTIVE = "('NEW','WAITING','PROCESS','RECOVERING','PAUSED','INVITES PAUSED')";
 const ORDER_METRICS = `COUNT(*) FILTER (WHERE UPPER(payload->>'status') IN ${ACTIVE}) AS active_orders,
@@ -145,7 +146,20 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
     });
   }
 
-  async function acquire({ orderId, amount, base, redirectUri, stockAllocations, excludedUserIds = [], accountTokenOnly = false }) {
+  async function eligibleRows(candidate, rows, accountTokenOnly, queryable = pool) {
+    const grants = new Set(accountTokenOnly || candidate.is_default ? [] : await grantUserIds(candidate.client_id, queryable));
+    return rows.filter(row => accountTokenOnly ? row.has_account_token : candidate.is_default ? row.has_shared_grant : grants.has(row.discord_user_id));
+  }
+
+  async function availableCount(base, rows, accountTokenOnly = false, includeDefault = false) {
+    const candidates = (await pool.query("SELECT client_id FROM community_bot_pool WHERE enabled=TRUE AND client_id<>$1", [base.clientId])).rows;
+    if (includeDefault) candidates.push({ client_id: base.clientId, is_default: true });
+    let maximum = 0;
+    for (const candidate of candidates) maximum = Math.max(maximum, (await eligibleRows(candidate, rows, accountTokenOnly)).length);
+    return maximum;
+  }
+
+  async function acquire({ orderId, amount, base, redirectUri, stockAllocations, excludedUserIds = [], accountTokenOnly = false, includeDefault = false }) {
     if (base.configured === false) throw fail("Configure Members Stock before using the bot pool.", 409);
     const client = await pool.connect();
     try {
@@ -158,27 +172,41 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
         ORDER BY COALESCE(work.pending_members,0) + COALESCE(leases.pending_members,0),
           COALESCE(work.active_orders,0) + COALESCE(leases.reservations,0),
           COALESCE(work.total_orders,0), b.last_assigned_at NULLS FIRST, b.created_at, b.client_id
-        ${stockAllocations ? "" : "LIMIT 1"} FOR UPDATE OF b`, [base.clientId]);
-      let bot = result.rows[0];
+        ${stockAllocations || includeDefault ? "" : "LIMIT 1"} FOR UPDATE OF b`, [base.clientId]);
+      const candidates = result.rows;
+      if (includeDefault) {
+        const work = await loadBotDeliveryMetrics(client, base.clientId, { includeLegacy: true });
+        const leases = (await client.query("SELECT COUNT(*)::int AS reservations,COALESCE(SUM(amount),0)::int AS reserved_members FROM community_bot_pool_reservations WHERE client_id=$1 AND expires_at>NOW()", [base.clientId])).rows[0];
+        candidates.push({ client_id: base.clientId, is_default: true, pending_members: work.pendingMembers, active_orders: work.activeOrders, total_orders: work.totalOrders, ...leases });
+        const load = row => [Number(row.pending_members || 0) + Number(row.reserved_members || 0), Number(row.active_orders || 0) + Number(row.reservations || 0), Number(row.total_orders || 0), Date.parse(row.last_assigned_at) || 0, Date.parse(row.created_at) || 0];
+        candidates.sort((left, right) => {
+          const a = load(left), b = load(right);
+          for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return a[index] - b[index];
+          return left.client_id.localeCompare(right.client_id);
+        });
+      }
+      let bot = candidates[0];
       if (stockAllocations) {
         if (!Array.isArray(stockAllocations) || !stockAllocations.length || stockAllocations.some(item => !item.categoryId || !Number.isInteger(item.amount) || item.amount<1)) throw fail("Choose valid stock allocations.");
         const stock = await client.query(`SELECT discord_user_id,stock_type,encrypted_account_token IS NOT NULL AS has_account_token
+          ${includeDefault ? ",(encrypted_access_token IS NOT NULL AND access_token_expires_at>NOW()) AS has_shared_grant" : ""}
           FROM community_oauth_joins WHERE guild_id=$1 AND status='authorized' AND NOT(discord_user_id=ANY($2::text[]))`, [base.guildId,excludedUserIds]);
         bot = null;
-        for (const candidate of result.rows) {
-          const grants = new Set(accountTokenOnly ? [] : await grantUserIds(candidate.client_id,client));
-          if (stockAllocations.every(allocation => stock.rows.filter(row => row.stock_type === allocation.categoryId && (row.has_account_token || grants.has(row.discord_user_id))).length >= allocation.amount)) { bot=candidate; break; }
+        for (const candidate of candidates) {
+          const eligible = await eligibleRows(candidate, stock.rows, accountTokenOnly, client);
+          if (stockAllocations.every(allocation => eligible.filter(row => row.stock_type === allocation.categoryId).length >= allocation.amount)) { bot=candidate; break; }
         }
       }
-      if (!bot) throw fail("No enabled pool bot has enough eligible accounts for this order. Authorize more stock accounts or enable another bot.", 409);
-      const credentials = JSON.parse(decrypt(bot.encrypted_value));
+      if (!bot) throw fail("No enabled bot has enough OAuth-authorized stock for this order. Run Sync in Settings > Bots first.", 409);
+      const credentials = bot.is_default ? base : JSON.parse(decrypt(bot.encrypted_value));
       if (credentials.clientId !== bot.client_id) throw fail("Pool credentials belong to another application.");
       await client.query(`INSERT INTO community_bot_pool_reservations (order_id, client_id, amount, expires_at)
         VALUES ($1,$2,$3,NOW() + INTERVAL '10 minutes')`, [orderId, bot.client_id, amount]);
-      await client.query("UPDATE community_bot_pool SET last_assigned_at = NOW() WHERE client_id = $1", [bot.client_id]);
+      if (!bot.is_default) await client.query("UPDATE community_bot_pool SET last_assigned_at = NOW() WHERE client_id = $1", [bot.client_id]);
       await client.query("COMMIT");
+      if (bot.is_default) return { ...base, isDefault: true, assignmentReserved: true, botName: base.botName || "Default bot" };
       return { ...credentials, botName: bot.name, poolBotId: bot.client_id, orderBotId: orderId,
-        guildId: base.guildId, stockGuildId: base.guildId, redirectUri, configured: true, missing: [] };
+        guildId: base.guildId, stockGuildId: base.guildId, redirectUri, configured: true, missing: [], assignmentReserved: true, oauthOnly: !accountTokenOnly };
     } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
     finally { client.release(); }
   }
@@ -217,7 +245,7 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
       await pool.query("DELETE FROM community_bot_pool_credential_leases WHERE client_id = $1 AND discord_user_id = $2 AND owner_token = $3", [clientId,userId,owner]);
     }
   }
-  return { list, save, setEnabled, acquire, release, load, withGrantLock, grantUserIds };
+  return { list, save, setEnabled, acquire, release, load, withGrantLock, grantUserIds, availableCount };
 }
 
 export function registerCommunityBotPool(app, requireSession, service) {

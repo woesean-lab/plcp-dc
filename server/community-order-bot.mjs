@@ -61,6 +61,7 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
   }
 
   async function token(config, member, { force = false, allowAuthorize = true } = {}) {
+    allowAuthorize = allowAuthorize && config.oauthOnly !== true;
     const userId = String(member?.discord_user_id ?? "");
     if (!/^\d{16,22}$/.test(userId)) throw fail("A valid member is required for bot authorization.");
     const pooled = Boolean(config.poolBotId);
@@ -73,7 +74,8 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
       const result = await pool.query(`SELECT encrypted_value FROM ${table} WHERE ${keyColumn} = $1 AND discord_user_id = $2`, [grantId, userId]);
       const stored = result.rows[0] ? JSON.parse(decrypt(result.rows[0].encrypted_value)) : null;
       if (stored && stored.clientId !== config.clientId) throw fail("Member authorization belongs to another application.");
-      if (!force && stored?.accessToken && Date.parse(stored.expiresAt) > Date.now() + 48 * 60 * 60 * 1000) return stored.accessToken;
+      const reuseUntil = Date.now() + (config.oauthOnly && !stored?.refreshToken ? 0 : 48 * 60 * 60 * 1000);
+      if (!force && stored?.accessToken && Date.parse(stored.expiresAt) > reuseUntil) return stored.accessToken;
       let oauth;
       if (stored?.refreshToken) {
         try { oauth = await refresh(config, stored.refreshToken); }
