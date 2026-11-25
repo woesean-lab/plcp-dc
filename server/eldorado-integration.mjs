@@ -82,10 +82,12 @@ export function registerEldoradoIntegration(app, { pool, readSettings = () => re
         id: invite, amount, service: settings.service, categoryId: settings.categoryId,
         delay: settings.delay, speedProfile: settings.speedProfile, joinMethod: settings.joinMethod,
         durationMonths: settings.durationMonths, reactionLimit: settings.reactionLimit, isEldoradoSale: true,
+        autoReplace: settings.autoReplace,
       } : {
         id: invite, amount, duration: settings.duration, boostProvider: settings.boostProvider,
         boostStockPool: settings.boostStockPool, concurrency: settings.concurrency,
         removeTwoFactor: settings.removeTwoFactor, allowMembershipScreening: false, isEldoradoSale: true,
+        autoReplace: settings.autoReplace,
       };
       let status = 200, responseBody, thrown;
       const response = { status(code) { status = code; return this; }, json(value) { responseBody = value; return this; } };

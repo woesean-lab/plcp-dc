@@ -1,5 +1,6 @@
 import { registerEldoradoIntegration, ensureEldoradoIntegrationStorage } from "./eldorado-integration.mjs";
 import crypto from "node:crypto";
+import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceRunner, invokeReplacement, withOrderReplacementLock } from "./order-auto-replace.mjs";
 import { registerEldoradoIntegrationSettings } from "./eldorado-integration-settings.mjs";
 import { createAdminAuth } from "./admin-auth.mjs";
 import { createSalta7Client } from "./salta7.mjs";
@@ -8910,6 +8911,7 @@ async function initializeDatabase() {
   `);
   await pool.query(COMMUNITY_ORDER_CATEGORY_GUARD_SQL);
   await pool.query(CUSTOMER_REACTION_SETTINGS_GUARD_SQL);
+  await pool.query(AUTO_REPLACE_GUARD_SQL);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS community_order_worker_leases (
       order_id TEXT PRIMARY KEY,
@@ -11834,6 +11836,7 @@ app.get("/api/community/availability", requireSession, async (req, res, next) =>
 async function createCommunityOrder(req, res, next) {
   let client = null;
   try {
+    if (req.body?.autoReplace !== undefined && typeof req.body.autoReplace !== "boolean") return res.status(400).json({ message: "Auto-replace must be enabled or disabled." });
     const amount = Number.parseInt(req.body?.amount, 10);
     const delay = Number.parseInt(req.body?.delay, 10);
     const speedProfile = normalizeCommunitySpeedProfile(req.body?.speedProfile);
@@ -11950,6 +11953,8 @@ async function createCommunityOrder(req, res, next) {
       uniqid,
       provider: "community",
       service,
+      autoReplace: req.body?.autoReplace === true,
+      autoReplaceRounds: 0,
       stockType: primaryCategory.id,
       categoryId: primaryCategory.id,
       categoryName: categoryAllocations.length > 1 ? `${categoryAllocations.length} categories` : primaryCategory.name,
@@ -13740,14 +13745,14 @@ app.post("/api/community/orders/:uniqid/retry-failed", requireSession, async (re
   }
 });
 
-app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => {
+async function replaceAllCommunityMembersHandler(req, res, next, { automatic = false } = {}) {
   const client = await pool.connect();
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     if (!uniqid || uniqid.length > 160) {
       return res.status(400).json({ message: "A valid order ID is required." });
     }
-    const isAdminRequest = await hasActiveSession(req);
+    const isAdminRequest = automatic || await hasActiveSession(req);
     const publicCooldownKey = `${req.ip}:${uniqid}:all`;
     const publicCooldownUntil = publicCommunityReplaceCooldowns.get(publicCooldownKey) ?? 0;
     if (!isAdminRequest && publicCooldownUntil > Date.now()) {
@@ -13764,7 +13769,7 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
       return res.status(404).json({ message: "Members order could not be found." });
     }
     order = await hydrateCommunityOrderCategories(order);
-    if (!isAdminRequest && isCommunityOrderManagementExpired(order)) {
+    if ((!isAdminRequest || automatic) && isCommunityOrderManagementExpired(order)) {
       await client.query("ROLLBACK");
       return res.status(410).json({ message: "This order's member support period has expired." });
     }
@@ -13813,9 +13818,9 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
     const results = order.communityResults.map((item) => ({ ...item }));
     const replaceableIndices = results.flatMap((item, index) => {
       const state = String(item?.state ?? "").toLowerCase();
-      const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed";
+      const removed = String(item?.membershipStatus ?? "").toLowerCase() === "removed" || (automatic && Boolean(item?.leaveAllStatus || item?.autoLeaveAttemptedAt));
       const notLiveWithPeriodicSupport = isCommunityOnlinerReplacementEligible(order, item);
-      return !removed && (["failed", "blocked", "already_member"].includes(state) || notLiveWithPeriodicSupport)
+      return !removed && (["failed", "blocked", "already_member"].includes(state) || (!automatic && notLiveWithPeriodicSupport))
         && !isCommunityResultManagementExpired(order, item) ? [index] : [];
     });
     if (!replaceableIndices.length) {
@@ -13934,7 +13939,8 @@ app.post("/api/community/orders/:uniqid/replace-all", async (req, res, next) => 
   } finally {
     client.release();
   }
-});
+}
+app.post("/api/community/orders/:uniqid/replace-all", replaceAllCommunityMembersHandler);
 
 app.post("/api/community/orders/:uniqid/replace-member", async (req, res, next) => {
   const client = await pool.connect();
@@ -14828,6 +14834,7 @@ app.post("/api/discord/user/leave-guild", requireSession, async (req, res, next)
 
 async function createBoostOrder(req, res, next) {
   try {
+    if (req.body?.autoReplace !== undefined && typeof req.body.autoReplace !== "boolean") return res.status(400).json({ message: "Auto-replace must be enabled or disabled." });
     if (req.body?.boostProvider !== undefined && !["dcord", "salta7"].includes(req.body.boostProvider)) return res.status(400).json({ message: "Choose Dcord or Salta7." });
     if (req.body?.removeTwoFactor !== undefined && typeof req.body.removeTwoFactor !== "boolean") return res.status(400).json({ message: "Remove 2FA field must be enabled or disabled." });
     const removeTwoFactor = req.body?.removeTwoFactor !== false;
@@ -14903,6 +14910,8 @@ async function createBoostOrder(req, res, next) {
       provider: "dcord",
       boostProvider,
       removeTwoFactor,
+      autoReplace: req.body?.autoReplace === true,
+      autoReplaceRounds: 0,
       service: "DCORD-BOOSTS",
       serverId: serverInfo.guildId,
       serverName: serverInfo.guildName,
@@ -15303,7 +15312,7 @@ app.post("/api/dcord/boost-orders/:uniqid/cancel", requireSession, async (req, r
   }
 });
 
-app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async (req, res, next) => {
+async function replaceDcordBoostTokenHandler(req, res, next, { automatic = false, deferDelivery = false } = {}) {
   try {
     const uniqid = String(req.params.uniqid ?? "").trim();
     const resultIndex = Number.parseInt(req.body?.resultIndex, 10);
@@ -15317,13 +15326,16 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
       return res.status(404).json({ message: "Boost order could not be found." });
     }
     const orderStatus = String(order.status ?? "").trim().toUpperCase();
-    if (orderStatus === "PROCESS") {
+    if ((orderStatus === "PROCESS" && !deferDelivery) || dcordOrderProcessingJobs.has(uniqid)) {
       return res.status(409).json({ message: "Wait until the boost order finishes before replacing failed tokens." });
     }
     if (orderStatus === "CANCELLED") {
       return res.status(409).json({ message: "Cancelled order tokens cannot be replaced." });
     }
 
+    if (automatic && (order.deliveryPaused === true || !["PARTIAL", "ERROR", ...(deferDelivery ? ["PROCESS"] : [])].includes(orderStatus))) {
+      return res.status(409).json({ message: "Automatic replacement requires a settled delivery." });
+    }
     const results = Array.isArray(order.dcordResults) ? [...order.dcordResults] : [];
     const currentResult = results[resultIndex];
     if (order.boostProvider === "salta7" && currentResult && (isRunnableDcordResult(currentResult) || isUncertainDcordTransportResult(currentResult))) return res.status(409).json({ message: "Wait for the Salta7 task to be verified before replacing this account." });
@@ -15408,9 +15420,10 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
     };
 
     await saveTrackedOrderPayload(nextOrder);
-    void processDcordBoostOrder(nextOrder, assignedTokens, invite).catch((error) => {
+    if (!deferDelivery) void processDcordBoostOrder(nextOrder, assignedTokens, invite).catch((error) => {
       console.error("Dcord replacement failed:", error instanceof Error ? error.message : error);
     });
+    if (automatic) return res.json({ order: nextOrder });
     res.set("Cache-Control", "no-store").json({
       order: await revealDcordOrderTokens(nextOrder),
       stock: summarizeBoostTokenStock(await loadBoostTokenStock())
@@ -15418,6 +15431,11 @@ app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async 
   } catch (error) {
     next(error);
   }
+}
+app.post("/api/dcord/boost-orders/:uniqid/replace-token", requireSession, async (req, res, next) => {
+  try {
+    await withOrderReplacementLock(pool, String(req.params.uniqid ?? ""), () => replaceDcordBoostTokenHandler(req, res, next));
+  } catch (error) { next(error); }
 });
 
 app.get("/api/orders", requireSession, async (_req, res, next) => {
@@ -15573,6 +15591,42 @@ app.put("/api/orders", requireSession, async (req, res, next) => {
   }
 });
 
+const readAutoReplaceSettings = registerAutoReplaceSettings(app, {
+  requireSession, load: loadEncryptedSetting, save: saveEncryptedSetting
+});
+const processOrderAutoReplacements = createAutoReplaceRunner({
+  pool, readSettings: readAutoReplaceSettings,
+  memberEligible: (order, item) => !isCommunityOrderManagementExpired(order)
+    && !isCommunityResultManagementExpired(order, item)
+    && item?.membershipStatus !== "removed" && !item?.leaveAllStatus && !item?.autoLeaveAttemptedAt
+    && !communityLeaveRunning(order),
+  boostCount: getDcordResultBoostCount,
+  boostPending: item => isRunnableDcordResult(item) || isUncertainDcordTransportResult(item),
+  boostBusy: order => dcordOrderProcessingJobs.has(order.uniqid) || dcordRejoinJobs.has(order.uniqid)
+    || ["queued", "running"].includes(order.humanizerStatus),
+  replaceMembers: order => invokeReplacement(replaceAllCommunityMembersHandler, order.uniqid),
+  replaceBoosts: async (order, indices) => {
+    let queuedOrder = null, failure;
+    try {
+      for (const resultIndex of indices) {
+        const result = await invokeReplacement(replaceDcordBoostTokenHandler, order.uniqid, { resultIndex }, { deferDelivery: true });
+        queuedOrder = result.order;
+      }
+    } catch (error) { failure = error; }
+    // Start partially reserved batches without abandoning assigned accounts.
+    if (queuedOrder) {
+      if (failure) {
+        queuedOrder.autoReplaceStopped = "replacement_unavailable";
+        await saveTrackedOrderPayload(queuedOrder);
+      }
+      const tokens = await loadDcordOrderTokens(order.uniqid);
+      void processDcordBoostOrder(queuedOrder, tokens, extractDiscordInviteCode(queuedOrder.serverInvite))
+        .catch(error => console.error("Automatic boost replacement failed:", error));
+    }
+    if (failure) throw failure;
+  }
+});
+
 serveFrontend(app, distDir);
 
 app.use((error, _req, res, _next) => {
@@ -15605,6 +15659,10 @@ if (serviceRunsWeb) {
   app.listen(port, "0.0.0.0", () => {
     console.log(`Pulcip Members web service listening on port ${port} (role: ${serviceRole}, invite resolver: bot-first-v5).`);
   });
+  const autoReplaceTimer = setInterval(() => {
+    void processOrderAutoReplacements().catch(error => console.error("Auto-replace scan failed:", error));
+  }, 10_000);
+  autoReplaceTimer.unref();
   const communityRecoveryTimer = setInterval(() => {
     void recoverInterruptedCommunityOrders().catch((error) => {
       console.error("Members recovery scan failed:", error instanceof Error ? error.message : error);

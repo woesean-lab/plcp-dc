@@ -2,6 +2,7 @@ export const MEMBER_JOINED_HOLD_MS = 200;
 
 type Member = { index: number; state: string };
 type Hold = { position: number; until: number };
+const deliveryFailed = (item: Member) => ["failed", "blocked"].includes(item.state.toLowerCase());
 export type MemberLogOrder<T extends Member> = {
   scope: string;
   source: T[];
@@ -16,7 +17,10 @@ export function advanceMemberLogOrder<T extends Member>(
   scope: string,
   now: number
 ): MemberLogOrder<T> {
-  if (!previous || previous.scope !== scope) return { scope, source, items: source, holds: new Map() };
+  // Keep failures last even when inactive OAuth/Onliner diagnostics would
+  // otherwise put them first. Preserve API row indices and within-group order.
+  const ordered = [...source.filter(item => !deliveryFailed(item)), ...source.filter(deliveryFailed)];
+  if (!previous || previous.scope !== scope) return { scope, source, items: ordered, holds: new Map() };
   const prior = new Map(previous.items.map((item, position) => [item.index, { item, position }]));
   const holds = new Map<number, Hold>();
   for (const item of source) {
@@ -31,9 +35,9 @@ export function advanceMemberLogOrder<T extends Member>(
       holds.set(item.index, { position: before.position, until: now + MEMBER_JOINED_HOLD_MS });
     }
   }
-  const items = source.filter(item => !holds.has(item.index));
-  const held = source.filter(item => holds.has(item.index))
+  const items = ordered.filter(item => !holds.has(item.index));
+  const held = ordered.filter(item => holds.has(item.index))
     .sort((left, right) => holds.get(left.index)!.position - holds.get(right.index)!.position);
-  for (const item of held) items.splice(Math.min(holds.get(item.index)!.position, items.length), 0, item);
+  for (const item of held) items.splice(Math.min(holds.get(item.index)!.position, items.filter(row => !deliveryFailed(row)).length), 0, item);
   return { scope, source, items, holds };
 }

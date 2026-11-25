@@ -49,6 +49,14 @@ export function getAdminConfig() {
   return requestJson<{ dcordConfigured: boolean; salta7Configured?: boolean; boostStock: BoostStock }>("/api/admin/config");
 }
 
+export type AutoReplaceLimits = { members: number; boosts: number };
+export function getAutoReplaceSettings() {
+  return requestJson<AutoReplaceLimits>("/api/settings/auto-replace");
+}
+export function saveAutoReplaceSettings(limits: AutoReplaceLimits) {
+  return requestJson<AutoReplaceLimits>("/api/settings/auto-replace", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(limits) });
+}
+
 export function saveSalta7ApiKey(apiKey: string) {
   return requestJson<{ configured: boolean }>("/api/salta7/config", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apiKey }) });
 }

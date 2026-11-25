@@ -508,7 +508,8 @@ export default function OrderPage() {
   const leaveProgress = autoLeaveRunning ? autoLeaveJob : leavingAllCommunityMembers && currentLeaveProgress?.startedAt === leaveAttemptBeforeStart.current
     ? { processed: 0, total: leaveAttemptTotal.current } : currentLeaveProgress;
   const reactionDeliveryRunning = result?.customerReactions?.requests.some((request) => request.assignedCount > request.completedCount + request.failedCount + request.cancelledCount) === true;
-  const refreshComplete = terminal && !autoLeaveRunning && !manualLeaveRunning && !leavingAllCommunityMembers && !reactionDeliveryRunning;
+  const autoReplacePending = result?.autoReplace === true && !result.autoReplaceStopped && ["PARTIAL", "ERROR"].includes(normalizedStatus);
+  const refreshComplete = terminal && !autoReplacePending && !autoLeaveRunning && !manualLeaveRunning && !leavingAllCommunityMembers && !reactionDeliveryRunning;
   const communityMemberJoining = communityMemberResults.some((item) => item.state.toLowerCase() === "joining");
   const showNextMemberActivity = isCommunityProvider && normalizedStatus === "PROCESS" && typeof remainingAmount === "number" && remainingAmount > 0;
   const nextMemberActivityValue = nextMemberSeconds !== null && nextMemberSeconds > 0
@@ -1226,6 +1227,7 @@ export default function OrderPage() {
                 <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
                   <OrderStatusIndicator status={result.status ?? "UNKNOWN"} />
+                  {result.autoReplace ? <Badge variant={result.autoReplaceStopped ? "secondary" : "default"}><RefreshCw aria-hidden="true" />Auto-replace · {result.autoReplaceRounds ?? 0} rounds{result.autoReplaceStopped === "limit_reached" ? " · Limit reached" : result.autoReplaceStopped ? " · Stopped" : ""}</Badge> : null}
                   <span className="lookup-service-name">
                     <small>Service</small>
                     <strong>{serviceName}{isDcordProvider ? ` · ${result.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : ""}</strong>

@@ -165,6 +165,7 @@ import { BoostServiceField } from "../components/BoostServiceField";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
+import { OrderAutoReplaceOption } from "../components/OrderAutoReplaceOption";
 
 const EMPTY_FORM = {
   service: "COMMUNITY-OFFLINE" as ServiceType,
@@ -175,6 +176,7 @@ const EMPTY_FORM = {
   boostStockPool: "regular" as "regular" | "rotating",
   boostProvider: "salta7" as "dcord" | "salta7",
   removeTwoFactor: true,
+  autoReplace: false,
   useProxy: true,
   concurrency: 1,
   communityCategoryId: "offline",
@@ -3003,6 +3005,7 @@ export default function HomePage() {
       provider: payloadIsBoost ? "dcord" : "community",
       boostProvider: payloadIsBoost ? payload.boostProvider : undefined,
       removeTwoFactor: payloadIsBoost ? payload.removeTwoFactor : undefined,
+      autoReplace: payload.autoReplace,
       service: payload.service,
       serverId,
       serverName,
@@ -3063,6 +3066,7 @@ export default function HomePage() {
       boostStockPool: selectedIsBoost ? form.boostStockPool : undefined,
       boostProvider: selectedIsBoost ? form.boostProvider : undefined,
       removeTwoFactor: selectedIsBoost ? form.removeTwoFactor : undefined,
+      autoReplace: form.autoReplace,
       useProxy: selectedIsBoost ? form.boostProvider !== "salta7" && form.boostStockPool !== "rotating" : undefined,
       concurrency: selectedIsBoost ? form.concurrency : undefined,
       categoryId: selectedIsCommunity ? form.communityCategoryId : undefined,
@@ -3847,6 +3851,7 @@ export default function HomePage() {
                           </label>
 
                           <BoostTokenFormatOption checked={form.removeTwoFactor} disabled={creating} onChange={removeTwoFactor => setForm(current => ({ ...current, removeTwoFactor }))} />
+                          <OrderAutoReplaceOption checked={form.autoReplace} disabled={creating} onChange={autoReplace => setForm(current => ({ ...current, autoReplace }))} />
 
                           {form.boostProvider !== "salta7" && form.boostStockPool !== "rotating" ? <label className="boost-proxy-toggle is-enabled">
                             <input
@@ -4039,6 +4044,8 @@ export default function HomePage() {
                           {selectedIsCommunity && selectedCommunityHasReactions ? <OrderReactionOption enabled={form.communityReactions} memberCount={Number(form.amount)} dailyLimit={form.communityReactionLimit}
                             onEnabledChange={(enabled) => setForm((current) => ({ ...current, communityReactions: enabled, communityReactionLimit: enabled && current.amount >= 500 ? 100 : current.communityReactionLimit }))}
                             onDailyLimitChange={(limit) => setForm((current) => ({ ...current, communityReactionLimit: limit }))} /> : null}
+
+                          <OrderAutoReplaceOption checked={form.autoReplace} disabled={creating} onChange={autoReplace => setForm(current => ({ ...current, autoReplace }))} />
 
                           <label className={`boost-proxy-toggle ${form.isEldoradoSale ? "is-enabled" : ""}`}>
                             <input type="checkbox" checked={form.isEldoradoSale} onChange={(event) => setForm((current) => ({ ...current, isEldoradoSale: event.target.checked }))} />
@@ -5166,6 +5173,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.concurrency ? <span><Users className="h-3.5 w-3.5" />{orderConfirmationPayload.concurrency} workers</span> : null}
                   {orderConfirmationPayload.duration ? <span><Bot className="h-3.5 w-3.5" />{orderConfirmationPayload.boostProvider === "salta7" ? "Salta7" : "Dcord"}</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.removeTwoFactor ? <span><ShieldCheck className="h-3.5 w-3.5" />Remove 2FA field · request only</span> : null}
+                  {orderConfirmationPayload.autoReplace ? <span><RefreshCw className="h-3.5 w-3.5" />Auto-replace enabled · Settings round limit</span> : null}
                   {orderConfirmationPayload.duration && orderConfirmationPayload.boostProvider !== "salta7" && orderConfirmationPayload.boostStockPool !== "rotating" ? <span><ShieldCheck className="h-3.5 w-3.5" />{orderConfirmationPayload.amount / 2} proxies</span> : null}
                   {isCommunityService(orderConfirmationPayload.service) ? <span><ListChecks className="h-3.5 w-3.5" />{orderConfirmationPayload.joinMethod === "experimental_join" ? "Experimental Join" : orderConfirmationPayload.joinMethod === "directly" ? "Directly" : "Create Invite"}</span> : null}
                   {orderConfirmationPayload.delay ? <span><Timer className="h-3.5 w-3.5" />{orderConfirmationPayload.delay}s delay</span> : null}

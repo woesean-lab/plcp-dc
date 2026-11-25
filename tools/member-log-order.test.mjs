@@ -67,3 +67,16 @@ test("polls that skip Joining still show the known queued member's Joined transi
   assert.deepEqual(indices(joined),[0,1]);assert.equal(joined.holds.get(0).until,210);
 });
 
+test("failed and blocked deliveries stay last despite diagnostic priority and pagination", () => {
+  const source = [{ ...member(0, "failed"), authorizationStatus: "inactive", onlinerLive: false }, member(1, "blocked"), ...Array.from({ length: 51 }, (_, index) => member(index + 2, index === 0 ? "joining" : "joined"))];
+  const initial = advanceMemberLogOrder(null, source, "failures-last", 0);
+  assert.deepEqual(indices(initial).slice(-2), [0, 1]);
+  assert.equal(initial.items.slice(0, 50).some(row => ["failed", "blocked"].includes(row.state)), false);
+  assert.deepEqual(source.slice(0, 2).map(row => row.index), [0, 1], "source/index identity stays unchanged");
+  const updated = source.map(row => row.index === 2 ? { ...row, state: "joined" } : row);
+  const held = advanceMemberLogOrder(initial, updated, "failures-last", 100);
+  assert.deepEqual(indices(held).slice(-2), [0, 1]);
+  assert.equal(held.items[0].index, 2);
+  assert.deepEqual(indices(advanceMemberLogOrder(held, updated, "failures-last", 300)).slice(-2), [0, 1]);
+});
+

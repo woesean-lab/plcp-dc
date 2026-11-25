@@ -88,7 +88,7 @@ test("cancel and replacement routes cannot recycle a Salta7 token with an unknow
     let handler;
     const scope={app:{post:(_path,_auth,callback)=>{handler=callback}},requireSession(){},dcordOrderProcessingJobs:new Set(),
       pool:{query:async()=>({rows:[{payload:{...base,status:"WAITING",dcordResults:[result]}}]})},isDcordUpstreamVerificationMessage:()=>false};
-    vm.runInNewContext(["isDcordTaskPendingResult","isDcordUnconfirmedRunningResult","isDcordCloudflareBlockedResult","isRunnableDcordResult","isUncertainDcordTransportResult"].map(fn).join("\n")+route(path),scope);
+    vm.runInNewContext(["isDcordTaskPendingResult","isDcordUnconfirmedRunningResult","isDcordCloudflareBlockedResult","isRunnableDcordResult","isUncertainDcordTransportResult"].map(fn).join("\n")+(path.endsWith("replace-token") ? fn("replaceDcordBoostTokenHandler") : "")+route(path), {...scope, withOrderReplacementLock: async (_pool, _id, work) => work()});
     const res=response();await handler({params:{uniqid:"boost"},body:{resultIndex:0}},res,error=>{throw error});assert.equal(res.statusCode,409);
   }
 });

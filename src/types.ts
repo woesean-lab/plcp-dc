@@ -122,6 +122,7 @@ export type OrderStatus =
   | string;
 
 export interface CreateOrderPayload {
+  autoReplace?: boolean;
   boostProvider?: BoostProvider;
   removeTwoFactor?: boolean;
   service: ServiceType;
@@ -168,6 +169,9 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  autoReplace?: boolean;
+  autoReplaceRounds?: number;
+  autoReplaceStopped?: string;
   boostProvider?: BoostProvider;
   removeTwoFactor?: boolean;
   customerReactions?: CustomerOrderReactions;
@@ -257,6 +261,9 @@ export interface OrderStatusResponse {
 }
 
 export interface TrackedOrder {
+  autoReplace?: boolean;
+  autoReplaceRounds?: number;
+  autoReplaceStopped?: string;
   boostProvider?: BoostProvider;
   removeTwoFactor?: boolean;
   customerReactions?: OrderReactionOverview;

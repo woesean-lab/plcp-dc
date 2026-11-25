@@ -8,6 +8,7 @@ import { PaginatedList } from "./ListPagination";
 import type { CommunityBotGuild, CommunityConfig, CommunityConfigInput, CommunityGuildLeaveProgress } from "../lib/community";
 import "./SettingsWorkspace.css";
 import EldoradoIntegrationSettings from "./EldoradoIntegrationSettings";
+import AutoReplaceSettings from "./AutoReplaceSettings";
 
 export type SettingsWorkspaceProps = {
   loading: boolean;
@@ -177,6 +178,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
               </form>
             </section> : null}
             <EldoradoIntegrationSettings preview={integrationPreview} onConfigured={setIntegrationConfigured} />
+            <AutoReplaceSettings preview={integrationPreview} />
           </div>
         </div>
 
