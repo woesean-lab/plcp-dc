@@ -17,6 +17,7 @@ type FilterDropdownProps = {
   disabled?: boolean;
   placement?: "bottom" | "top";
   portal?: boolean;
+  size?: "default" | "compact";
 };
 
 export function FilterDropdown({
@@ -28,7 +29,8 @@ export function FilterDropdown({
   className = "",
   disabled = false,
   placement = "bottom",
-  portal = false
+  portal = false,
+  size = "default"
 }: FilterDropdownProps) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -87,7 +89,7 @@ export function FilterDropdown({
   ) : null;
 
   return (
-    <div className={`filter-dropdown ${placement === "top" ? "is-top" : ""} ${className}`.trim()}>
+    <div className={`filter-dropdown ${placement === "top" ? "is-top" : ""} ${size === "compact" ? "is-compact" : ""} ${className}`.trim()}>
       {showLabel ? <span className="field-label">{label}</span> : null}
       <button
         ref={triggerRef}

@@ -12341,7 +12341,8 @@
   align-items: center;
   gap: 8px;
 }
-.onliner-account-filters :is(.ui-input, .filter-dropdown-trigger) {
+.onliner-account-filters :is(.ui-input, .filter-dropdown-trigger),
+.filter-dropdown.is-compact .filter-dropdown-trigger {
   height: 34px;
   min-height: 34px;
   border-radius: 9px;
@@ -12349,11 +12350,11 @@
   font-size: 11px;
   font-weight: 500;
 }
-.onliner-account-filters .filter-dropdown { gap: 0; }
-.onliner-account-filters .filter-dropdown-trigger { gap: 6px; }
-.onliner-account-filters .filter-dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.onliner-account-filters .filter-dropdown-trigger > svg { flex-shrink: 0; width: 13px; height: 13px; }
-.onliner-account-filters .filter-dropdown-option { min-height: 30px; padding: 6px 8px; font-size: 11px; white-space: nowrap; }
+.onliner-account-filters .filter-dropdown, .filter-dropdown.is-compact { gap: 0; }
+.onliner-account-filters .filter-dropdown-trigger, .filter-dropdown.is-compact .filter-dropdown-trigger { gap: 6px; }
+.onliner-account-filters .filter-dropdown-trigger > span, .filter-dropdown.is-compact .filter-dropdown-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.onliner-account-filters .filter-dropdown-trigger > svg, .filter-dropdown.is-compact .filter-dropdown-trigger > svg { flex-shrink: 0; width: 13px; height: 13px; }
+.onliner-account-filters .filter-dropdown-option, .filter-dropdown.is-compact .filter-dropdown-option { min-height: 30px; padding: 6px 8px; font-size: 11px; white-space: nowrap; }
 .onliner-proxy-filters {
   grid-template-columns: minmax(0, 1fr) 140px;
   padding: 12px;
