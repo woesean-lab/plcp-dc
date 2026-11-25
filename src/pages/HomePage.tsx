@@ -6,7 +6,7 @@ import { parseStockAccountPairs } from "../lib/stock-account-input";
 import OrdersWorkspace, { OrdersWorkspaceLoading } from "../components/OrdersWorkspace";
 import SettingsWorkspace, { SettingsWorkspaceSkeleton } from "../components/SettingsWorkspace";
 import { StockWorkspace } from "../components/StockWorkspace";
-import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
+import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSkeleton, MembersStockListSkeleton, MembersStockSummary } from "../components/MembersStockWorkspace";
 import OrderCategoryTransferDialog from "../components/OrderCategoryTransferDialog";
 import { connectCommunityMembersToOnliner, type CommunityOnlinerConnectFailure } from "../lib/community-onliner-connect";
 import { ListPagination, PaginatedList, paginate } from "../components/ListPagination";
@@ -88,6 +88,7 @@ import {
   downloadCommunityMemberTokens,
   exportCommunityOAuthStock,
   getCommunityAdminStatus,
+  getCommunityStockOnlinerStates,
   getCommunityCreateStatus,
   getCommunityMemberAccountToken,
   getCommunityMemberAccessToken,
@@ -613,6 +614,7 @@ export default function HomePage() {
   const [communityMemberSort, setCommunityMemberSort] = useState<"name" | "servers_asc" | "servers_desc">("name");
   const [communityStatus, setCommunityStatus] = useState<CommunityAdminStatus | null>(null);
   const [communityStatusError, setCommunityStatusError] = useState("");
+  const [communityMembersCategory, setCommunityMembersCategory] = useState<string | null>(null);
   const [communityConfig, setCommunityConfig] = useState<CommunityConfig | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(false);
   const [settingsError, setSettingsError] = useState("");
@@ -755,6 +757,7 @@ export default function HomePage() {
   const [communityAvailability, setCommunityAvailability] = useState<Record<string, number>>({});
   const availabilityRequestRef = useRef(0);
   const communityStatusRequestRef = useRef(0);
+  const communityStatusAbortRef = useRef<AbortController | null>(null);
   const [orders, setOrders] = useState<TrackedOrder[]>([]);
   const [form, setForm] = useState(EMPTY_FORM);
   const activeOrders = useMemo(
@@ -1163,11 +1166,21 @@ export default function HomePage() {
     setUsedBoostTokenPage(1);
     setCommunityMemberPage(1);
     void refreshBoostStockTokens();
-    void refreshCommunityStatus();
     if (stockCategory === "boosts") void refreshDcordProxies();
     // Stock data is preloaded so switching tabs does not flash empty values.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== "stock" || stockCategory !== "offline") return;
+    void refreshCommunityStatus(communityStockType);
+    return () => {
+      communityStatusAbortRef.current?.abort();
+      communityStatusAbortRef.current = null;
+      communityStatusRequestRef.current += 1;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, stockCategory, communityStockType]);
 
   useEffect(() => {
     setUsedBoostTokenPage(1);
@@ -1187,8 +1200,12 @@ export default function HomePage() {
   useEffect(() => {
     if (activeTab !== "stock" || stockCategory !== "offline") return;
     let cancelled = false;
+    let polling = false;
+    const controller = new AbortController();
     const refreshOnlinerStates = () => {
-      void getDiscordOnliner().then((snapshot) => {
+      if (polling) return;
+      polling = true;
+      void getCommunityStockOnlinerStates(controller.signal).then((snapshot) => {
         if (cancelled) return;
         const accountById = new Map(snapshot.accounts.map((account) => [account.id, account]));
         setCommunityStatus((current) => current ? {
@@ -1204,12 +1221,13 @@ export default function HomePage() {
             } : record;
           })
         } : current);
-      }).catch(() => {});
+      }).catch(() => {}).finally(() => { polling = false; });
     };
     refreshOnlinerStates();
     const timer = window.setInterval(refreshOnlinerStates, 3_000);
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearInterval(timer);
     };
   }, [activeTab, stockCategory]);
@@ -1293,11 +1311,11 @@ export default function HomePage() {
     if (activeTab !== "create") return;
     const requestId = ++communityStatusRequestRef.current;
     setLoadingCommunityStatus(true);
-    void getCommunityCreateStatus()
+    const controller = new AbortController();
+    void getCommunityCreateStatus(controller.signal)
       .then((nextStatus) => {
         if (requestId !== communityStatusRequestRef.current) return;
-        setCommunityStatus((current) => ({ ...nextStatus, recent: current?.recent ?? [] }));
-        if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
+        setCommunityStatus((current) => ({ ...nextStatus, bot: current?.bot, guild: current?.guild, activeCategoryId: current?.activeCategoryId ?? null, recent: current?.recent ?? [] }));
       })
       .catch((error) => {
         if (requestId === communityStatusRequestRef.current) notifyError(error instanceof Error ? error.message : "Members categories could not be loaded.");
@@ -1305,6 +1323,7 @@ export default function HomePage() {
       .finally(() => {
         if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
       });
+    return () => { controller.abort(); if (requestId === communityStatusRequestRef.current) communityStatusRequestRef.current += 1; };
   }, [activeTab]);
 
   useEffect(() => {
@@ -1362,6 +1381,7 @@ export default function HomePage() {
         const nextStatus = await getCommunityAdminStatus(communityStockType);
         if (cancelled || requestId !== communityStatusRequestRef.current) return;
         setCommunityStatus(nextStatus);
+        setCommunityMembersCategory(nextStatus.activeCategoryId ?? null);
         if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
         if (nextStatus.syncing) {
           pollHandle = window.setTimeout(() => void pollCommunitySync(), 1500);
@@ -1383,24 +1403,37 @@ export default function HomePage() {
   }, [communityStatus?.syncing, communityStockType]);
 
   async function refreshCommunityStatus(categoryId = communityStockType) {
+    communityStatusAbortRef.current?.abort();
+    const controller = new AbortController();
+    communityStatusAbortRef.current = controller;
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort(new Error("Members Stock request timed out. Please retry."));
+    }, 20_000);
     const requestId = ++communityStatusRequestRef.current;
     try {
       setCommunityStatusError("");
       setLoadingCommunityStatus(true);
-      const nextStatus = await getCommunityAdminStatus(categoryId);
+      const nextStatus = await getCommunityAdminStatus(categoryId, controller.signal);
       if (requestId === communityStatusRequestRef.current) {
         setCommunityStatus(nextStatus);
+        setCommunityMembersCategory(nextStatus.activeCategoryId ?? null);
         if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
         setCommunityAccessTokens({});
       }
     } catch (error) {
-      if (requestId === communityStatusRequestRef.current) {
+      if (requestId === communityStatusRequestRef.current && (!controller.signal.aborted || timedOut)) {
         const message = error instanceof Error ? error.message : "Members Stock could not be loaded.";
         setCommunityStatusError(message);
         notifyError(message);
       }
     } finally {
-      if (requestId === communityStatusRequestRef.current) setLoadingCommunityStatus(false);
+      window.clearTimeout(timeout);
+      if (communityStatusAbortRef.current === controller) {
+        communityStatusAbortRef.current = null;
+        setLoadingCommunityStatus(false);
+      }
     }
   }
 
@@ -1414,6 +1447,7 @@ export default function HomePage() {
       const nextStatus = await getCommunityAdminStatus(communityStockType);
       if (requestId !== communityStatusRequestRef.current) return;
       setCommunityStatus(nextStatus);
+      setCommunityMembersCategory(nextStatus.activeCategoryId ?? null);
       if (nextStatus.activeCategoryId) setCommunityStockType(nextStatus.activeCategoryId);
       setCommunityAccessTokens({});
     } catch (error) {
@@ -1961,6 +1995,7 @@ export default function HomePage() {
       await loadCommunityConfiguration();
       communityStatusRequestRef.current += 1;
       setCommunityStatus(null);
+      setCommunityMembersCategory(null);
       setLoadingCommunityStatus(false);
       notifySuccess("Saved Members bot settings removed.");
     } catch (error) {
@@ -3134,7 +3169,8 @@ export default function HomePage() {
     }
   }
 
-  const communityStockLoading = loadingCommunityStatus && !communityStatus;
+  const communityStockLoading = !communityStatus && !communityStatusError;
+  const communityMembersLoading = Boolean(communityStatus?.configured && communityMembersCategory !== communityStockType && !communityStatusError);
   const communityStockConfigured = Boolean(communityStatus?.configured);
   const communityStockBadge = communityStockLoading
     ? { label: "Loading", variant: "secondary" as const }
@@ -3207,7 +3243,6 @@ export default function HomePage() {
               setCommunityStockType(category.id); setSelectedCommunityMemberIds([]); setExpandedCommunityMemberId(null);
               setCommunityMemberPage(1); setCommunityAccessTokens({}); setCommunityImportFile(null);
               if (communityImportInputRef.current) communityImportInputRef.current.value = "";
-              void refreshCommunityStatus(category.id);
             }} indicators={<>
               {category.checkReplacementEnabled ? <span className="community-category-rule-indicator" title="Check Members replacement enabled" aria-label="Check Members replacement enabled"><RefreshCw aria-hidden="true" /></span> : null}
               {(category.joinMethods?.length ? category.joinMethods : ["create_invite", "experimental_join", "directly"]).map(method => {
@@ -3224,7 +3259,7 @@ export default function HomePage() {
       </section>
       <MembersStockSummary total={communityTotalUsers} available={communityVisibleSummary.ready} active={communityVisibleSummary.authorized} inactive={communityVisibleSummary.failed} />
       {communityStatusError ? <div className="app-panel-soft members-stock-load-error" role="alert"><span>{communityStatusError}</span><Button type="button" size="sm" variant="secondary" disabled={loadingCommunityStatus} onClick={() => void refreshCommunityStatus()}>Retry</Button></div> : !communityStockConfigured ? <div className="app-panel-soft members-stock-setup"><TriangleAlert className="h-4 w-4" />Members Stock bot is not configured.</div> : null}
-      <section className="app-panel members-stock-list" aria-label="Stock members">
+      {communityMembersLoading ? <MembersStockListSkeleton /> : <section className="app-panel members-stock-list" aria-label="Stock members">
         <header className="members-stock-list-heading"><h3>{communityVisibleCategory?.name ?? "Stock"} members<Badge variant="secondary">{communityCategoryRecords.length.toLocaleString("en-US")}</Badge></h3><div><Button type="button" variant="secondary" size="xs"
             disabled={!zeroServerCommunityRecords.length || communityBulkAction !== null}
             title="Select all members with 0 servers matching the current filters, including unloaded rows"
@@ -3423,8 +3458,8 @@ export default function HomePage() {
             })}
           </div>
           <div className="members-stock-list-footer"><ListPagination {...communityPagination} onChange={setCommunityMemberPage} onPageSizeChange={setCommunityMemberPageSize} label="Member stock pages" /></div>
-        </> : <div className="stock-empty-state"><Users className="h-6 w-6" /><strong>{communityCategoryRecords.length ? "No matching members" : "No members in this pool"}</strong><span>{communityCategoryRecords.length ? "No members match the selected filters." : communityVisibleCategory?.name ?? "Members Stock"}</span></div>}
-      </section>
+        </> : <div className="stock-empty-state"><Users className="h-6 w-6" /><strong>{communityStatusError && communityMembersCategory !== communityStockType ? "Members could not be loaded" : communityCategoryRecords.length ? "No matching members" : "No members in this pool"}</strong><span>{communityCategoryRecords.length ? "No members match the selected filters." : communityVisibleCategory?.name ?? "Members Stock"}</span></div>}
+      </section>}
       {communityImportOpen ? <MembersStockImportDialog category={communityVisibleCategory?.name ?? "Selected category"} busy={importingCommunityStock} onClose={() => setCommunityImportOpen(false)}><form onSubmit={handleImportCommunityStock} className="community-stock-import"><OAuthBotTargetField value={stockAuthorizationBotId} onChange={setStockAuthorizationBotId} defaultName={communityStatus?.bot?.name} disabled={importingCommunityStock} onReadyChange={setStockTargetReady} /><input
           ref={communityImportInputRef}
           id="community-oauth-stock-file"

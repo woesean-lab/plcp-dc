@@ -21,6 +21,14 @@ export function MembersStockSkeleton() {
   return <div className="members-stock-workspace" role="status" aria-label="Loading Members Stock" aria-busy="true"><div className="app-panel boost-workbench"><div className="boost-inventory-heading"><div><Skeleton className="h-10 w-10 rounded-xl" /><div><Skeleton className="h-4 w-32" /><Skeleton className="mt-2 h-3 w-48 max-w-full" /></div></div><Skeleton className="h-8 w-28" /></div><div className="members-stock-heading-actions members-stock-inventory-actions"><Skeleton className="h-9 w-28" /><Skeleton className="h-9 w-28" /><Skeleton className="h-9 w-28" /></div></div><div className="members-stock-categories">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-32 w-full" />)}</div><div className="members-stock-summary">{[0, 1, 2, 3].map(index => <Skeleton key={index} className="h-24 w-full" />)}</div><div className="app-panel members-stock-list"><Skeleton className="m-5 h-10 w-64 max-w-full" />{[0, 1, 2, 3].map(index => <div className="members-stock-skeleton-row" key={index}><Skeleton className="h-9 w-9" /><Skeleton className="h-8 w-44 max-w-full" /><Skeleton className="ml-auto h-6 w-24" /></div>)}</div></div>;
 }
 
+export function MembersStockListSkeleton() {
+  return <section className="app-panel members-stock-list" role="status" aria-label="Loading category members" aria-busy="true">
+    <header className="members-stock-list-heading"><Skeleton className="h-5 w-40" /><Skeleton className="h-8 w-28" /></header>
+    <div className="members-stock-filters">{[0, 1, 2, 3].map(index => <Skeleton key={index} className={`h-9 w-full ${index === 0 ? "community-member-search" : "community-member-filter"}`} />)}</div>
+    {[0, 1, 2, 3, 4].map(index => <div className="members-stock-skeleton-row" key={index}><Skeleton className="h-4 w-4" /><Skeleton className="h-9 w-9" /><Skeleton className="h-5 w-44 max-w-full" /><Skeleton className="ml-auto h-7 w-24" /></div>)}
+  </section>;
+}
+
 export function MembersStockCategory({ category, selected, icon, indicators, actions, onSelect }: {
   category: CommunityStockCategory; selected: boolean; icon: ReactNode; indicators: ReactNode; actions: ReactNode; onSelect: () => void;
 }) {

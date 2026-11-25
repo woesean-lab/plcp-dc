@@ -2256,13 +2256,13 @@ function formatDiscordOnlinerSocketAddress(address, port) {
   return port ? `${host}:${port}` : host;
 }
 
-async function getDiscordOnlinerConfig() {
+async function getDiscordOnlinerConfig({ hydrateMedia = true } = {}) {
   const raw = await loadEncryptedSetting(discordOnlinerSettingKey);
   const fallback = { enabled: false, activityText: "Pulcip Members" };
   let config;
   try { config = normalizeDiscordOnlinerConfig(withoutManagedBotProfiles(raw ? JSON.parse(raw) : fallback)); }
   catch { config = normalizeDiscordOnlinerConfig(fallback); }
-  return hydrateDiscordOnlinerSpotifyPlaylist(config);
+  return hydrateMedia ? hydrateDiscordOnlinerSpotifyPlaylist(config) : config;
 }
 
 function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
@@ -10997,6 +10997,79 @@ app.get("/api/community/create-status", requireSession, async (_req, res, next) 
   }
 });
 
+// Stock views need saved connection state, never external media/catalog requests.
+async function loadCommunityStockOnlinerStates() {
+  const onlinerConfig = await getDiscordOnlinerConfig({ hydrateMedia: false });
+  const onlinerAccountByUserId = new Map(
+    onlinerConfig.accounts
+      .filter((account) => isDiscordGuildId(account.discordUserId))
+      .map((account) => [account.discordUserId, account.id])
+  );
+  const onlinerRuntimeByAccountId = new Map();
+  if (onlinerConfig.accounts.length) {
+    const [runtimeLinks, workerResult] = await Promise.all([
+      pool.query(
+        `SELECT account_id, payload, payload->'bot'->>'id' AS discord_user_id
+         FROM discord_onliner_runtime
+         WHERE account_id = ANY($1::text[])`,
+        [onlinerConfig.accounts.map((account) => account.id)]
+      ),
+      serviceRunsOnliner
+        ? Promise.resolve({ rows: [] })
+        : pool.query("SELECT status, heartbeat_at FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
+    ]);
+    const workerRow = workerResult.rows[0] ?? {};
+    const heartbeatAt = workerRow.heartbeat_at ? new Date(workerRow.heartbeat_at).getTime() : 0;
+    const workerOnline = serviceRunsOnliner || (workerRow.status === "online" && Date.now() - heartbeatAt < discordOnlinerWorkerHeartbeatMs * 3);
+    for (const runtime of runtimeLinks.rows) {
+      const discordUserId = String(runtime.discord_user_id ?? "");
+      if (isDiscordGuildId(discordUserId) && !onlinerAccountByUserId.has(discordUserId)) {
+        onlinerAccountByUserId.set(discordUserId, String(runtime.account_id));
+      }
+      if (!serviceRunsOnliner) {
+        onlinerRuntimeByAccountId.set(String(runtime.account_id), {
+          connectionState: workerOnline ? normalizeDiscordOnlinerConnectionState(runtime.payload?.connectionState) : "disconnected",
+          lastError: workerOnline ? String(runtime.payload?.lastError ?? "").trim() || null : "Onliner worker is offline."
+        });
+      }
+    }
+    if (serviceRunsOnliner) {
+      for (const account of onlinerConfig.accounts) {
+        const runtime = discordOnlinerRuntimes.get(account.id);
+        onlinerRuntimeByAccountId.set(account.id, {
+          connectionState: normalizeDiscordOnlinerConnectionState(runtime?.state),
+          lastError: String(runtime?.lastError ?? "").trim() || null
+        });
+      }
+    } else {
+      for (const account of onlinerConfig.accounts) {
+        if (!onlinerRuntimeByAccountId.has(account.id)) {
+          onlinerRuntimeByAccountId.set(account.id, {
+            connectionState: "disconnected",
+            lastError: workerOnline ? null : "Onliner worker is offline."
+          });
+        }
+      }
+    }
+  }
+  const onlinerAccountConfigById = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
+  const onlinerStatusByUserId = new Map([...onlinerAccountByUserId.entries()].map(([discordUserId, accountId]) => {
+    const runtime = onlinerRuntimeByAccountId.get(accountId) ?? { connectionState: "disconnected", lastError: null };
+    const account = onlinerAccountConfigById.get(accountId);
+    return [discordUserId, { accountId, richPresenceEnabled: account?.richPresenceEnabled !== false, ...runtime }];
+  }));
+  return onlinerStatusByUserId;
+}
+
+app.get("/api/community/stock-onliner", requireSession, async (_req, res, next) => {
+  try {
+    const states = await loadCommunityStockOnlinerStates();
+    res.set("Cache-Control", "no-store").json({ accounts: [...states.values()].map(item => ({
+      id: item.accountId, connectionState: item.connectionState, lastError: item.lastError, richPresenceEnabled: item.richPresenceEnabled
+    })) });
+  } catch (error) { next(error); }
+});
+
 app.get("/api/community/status", requireSession, async (_req, res, next) => {
   try {
     const config = await getCommunityOAuthConfig();
@@ -11032,8 +11105,8 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
       categories: { ...total.categories, [category.id]: category.summary }
     }), { joined: 0, authorized: 0, ready: 0, alreadyMember: 0, failed: 0, categories: {} });
     const [bot, guild, recentResult] = await Promise.all([
-      loadCommunityBotSafe(config),
-      loadCommunityGuildSafe(config),
+      Promise.resolve(communityBotCache?.clientId === config.clientId ? communityBotCache.value : fallbackCommunityBot(config)),
+      Promise.resolve(communityGuildCache?.guildId === config.guildId ? communityGuildCache.value : fallbackCommunityGuild(config)),
       pool.query(
         `SELECT discord_user_id, username, display_name, avatar_url, status, stock_type, details, authorized_at, joined_at, reserved_order_id, sort_position,
                 encrypted_account_token IS NOT NULL AS has_stored_account_token
@@ -11056,65 +11129,7 @@ app.get("/api/community/status", requireSession, async (_req, res, next) => {
         console.error("Members server-count cache could not be prepared:", error instanceof Error ? error.message : error);
       });
     }
-    const onlinerConfig = await getDiscordOnlinerConfig();
-    const onlinerAccountByUserId = new Map(
-      onlinerConfig.accounts
-        .filter((account) => isDiscordGuildId(account.discordUserId))
-        .map((account) => [account.discordUserId, account.id])
-    );
-    const onlinerRuntimeByAccountId = new Map();
-    if (onlinerConfig.accounts.length) {
-      const [runtimeLinks, workerResult] = await Promise.all([
-        pool.query(
-          `SELECT account_id, payload, payload->'bot'->>'id' AS discord_user_id
-           FROM discord_onliner_runtime
-           WHERE account_id = ANY($1::text[])`,
-          [onlinerConfig.accounts.map((account) => account.id)]
-        ),
-        serviceRunsOnliner
-          ? Promise.resolve({ rows: [] })
-          : pool.query("SELECT status, heartbeat_at FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1")
-      ]);
-      const workerRow = workerResult.rows[0] ?? {};
-      const heartbeatAt = workerRow.heartbeat_at ? new Date(workerRow.heartbeat_at).getTime() : 0;
-      const workerOnline = serviceRunsOnliner || (workerRow.status === "online" && Date.now() - heartbeatAt < discordOnlinerWorkerHeartbeatMs * 3);
-      for (const runtime of runtimeLinks.rows) {
-        const discordUserId = String(runtime.discord_user_id ?? "");
-        if (isDiscordGuildId(discordUserId) && !onlinerAccountByUserId.has(discordUserId)) {
-          onlinerAccountByUserId.set(discordUserId, String(runtime.account_id));
-        }
-        if (!serviceRunsOnliner) {
-          onlinerRuntimeByAccountId.set(String(runtime.account_id), {
-            connectionState: workerOnline ? normalizeDiscordOnlinerConnectionState(runtime.payload?.connectionState) : "disconnected",
-            lastError: workerOnline ? String(runtime.payload?.lastError ?? "").trim() || null : "Onliner worker is offline."
-          });
-        }
-      }
-      if (serviceRunsOnliner) {
-        for (const account of onlinerConfig.accounts) {
-          const runtime = discordOnlinerRuntimes.get(account.id);
-          onlinerRuntimeByAccountId.set(account.id, {
-            connectionState: normalizeDiscordOnlinerConnectionState(runtime?.state),
-            lastError: String(runtime?.lastError ?? "").trim() || null
-          });
-        }
-      } else {
-        for (const account of onlinerConfig.accounts) {
-          if (!onlinerRuntimeByAccountId.has(account.id)) {
-            onlinerRuntimeByAccountId.set(account.id, {
-              connectionState: "disconnected",
-              lastError: workerOnline ? null : "Onliner worker is offline."
-            });
-          }
-        }
-      }
-    }
-    const onlinerAccountConfigById = new Map(onlinerConfig.accounts.map((account) => [account.id, account]));
-    const onlinerStatusByUserId = new Map([...onlinerAccountByUserId.entries()].map(([discordUserId, accountId]) => {
-      const runtime = onlinerRuntimeByAccountId.get(accountId) ?? { connectionState: "disconnected", lastError: null };
-      const account = onlinerAccountConfigById.get(accountId);
-      return [discordUserId, { accountId, richPresenceEnabled: account?.richPresenceEnabled !== false, ...runtime }];
-    }));
+    const onlinerStatusByUserId = await loadCommunityStockOnlinerStates();
     const syncProgress = getCommunityAuthorizationSyncSnapshot(config.guildId, activeCategoryId);
     res.set("Cache-Control", "no-store").json({
       configured: true,

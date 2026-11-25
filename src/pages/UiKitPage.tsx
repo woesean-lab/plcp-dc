@@ -34,7 +34,7 @@ import { BotServersSkeleton } from "../components/BotServersDialog";
 import { BotSyncToast, showBotSyncToast } from "../components/BotSyncNotifications";
 import { OAuthBotTargetField } from "../components/OAuthBotTargetField";
 import { StockWorkspace } from "../components/StockWorkspace";
-import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSummary } from "../components/MembersStockWorkspace";
+import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockListSkeleton, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSummary } from "../components/MembersStockWorkspace";
 import type { CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
 import { ProfileAvatarButton, ProfileDialog } from "../components/ProfileDialog";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
@@ -479,6 +479,7 @@ export default function UiKitPage() {
           <Example title="Progress & skeletons" source="src/index.css · monitor-live-progress-track · ui/skeleton.tsx" code={'<div className="monitor-live-progress-track" role="progressbar" aria-valuenow={65} aria-valuemin={0} aria-valuemax={100} aria-label="Delivery">\n  <span style={{ width: "65%" }} />\n</div>\n<Skeleton className="h-4 w-40" />\n<Skeleton className="mt-2 h-3 w-24" />'}>
             <div className="ui-ref-stack"><div className="ui-ref-row"><span className="ui-ref-hint">Delivered {progress}%</span><Button type="button" size="xs" variant="secondary" onClick={() => setProgress((current) => current >= 100 ? 0 : Math.min(100, current + 10))}><Plus className="h-3 w-3" />Advance</Button></div><div className="monitor-live-progress-track" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Sample delivery"><span style={{ width: `${progress}%` }} /></div><div className="ui-ref-row"><Skeleton className="h-9 w-9 rounded-lg" /><div><Skeleton className="h-4 w-40" /><Skeleton className="mt-2 h-3 w-24" /></div></div></div>
           </Example>
+          <Example title="Members Stock category loading" source="src/components/MembersStockWorkspace.tsx" code={'<MembersStockListSkeleton />\n// Category counts stay visible while its member list loads.'}><div className="members-stock-workspace"><MembersStockListSkeleton /></div></Example>
           <Example title="Empty state" source="src/index.css · stock-empty-state" code={'<div className="stock-empty-state">\n  <Users className="h-5 w-5" /><strong>No members found</strong>\n  <span>Try another search or clear your filters.</span>\n</div>'}><div className="stock-empty-state"><Users className="h-5 w-5" /><strong>No members found</strong><span>Try another search or clear your filters.</span></div></Example>
         </Section> : null}
 

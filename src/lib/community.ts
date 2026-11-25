@@ -248,13 +248,17 @@ async function parseResponse<T>(response: Response) {
   return payload;
 }
 
-export function getCommunityAdminStatus(categoryId?: string) {
+export function getCommunityAdminStatus(categoryId?: string, signal?: AbortSignal) {
   const params = categoryId ? `?categoryId=${encodeURIComponent(categoryId)}` : "";
-  return fetch(`/api/community/status${params}`, { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+  return fetch(`/api/community/status${params}`, { cache: "no-store", credentials: "same-origin", signal }).then(parseResponse<CommunityAdminStatus>);
 }
 
-export function getCommunityCreateStatus() {
-  return fetch("/api/community/create-status", { cache: "no-store", credentials: "same-origin" }).then(parseResponse<CommunityAdminStatus>);
+export function getCommunityCreateStatus(signal?: AbortSignal) {
+  return fetch("/api/community/create-status", { cache: "no-store", credentials: "same-origin", signal }).then(parseResponse<CommunityAdminStatus>);
+}
+
+export function getCommunityStockOnlinerStates(signal?: AbortSignal) {
+  return fetch("/api/community/stock-onliner", { cache: "no-store", credentials: "same-origin", signal }).then(parseResponse<{ accounts: Array<{ id: string; connectionState: CommunityJoinRecord["onlinerConnectionState"]; lastError: string | null; richPresenceEnabled: boolean }> }>);
 }
 
 export function syncCommunityAuthorizations(categoryId: string) {
