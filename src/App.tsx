@@ -17,6 +17,7 @@ import { checkDcordConnection, getAdminConfig } from "./lib/integration";
 import { Button } from "./components/ui/button";
 import { ProfileAvatarButton, ProfileDialog } from "./components/ProfileDialog";
 import { BotSyncNotifications } from "./components/BotSyncNotifications";
+import { SolarixProvider, SolarixStockButton } from "./components/SolarixWorkspace";
 
 const UiKitPage = lazy(() => import("./pages/UiKitPage"));
 
@@ -204,6 +205,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                 {checkingMembersBot ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Bot className="h-3.5 w-3.5" aria-hidden="true" />}
                 <span>{checkingMembersBot ? "Checking" : "Members check"}</span>
               </button>
+              <SolarixStockButton />
             </div>
             <div className="app-header-account" aria-label="Account actions">
               <ProfileAvatarButton username={profileUsername} open={profileOpen} onClick={() => setProfileOpen(true)} />
@@ -269,7 +271,7 @@ function ProtectedGate() {
     return <LoginPage onAuthenticated={() => setAuthState("authenticated")} />;
   }
 
-  return <ProtectedShell onSignedOut={() => setAuthState("anonymous")} />;
+  return <SolarixProvider><ProtectedShell onSignedOut={() => setAuthState("anonymous")} /></SolarixProvider>;
 }
 
 function LegacyPublicOrderRedirect() {

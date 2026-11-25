@@ -17,6 +17,7 @@ import { ReactionPanel, REACTION_MIXED_VALUE, type ReactionPanelRequest } from "
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { RotatingStockRemoveDialog } from "../components/RotatingStockRemoveDialog";
 import { BoostServiceField } from "../components/BoostServiceField";
+import { SolarixProvider, SolarixStockButton, useSolarix, type SolarixPreviewOutcome } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { OrderAutoReplaceOption } from "../components/OrderAutoReplaceOption";
 import { CommunitySpeedProfileOptions } from "../components/CommunitySpeedProfileOptions";
@@ -280,6 +281,17 @@ function MembersStockExample() {
   </div>;
 }
 
+function SolarixExampleActions() {
+  const workspace = useSolarix();
+  const [provider, setProvider] = useState<"dcord" | "salta7">("salta7");
+  return <div className="ui-ref-stack"><div className="ui-ref-row"><Button type="button" variant="secondary" size="xs" disabled><Users className="h-3.5 w-3.5" />Members check</Button><SolarixStockButton /></div><BoostServiceField value={provider} onChange={setProvider} onSolarix={() => workspace?.openOrder({ invite: "sample-server", amount: 10, duration: "1m" })} /></div>;
+}
+
+function SolarixExample() {
+  const [outcome, setOutcome] = useState<SolarixPreviewOutcome>("partial");
+  return <div className="ui-ref-stack"><FilterDropdown label="Sample result" value={outcome} onChange={value => setOutcome(value as SolarixPreviewOutcome)} options={[{ value: "success", label: "Completed" }, { value: "partial", label: "Partial delivery" }, { value: "failed", label: "Rejected request" }, { value: "uncertain", label: "Unconfirmed result" }, { value: "running", label: "Waiting for result" }]} /><SolarixProvider key={outcome} preview previewOutcome={outcome}><SolarixExampleActions /></SolarixProvider></div>;
+}
+
 function BotSyncProgressExample() {
   const [state, setState] = useState("running");
   const [compact, setCompact] = useState(false);
@@ -372,7 +384,6 @@ export default function UiKitPage() {
   const [autoReplace, setAutoReplace] = useState(false);
   const [switchOn, setSwitchOn] = useState(true);
   const [stockAuthorizationBot, setStockAuthorizationBot] = useState("");
-  const [boostProvider, setBoostProvider] = useState<"dcord" | "salta7">("salta7");
   const [progress, setProgress] = useState(65);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [rotatingRemovalPreview, setRotatingRemovalPreview] = useState(false);
@@ -420,8 +431,8 @@ export default function UiKitPage() {
 
         {visible("fields") ? <Section id="fields">
           <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// Four equal columns in one row; creation’s Custom field spans the next row.\n// Narrow containers scroll horizontally.\n// creation uses the existing create-order option styles.\n// Balanced 2 progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
-          <Example title="Boost service field" source="src/components/BoostServiceField.tsx · community-speed-profile-field" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// Inside Boost details, before amount, invite and concurrency.'}>
-            <BoostServiceField value={boostProvider} onChange={setBoostProvider} />
+          <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider}\n  onSolarix={() => solarix.openOrder({ invite, amount, duration })} />\n// SolarixAIO opens its own modal using provider stock.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// All preview requests and results use local samples only.'}>
+            <SolarixExample />
           </Example>
           <Example title="Boost request token format" source="src/components/BoostTokenFormatOption.tsx" code={'<BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} disabled={creating} />\n// Only four-part request lines lose their last field. Stored tokens remain unchanged.'}><BoostTokenFormatOption checked={removeTwoFactor} onChange={setRemoveTwoFactor} /></Example>
           <Example title="On/Off switch" source="src/components/ui/switch.tsx · switch.css" code={'<Switch checked={enabled} onCheckedChange={setEnabled} aria-label="Use bot for new orders" />\n// Green On, red Off, sliding thumb; supports keyboard, focus and disabled states.'}><div className="flex flex-wrap items-center gap-3"><Switch checked={switchOn} onCheckedChange={setSwitchOn} aria-label="Sample new-order setting" /><Switch checked disabled onCheckedChange={() => {}} aria-label="Disabled On switch" /><Switch checked={false} disabled onCheckedChange={() => {}} aria-label="Disabled Off switch" /></div></Example>

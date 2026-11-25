@@ -12,6 +12,7 @@ import { AUTO_REPLACE_GUARD_SQL, registerAutoReplaceSettings, createAutoReplaceR
 import { registerEldoradoIntegrationSettings } from "./eldorado-integration-settings.mjs";
 import { createAdminAuth } from "./admin-auth.mjs";
 import { createSalta7Client } from "./salta7.mjs";
+import { createSolarixService, registerSolarixRoutes } from "./solarix-aio.mjs";
 import { createRotatingTokenChecker } from "./rotating-token-check.mjs";
 import { diagnoseGuildJoinFailure, discordFailureDetails } from "./discord-join-diagnostics.mjs";
 import https from "node:https";
@@ -5493,6 +5494,11 @@ async function loadSalta7ApiKey() {
 }
 
 const salta7Client = createSalta7Client({ loadKey: loadSalta7ApiKey });
+const solarixService = createSolarixService({
+  load: loadEncryptedSetting, save: saveEncryptedSetting,
+  claim: async (key, value) => (await pool.query("INSERT INTO app_settings (setting_key, encrypted_value, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (setting_key) DO NOTHING", [key, encryptCredential(value)])).rowCount > 0,
+  remove: async key => { await pool.query("DELETE FROM app_settings WHERE setting_key = $1", [key]); }
+});
 
 function normalizeBoostTokenList(value) {
   const items = Array.isArray(value) ? value : String(value ?? "").split(/\r?\n/);
@@ -14625,6 +14631,8 @@ app.get("/api/admin/config", requireSession, async (_req, res, next) => {
     next(error);
   }
 });
+
+registerSolarixRoutes(app, { requireSession, service: solarixService });
 
 app.put("/api/salta7/config", requireSession, async (req, res, next) => {
   try {

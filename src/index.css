@@ -2316,6 +2316,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .community-speed-profile-options.boost-service-options.has-solarix {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .community-speed-profile-options button,
   .community-speed-custom-option {
     display: grid;
@@ -10179,7 +10183,8 @@
 
   .community-join-method-options,
   .community-speed-profile-options,
-  .community-speed-profile-options.boost-service-options {
+  .community-speed-profile-options.boost-service-options,
+  .community-speed-profile-options.boost-service-options.has-solarix {
     grid-template-columns: 1fr;
   }
 

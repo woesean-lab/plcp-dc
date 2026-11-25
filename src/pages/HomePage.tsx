@@ -167,6 +167,7 @@ import { RotatingBoostStockPanel } from "../components/RotatingBoostStockPanel";
 import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostServiceField } from "../components/BoostServiceField";
+import { useSolarix } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
 import { BoostStockStatus, boostStockOrderLink } from "../components/BoostStockStatus";
@@ -573,6 +574,7 @@ function HomePageSkeleton({ tab }: { tab: AdminTab }) {
 }
 
 export default function HomePage() {
+  const solarix = useSolarix();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const activeTab = normalizeAdminTab(searchParams.get("tab"));
@@ -3829,7 +3831,7 @@ export default function HomePage() {
                         </div>
                       </div>
                       <div className="boost-order-panel">
-                        <BoostServiceField useProxy={form.boostStockPool !== "rotating"} value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} />
+                        <BoostServiceField useProxy={form.boostStockPool !== "rotating"} value={form.boostProvider} disabled={creating} onChange={boostProvider => setForm(current => ({ ...current, boostProvider }))} onSolarix={() => solarix?.openOrder({ invite: form.serverId, amount: form.amount, duration: form.duration === 3 ? "3m" : "1m" })} />
                         <div className="boost-order-grid">
                           <div className="boost-order-field">
                             <span className="boost-order-label">Number of Boosts</span>

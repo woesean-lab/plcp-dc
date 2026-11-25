@@ -11,6 +11,7 @@ import type { CommunityBotGuild, CommunityConfig, CommunityConfigInput, Communit
 import "./SettingsWorkspace.css";
 import EldoradoIntegrationSettings from "./EldoradoIntegrationSettings";
 import AutoReplaceSettings from "./AutoReplaceSettings";
+import SolarixSettings from "./SolarixSettings";
 
 export type SettingsWorkspaceProps = {
   loading: boolean;
@@ -64,6 +65,7 @@ export function SettingsWorkspaceSkeleton() {
 export default function SettingsWorkspace({ loading, error, onRefresh, members, dcord, salta7, guilds, integrationPreview = false }: SettingsWorkspaceProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [integrationConfigured, setIntegrationConfigured] = useState(false);
+  const [solarixConfigured, setSolarixConfigured] = useState(false);
   const requestedSection = searchParams.get("settings");
   const section: Section = requestedSection === "servers" ? "bot-pool" : SECTIONS.some(item => item.id === requestedSection) ? requestedSection as Section : "connections";
   const [compactNavigation, setCompactNavigation] = useState(false);
@@ -74,8 +76,8 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
   const membersBusy = loading || members.saving || guilds.leaving;
   const dcordBusy = loading || dcord.saving;
   const membersDirty = members.draft.clientId !== (config?.clientId ?? "") || members.draft.guildId !== (config?.guildId ?? "") || Boolean(members.draft.clientSecret || members.draft.botToken);
-  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured)) + Number(integrationConfigured);
-  const connectionCount = salta7 ? 4 : 3;
+  const connectedCount = Number(Boolean(config?.configured)) + Number(dcord.configured) + Number(Boolean(salta7?.configured)) + Number(integrationConfigured) + Number(solarixConfigured);
+  const connectionCount = salta7 ? 5 : 4;
   const canSaveMembers = !membersBusy && Boolean(members.draft.clientId.trim())
     && Boolean(config?.hasClientSecret || members.draft.clientSecret.trim()) && Boolean(config?.hasBotToken || members.draft.botToken.trim());
   useEffect(() => {
@@ -153,6 +155,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
                 <footer className="settings-card-footer"><div><Button type="submit" size="sm" disabled={loading || salta7.saving || salta7.checking || !salta7.draft.trim()}>{salta7.saving ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}{salta7.saving ? "Verifying…" : "Verify & save"}</Button><Button type="button" size="sm" variant="secondary" disabled={loading || salta7.saving || salta7.checking || !salta7.configured} onClick={salta7.onCheck}>{salta7.checking ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Check</Button></div>{salta7.configured ? <Button type="button" size="sm" variant="dangerGhost" disabled={loading || salta7.saving || salta7.checking} onClick={salta7.onRemove}><Trash2 className="h-3.5 w-3.5" />Remove</Button> : null}</footer>
               </form>
             </section> : null}
+            <SolarixSettings preview={integrationPreview} onConfigured={setSolarixConfigured} />
             <EldoradoIntegrationSettings preview={integrationPreview} onConfigured={setIntegrationConfigured} />
             <AutoReplaceSettings preview={integrationPreview} />
           </div>

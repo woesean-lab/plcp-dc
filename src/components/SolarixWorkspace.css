@@ -1,0 +1,28 @@
+.solarix-body { display: grid; gap: 16px; min-width: 0; }
+.solarix-body > .settings-field-note { margin: 0; }
+.solarix-body .settings-load-error { margin: 0; flex-wrap: wrap; }
+.solarix-stock-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; min-width: 0; }
+.solarix-stock-tier { display: grid; gap: 9px; margin: 0; padding: 16px; }
+.solarix-stock-tier dt { color: var(--app-text-secondary); font-size: 12px; font-weight: 600; }
+.solarix-stock-tier dd { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; margin: 0; }
+.solarix-stock-tier dd strong { color: var(--app-text); font-size: 26px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.solarix-stock-tier dd span, .solarix-stock-tier > div { color: var(--app-muted); font-size: 11px; }
+.solarix-result { display: grid; gap: 14px; min-width: 0; padding: 16px; }
+.solarix-result-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; color: var(--app-text); font-size: 13px; }
+.solarix-result-heading > .status-badge { margin-left: auto; }
+.solarix-result > p { margin: 0; color: var(--app-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
+.solarix-result-counts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding-block: 14px; border-block: 1px solid var(--app-divider); }
+.solarix-result-counts dt { color: var(--app-muted); font-size: 10px; }
+.solarix-result-counts dd { margin: 5px 0 0; color: var(--app-text); font-size: 20px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.solarix-result-identity { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; min-width: 0; align-items: center; }
+.solarix-result-identity > div { display: grid; gap: 4px; min-width: 0; }
+.solarix-result-identity strong { color: var(--app-text-secondary); font-size: 12px; overflow-wrap: anywhere; }
+.solarix-result-identity small, .solarix-result-identity code { color: var(--app-muted); font-size: 10px; overflow-wrap: anywhere; }
+.solarix-result-identity code { grid-column: 1; }
+.solarix-result-identity > .community-member-row-actions { grid-column: 2; grid-row: 1 / 3; }
+@container settings (max-width: 380px) {
+  .solarix-result-heading > .status-badge { margin-left: 0; }
+}
+@container settings (max-width: 320px) {
+  .solarix-stock-grid { grid-template-columns: minmax(0, 1fr); }
+}
