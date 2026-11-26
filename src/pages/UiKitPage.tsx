@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ArrowUpRight, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, Layers3, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Bot, CheckCircle2, CircleHelp, Copy, ExternalLink, FileJson, Gem, Layers3, LoaderCircle, Plus, Power, RadioTower, RefreshCw, Search, Server, ShieldCheck, Star, Timer, Trash2, TriangleAlert, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button, type ButtonProps } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
@@ -28,6 +28,8 @@ import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/Member
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
 import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
+import { OrderBotField } from "../components/OrderBotField";
+import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
@@ -359,6 +361,17 @@ function SettingsExample() {
   />;
 }
 
+function OrderBotFieldExample() {
+  const [name, setName] = useState("Karpuz");
+  const [assignment, setAssignment] = useState("automatic");
+  const order = { botName: assignment === "unnamed" || assignment === "none" ? undefined : name, botApplicationId: "123456789012345678", automaticBot: assignment === "automatic" || assignment === "unnamed", customBot: assignment === "custom", joinMethod: assignment === "directly" ? "directly" as const : "create_invite" as const };
+  return <div className="ui-ref-stack">
+    <div className="settings-field-grid"><label className="settings-field"><span className="field-label">Sample bot name</span><Input aria-label="Sample bot name" value={name} onChange={event => setName(event.target.value)} /></label><FilterDropdown label="Sample bot assignment" value={assignment} onChange={setAssignment} options={[{ value: "automatic", label: "Automatic assignment" }, { value: "custom", label: "Custom bot" }, { value: "unnamed", label: "Assigned, name unavailable" }, { value: "none", label: "No bot assignment" }, { value: "directly", label: "Directly, no bot" }]} /></div>
+    <div><span className="field-label">Admin order</span><div className="lookup-order-labels"><OrderStatusIndicator status="PROCESS" /><span className="lookup-service-name"><small>Service</small><strong>OAuth Online</strong><code>COMMUNITY-OFFLINE</code></span><OrderBotField order={order} /><span className="lookup-join-method" data-join-method={order.joinMethod}><small>Join method</small><strong><Bot className="h-3.5 w-3.5" />{order.joinMethod === "directly" ? "Directly" : "Create Invite"}</strong></span></div></div>
+    <div><span className="field-label">Public Monitor</span><div className="monitor-order-labels"><OrderStatusIndicator status="PROCESS" /><span className="lookup-service-name"><small>Service</small><strong>OAuth Online</strong></span><OrderBotField order={order} /></div></div>
+  </div>;
+}
+
 function OrderSectionsExample() {
   return <div className="grid min-w-0 gap-4"><OrderDetailsLayout standaloneSections overview={
     <header className="lookup-workspace-header"><div className="lookup-order-identity"><span className="lookup-provider-mark" aria-hidden="true"><Server className="h-4 w-4" /></span><h2>Order overview</h2></div></header>
@@ -492,6 +505,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("badges") ? <Section id="badges">
+          <Example title="Assigned order bot" source="src/components/OrderBotField.tsx · OrderPage.tsx · PublicOrderPage.tsx" code={'<OrderBotField order={order} />\n// Use the same labelled field in admin and public Monitor.\n// Directly and orders without a bot assignment omit this field.'}><OrderBotFieldExample /></Example>
           <Example title="Shared status geometry" source="src/components/ui/badge.tsx · src/components/ui/badge.css" code={'import { Badge } from "@/components/ui/badge";\n\n<Badge variant="success"><CheckCircle2 className="h-3 w-3" />Active</Badge>\n<Badge variant="destructive">Inactive</Badge>\n<Badge variant="default">In progress</Badge>\n<Badge variant="secondary">Waiting</Badge>\n<Badge variant="outline">Available</Badge>'}>
             <div className="ui-ref-row"><Badge variant="success"><CheckCircle2 className="h-3 w-3" />Active</Badge><Badge variant="destructive">Inactive</Badge><Badge>In progress</Badge><Badge variant="secondary">Waiting</Badge><Badge variant="outline">Available</Badge></div>
           </Example>

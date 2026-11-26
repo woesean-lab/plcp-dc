@@ -18,6 +18,7 @@ import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { isCommunityDeliverySettled } from "../../shared/community-delivery-state.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
+import { OrderBotField } from "../components/OrderBotField";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { OrderReactionSettingsDialog } from "../components/OrderReactionSettingsDialog";
 import { OrderReactionAccessCard } from "../components/OrderReactionAccessCard";
@@ -1222,13 +1223,13 @@ export default function OrderPage() {
                 <h2>{serverName || serverId || "Discord server"}</h2>
                 <div className="lookup-order-labels">
                   <OrderStatusIndicator status={result.status ?? "UNKNOWN"} />
-                  {result.customBot || result.automaticBot ? <Badge variant="secondary" title={result.botApplicationId}><Bot aria-hidden="true" />{result.botName || "Order bot"}</Badge> : null}
                   {result.autoReplace ? <Badge variant={result.autoReplaceStopped ? "secondary" : "default"}><RefreshCw aria-hidden="true" />Auto-replace · {result.autoReplaceRounds ?? 0} rounds{result.autoReplaceStopped === "limit_reached" ? " · Limit reached" : result.autoReplaceStopped ? " · Stopped" : ""}</Badge> : null}
                   <span className="lookup-service-name">
                     <small>Service</small>
                     <strong>{serviceName}{isDcordProvider ? ` · ${result.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : ""}</strong>
                     <code>{isDcordProvider && result.boostProvider === "salta7" ? "SALTA7-BOOSTS" : serviceType}</code>
                   </span>
+                  {isCommunityProvider ? <OrderBotField order={result} /> : null}
                   {joinMethod ? (
                     <span className="lookup-join-method" data-join-method={joinMethod}>
                       <small>Join method</small>

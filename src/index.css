@@ -620,6 +620,7 @@
     display: flex;
     min-width: 0;
     align-items: center;
+    flex-wrap: wrap;
     gap: .45rem;
     margin-top: .45rem;
   }

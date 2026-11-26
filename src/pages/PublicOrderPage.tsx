@@ -16,6 +16,7 @@ import { checkPublicCommunityOrderMembers, getPublicCommunityOrderMemberCheckPro
 import { getOrderSupportExpiration, mergeOrderStatus } from "../lib/order-status";
 import { getCommunityResultAllocation } from "../../shared/community-order-allocations.mjs";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
+import { OrderBotField } from "../components/OrderBotField";
 import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionPanel";
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
@@ -947,6 +948,7 @@ export default function PublicOrderPage() {
                   <small>Service</small>
                   {isInitialLoading ? <Skeleton className="h-3 w-14" /> : <strong>{serviceName}{isBoostOrder ? ` · ${status?.boostProvider === "salta7" ? "Salta7" : "Dcord"}` : ""}</strong>}
                 </span>
+                {!isInitialLoading && isCommunityOrder && status ? <OrderBotField order={status} /> : null}
               </div>
             </div>
             <div className="monitor-order-context">
