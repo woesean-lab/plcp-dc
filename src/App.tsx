@@ -100,7 +100,6 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
 
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
-      <BotSyncNotifications />
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
@@ -208,6 +207,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
               <SolarixStockButton />
             </div>
             <div className="app-header-account" aria-label="Account actions">
+              <BotSyncNotifications />
               <ProfileAvatarButton username={profileUsername} open={profileOpen} onClick={() => setProfileOpen(true)} />
               <span className="community-member-row-actions"><Button type="button" size="icon-sm" variant="dangerGhost" disabled={signingOut} aria-label="Sign out" title="Sign out" onClick={() => void handleSignOut()}>{signingOut ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}</Button></span>
             </div>

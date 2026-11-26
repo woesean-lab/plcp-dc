@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
-import { Pause, Square } from "lucide-react";
+import { CheckCircle2, ChevronUp, LoaderCircle, Pause, Square } from "lucide-react";
 import toast from "react-hot-toast";
 import { Button } from "./ui/button";
 import { formatBotSyncEta } from "../lib/bot-sync-state";
@@ -42,7 +43,7 @@ export function notifyBotSyncChange(job: BotSyncJob, botName: string) {
   window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { ...job, botName, updatedAt: new Date().toISOString() } }));
 }
 
-export function BotSyncToast({ job, stale = false, preview = false }: { job: BotSyncJob & { botName: string }; stale?: boolean; preview?: boolean }) {
+export function BotSyncToast({ job, stale = false, preview = false, onView }: { job: BotSyncJob & { botName: string }; stale?: boolean; preview?: boolean; onView?: () => void }) {
   const label = job.stopping ? "Stopping sync" : job.status === "completed" ? "Sync completed" : job.status === "cancelled" ? "Sync stopped" : job.status === "paused" ? "Sync paused" : "Syncing accounts";
   const progress = job.total ? Math.min(100, job.processed / job.total * 100) : job.status === "completed" ? 100 : 0;
   return <div className="bot-sync-toast">
@@ -53,26 +54,78 @@ export function BotSyncToast({ job, stale = false, preview = false }: { job: Bot
     {["queued", "running"].includes(job.status) && !job.stopping ? <span>Est. remaining · {formatBotSyncEta(job.estimatedRemainingSeconds)}</span> : null}
     {job.stopping ? <span>Finishing the current account…</span> : null}
     {stale ? <span>Reconnecting to progress… The server job continues.</span> : job.status === "paused" ? <span>{job.details || "Review this sync before resuming."}</span> : null}
-    <div className="bot-sync-toast-actions"><span>{job.succeeded.toLocaleString("en-US")} synced</span>{preview ? <Button variant="secondary" size="xs" disabled>View bots</Button> : <Button asChild variant="secondary" size="xs"><Link to="/manage?tab=settings&settings=bot-pool">View bots</Link></Button>}</div>
+    <div className="bot-sync-toast-actions"><span>{job.succeeded.toLocaleString("en-US")} synced</span>{preview ? <Button variant="secondary" size="xs" disabled>View bots</Button> : <Button asChild variant="secondary" size="xs"><Link to="/manage?tab=settings&settings=bot-pool" onClick={onView}>View bots</Link></Button>}</div>
   </div>;
 }
 
 export function showBotSyncToast(job: BotSyncJob & { botName: string }, stale = false, preview = false) {
-  const options = { id: toastId(job.id), duration: active(job) && !preview ? Infinity : 6000 };
-  const content = <BotSyncToast job={job} stale={stale} preview={preview} />;
+  const options = { id: toastId(job.id), duration: 6000 };
+  const label = job.stopping ? "Stopping sync" : job.status === "completed" ? "Sync completed" : job.status === "cancelled" ? "Sync stopped" : job.status === "paused" ? "Sync paused" : "Syncing accounts";
+  const content = `${job.botName} · ${label}${active(job) ? "" : ` · ${job.succeeded.toLocaleString("en-US")} synced · ${job.failed.toLocaleString("en-US")} failed`}${stale ? " · Reconnecting" : ""}${preview ? " · Preview" : ""}`;
   if (job.stopping || job.status === "queued" || job.status === "running") toast.loading(content, options);
   else if (job.status === "completed") (job.failed ? toast.error : toast.success)(content, options);
   else toast(content, { ...options, icon: job.status === "paused" ? <Pause className="h-4 w-4 text-[var(--app-accent-bright)]" /> : <Square className="h-4 w-4 text-[var(--app-muted)]" /> });
 }
 
+export type BotSyncCenterItem = { job: BotSyncNotification; stale?: boolean };
+
+export function BotSyncCenter({ items, preview = false }: { items: BotSyncCenterItem[]; preview?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<CSSProperties>({ position: "fixed", top: 0, left: 0, visibility: "hidden" });
+  const trigger = useRef<HTMLButtonElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const collapse = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  const activeItems = items.filter(({ job }) => active(job));
+  const total = activeItems.reduce((sum, { job }) => sum + Math.max(0, job.total), 0);
+  const processed = activeItems.reduce((sum, { job }) => sum + Math.min(Math.max(0, job.processed), Math.max(0, job.total)), 0);
+  const working = activeItems.some(({ job }) => job.stopping || job.status === "running" || job.status === "queued");
+  const close = (restoreFocus = false) => { setOpen(false); if (restoreFocus) trigger.current?.focus(); };
+  useLayoutEffect(() => {
+    if (!open || !trigger.current) return;
+    const rect = trigger.current.getBoundingClientRect();
+    const width = Math.min(380, window.innerWidth - 24);
+    const top = Math.min(rect.bottom + 8, Math.max(12, window.innerHeight - 180));
+    setPosition({ position: "fixed", zIndex: 100, top, left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)), width, maxHeight: Math.max(160, window.innerHeight - top - 12) });
+  }, [open]);
+  useEffect(() => { if (open && position.visibility !== "hidden") collapse.current?.focus(); }, [open, position.visibility]);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!panel.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) close(); };
+    const resize = () => close();
+    const scroll = (event: Event) => { if (!panel.current?.contains(event.target as Node)) close(); };
+    document.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", resize);
+    window.addEventListener("scroll", scroll, true);
+    return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", resize); window.removeEventListener("scroll", scroll, true); };
+  }, [open]);
+  useEffect(() => { if (!items.length) setOpen(false); }, [items.length]);
+  if (!items.length) return null;
+  const sorted = [...items].sort((a, b) => Number(active(b.job)) - Number(active(a.job)) || Date.parse(b.job.updatedAt) - Date.parse(a.job.updatedAt));
+  return <>
+    <Button ref={trigger} type="button" variant="secondary" size="xs" aria-haspopup="dialog" aria-expanded={open} aria-controls={id} title={activeItems.length ? `${activeItems.length} active syncs · ${processed.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} processed` : "View recent sync results"} onClick={() => setOpen(value => !value)}>
+      {working ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : activeItems.length ? <Pause className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}<span>{activeItems.length ? "Sync" : "Sync results"} · {activeItems.length || items.length}</span>{total ? <span className="bot-sync-center-percent">{Math.round(processed / total * 100)}%</span> : null}
+    </Button>
+    {open ? createPortal(<div ref={panel} id={id} role="dialog" aria-label="Background syncs" className="app-panel-soft bot-sync-center-panel" style={position}
+      onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}
+      onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !trigger.current?.contains(event.relatedTarget as Node | null)) close(); }}>
+      <header><div><strong>Background syncs</strong><span>{activeItems.length ? `${activeItems.length} active · Progress updates automatically` : "Recent results"}</span></div><span className="community-member-row-actions"><Button ref={collapse} type="button" variant="secondary" size="icon-sm" aria-label="Collapse sync progress" title="Collapse sync progress" onClick={() => close(true)}><ChevronUp className="h-4 w-4" /></Button></span></header>
+      <div className="bot-sync-center-list">{sorted.map(({ job, stale }) => <article className="app-panel-soft" key={job.id}><BotSyncToast job={job} stale={stale} preview={preview} onView={() => close()} /></article>)}</div>
+    </div>, document.body) : null}
+  </>;
+}
+
 // The browser only observes persisted jobs. It never schedules authorization work.
 export function BotSyncNotifications() {
+  const [items, setItems] = useState<BotSyncCenterItem[]>([]);
   useEffect(() => {
     let disposed = false, timer: ReturnType<typeof setTimeout> | undefined;
     let controller: AbortController | undefined;
     const jobs = new Map<string, BotSyncNotification>();
     const signatures = new Map<string, string>();
     const displayed = new Set<string>();
+    const staleJobs = new Set<string>();
+    const publish = () => { if (!disposed) setItems([...jobs.values()].map(job => ({ job, stale: staleJobs.has(job.id) }))); };
     const render = (job: BotSyncNotification, stale = false) => {
       const previous = jobs.get(job.id);
       const receipts = loadCompletionReceipts();
@@ -81,14 +134,17 @@ export function BotSyncNotifications() {
       const signature = JSON.stringify([job.status, job.stopping, job.processed, job.total, job.succeeded, job.failed, job.details, job.botName, job.categoryId, job.categoryName, formatBotSyncEta(job.estimatedRemainingSeconds), stale]);
       if (signatures.get(job.id) === signature) return;
       jobs.set(job.id, job); signatures.set(job.id, signature);
+      if (stale) staleJobs.add(job.id); else staleJobs.delete(job.id);
+      publish();
       const result = JSON.stringify([job.status, job.processed, job.total, job.succeeded, job.failed]);
       if (!active(job) && receipts.get(job.id)?.result === result) {
         if (previous && active(previous)) toast.dismiss(toastId(job.id));
         return;
       }
       displayed.add(job.id);
-      showBotSyncToast(job, stale);
-      if (!active(job)) rememberCompletion(job.id, result);
+      // Active work stays in the compact header control. Only completion uses a
+      // short text toast; observing progress never expands or obstructs the page.
+      if (!active(job)) { showBotSyncToast(job, stale); rememberCompletion(job.id, result); }
     };
     const schedule = (delay: number) => { clearTimeout(timer); timer = setTimeout(() => void poll(), delay); };
     const poll = async () => {
@@ -98,9 +154,10 @@ export function BotSyncNotifications() {
         if (disposed || request.signal.aborted) return;
         const current = new Set(latest.map(job => job.id));
         for (const [id, previous] of jobs) {
-          if (!current.has(id)) { if (active(previous)) toast.dismiss(toastId(id)); jobs.delete(id); signatures.delete(id); displayed.delete(id); }
+          if (!current.has(id)) { if (active(previous)) toast.dismiss(toastId(id)); jobs.delete(id); signatures.delete(id); staleJobs.delete(id); displayed.delete(id); }
         }
         latest.forEach(job => render(job));
+        publish();
         schedule(latest.some(active) ? 2000 : 15000);
       } catch {
         if (disposed || request.signal.aborted) return;
@@ -126,5 +183,5 @@ export function BotSyncNotifications() {
       for (const id of displayed) toast.dismiss(toastId(id));
     };
   }, []);
-  return null;
+  return <BotSyncCenter items={items} />;
 }

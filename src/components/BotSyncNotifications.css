@@ -3,3 +3,12 @@
 .bot-sync-toast > span, .bot-sync-toast-actions > span { color: var(--app-muted); font-size: 11px; line-height: 1.5; }
 .bot-sync-toast > .monitor-live-progress-track { grid-column: 1 / -1; margin-top: 0; }
 .bot-sync-toast-actions { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+.bot-sync-center-percent { color: var(--app-muted); font-variant-numeric: tabular-nums; }
+.bot-sync-center-panel { display: flex; flex-direction: column; overflow: hidden; margin: 0; background: var(--app-surface-raised); box-shadow: var(--app-shadow-md); }
+.bot-sync-center-panel > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border-bottom: 1px solid var(--app-divider); }
+.bot-sync-center-panel > header > div { display: grid; gap: 5px; min-width: 0; }
+.bot-sync-center-panel > header strong { color: var(--app-text); font-size: 13px; font-weight: 650; }
+.bot-sync-center-panel > header > div > span { color: var(--app-muted); font-size: 10px; }
+.bot-sync-center-list { display: grid; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; }
+.bot-sync-center-list > article { min-width: 0; padding: 14px; }
+.bot-sync-center-list .bot-sync-toast { width: 100%; max-width: none; }
