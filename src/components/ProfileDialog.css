@@ -32,7 +32,7 @@
 .profile-trigger-avatar { display: grid; place-items: center; color: inherit; font-size: 10px; font-weight: 700; letter-spacing: .02em; }
 .app-header-inner:has(.app-header-account) .app-header-operations { min-width: 0; }
 .app-header-inner:has(.app-header-account) .app-brand { min-width: 0; }
-@media (max-width: 1380px) {
+@container app-header (max-width: 1420px) {
   .app-header-inner:has(.app-header-account) { flex-wrap: wrap; }
   .app-header-inner:has(.app-header-account) .app-header-operations { margin-left: auto; }
   .app-header-inner:has(.app-header-account) .app-nav-cluster { order: 3; width: 100%; margin-inline: 0; }

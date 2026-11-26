@@ -222,6 +222,7 @@
   }
 
   .app-header {
+    container: app-header / inline-size;
     overflow: hidden;
     width: 100%;
     max-width: 100%;
@@ -6959,12 +6960,31 @@
 
 .community-speed-profile-options.community-member-speed-options,
 .monitor-speed-profile-options.community-member-speed-options {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  container: member-speed-options / inline-size;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
   min-width: 0;
+}
+
+.community-member-speed-options > button {
+  grid-column: span 12;
 }
 
 .community-member-speed-options > .community-speed-custom-option {
   grid-column: 1 / -1;
+}
+
+@container member-speed-options (min-width: 360px) {
+  .community-member-speed-options > button { grid-column: span 6; }
+}
+
+@container member-speed-options (min-width: 640px) {
+  .community-member-speed-options > button { grid-column: span 3; }
+}
+
+@container member-speed-options (min-width: 600px) {
+  .community-member-speed-options.has-custom > button { grid-column: span 4; }
+  .community-member-speed-options.has-custom > button:nth-child(4),
+  .community-member-speed-options.has-custom > .community-speed-custom-option { grid-column: span 6; }
 }
 
 @media (max-width: 520px) {

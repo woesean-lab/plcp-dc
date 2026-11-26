@@ -71,24 +71,52 @@ export type BotSyncCenterItem = { job: BotSyncNotification; stale?: boolean };
 
 export function BotSyncCenter({ items, preview = false }: { items: BotSyncCenterItem[]; preview?: boolean }) {
   const [open, setOpen] = useState(false);
+  const [present, setPresent] = useState(false);
   const [position, setPosition] = useState<CSSProperties>({ position: "fixed", top: 0, left: 0, visibility: "hidden" });
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const collapse = useRef<HTMLButtonElement>(null);
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+  const exitTimer = useRef<ReturnType<typeof setTimeout>>();
+  const openRef = useRef(false);
+  const interaction = useRef<"hover" | "keyboard" | "touch">("hover");
+  const pointerType = useRef("mouse");
+  const focusPanel = useRef(false);
+  const suppressFocus = useRef(false);
   const id = useId();
   const activeItems = items.filter(({ job }) => active(job));
-  const total = activeItems.reduce((sum, { job }) => sum + Math.max(0, job.total), 0);
-  const processed = activeItems.reduce((sum, { job }) => sum + Math.min(Math.max(0, job.processed), Math.max(0, job.total)), 0);
   const working = activeItems.some(({ job }) => job.stopping || job.status === "running" || job.status === "queued");
-  const close = (restoreFocus = false) => { setOpen(false); if (restoreFocus) trigger.current?.focus(); };
+  const show = (mode: typeof interaction.current, focus = false) => {
+    clearTimeout(closeTimer.current); clearTimeout(exitTimer.current);
+    interaction.current = mode; openRef.current = true;
+    setPresent(true); setOpen(true);
+    focusPanel.current = focus;
+    if (focus && panel.current) { focusPanel.current = false; collapse.current?.focus(); }
+  };
+  const close = (restoreFocus = false) => {
+    clearTimeout(closeTimer.current);
+    if (openRef.current) {
+      openRef.current = false; setOpen(false);
+      exitTimer.current = setTimeout(() => setPresent(false), 140);
+    }
+    if (restoreFocus && document.activeElement !== trigger.current) {
+      suppressFocus.current = true; trigger.current?.focus(); suppressFocus.current = false;
+    }
+  };
+  const leave = () => {
+    if (interaction.current === "keyboard" && (panel.current?.contains(document.activeElement) || trigger.current === document.activeElement)) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => close(), 160);
+  };
+  useEffect(() => () => { clearTimeout(closeTimer.current); clearTimeout(exitTimer.current); }, []);
   useLayoutEffect(() => {
-    if (!open || !trigger.current) return;
+    if (!present || !trigger.current) return;
     const rect = trigger.current.getBoundingClientRect();
     const width = Math.min(380, window.innerWidth - 24);
     const top = Math.min(rect.bottom + 8, Math.max(12, window.innerHeight - 180));
     setPosition({ position: "fixed", zIndex: 100, top, left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)), width, maxHeight: Math.max(160, window.innerHeight - top - 12) });
-  }, [open]);
-  useEffect(() => { if (open && position.visibility !== "hidden") collapse.current?.focus(); }, [open, position.visibility]);
+  }, [present]);
+  useEffect(() => { if (open && position.visibility !== "hidden" && focusPanel.current) { focusPanel.current = false; collapse.current?.focus(); } }, [open, position.visibility]);
   useEffect(() => {
     if (!open) return;
     const outside = (event: PointerEvent) => { if (!panel.current?.contains(event.target as Node) && !trigger.current?.contains(event.target as Node)) close(); };
@@ -99,14 +127,23 @@ export function BotSyncCenter({ items, preview = false }: { items: BotSyncCenter
     window.addEventListener("scroll", scroll, true);
     return () => { document.removeEventListener("pointerdown", outside); window.removeEventListener("resize", resize); window.removeEventListener("scroll", scroll, true); };
   }, [open]);
-  useEffect(() => { if (!items.length) setOpen(false); }, [items.length]);
+  useEffect(() => { if (!items.length) { clearTimeout(closeTimer.current); clearTimeout(exitTimer.current); openRef.current = false; setOpen(false); setPresent(false); } }, [items.length]);
   if (!items.length) return null;
   const sorted = [...items].sort((a, b) => Number(active(b.job)) - Number(active(a.job)) || Date.parse(b.job.updatedAt) - Date.parse(a.job.updatedAt));
   return <>
-    <Button ref={trigger} type="button" variant="secondary" size="xs" aria-haspopup="dialog" aria-expanded={open} aria-controls={id} title={activeItems.length ? `${activeItems.length} active syncs · ${processed.toLocaleString("en-US")} / ${total.toLocaleString("en-US")} processed` : "View recent sync results"} onClick={() => setOpen(value => !value)}>
-      {working ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : activeItems.length ? <Pause className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}<span>{activeItems.length ? "Sync" : "Sync results"} · {activeItems.length || items.length}</span>{total ? <span className="bot-sync-center-percent">{Math.round(processed / total * 100)}%</span> : null}
-    </Button>
-    {open ? createPortal(<div ref={panel} id={id} role="dialog" aria-label="Background syncs" className="app-panel-soft bot-sync-center-panel" style={position}
+    <span className="community-member-row-actions"><Button ref={trigger} type="button" variant="secondary" size="icon-sm" aria-label={activeItems.length ? `Background syncs · ${activeItems.length} active` : "Recent sync results"} aria-haspopup="dialog" aria-expanded={open} aria-controls={id}
+      onPointerDown={event => { pointerType.current = event.pointerType; }}
+      onPointerEnter={event => { if (event.pointerType !== "touch") show("hover"); }}
+      onPointerLeave={event => { if (event.pointerType !== "touch") leave(); }}
+      onFocus={event => { if (!suppressFocus.current && event.currentTarget.matches(":focus-visible")) show("keyboard"); }}
+      onBlur={event => { if (interaction.current === "keyboard" && !panel.current?.contains(event.relatedTarget as Node | null)) close(); }}
+      onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); close(true); } else if (event.key === "ArrowDown") { event.preventDefault(); show("keyboard", true); } }}
+      onClick={event => { if (event.detail === 0) show("keyboard", true); else if (pointerType.current === "touch") { if (openRef.current) close(); else show("touch"); } else show("hover"); }}>
+      {working ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : activeItems.length ? <Pause className="h-3.5 w-3.5" aria-hidden="true" /> : <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />}
+    </Button></span>
+    {present ? createPortal(<div ref={panel} id={id} role="dialog" aria-label="Background syncs" aria-hidden={!open} data-state={open ? "open" : "closed"} className="app-panel-soft bot-sync-center-panel" style={position}
+      onPointerEnter={event => { if (event.pointerType !== "touch") show("hover"); }}
+      onPointerLeave={event => { if (event.pointerType !== "touch") leave(); }}
       onKeyDown={event => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(true); } }}
       onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !trigger.current?.contains(event.relatedTarget as Node | null)) close(); }}>
       <header><div><strong>Background syncs</strong><span>{activeItems.length ? `${activeItems.length} active · Progress updates automatically` : "Recent results"}</span></div><span className="community-member-row-actions"><Button ref={collapse} type="button" variant="secondary" size="icon-sm" aria-label="Collapse sync progress" title="Collapse sync progress" onClick={() => close(true)}><ChevronUp className="h-4 w-4" /></Button></span></header>
