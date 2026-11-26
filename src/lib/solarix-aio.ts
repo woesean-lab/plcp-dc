@@ -4,7 +4,7 @@ export type SolarixStock = { checkedAt: string; tiers: { duration: "1m" | "3m"; 
 export type SolarixReceipt = {
   id: string; input: SolarixInput; status: "running" | "completed" | "failed" | "uncertain";
   startedAt: string; finishedAt?: string; message: string;
-  result?: { orderId: string; guildId: string; guildName: string; boosted: number; failed: number };
+  result?: { orderId: string; guildId: string; guildName: string; boosted: number; failed: number; countUnit?: "boosts"; successfulAccounts?: number; failedAccounts?: number };
 };
 export class SolarixRequestError extends Error {
   constructor(message: string, public status?: number) { super(message); }

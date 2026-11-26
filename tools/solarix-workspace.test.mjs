@@ -27,8 +27,8 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
     },
     "react/jsx-runtime": jsx, "react-hot-toast": { default: { success() {}, error() {} } },
     "react-router-dom": { useNavigate: () => path => navigations.push(path) },
-    "lucide-react": Object.fromEntries(["CheckCircle2", "Copy", "Gem", "LoaderCircle", "RefreshCw", "TriangleAlert"].map(name => [name, "svg"])),
-    "./BotSettingsDialog": { BotSettingsDialog: "dialog" }, "./ui/badge": { Badge: "badge" }, "./ui/button": { Button: "button" }, "./ui/input": { Input: "input" }, "./ui/filter-dropdown": { FilterDropdown: "select" }, "./ui/skeleton": { Skeleton: "skeleton" }, "./SolarixSettings": { SolarixSetupLink: "setup" },
+    "lucide-react": Object.fromEntries(["CheckCircle2", "Copy", "Gem", "History", "Server", "LoaderCircle", "RefreshCw", "TriangleAlert"].map(name => [name, "svg"])),
+    "./OrderConfirmationDialog": { OrderConfirmationDialog: "confirmation" }, "./BotSettingsDialog": { BotSettingsDialog: "dialog" }, "./ui/badge": { Badge: "badge" }, "./ui/button": { Button: "button" }, "./ui/input": { Input: "input" }, "./ui/filter-dropdown": { FilterDropdown: "select" }, "./ui/skeleton": { Skeleton: "skeleton" }, "./SolarixSettings": { SolarixSetupLink: "setup" },
     "../lib/solarix-aio": {
       SolarixRequestError, SOLARIX_PREVIEW_STOCK: stock,
       getSolarixConfig: async () => ({ configured, slug: "test", secretSuffix: "TEST" }),
@@ -46,6 +46,8 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
     async refresh() { tree.props.value.refreshStock(); await flush(); },
     button(label) { const value = nodes(tree, "button").find(node => text(node) === label || node.props["aria-label"] === label); assert.ok(value, `Missing ${label}`); return value.props; },
     submit(value = input) { tree.props.value.startOrder(value); },
+    async confirm() { const confirmation = nodes(tree, "confirmation")[0]; assert.ok(confirmation, "Missing order confirmation"); confirmation.props.onConfirm(); await flush(); },
+    async cancel() { nodes(tree, "confirmation")[0].props.onClose(); await flush(); },
     async close() { nodes(tree, "dialog")[0].props.onClose(); await flush(); },
     async tick() { assert.ok(timers.size); const [id, fn] = timers.entries().next().value; timers.delete(id); fn(); await flush(); },
     stop() { mounted = false; slots.forEach(slot => slot?.cleanup?.()); }
@@ -56,6 +58,7 @@ test("double submit sends one delivery and closing the dialog preserves result p
   const f = fixture(); await f.flush(); await f.refresh();
   assert.equal(nodes(f.tree, "dialog").length, 0);
   f.submit(); f.submit(); await f.flush();
+  assert.equal(f.submissions.length, 0); await f.confirm();
   assert.equal(f.submissions.length, 1); assert.equal(f.saved.get("solarix-aio:last-request"), f.receipt.id);
   await f.close(); assert.equal(nodes(f.tree, "dialog").length, 0);
   f.setReceipt({ ...f.receipt, status: "completed", result: { orderId: "solarix", guildId: "123456789012345678", guildName: "Sample server", boosted: 8, failed: 2 } });
@@ -79,14 +82,37 @@ test("reloading a saved request reads its receipt without making a new order", a
   assert.equal(f.submissions.length, 0); assert.ok(f.reads.includes(receipt.id)); f.stop();
 });
 
+test("Solarix always requires confirmation, cancellation sends nothing, and confirmation uses the reviewed snapshot", async () => {
+  const f = fixture(); await f.flush(); await f.refresh();
+  const input = { invite: "reviewed-invite", amount: 2, duration: "3m" };
+  f.submit(input); await f.flush();
+  assert.equal(f.submissions.length, 0);
+  const review = nodes(f.tree, "confirmation")[0];
+  assert.equal(review.props.amount, 2);
+  assert.equal(review.props.invite, "reviewed-invite");
+  await f.cancel();
+  assert.equal(nodes(f.tree, "confirmation").length, 0);
+  assert.equal(nodes(f.tree, "dialog").length, 0);
+  assert.equal(f.submissions.length, 0);
+  f.submit(input); await f.flush();
+  input.invite = "changed-after-review";
+  const confirmed = nodes(f.tree, "confirmation")[0];
+  confirmed.props.onConfirm(); confirmed.props.onConfirm(); await f.flush();
+  assert.equal(f.submissions.length, 1);
+  assert.equal(f.submissions[0].invite, "reviewed-invite");
+  assert.equal(f.submissions[0].amount, 2);
+  assert.equal(f.submissions[0].duration, "3m");
+  f.stop();
+});
+
 test("a fully delivered 16-boost result stays completed with 24 reported failures", async () => {
   const receipt = { id: crypto.randomUUID(), input: { ...input, amount: 16 }, status: "completed", message: "SolarixAIO returned the delivery result.", result: { orderId: "provider-order", guildId: "123456789012345678", guildName: "Sample server", boosted: 16, failed: 24 } };
   const f = fixture({ restore: receipt }); await f.flush(); await f.open();
   const badges = nodes(f.tree, "badge");
   assert.ok(badges.some(node => text(node) === "Completed" && node.props.variant === "success"));
   const counts = nodes(f.tree, "dl").map(text).join(" ");
-  assert.ok(counts.includes("Requested16Boosted16Undelivered0"));
-  assert.ok(text(f.tree).includes("SolarixAIO reported 24 failures."));
+  assert.ok(counts.includes("Requested16boostsDelivered16boostsRemaining0boosts"));
+  assert.ok(text(f.tree).includes("SolarixAIO reported 12 unsuccessful accounts."));
   assert.equal(text(f.tree).includes("Result not confirmed"), false);
   assert.equal(text(f.tree).includes("Pending"), false);
   assert.equal(f.submissions.length, 0);
@@ -99,7 +125,7 @@ test("zero reported failures do not turn partial or empty delivery into success"
     const receipt = { id: crypto.randomUUID(), input, status: "completed", message: "Delivery result", result: { orderId: "provider-order", guildId: "123456789012345678", guildName: "Sample server", boosted, failed: 0 } };
     const f = fixture({ restore: receipt }); await f.flush(); await f.open();
     assert.ok(nodes(f.tree, "badge").some(node => text(node) === outcome && node.props.variant === "destructive"));
-    assert.ok(nodes(f.tree, "dl").map(text).join(" ").includes(`Undelivered${input.amount - boosted}`));
+    assert.ok(nodes(f.tree, "dl").map(text).join(" ").includes(`Remaining${input.amount - boosted}boosts`));
     assert.equal(f.submissions.length, 0);
     f.stop();
   }
@@ -108,7 +134,7 @@ test("zero reported failures do not turn partial or empty delivery into success"
 test("an unconfigured integration and unavailable stock disable submission", async () => {
   for (const options of [{ configured: false }, { unavailable: true }]) {
     const f = fixture(options); await f.flush(); await f.refresh();
-    f.submit(); await f.flush();
+    f.submit(); await f.flush(); await f.confirm();
     assert.equal(f.submissions.length, 0); f.stop();
   }
 });
@@ -117,6 +143,7 @@ test("Create order submits the existing form values directly and exposes no seco
   const f = fixture(); await f.flush(); await f.refresh();
   const selected = { invite: "chosen-server", amount: 14, duration: "3m" };
   f.submit(selected); await f.flush();
+  assert.equal(f.submissions.length, 0); await f.confirm();
   assert.equal(f.submissions.length, 1);
   assert.equal(f.submissions[0].invite, selected.invite);
   assert.equal(f.submissions[0].amount, selected.amount);

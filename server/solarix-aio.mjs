@@ -18,6 +18,13 @@ export function normalizeSolarixDelivery(value) {
   return { invite: match[1], amount: value.amount, duration: value.duration };
 }
 
+// POST amount is boosts; the signed result counters are accounts (two boosts
+// each). Keep that conversion at this boundary, with a marker for saved receipts.
+export function normalizeSolarixResult(value, input) {
+  if (typeof value?.orderId !== "string" || !value.orderId || value.orderId.length > 200 || !Number.isSafeInteger(value.boosted) || value.boosted < 0 || value.boosted > input.amount / 2 || !Number.isSafeInteger(value.failed) || value.failed < 0 || value.failed > Math.floor(Number.MAX_SAFE_INTEGER / 2) || !/^\d{17,22}$/.test(String(value.guildId ?? ""))) throw fail("SolarixAIO returned an incomplete result. Check its panel before placing another order.", 502, true);
+  return { orderId: value.orderId, guildId: String(value.guildId), guildName: String(value.guildName ?? "").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 100), boosted: value.boosted * 2, failed: value.failed * 2, successfulAccounts: value.boosted, failedAccounts: value.failed, countUnit: "boosts" };
+}
+
 export function createSolarixClient({ credentials, fetch: transport = globalThis.fetch, now = Date.now }) {
   const { slug, secret } = normalizeSolarixCredentials(credentials);
   async function request(suffix, payload) {
@@ -59,10 +66,8 @@ export function createSolarixClient({ credentials, fetch: transport = globalThis
   async function submit(delivery, requestId) {
     const input = normalizeSolarixDelivery(delivery);
     const value = await request("", { ...input, order_ref: requestId });
-    // Solarix reports failures separately. Real completed responses can have
-    // boosted + failed above the requested amount; these are not a partition.
-    if (typeof value?.orderId !== "string" || !value.orderId || value.orderId.length > 200 || value.orderRef !== requestId || !Number.isSafeInteger(value.boosted) || value.boosted < 0 || value.boosted > input.amount || !Number.isSafeInteger(value.failed) || value.failed < 0 || !/^\d{17,22}$/.test(String(value.guildId ?? ""))) throw fail("SolarixAIO returned an incomplete result. Check its panel before placing another order.", 502, true);
-    return { orderId: value.orderId, guildId: String(value.guildId), guildName: String(value.guildName ?? "").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 100), boosted: value.boosted, failed: value.failed };
+    if (value?.orderRef !== requestId) throw fail("SolarixAIO returned an incomplete result. Check its panel before placing another order.", 502, true);
+    return normalizeSolarixResult(value, input);
   }
   return { stock, submit };
 }
@@ -106,6 +111,10 @@ export function createSolarixService({ load, save, claim, remove, fetch: transpo
     const raw = await load(receiptKey(id));
     if (!raw) throw fail("This SolarixAIO request has not been found. Check its panel before placing another order.", 404);
     const value = JSON.parse(raw);
+    if (value.status === "completed" && value.result && value.result.countUnit !== "boosts") {
+      try { return { ...value, result: normalizeSolarixResult(value.result, value.input) }; }
+      catch { return { ...value, status: "uncertain", result: undefined, message: "The saved SolarixAIO result counts could not be verified. Check its panel before placing another order." }; }
+    }
     if (value.status === "running" && now() - Date.parse(value.startedAt) > 240000) return { ...value, status: "uncertain", message: "The SolarixAIO result was interrupted. Check its panel before placing another order." };
     return value;
   }

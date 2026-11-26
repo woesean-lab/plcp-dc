@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createSolarixClient, createSolarixService, normalizeSolarixDelivery, registerSolarixRoutes, solarixSignature } from "./solarix-aio.mjs";
+import { createSolarixClient, createSolarixService, normalizeSolarixDelivery, normalizeSolarixResult, registerSolarixRoutes, solarixSignature } from "./solarix-aio.mjs";
 
 const timestamp = 1795683600000;
 const credentials = { slug: "my-integration", secret: "test-only-signing-secret-1234" };
 const id = "a1b2c3d4-1234-4abc-8def-123456789abc";
 const input = { invite: "sample-invite", amount: 10, duration: "1m" };
 const stock = { tiers: [{ duration: "1m", tokens: 60, boosts: 120 }, { duration: "3m", tokens: 20, boosts: 40 }] };
-const result = { orderId: "provider-order", orderRef: id, guildId: "123456789012345678", guildName: "Sample server", boosted: 8, failed: 2 };
+const result = { orderId: "provider-order", orderRef: id, guildId: "123456789012345678", guildName: "Sample server", boosted: 4, failed: 1 };
 function signed(payload, { secret = credentials.secret, at = timestamp, signature, status = 200 } = {}) {
   const raw = JSON.stringify(payload), time = String(Math.floor(at / 1000));
   return new Response(raw, { status, headers: { "Content-Type": "application/json", "X-Timestamp": time, "X-Signature": signature ?? solarixSignature(secret, time, raw) } });
@@ -37,29 +37,52 @@ test("validation rejects odd/oversized boosts and unsupported durations before a
   assert.deepEqual(normalizeSolarixDelivery({ ...input, invite: "https://discord.gg/sample-invite" }), input);
 });
 
+test("two requested boosts are sent as amount 2; one returned account becomes two delivered boosts", async () => {
+  let body;
+  const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async (_url, init) => { body = JSON.parse(init.body); return signed({ ...result, boosted: 1, failed: 0 }); } });
+  const value = await api.submit({ ...input, amount: 2 }, id);
+  assert.equal(body.amount, 2);
+  assert.equal(value.boosted, 2);
+  assert.equal(value.successfulAccounts, 1);
+  assert.equal(value.countUnit, "boosts");
+});
+
+test("old saved account counters are converted on read without resubmission or double conversion", async () => {
+  const store = storage();
+  store.values.set(`solarix_aio_delivery_${id}`, JSON.stringify({ id, input: { ...input, amount: 2 }, status: "completed", result: { ...result, boosted: 1, failed: 0 } }));
+  const service = createSolarixService({ ...store, fetch: () => { throw Error("Must never resubmit"); } });
+  const first = await service.read(id);
+  assert.equal(first.result.boosted, 2);
+  assert.equal(first.result.successfulAccounts, 1);
+  assert.deepEqual(await service.read(id), first);
+  store.values.set(`solarix_aio_delivery_${id}`, JSON.stringify(first));
+  assert.deepEqual(await service.read(id), first);
+  assert.deepEqual(await service.start({ ...input, amount: 2, requestId: id }), first);
+});
+
 test("unsigned, tampered or expired responses and mismatched results remain uncertain", async () => {
   for (const options of [{ signature: "0".repeat(64) }, { at: timestamp - 301000 }, { secret: "wrong" }]) {
     const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed(result, options) });
     await assert.rejects(api.submit(input, id), { uncertain: true });
   }
-  for (const patch of [{ orderRef: "different" }, { boosted: 11, failed: 0 }, { boosted: -1, failed: 11 }, { guildId: "wrong" }, { failed: -1 }, { failed: 1.5 }, { failed: Number.MAX_SAFE_INTEGER + 1 }, { failed: undefined }, { boosted: undefined }]) {
+  for (const patch of [{ orderRef: "different" }, { boosted: 6, failed: 0 }, { boosted: -1, failed: 11 }, { guildId: "wrong" }, { failed: -1 }, { failed: 1.5 }, { failed: Number.MAX_SAFE_INTEGER + 1 }, { failed: undefined }, { boosted: undefined }]) {
     const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed({ ...result, ...patch }) });
     await assert.rejects(api.submit(input, id), { uncertain: true });
   }
 });
 
 test("reported failures are independent of delivered boosts, including a fully delivered 16/24 result", async () => {
-  for (const [boosted, failed] of [[16, 24], [16, 0], [8, 24], [8, 0], [0, 24], [0, 0]]) {
+  for (const [boosted, failed] of [[8, 12], [8, 0], [4, 12], [4, 0], [0, 12], [0, 0]]) {
     const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed({ ...result, boosted, failed }) });
     const response = await api.submit({ ...input, amount: 16 }, id);
-    assert.equal(response.boosted, boosted);
-    assert.equal(response.failed, failed);
+    assert.equal(response.boosted, boosted * 2);
+    assert.equal(response.failed, failed * 2);
   }
 });
 
 test("a fully delivered order with extra reported failures is saved as completed and never resubmitted", async () => {
   const store = storage(); let calls = 0;
-  const service = createSolarixService({ ...store, now: () => timestamp, fetch: async () => { calls++; return signed({ ...result, boosted: 16, failed: 24 }); } });
+  const service = createSolarixService({ ...store, now: () => timestamp, fetch: async () => { calls++; return signed({ ...result, boosted: 8, failed: 12 }); } });
   await service.start({ ...input, amount: 16, requestId: id });
   await service.executions.get(id);
   const receipt = await service.read(id);
@@ -106,7 +129,7 @@ test("concurrent submissions share one atomic receipt and make only one upstream
   assert.equal((await service.read(id)).status, "running");
   gate.resolve(); await service.executions.get(id);
   const finished = await service.read(id);
-  assert.equal(finished.status, "completed"); assert.deepEqual(finished.result, { orderId: result.orderId, guildId: result.guildId, guildName: result.guildName, boosted: 8, failed: 2 });
+  assert.equal(finished.status, "completed"); assert.deepEqual(finished.result, normalizeSolarixResult(result, input));
   await service.start({ ...input, requestId: id }); assert.equal(calls.length, 1);
   await assert.rejects(service.start({ ...input, requestId: id, amount: 12 }), { statusCode: 409 });
   assert.ok([...store.values.keys()].every(key => key.startsWith("solarix_aio_")));

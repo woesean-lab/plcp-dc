@@ -168,6 +168,7 @@ import { ProxyRoutingEditor } from "../components/ProxyRoutingEditor";
 import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
 import { BoostStockCounts } from "../components/BoostStockCounts";
+import { OrderConfirmationDialog } from "../components/OrderConfirmationDialog";
 import { useSolarix } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
@@ -5185,37 +5186,11 @@ export default function HomePage() {
         </div>
       ) : null}
 
-      {orderConfirmationPayload ? (
-        <div
-          className="confirm-modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget && !creating) setOrderConfirmationPayload(null);
-          }}
-        >
-          <div className="confirm-modal order-confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="create-order-title" aria-describedby="create-order-description">
-            <span className="confirm-modal-icon is-success" aria-hidden="true"><Check className="h-5 w-5" /></span>
-            <p className="app-kicker text-[var(--app-accent)]">Order confirmation</p>
-            <h2 id="create-order-title">Create this order?</h2>
-            <p id="create-order-description">
-              Creates the order and reserves its stock.
-            </p>
-            <div className="order-confirm-summary">
-              <div className="order-confirm-primary">
-                <span className="order-confirm-service-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
-                <span className="order-confirm-primary-copy">
-                  <small>Service</small>
-                  <strong>{isCommunityService(orderConfirmationPayload.service)
+      {orderConfirmationPayload ? <OrderConfirmationDialog service={isCommunityService(orderConfirmationPayload.service)
                     ? orderConfirmationPayload.categoryAllocations?.map((allocation) => `${communityCategories.find((category) => category.id === allocation.categoryId)?.name ?? allocation.categoryId} × ${allocation.amount}`).join(" + ")
                       ?? communityCategories.find((category) => category.id === orderConfirmationPayload.categoryId)?.name
                       ?? "Members 2"
-                    : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)}</strong>
-                </span>
-                <span className="order-confirm-amount"><small>Amount</small><strong>{orderConfirmationPayload.amount}</strong></span>
-              </div>
-              <div className="order-confirm-target">
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                <span><small>Discord invite</small><strong>{orderConfirmationPayload.id}</strong></span>
-              </div>
+                    : (SERVICE_OPTIONS.find((option) => option.value === orderConfirmationPayload.service)?.title ?? orderConfirmationPayload.service)} amount={orderConfirmationPayload.amount} invite={orderConfirmationPayload.id} busy={creating} onClose={() => setOrderConfirmationPayload(null)} onConfirm={() => void confirmCreateOrder()}>
               {(orderConfirmationPayload.duration || orderConfirmationPayload.concurrency || orderConfirmationPayload.delay) ? (
                 <div className="order-confirm-meta">
                   {orderConfirmationPayload.duration ? <span><History className="h-3.5 w-3.5" />{orderConfirmationPayload.boostStockPool === "rotating" ? "Rotating stock · 30 days" : `${orderConfirmationPayload.duration} month`}</span> : null}
@@ -5231,17 +5206,7 @@ export default function HomePage() {
                   {orderConfirmationPayload.reactionLimit ? <span><Sparkles className="h-3.5 w-3.5" />{orderConfirmationPayload.amount} first day · {orderConfirmationPayload.reactionLimit} / day after</span> : null}
                 </div>
               ) : null}
-            </div>
-            <div className="confirm-modal-actions">
-              <Button autoFocus type="button" variant="secondary" disabled={creating} onClick={() => setOrderConfirmationPayload(null)}>Go back</Button>
-              <Button type="button" disabled={creating} onClick={() => void confirmCreateOrder()}>
-                {creating ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}
-                {creating ? "Creating..." : "Confirm order"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      </OrderConfirmationDialog> : null}
 
       {communityMemberPendingDeletion ? (
         <div
