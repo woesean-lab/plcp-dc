@@ -13,7 +13,22 @@
 .solarix-result[data-outcome="warning"] { --solarix-result-tone: var(--app-danger); --solarix-result-soft: var(--app-danger-soft); }
 .solarix-result-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; min-width: 0; }
 .solarix-result-icon, .solarix-server-icon { display: grid; place-items: center; flex-shrink: 0; border: 1px solid var(--app-border); border-radius: var(--app-radius-md); }
-.solarix-result-icon { width: 52px; height: 52px; color: var(--solarix-result-tone); background: var(--solarix-result-soft); }
+.solarix-result-icon { position: relative; isolation: isolate; width: 52px; height: 52px; color: var(--solarix-result-tone); background: var(--solarix-result-soft); transition: color .3s ease, background-color .3s ease, border-color .3s ease; }
+.solarix-result-icon > span, .solarix-status-check { position: absolute; inset: 0; display: grid; place-items: center; margin: auto; transition: opacity .2s ease, transform .3s cubic-bezier(.2,.8,.2,1); }
+.solarix-status-check, .solarix-status-warning { opacity: 0; transform: scale(.65); }
+.solarix-result[data-outcome="pending"] .solarix-status-spinner > svg { animation: solarix-status-spin 1s linear infinite; }
+.solarix-result:not([data-outcome="pending"]) .solarix-status-spinner { opacity: 0; transform: scale(.65); }
+.solarix-result[data-outcome="success"] .solarix-status-check, .solarix-result[data-outcome="warning"] .solarix-status-warning { opacity: 1; transform: scale(1); }
+.solarix-status-check circle, .solarix-status-check path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.solarix-result[data-outcome="success"] .solarix-status-check circle { animation: solarix-check-draw .45s ease-out both; }
+.solarix-result[data-outcome="success"] .solarix-status-check path { animation: solarix-check-draw .32s ease-out .28s both; }
+.solarix-result-icon::after { position: absolute; inset: -1px; z-index: -1; border: 1px solid currentColor; border-radius: inherit; opacity: 0; content: ""; pointer-events: none; }
+.solarix-result[data-outcome="pending"] .solarix-result-icon::after { animation: solarix-status-pulse 2s ease-out infinite; }
+.solarix-result[data-outcome="success"] .solarix-result-icon { border-color: color-mix(in srgb, var(--app-success) 35%, var(--app-border)); }
+.solarix-result[data-outcome="success"] .solarix-result-icon::after { animation: solarix-confirm-ring .8s ease-out .12s both; }
+.solarix-result-copy { min-width: 0; animation: solarix-settle .3s ease-out both; }
+.solarix-result-badge { animation: solarix-settle .3s ease-out both; }
+.solarix-result[data-outcome="pending"] .solarix-result-badge::before { width: 5px; height: 5px; border-radius: 50%; background: currentColor; content: ""; animation: solarix-pending-dot 1.5s ease-in-out infinite; }
 .solarix-result-heading .app-kicker { font-size: 9px; }
 .solarix-result-heading h4 { margin: 5px 0 0; color: var(--app-text); font-size: 19px; font-weight: 650; line-height: 1.3; letter-spacing: -.02em; }
 .solarix-result-heading p { margin: 6px 0 0; color: var(--app-muted); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; }
@@ -28,11 +43,21 @@
 .solarix-result-counts dd { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin: 0; color: var(--app-text); font-size: 28px; font-weight: 650; line-height: 1.2; font-variant-numeric: tabular-nums; }
 .solarix-result-counts dd small { color: var(--app-subtle); font-size: 10px; font-weight: 400; }
 .solarix-result-counts [data-delivered="true"] dd { color: var(--solarix-result-tone); }
+.solarix-metric-value { display: inline-block; }
+.solarix-result:not([data-outcome="pending"]) .solarix-result-counts > div { animation: solarix-settle .42s cubic-bezier(.2,.8,.2,1) both; }
+.solarix-result:not([data-outcome="pending"]) .solarix-result-counts > div:nth-child(1) { animation-delay: .08s; }
+.solarix-result:not([data-outcome="pending"]) .solarix-result-counts > div:nth-child(2) { animation-delay: .15s; }
+.solarix-result:not([data-outcome="pending"]) .solarix-result-counts > div:nth-child(3) { animation-delay: .22s; }
+.solarix-result[data-outcome="pending"] .solarix-result-counts dd { color: var(--app-muted); }
+.solarix-result[data-outcome="success"] .solarix-result-counts [data-delivered="true"] { border-color: color-mix(in srgb, var(--app-success) 25%, var(--app-border)); transition: border-color .4s ease; }
 .solarix-delivery-total { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .solarix-delivery-total > div:first-child { display: flex; justify-content: space-between; gap: 12px; color: var(--app-muted); font-size: 11px; }
 .solarix-delivery-total strong { color: var(--solarix-result-tone); font-variant-numeric: tabular-nums; }
 .solarix-delivery-total .monitor-live-progress-track { grid-column: auto; width: 100%; margin: 0; }
 .solarix-delivery-total .monitor-live-progress-track > span { background: var(--solarix-result-tone); }
+.solarix-delivery-total[data-pending="true"] .monitor-live-progress-track > span { width: 32%; animation: solarix-progress-wait 1.8s ease-in-out infinite; }
+.solarix-delivery-total[data-pending="false"] .monitor-live-progress-track > span { transform-origin: left; animation: solarix-progress-complete .7s cubic-bezier(.2,.8,.2,1) .12s both; }
+.solarix-result:not([data-outcome="pending"]) .solarix-result-identity { animation: solarix-settle .4s ease-out .28s both; }
 .solarix-result-note { display: flex; align-items: flex-start; gap: 9px; color: var(--app-muted); font-size: 11px; line-height: 1.6; }
 .solarix-result-note svg { flex-shrink: 0; margin-top: 2px; }
 .solarix-result-note p { margin: 0; }
@@ -44,6 +69,19 @@
 .solarix-invite-help > div { flex: 1 1 220px; min-width: 0; }
 .solarix-invite-help strong { color: var(--app-text-secondary); font-size: 12px; font-weight: 650; }
 .solarix-invite-help p { margin: 6px 0 0; color: var(--app-muted); font-size: 11px; line-height: 1.6; }
+@keyframes solarix-status-spin { to { transform: rotate(360deg); } }
+@keyframes solarix-check-draw { to { stroke-dashoffset: 0; } }
+@keyframes solarix-status-pulse { 0% { opacity: .35; transform: scale(1); } 85%, 100% { opacity: 0; transform: scale(1.25); } }
+@keyframes solarix-confirm-ring { 0% { opacity: .6; transform: scale(.95); } 100% { opacity: 0; transform: scale(1.5); } }
+@keyframes solarix-pending-dot { 50% { opacity: .35; } }
+@keyframes solarix-settle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes solarix-progress-wait { 0% { transform: translateX(-110%); } 100% { transform: translateX(420%); } }
+@keyframes solarix-progress-complete { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@media (prefers-reduced-motion: reduce) {
+  .solarix-result *, .solarix-result *::before, .solarix-result *::after { animation: none !important; transition: none !important; }
+  .solarix-result[data-outcome="success"] .solarix-status-check circle, .solarix-result[data-outcome="success"] .solarix-status-check path { stroke-dashoffset: 0; }
+  .solarix-delivery-total[data-pending="true"] .monitor-live-progress-track > span { transform: none; }
+}
 @container settings (max-width: 480px) {
   .solarix-result-heading { grid-template-columns: auto minmax(0, 1fr); }
   .solarix-result-heading > .status-badge { grid-column: 2; }

@@ -318,7 +318,7 @@ function SolarixExampleActions() {
 }
 
 function SolarixExample() {
-  const [outcome, setOutcome] = useState<SolarixPreviewOutcome>("partial");
+  const [outcome, setOutcome] = useState<SolarixPreviewOutcome>("success");
   return <div className="ui-ref-stack"><FilterDropdown label="Sample result" value={outcome} onChange={value => setOutcome(value as SolarixPreviewOutcome)} options={[{ value: "success", label: "Completed" }, { value: "success_with_failures", label: "Completed with reported failures" }, { value: "partial", label: "Partial delivery" }, { value: "failed", label: "Rejected request" }, { value: "uncertain", label: "Unconfirmed result" }, { value: "running", label: "Waiting for result" }]} /><SolarixProvider key={outcome} preview previewOutcome={outcome}><SolarixExampleActions /></SolarixProvider></div>;
 }
 
@@ -492,7 +492,7 @@ export default function UiKitPage() {
 
         {visible("fields") ? <Section id="fields">
           <Example title="Members delivery speed" source="src/components/CommunitySpeedProfileOptions.tsx · shared/community-speed.mjs" code={'<CommunitySpeedProfileOptions value={profile} added={order.added}\n  onChange={(profile, delay) => updateDelay(delay, profile)} disabled={saving} />\n// With Custom, use balanced 3+2 rows; four presets use 4/2/1 columns.\n// Narrow cards wrap to additional rows without horizontal scrolling.\n// creation uses the existing create-order option styles.\n// Balanced Fast progresses by delivered count: members 1–250: 1–6s, 251–400: 30–60s, 401+: 30–300s.'}><MemberSpeedExample /></Example>
-          <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// SolarixAIO selection loads provider stock into the existing form.\n// Create order calls solarix.startOrder({ invite, amount, duration }); shared confirmation must be accepted before delivery.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// Rejected invite results include Copy message for the shared Bypass Join Application request.\n// All preview requests and results use local samples only.'}>
+          <Example title="Boost services & SolarixAIO modal" source="src/components/BoostServiceField.tsx · SolarixWorkspace.tsx" code={'<BoostServiceField value={boostProvider} onChange={setBoostProvider} />\n// SolarixAIO selection loads provider stock into the existing form.\n// Create order calls solarix.startOrder({ invite, amount, duration }); shared confirmation must be accepted before delivery.\n// Header Boosts stock uses SolarixStockButton beside Members check.\n// Rejected invite results include Copy message for the shared Bypass Join Application request.\n// Pending ring and indeterminate track settle into a drawn check, completed Badge and staggered result cards.\n// Reduced motion shows static final states. No counts or percentages are fabricated.\n// All preview requests and results use local samples only.'}>
             <SolarixExample />
           </Example>
           <Example title="Boost stock loading" source="src/components/BoostStockCounts.tsx" code={'<div className="service-grid boost-duration-grid">\n  {/* Keep the standard card widths for every provider. */}\n  <BoostStockCounts loading={loading} tokens={60} boosts={120} requiredTokens={7} />\n</div>'}>

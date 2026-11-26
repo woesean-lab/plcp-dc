@@ -179,3 +179,21 @@ test("Create order submits the existing form values directly and exposes no seco
   assert.equal(nodes(f.tree, "input").length, 0);
   f.stop();
 });
+
+test("pending delivery stays indeterminate, then reveals only confirmed counts on completion", async () => {
+  const f = fixture(); await f.flush(); await f.refresh();
+  f.submit(); await f.flush(); await f.confirm();
+  const progress = () => nodes(f.tree, "div").find(node => node.props.role === "progressbar");
+  const result = () => nodes(f.tree, "section").find(node => node.props["aria-label"] === "SolarixAIO delivery result");
+  assert.equal(result().props["data-outcome"], "pending");
+  assert.equal(progress().props["aria-valuenow"], undefined);
+  assert.ok(nodes(f.tree, "dl").map(text).join(" ").includes("Delivered—Awaiting resultRemaining—Awaiting result"));
+  f.setReceipt({ ...f.receipt, status: "completed", result: { orderId: "solarix", guildId: "123456789012345678", guildName: "Sample", boosted: input.amount, failed: 0 } });
+  await f.tick();
+  assert.equal(result().props["data-outcome"], "success");
+  assert.equal(progress().props["aria-valuenow"], input.amount);
+  assert.ok(text(f.tree).includes("All boosts delivered"));
+  assert.ok(nodes(f.tree, "dl").map(text).join(" ").includes("Remaining0boosts"));
+  assert.equal(f.submissions.length, 1);
+  f.stop();
+});
