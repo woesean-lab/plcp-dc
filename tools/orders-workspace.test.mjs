@@ -59,9 +59,9 @@ test("delivery progress is independent of expired support and clamps invalid tot
 });
 
 test("Orders shows variable speed ranges instead of the nominal 300-second setting", () => {
-  assert.equal(orderDeliveryTiming({ ...base, status: "INVITES PAUSED", amount: 750, added: 124, speedProfile: "balanced2", delay: 300, statusDelay: 300 }), "Balanced 2 · 1–6s");
-  assert.equal(orderDeliveryTiming({ ...base, added: 300, speedProfile: "balanced2", delay: 300 }), "Balanced 2 · 30–60s");
-  assert.equal(orderDeliveryTiming({ ...base, added: 464, speedProfile: "balanced2", delay: 300 }), "Balanced 2 · 30–300s");
+  assert.equal(orderDeliveryTiming({ ...base, status: "INVITES PAUSED", amount: 750, added: 124, speedProfile: "balanced2", delay: 300, statusDelay: 300 }), "Balanced Fast · 1–6s");
+  assert.equal(orderDeliveryTiming({ ...base, added: 300, speedProfile: "balanced2", delay: 300 }), "Balanced Fast · 30–60s");
+  assert.equal(orderDeliveryTiming({ ...base, added: 464, speedProfile: "balanced2", delay: 300 }), "Balanced Fast · 30–300s");
   assert.equal(orderDeliveryTiming({ ...base, speedProfile: "balanced", delay: 300 }), "Balanced · 30–300s");
   assert.equal(orderDeliveryTiming({ ...base, speedProfile: "custom", delay: 20 }), "20s between members");
 });

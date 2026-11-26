@@ -5,7 +5,7 @@ import { getCommunitySpeedPresetDelay, getCommunitySpeedRange, type CommunitySpe
 const profiles = [
   { key: "safe", label: "Safe", timing: "700s", description: "Lowest risk", Icon: ShieldCheck },
   { key: "balanced", label: "Balanced", timing: "30–300s", description: "12-step rhythm", Icon: Timer },
-  { key: "balanced2", label: "Balanced 2", timing: "", description: "By delivery progress", Icon: Timer },
+  { key: "balanced2", label: "Balanced Fast", timing: "", description: "By delivery progress", Icon: Timer },
   { key: "fast", label: "Fast", timing: "60s", description: "Quick delivery", Icon: Rocket }
 ] as const;
 

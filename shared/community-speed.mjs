@@ -52,11 +52,11 @@ export function getCommunityDeliveryEstimateSeconds(profile, configuredDelay, am
 }
 
 export function getCommunitySpeedLabel(profile) {
-  return profile === "balanced2" ? "Balanced 2" : profile === "balanced" ? "Balanced" : profile === "safe" ? "Safe" : profile === "fast" ? "Fast" : "Custom";
+  return profile === "balanced2" ? "Balanced Fast" : profile === "balanced" ? "Balanced" : profile === "safe" ? "Safe" : profile === "fast" ? "Fast" : "Custom";
 }
 
 export function getCommunitySpeedDescription(profile, delay) {
-  if (profile === "balanced2" && Number(delay) !== 0) return "Balanced 2 (members 1–250: 1–6s; 251–400: 30–60s; 401+: 30–300s)";
+  if (profile === "balanced2" && Number(delay) !== 0) return "Balanced Fast (members 1–250: 1–6s; 251–400: 30–60s; 401+: 30–300s)";
   const pattern = getCommunitySpeedPattern(profile);
   return pattern && delay !== 0
     ? `${getCommunitySpeedLabel(profile)} (variable ${Math.min(...pattern)}–${Math.max(...pattern)} second delay)`

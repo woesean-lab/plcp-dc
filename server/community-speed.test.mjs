@@ -6,7 +6,7 @@ import ts from "typescript";
 import { COMMUNITY_BALANCED_DELAY_PATTERN, normalizeCommunitySpeedProfile, getCommunitySpeedPattern, getCommunitySpeedRange, getCommunitySpeedPresetDelay, getCommunitySpeedDelay, getCommunitySpeedAverage, getCommunityDeliveryEstimateSeconds, getCommunitySpeedDescription } from "../shared/community-speed.mjs";
 import { buildEldoradoDeliveryMessage } from "./eldorado-integration.mjs";
 
-test("Balanced 2 advances after delivering member 250 and member 400", () => {
+test("Balanced Fast advances after delivering member 250 and member 400", () => {
   for (const [amount, min, max] of [[0, 1, 6], [25, 1, 6], [249, 1, 6], [250, 30, 60], [251, 30, 60], [399, 30, 60], [400, 30, 300], [401, 30, 300], [750, 30, 300]]) {
     const pattern = getCommunitySpeedPattern("balanced2", amount);
     assert.equal(Math.min(...pattern), min); assert.equal(Math.max(...pattern), max);
@@ -78,7 +78,7 @@ test("resuming retains the current deadline, and pause/profile changes remain ef
   assert.equal(changed.elapsed, 60_000, "switching to Fast changes the current wait");
 });
 
-test("admin and Monitor delay endpoints retain Balanced 2 and return a valid worker configuration", async () => {
+test("admin and Monitor delay endpoints retain Balanced Fast and return a valid worker configuration", async () => {
   const paths = ["/api/community/orders/:uniqid/delay", "/api/public/orders/:uniqid/delay"];
   for (const path of paths) {
     let handler, updated;
@@ -102,7 +102,7 @@ test("admin and Monitor delay endpoints retain Balanced 2 and return a valid wor
 });
 
 test("delivery messages describe all stages instead of choosing a bracket from order size", () => {
-  const description = "Balanced 2 (members 1–250: 1–6s; 251–400: 30–60s; 401+: 30–300s)";
+  const description = "Balanced Fast (members 1–250: 1–6s; 251–400: 30–60s; 401+: 30–300s)";
   assert.equal(getCommunitySpeedDescription("balanced2", 300), description);
   for (const amount of [250, 400, 750]) {
     const message = buildEldoradoDeliveryMessage({ uniqid: "test", provider: "community", speedProfile: "balanced2", amount, added: 25, delay: 300 }, "https://example.test");
