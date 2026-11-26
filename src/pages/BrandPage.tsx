@@ -10,7 +10,7 @@ export default function BrandPage() {
       <div className="app-ambient app-ambient-two" aria-hidden="true" />
 
       <section className="brand-gate-card" aria-labelledby="brand-gate-title">
-        <div className="brand-gate-mark" aria-hidden="true">
+        <div className="brand-mark brand-gate-mark" aria-hidden="true">
           <span className="brand-letter">P</span>
         </div>
 

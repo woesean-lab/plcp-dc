@@ -596,6 +596,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("tokens") ? <Section id="tokens">
+          <Example title="Brand mark" source="src/index.css · brand-mark / brand-gate-mark" code={'<span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>\n// Public entry uses the same mark at 64px, with a 30px letter.\n<span className="brand-mark brand-gate-mark" aria-hidden="true"><span className="brand-letter">P</span></span>'}><div className="ui-ref-row"><span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span><span className="brand-mark brand-gate-mark" aria-hidden="true"><span className="brand-letter">P</span></span></div></Example>
           <Example title="Live theme colors" source="src/index.css · :root --app-* variables" code={'/* Use the current theme instead of adding literal colors. */\ncolor: var(--app-text);\nbackground: var(--app-control-bg);\nborder-color: var(--app-border);\n/* Prefer Button, Badge and existing surface classes where available. */'}>
             <div className="ui-ref-colors">{COLORS.map((token) => <div key={token}><span aria-hidden="true" style={{ background: `var(${token})` } as CSSProperties} /><code>{token}</code></div>)}</div>
           </Example>
