@@ -79,6 +79,32 @@ test("reloading a saved request reads its receipt without making a new order", a
   assert.equal(f.submissions.length, 0); assert.ok(f.reads.includes(receipt.id)); f.stop();
 });
 
+test("a fully delivered 16-boost result stays completed with 24 reported failures", async () => {
+  const receipt = { id: crypto.randomUUID(), input: { ...input, amount: 16 }, status: "completed", message: "SolarixAIO returned the delivery result.", result: { orderId: "provider-order", guildId: "123456789012345678", guildName: "Sample server", boosted: 16, failed: 24 } };
+  const f = fixture({ restore: receipt }); await f.flush(); await f.open();
+  const badges = nodes(f.tree, "badge");
+  assert.ok(badges.some(node => text(node) === "Completed" && node.props.variant === "success"));
+  const counts = nodes(f.tree, "dl").map(text).join(" ");
+  assert.ok(counts.includes("Requested16Boosted16Undelivered0"));
+  assert.ok(text(f.tree).includes("SolarixAIO reported 24 failures."));
+  assert.equal(text(f.tree).includes("Result not confirmed"), false);
+  assert.equal(text(f.tree).includes("Pending"), false);
+  assert.equal(f.submissions.length, 0);
+  assert.equal(nodes(f.tree, "button").some(node => text(node) === "Back to order form"), true);
+  f.stop();
+});
+
+test("zero reported failures do not turn partial or empty delivery into success", async () => {
+  for (const [boosted, outcome] of [[8, "Partially delivered"], [0, "Delivery failed"]]) {
+    const receipt = { id: crypto.randomUUID(), input, status: "completed", message: "Delivery result", result: { orderId: "provider-order", guildId: "123456789012345678", guildName: "Sample server", boosted, failed: 0 } };
+    const f = fixture({ restore: receipt }); await f.flush(); await f.open();
+    assert.ok(nodes(f.tree, "badge").some(node => text(node) === outcome && node.props.variant === "destructive"));
+    assert.ok(nodes(f.tree, "dl").map(text).join(" ").includes(`Undelivered${input.amount - boosted}`));
+    assert.equal(f.submissions.length, 0);
+    f.stop();
+  }
+});
+
 test("an unconfigured integration and unavailable stock disable submission", async () => {
   for (const options of [{ configured: false }, { unavailable: true }]) {
     const f = fixture(options); await f.flush(); await f.refresh();

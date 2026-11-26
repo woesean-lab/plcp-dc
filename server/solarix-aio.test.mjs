@@ -42,10 +42,33 @@ test("unsigned, tampered or expired responses and mismatched results remain unce
     const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed(result, options) });
     await assert.rejects(api.submit(input, id), { uncertain: true });
   }
-  for (const patch of [{ orderRef: "different" }, { boosted: 11, failed: 0 }, { boosted: -1, failed: 11 }, { guildId: "wrong" }, { failed: 1 }]) {
+  for (const patch of [{ orderRef: "different" }, { boosted: 11, failed: 0 }, { boosted: -1, failed: 11 }, { guildId: "wrong" }, { failed: -1 }, { failed: 1.5 }, { failed: Number.MAX_SAFE_INTEGER + 1 }, { failed: undefined }, { boosted: undefined }]) {
     const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed({ ...result, ...patch }) });
     await assert.rejects(api.submit(input, id), { uncertain: true });
   }
+});
+
+test("reported failures are independent of delivered boosts, including a fully delivered 16/24 result", async () => {
+  for (const [boosted, failed] of [[16, 24], [16, 0], [8, 24], [8, 0], [0, 24], [0, 0]]) {
+    const api = createSolarixClient({ credentials, now: () => timestamp, fetch: async () => signed({ ...result, boosted, failed }) });
+    const response = await api.submit({ ...input, amount: 16 }, id);
+    assert.equal(response.boosted, boosted);
+    assert.equal(response.failed, failed);
+  }
+});
+
+test("a fully delivered order with extra reported failures is saved as completed and never resubmitted", async () => {
+  const store = storage(); let calls = 0;
+  const service = createSolarixService({ ...store, now: () => timestamp, fetch: async () => { calls++; return signed({ ...result, boosted: 16, failed: 24 }); } });
+  await service.start({ ...input, amount: 16, requestId: id });
+  await service.executions.get(id);
+  const receipt = await service.read(id);
+  assert.equal(receipt.status, "completed");
+  assert.equal(receipt.result.boosted, 16);
+  assert.equal(receipt.result.failed, 24);
+  const restarted = createSolarixService({ ...store, now: () => timestamp, fetch: () => { throw Error("Must never resubmit"); } });
+  assert.deepEqual(await restarted.start({ ...input, amount: 16, requestId: id }), receipt);
+  assert.equal(calls, 1);
 });
 
 test("transport failures and server errors never turn into confirmed failed boost counts", async () => {

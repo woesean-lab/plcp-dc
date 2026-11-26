@@ -14,7 +14,7 @@
 .bot-sync-outcomes > span[data-failed="true"] > svg { color: var(--app-danger); }
 .bot-sync-overview > .settings-field-note { margin: 0; padding-top: 12px; border-top: 1px solid var(--app-divider); }
 .bot-sync-errors { min-width: 0; width: 100%; border-radius: var(--app-radius-md); box-shadow: none; }
-.bot-sync-errors > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 14px 16px; color: var(--app-text-secondary); font-size: 12px; font-weight: 650; border-radius: inherit; cursor: pointer; list-style: none; }
+.bot-sync-errors > summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 54px; padding: 14px 16px; color: var(--app-text-secondary); font-size: 12px; font-weight: 650; border-radius: calc(var(--app-radius-md) - 1px); cursor: pointer; list-style: none; }
 .bot-sync-errors > summary::-webkit-details-marker { display: none; }
 .bot-sync-errors > summary > span { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 @media (hover: hover) {

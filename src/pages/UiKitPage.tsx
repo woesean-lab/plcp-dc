@@ -38,6 +38,7 @@ import { OAuthBotTargetField } from "../components/OAuthBotTargetField";
 import { StockWorkspace } from "../components/StockWorkspace";
 import { MembersStockBadges, MembersStockBulkActions, MembersStockHeader, MembersStockListSkeleton, MembersStockMetadata, MembersStockCategory, MembersStockImportDialog, MembersStockRow, MembersStockSecret, MembersStockSummary } from "../components/MembersStockWorkspace";
 import { BotSyncProgress } from "../components/BotSyncProgress";
+import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { BotSyncSkeleton } from "../components/BotSyncDialog";
 import type { BotSyncJob, CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
 import { ProfileAvatarButton, ProfileDialog } from "../components/ProfileDialog";
@@ -316,12 +317,13 @@ function SolarixExampleActions() {
 
 function SolarixExample() {
   const [outcome, setOutcome] = useState<SolarixPreviewOutcome>("partial");
-  return <div className="ui-ref-stack"><FilterDropdown label="Sample result" value={outcome} onChange={value => setOutcome(value as SolarixPreviewOutcome)} options={[{ value: "success", label: "Completed" }, { value: "partial", label: "Partial delivery" }, { value: "failed", label: "Rejected request" }, { value: "uncertain", label: "Unconfirmed result" }, { value: "running", label: "Waiting for result" }]} /><SolarixProvider key={outcome} preview previewOutcome={outcome}><SolarixExampleActions /></SolarixProvider></div>;
+  return <div className="ui-ref-stack"><FilterDropdown label="Sample result" value={outcome} onChange={value => setOutcome(value as SolarixPreviewOutcome)} options={[{ value: "success", label: "Completed" }, { value: "success_with_failures", label: "Completed with reported failures" }, { value: "partial", label: "Partial delivery" }, { value: "failed", label: "Rejected request" }, { value: "uncertain", label: "Unconfirmed result" }, { value: "running", label: "Waiting for result" }]} /><SolarixProvider key={outcome} preview previewOutcome={outcome}><SolarixExampleActions /></SolarixProvider></div>;
 }
 
 function BotSyncProgressExample() {
   const [state, setState] = useState("running");
   const [compact, setCompact] = useState(false);
+  const [modal, setModal] = useState(false);
   const [failures, setFailures] = useState("3");
   const samples = [
     { userId: "123456789012345678", message: "Discord OAuth authorization failed (HTTP 403): You need to verify your account in order to perform this action." },
@@ -332,7 +334,7 @@ function BotSyncProgressExample() {
   const processed = state === "completed" ? 750 : 250;
   const errors = Array.from({ length: Math.min(failed, 25) }, (_, index) => ({ ...samples[index % samples.length], userId: String(123456789012345678n + BigInt(index)) }));
   const job: BotSyncJob = { id: "preview-sync-panel", clientId: "1544546102458720276", categoryId: "online", categoryName: "OAuth Online", status: state === "stopping" ? "cancelled" : state as BotSyncJob["status"], stopping: state === "stopping", total: 750, processed, succeeded: processed - failed, failed, estimatedRemainingSeconds: 5400, details: state === "paused" ? "Discord requested a pause. Review the account before resuming." : undefined, errors };
-  return <div className="ui-ref-stack"><div className="ui-ref-row"><FilterDropdown label="Sync state" value={state} onChange={setState} options={["loading", "queued", "running", "paused", "stopping", "cancelled", "completed"].map(value => ({ value, label: value }))} /><FilterDropdown label="Failure sample" value={failures} onChange={setFailures} options={[{ value: "1", label: "1 failure" }, { value: "3", label: "3 failures" }, { value: "31", label: "31 failures · 25 saved" }]} /><Button type="button" variant="secondary" size="xs" onClick={() => setCompact(value => !value)}>{compact ? "Full width" : "Narrow preview"}</Button></div><div style={{ width: "100%", maxWidth: compact ? 340 : undefined }}>{state === "loading" ? <BotSyncSkeleton /> : <BotSyncProgress key={`${state}:${failures}`} job={job} categoryName="OAuth Online" />}</div></div>;
+  return <div className="ui-ref-stack"><div className="ui-ref-row"><FilterDropdown label="Sync state" value={state} onChange={setState} options={["loading", "queued", "running", "paused", "stopping", "cancelled", "completed"].map(value => ({ value, label: value }))} /><FilterDropdown label="Failure sample" value={failures} onChange={setFailures} options={[{ value: "1", label: "1 failure" }, { value: "3", label: "3 failures" }, { value: "31", label: "31 failures · 25 saved" }, { value: "113", label: "113 failures · 25 saved" }]} /><Button type="button" variant="secondary" size="xs" onClick={() => setCompact(value => !value)}>{compact ? "Full width" : "Narrow preview"}</Button><Button type="button" variant="secondary" size="xs" onClick={() => setModal(true)}>Preview sync modal</Button></div><div style={{ width: "100%", maxWidth: compact ? 340 : undefined }}>{state === "loading" ? <BotSyncSkeleton /> : <BotSyncProgress key={`${state}:${failures}`} job={job} categoryName="OAuth Online" />}</div>{modal ? <BotSettingsDialog title="Members 01 · Sync accounts" onClose={() => setModal(false)}><div className="settings-card-body bot-sync-body">{state === "loading" ? <BotSyncSkeleton /> : <BotSyncProgress job={job} categoryName="OAuth Online" />}</div><footer className="settings-card-footer"><Button type="button" variant="secondary" size="sm" onClick={() => setModal(false)}>Close</Button></footer></BotSettingsDialog> : null}</div>;
 }
 
 function StockNavigationExample() {

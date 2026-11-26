@@ -59,7 +59,9 @@ export function createSolarixClient({ credentials, fetch: transport = globalThis
   async function submit(delivery, requestId) {
     const input = normalizeSolarixDelivery(delivery);
     const value = await request("", { ...input, order_ref: requestId });
-    if (typeof value?.orderId !== "string" || !value.orderId || value.orderId.length > 200 || value.orderRef !== requestId || !Number.isInteger(value.boosted) || value.boosted < 0 || !Number.isInteger(value.failed) || value.failed < 0 || value.boosted + value.failed !== input.amount || !/^\d{17,22}$/.test(String(value.guildId ?? ""))) throw fail("SolarixAIO returned an incomplete result. Check its panel before placing another order.", 502, true);
+    // Solarix reports failures separately. Real completed responses can have
+    // boosted + failed above the requested amount; these are not a partition.
+    if (typeof value?.orderId !== "string" || !value.orderId || value.orderId.length > 200 || value.orderRef !== requestId || !Number.isSafeInteger(value.boosted) || value.boosted < 0 || value.boosted > input.amount || !Number.isSafeInteger(value.failed) || value.failed < 0 || !/^\d{17,22}$/.test(String(value.guildId ?? ""))) throw fail("SolarixAIO returned an incomplete result. Check its panel before placing another order.", 502, true);
     return { orderId: value.orderId, guildId: String(value.guildId), guildName: String(value.guildName ?? "").replace(/[\u0000-\u001f\u007f]/g, "").slice(0, 100), boosted: value.boosted, failed: value.failed };
   }
   return { stock, submit };
