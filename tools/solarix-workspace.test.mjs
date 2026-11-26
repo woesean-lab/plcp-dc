@@ -73,7 +73,7 @@ test("double submit sends one delivery and closing the dialog preserves result p
   f.button("Back to order form").onClick({ preventDefault() { prevented = true; } }); await f.flush();
   assert.equal(prevented, true);
   assert.equal(nodes(f.tree, "dialog").length, 0);
-  assert.deepEqual(f.navigations, ["/manage?tab=create&boostService=solarix"]);
+  assert.deepEqual(f.navigations, ["/console?tab=create&boostService=solarix"]);
   assert.equal(f.submissions.length, 1);
   f.stop();
 });

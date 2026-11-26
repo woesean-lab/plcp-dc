@@ -66,5 +66,5 @@ export default function SolarixSettings({ preview = false, onConfigured }: { pre
 }
 
 export function SolarixSetupLink({ onClick }: { onClick?: () => void }) {
-  return <Button asChild size="sm" variant="secondary"><Link to="/manage?tab=settings&settings=connections" onClick={onClick}>Configure SolarixAIO</Link></Button>;
+  return <Button asChild size="sm" variant="secondary"><Link to="/console?tab=settings&settings=connections" onClick={onClick}>Configure SolarixAIO</Link></Button>;
 }

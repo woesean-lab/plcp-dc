@@ -54,7 +54,7 @@ export function BotSyncToast({ job, stale = false, preview = false, onView }: { 
     {["queued", "running"].includes(job.status) && !job.stopping ? <span>Est. remaining · {formatBotSyncEta(job.estimatedRemainingSeconds)}</span> : null}
     {job.stopping ? <span>Finishing the current account…</span> : null}
     {stale ? <span>Reconnecting to progress… The server job continues.</span> : job.status === "paused" ? <span>{job.details || "Review this sync before resuming."}</span> : null}
-    <div className="bot-sync-toast-actions"><span>{job.succeeded.toLocaleString("en-US")} synced</span>{preview ? <Button variant="secondary" size="xs" disabled>View bots</Button> : <Button asChild variant="secondary" size="xs"><Link to="/manage?tab=settings&settings=bot-pool" onClick={onView}>View bots</Link></Button>}</div>
+    <div className="bot-sync-toast-actions"><span>{job.succeeded.toLocaleString("en-US")} synced</span>{preview ? <Button variant="secondary" size="xs" disabled>View bots</Button> : <Button asChild variant="secondary" size="xs"><Link to="/console?tab=settings&settings=bot-pool" onClick={onView}>View bots</Link></Button>}</div>
   </div>;
 }
 

@@ -86,7 +86,7 @@ export function SolarixProvider({ children, preview = false, previewOutcome = "p
     void poll();
     return () => { controller.abort(); clearTimeout(timer); };
   }, [preview, requestId, receipt?.status, submitting, pollRevision]);
-  function goToCreate() { setMode(null); if (!preview) navigate("/manage?tab=create&boostService=solarix"); }
+  function goToCreate() { setMode(null); if (!preview) navigate("/console?tab=create&boostService=solarix"); }
   function openOrder() { if (requestId) setMode("order"); else goToCreate(); }
   const running = submitting || receipt?.status === "running";
   function startOrder(next: SolarixInput) {

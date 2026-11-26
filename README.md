@@ -41,6 +41,9 @@ uretim API'lerine istek gondermez. Yeni UI calismalarinda
 
 ## Admin profili
 
+Admin girisi `/console` adresindedir. Eski `/manage` ve `/admin` adresleri ile
+tanimlanmamis yollar ana sayfaya doner; panelin oturum kontrolu korunur.
+
 Sag ustteki **Profile**, hesap ve oturum bilgilerini ve sifre degistirme formunu
 acar. Ayrica sagdaki cikis ikonu mevcut oturumu kapatir. Yeni sifre 12–128
 karakterdir; degisiklik mevcut sifreyi dogrular ve diger oturumlari kapatir.

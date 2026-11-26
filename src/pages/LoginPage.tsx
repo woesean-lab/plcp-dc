@@ -1,21 +1,12 @@
-import { useState, type FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Check, KeyRound, LockKeyhole, LogIn, ShieldCheck, Sparkles } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, LockKeyhole } from "lucide-react";
 import toast from "react-hot-toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { ConsoleLoginCard } from "../components/ConsoleLoginCard";
 import { signIn } from "../lib/session-auth";
 
-type LocationState = {
-  from?: {
-    pathname?: string;
-    search?: string;
-  };
-};
-
-type LoginPageProps = {
-  onAuthenticated?: () => void;
-};
+type LocationState = { from?: { pathname?: string; search?: string } };
+type LoginPageProps = { onAuthenticated?: () => void };
 
 export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const navigate = useNavigate();
@@ -24,88 +15,29 @@ export default function LoginPage({ onAuthenticated }: LoginPageProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-
-  async function handleSubmit(event: FormEvent) {
+  const [error, setError] = useState("");
+  const pending = useRef(false);
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setLoading(true);
-
+    if (pending.current) return;
+    pending.current = true; setLoading(true); setError("");
     try {
       const ok = await signIn(username, password);
-      if (!ok) {
-        toast.error("Invalid username or password.");
-        return;
-      }
-
+      if (!ok) { setError("Username or password is incorrect."); return; }
       toast.success("Signed in.");
       onAuthenticated?.();
-      const destination = `${state?.from?.pathname ?? "/manage"}${state?.from?.search ?? "?tab=create"}`;
+      const destination = (state?.from?.pathname ?? "/console") + (state?.from?.search ?? "?tab=create");
       navigate(destination, { replace: true });
+    } catch {
+      setError("Could not connect. Please try again.");
     } finally {
-      setLoading(false);
+      pending.current = false; setLoading(false);
     }
   }
-
-  return (
-    <section className="login-shell">
-      <div className="app-ambient app-ambient-one" aria-hidden="true" />
-      <div className="app-ambient app-ambient-two" aria-hidden="true" />
-      <div className="login-card app-panel">
-        <aside className="login-story">
-          <div>
-            <div className="login-brand">
-              <span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span>
-              <span><span className="brand-eyebrow">Pulcip</span><strong>Members Suite</strong></span>
-            </div>
-            <div className="login-hero-icon" aria-hidden="true"><Sparkles className="h-6 w-6" /></div>
-            <h1 className="login-headline">Everything in control.<br />Beautifully simple.</h1>
-            <p className="login-copy">Orders, deliveries and stock in one workspace.</p>
-          </div>
-          <ul className="login-benefits" aria-label="Platform benefits">
-            <li><Check className="h-4 w-4" /> Live delivery intelligence</li>
-            <li><Check className="h-4 w-4" /> Protected local credentials</li>
-            <li><Check className="h-4 w-4" /> Precision order controls</li>
-          </ul>
-        </aside>
-
-        <div className="login-form-panel">
-          <div className="flex items-center justify-between gap-3">
-            <span className="stat-icon" aria-hidden="true"><LockKeyhole className="h-4 w-4" /></span>
-            <span className="login-security"><ShieldCheck className="h-3.5 w-3.5" /> Secure access</span>
-          </div>
-          <div className="mt-8">
-            <p className="app-kicker">Welcome back</p>
-            <h2 className="app-title mt-2 text-3xl font-semibold">Sign in to continue</h2>
-            <p className="app-copy mt-3 max-w-lg text-sm leading-6">Dashboard sign-in.</p>
-          </div>
-        <form className="mt-7 grid gap-5" onSubmit={handleSubmit}>
-          <label className="grid gap-2">
-            <span className="field-label">Username</span>
-            <Input value={username} onChange={(event) => setUsername(event.target.value)} autoComplete="username" />
-          </label>
-
-          <label className="grid gap-2">
-            <span className="field-label">Password</span>
-            <Input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              autoComplete="current-password"
-            />
-          </label>
-
-          <div className="grid gap-3">
-            <Button type="submit" size="lg" className="w-full" disabled={loading}>
-              <LogIn className="h-4 w-4" aria-hidden="true" />
-              {loading ? "Signing in..." : "Sign in"}
-            </Button>
-            <div className="login-hint">
-              <KeyRound className="h-4 w-4" aria-hidden="true" />
-              <span>Use the configured dashboard credentials.</span>
-            </div>
-          </div>
-        </form>
-        </div>
-      </div>
-    </section>
-  );
+  return <main className="console-auth-shell">
+    <div className="console-auth-backdrop" aria-hidden="true" />
+    <header className="console-auth-topbar"><Link to="/" className="console-auth-brand" aria-label="Pulcip home"><span className="brand-mark" aria-hidden="true"><span className="brand-letter">P</span></span><span><strong>Pulcip</strong><small>Discord Console</small></span></Link><span className="console-auth-private"><LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />Private workspace</span></header>
+    <div className="console-auth-content"><ConsoleLoginCard username={username} password={password} loading={loading} error={error} onUsernameChange={setUsername} onPasswordChange={setPassword} onSubmit={handleSubmit} /><Link to="/" className="console-auth-back"><ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />Back to Pulcip</Link></div>
+    <footer className="console-auth-footer">Pulcip · Private operations suite</footer>
+  </main>;
 }

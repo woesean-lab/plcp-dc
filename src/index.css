@@ -5327,146 +5327,6 @@
     color: #f2d985;
   }
 
-  .login-shell {
-    position: relative;
-    display: grid;
-    min-height: 100vh;
-    place-items: center;
-    overflow: hidden;
-    padding: 1.5rem;
-  }
-
-  .login-card {
-    display: grid;
-    width: min(100%, 980px);
-    min-height: 610px;
-    grid-template-columns: minmax(0, 1.05fr) minmax(390px, .95fr);
-    overflow: hidden;
-  }
-
-  .login-story {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    overflow: hidden;
-    border-right: 1px solid var(--app-divider);
-    padding: clamp(2rem, 5vw, 3.5rem);
-    background:
-      radial-gradient(circle at 20% 10%, rgba(166, 150, 255, .22), transparent 19rem),
-      linear-gradient(145deg, rgba(116, 87, 255, .14), rgba(255, 255, 255, .015));
-  }
-
-  .login-story::after {
-    content: "";
-    position: absolute;
-    right: -8rem;
-    bottom: -8rem;
-    width: 22rem;
-    height: 22rem;
-    border: 1px solid rgba(155, 140, 255, .16);
-    border-radius: 50%;
-    box-shadow: 0 0 0 3rem rgba(155, 140, 255, .025), 0 0 0 6rem rgba(155, 140, 255, .018);
-    pointer-events: none;
-  }
-
-  .login-brand {
-    display: flex;
-    align-items: center;
-    gap: .8rem;
-  }
-
-  .login-brand strong {
-    display: block;
-    margin-top: .2rem;
-    font-size: 14px;
-    color: var(--app-text);
-  }
-
-  .login-hero-icon {
-    display: grid;
-    width: 54px;
-    height: 54px;
-    place-items: center;
-    margin-top: 4.5rem;
-    border: 1px solid var(--app-accent-border);
-    border-radius: 17px;
-    color: var(--app-accent-bright);
-    background: var(--app-accent-soft);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 16px 40px rgba(91, 63, 225, .18);
-  }
-
-  .login-headline {
-    max-width: 28rem;
-    margin: 1.1rem 0 0;
-    font-size: clamp(2.3rem, 4.4vw, 3.75rem);
-    font-weight: 720;
-    letter-spacing: -.055em;
-    line-height: .99;
-    color: var(--app-text);
-  }
-
-  .login-copy {
-    max-width: 27rem;
-    margin: 1.3rem 0 0;
-    font-size: 15px;
-    line-height: 1.7;
-    color: var(--app-muted);
-  }
-
-  .login-benefits {
-    position: relative;
-    z-index: 1;
-    display: grid;
-    gap: .75rem;
-    margin: 2.5rem 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .login-benefits li {
-    display: flex;
-    align-items: center;
-    gap: .7rem;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--app-text-secondary);
-  }
-
-  .login-benefits svg {
-    color: var(--app-success);
-  }
-
-  .login-form-panel {
-    align-self: center;
-    padding: clamp(2rem, 5vw, 3.5rem);
-  }
-
-  .login-security {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    border: 1px solid var(--app-border);
-    border-radius: 999px;
-    padding: .4rem .65rem;
-    font-size: 10px;
-    font-weight: 750;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-    color: var(--app-success);
-    background: var(--app-success-soft);
-  }
-
-  .login-hint {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: .5rem;
-    padding: .55rem;
-    font-size: 11px;
-    color: var(--app-subtle);
-  }
-
   pre,
   code {
     font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -7309,27 +7169,6 @@
     position: static;
   }
 
-  .login-card {
-    max-width: 580px;
-    grid-template-columns: 1fr;
-  }
-
-  .login-story {
-    min-height: 260px;
-    border-right: 0;
-    border-bottom: 1px solid var(--app-divider);
-  }
-
-  .login-hero-icon,
-  .login-benefits {
-    display: none;
-  }
-
-  .login-headline {
-    margin-top: 2rem;
-    font-size: clamp(2rem, 8vw, 3rem);
-  }
-
   .tracked-order-card {
     grid-template-areas:
       "identity"
@@ -7523,24 +7362,6 @@
 
   .public-progress-details > div + div {
     padding-top: .8rem;
-  }
-
-  .login-shell {
-    align-items: start;
-    padding: .75rem;
-  }
-
-  .login-card {
-    min-height: calc(100vh - 1.5rem);
-  }
-
-  .login-story,
-  .login-form-panel {
-    padding: 1.5rem;
-  }
-
-  .login-story {
-    min-height: 230px;
   }
 
   .app-frame {

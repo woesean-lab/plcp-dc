@@ -4107,7 +4107,7 @@ export default function HomePage() {
                   </Button>
                   {!selectedApiConfigured && !solarixLoading ? (
                     <Button asChild variant="secondary" className="max-sm:w-full">
-                      <Link to="/manage?tab=settings">
+                      <Link to="/console?tab=settings">
                         <Settings2 className="h-4 w-4" aria-hidden="true" />
                         Configure {selectedIsSolarix ? "SolarixAIO" : selectedIsBoost ? form.boostProvider === "salta7" ? "Salta7" : "Dcord" : "Members bot"}
                       </Link>

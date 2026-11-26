@@ -44,6 +44,7 @@ import { BotSettingsDialog } from "../components/BotSettingsDialog";
 import { BotSyncSkeleton } from "../components/BotSyncDialog";
 import type { BotSyncJob, BotSyncRoute, CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
 import { ProfileAvatarButton, ProfileDialog } from "../components/ProfileDialog";
+import { ConsoleLoginCard } from "../components/ConsoleLoginCard";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
 import type { HumanizerJob } from "../lib/humanizer";
 import type { CommunityMemberResult } from "../types";
@@ -307,6 +308,13 @@ function BoostStockLoadingExample() {
   </div>;
 }
 
+function ConsoleLoginExample() {
+  const [state, setState] = useState("ready");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  return <div className="ui-ref-stack"><FilterDropdown label="Sign-in preview state" value={state} onChange={setState} options={[{ value: "ready", label: "Ready" }, { value: "loading", label: "Signing in" }, { value: "invalid", label: "Invalid credentials" }, { value: "connection", label: "Connection error" }]} /><ConsoleLoginCard username={username} password={password} onUsernameChange={setUsername} onPasswordChange={setPassword} loading={state === "loading"} error={state === "invalid" ? "Username or password is incorrect." : state === "connection" ? "Could not connect. Please try again." : ""} onSubmit={event => { event.preventDefault(); setState("invalid"); }} /><p className="ui-ref-hint">Sample form only. No sign-in requests are sent.</p></div>;
+}
+
 function SolarixExampleActions() {
   const workspace = useSolarix();
   const [provider, setProvider] = useState<BoostServiceChoice>("salta7");
@@ -453,7 +461,7 @@ export default function UiKitPage() {
   const previewClick = () => toast.success("Sample action previewed");
 
   return <div className="ui-reference">
-    <header className="ui-ref-heading"><div><p className="app-kicker">PULCIP · DESIGN REFERENCE</p><h1>UI Kit</h1><p>The console’s existing components, together in one place.</p></div><Button asChild variant="secondary" size="sm"><Link to="/manage?tab=manage"><ArrowLeft className="h-4 w-4" />Back to Orders</Link></Button></header>
+    <header className="ui-ref-heading"><div><p className="app-kicker">PULCIP · DESIGN REFERENCE</p><h1>UI Kit</h1><p>The console’s existing components, together in one place.</p></div><Button asChild variant="secondary" size="sm"><Link to="/console?tab=manage"><ArrowLeft className="h-4 w-4" />Back to Orders</Link></Button></header>
     <div className="ui-ref-layout">
       <aside className="ui-ref-sidebar"><div className="app-panel-soft ui-ref-nav-panel">
         <label className="community-member-search"><Search className="h-3.5 w-3.5" aria-hidden="true" /><Input type="search" aria-label="Find a component" placeholder="Find a component…" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -537,6 +545,7 @@ export default function UiKitPage() {
         </Section> : null}
 
         {visible("panels") ? <Section id="panels">
+          <Example title="Console sign-in" source="src/components/ConsoleLoginCard.tsx · pages/LoginPage.tsx" code={'<ConsoleLoginCard username={username} password={password}\n  loading={loading} error={error}\n  onUsernameChange={setUsername} onPasswordChange={setPassword}\n  onSubmit={handleSubmit} />\n// /console uses this card in a centered page.\n// Shared Input, SecretField and Button retain their states.\n// Inline errors; pending requests are deduplicated. Preview never calls authentication APIs.'}><ConsoleLoginExample /></Example>
           <Example title="OAuth import/export target" source="src/components/OAuthBotTargetField.tsx" code={'<OAuthBotTargetField value={botId} onChange={setBotId} />\n// Bot selection lives inside import/export dialogs. Account sync lives in Settings → Bots.'}><OAuthBotTargetField value={stockAuthorizationBot} onChange={setStockAuthorizationBot} defaultName="Members bot" preview /></Example>
           <Example title="Members bot actions" source="src/components/BotPoolSettings.tsx · BotDirectory.tsx · BotSettingsDialog.tsx · BotServersDialog.tsx" code={'<BotPoolSettings preview />\n// Bot directory with search, account counts, aligned delivery columns and shared icon-sm actions.\n// Use for new orders is a shared sliding On/Off Switch in row actions.\n// Save confirmations use the shared Toaster; default starts off.\n// Workload balancing still compares all participating eligible bots; existing orders keep their bot.\n// Pool bot Accounts Sync includes category/All categories selection; preview totals follow the scope.\n// Edit and server management open native dialogs.\n// The default bot has no Sync action; previews only update sample state.'}><BotPoolSettings preview /></Example>
           <Example title="Bot server loading" source="src/components/BotServersDialog.tsx · ui/skeleton.tsx" code={'<BotServersSkeleton />\n// Matching rows replace the loading text inside the server dialog.'}><BotServersSkeleton /></Example>

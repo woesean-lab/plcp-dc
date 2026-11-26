@@ -1,4 +1,4 @@
-import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from "react";
 import { Bot, Boxes, ListChecks, LoaderCircle, LogOut, Plus, RadioTower, Settings2, ShieldCheck, Sparkles, WandSparkles } from "lucide-react";
 import toast, { Toaster } from "react-hot-toast";
@@ -44,7 +44,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   async function handleSignOut() {
     if (signingOut) return;
     setSigningOut(true);
-    try { await signOut(); onSignedOut(); navigate("/manage", { replace: true }); }
+    try { await signOut(); onSignedOut(); navigate("/console", { replace: true }); }
     catch { toast.error("Could not sign out. Try again."); }
     finally { setSigningOut(false); }
   }
@@ -96,7 +96,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
   const isOrders = location.pathname.startsWith("/orders");
   const isHumanizer = location.pathname.startsWith("/humanizer");
   const isReactions = location.pathname.startsWith("/reactions");
-  const isManage = location.pathname.startsWith("/manage") || location.pathname.startsWith("/admin");
+  const isManage = location.pathname.startsWith("/console");
 
   return (
     <div className="app-shell min-h-screen text-[var(--app-text)]">
@@ -110,7 +110,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
       <div className="app-frame mx-auto flex min-h-screen w-full max-w-[1520px] flex-col gap-6 px-3 py-3 sm:px-5 sm:py-5 lg:px-8">
         <header className="app-header sticky top-3 z-30">
           <div className="app-header-inner">
-            <button className="app-brand" type="button" onClick={() => navigate("/manage?tab=create")} aria-label="Pulcip Discord Console home">
+            <button className="app-brand" type="button" onClick={() => navigate("/console?tab=create")} aria-label="Pulcip Discord Console home">
               <span className="brand-mark" aria-hidden="true">
                 <span className="brand-letter">P</span>
               </span>
@@ -123,7 +123,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
             <div className="app-nav-cluster">
               <nav className="app-nav" aria-label="Primary navigation">
                 <Link
-                  to="/manage?tab=create"
+                  to="/console?tab=create"
                   aria-label="Create order"
                   title="Create order"
                   className={`app-nav-button ${isManage && tab === "create" ? "is-active" : ""}`}
@@ -133,7 +133,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                   <span>Create</span>
                 </Link>
                 <Link
-                  to="/manage?tab=manage"
+                  to="/console?tab=manage"
                   aria-label="Orders"
                   title="Orders"
                   className={`app-nav-button ${(isManage && tab === "manage") || isOrders ? "is-active" : ""}`}
@@ -153,7 +153,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                   <span>Reactions</span>
                 </Link>
                 <Link
-                  to="/manage?tab=stock"
+                  to="/console?tab=stock"
                   aria-label="Stock"
                   title="Stock"
                   className={`app-nav-button ${isManage && tab === "stock" ? "is-active" : ""}`}
@@ -163,7 +163,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                   <span>Stock</span>
                 </Link>
                 <Link
-                  to="/manage?tab=onliner"
+                  to="/console?tab=onliner"
                   aria-label="Onliner"
                   title="Onliner"
                   className={`app-nav-button ${isManage && tab === "onliner" ? "is-active" : ""}`}
@@ -183,7 +183,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
                   <span>Humanizer</span>
                 </Link>
                 <Link
-                  to="/manage?tab=settings"
+                  to="/console?tab=settings"
                   aria-label="Settings"
                   title="Settings"
                   className={`app-nav-button ${isManage && tab === "settings" ? "is-active" : ""}`}
@@ -215,15 +215,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
         </header>
 
         <main id="main-content" className="min-w-0 flex-1">
-          <Routes>
-            <Route path="/orders" element={<OrderPage />} />
-            <Route path="/manage" element={<HomePage />} />
-            <Route path="/admin" element={<HomePage />} />
-            <Route path="/humanizer" element={<HumanizerPage />} />
-            <Route path="/reactions" element={<ReactionsPage />} />
-            <Route path="/ui-kit" element={<Suspense fallback={<div className="app-panel p-6 text-sm text-[var(--app-muted)]" role="status">Loading UI Kit…</div>}><UiKitPage /></Suspense>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <Outlet />
         </main>
 
         <footer className="app-footer">
@@ -265,8 +257,8 @@ function ProtectedGate() {
     );
   }
   if (authState === "anonymous") {
-    if (location.pathname !== "/manage") {
-      return <Navigate to="/manage" replace state={{ from: location }} />;
+    if (location.pathname !== "/console") {
+      return <Navigate to="/console" replace state={{ from: location }} />;
     }
     return <LoginPage onAuthenticated={() => setAuthState("authenticated")} />;
   }
@@ -292,9 +284,13 @@ export default function App() {
         <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
         <Route path="/monitor/*" element={<PublicOrderPage />} />
         <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
-        {["/manage", "/admin", "/orders", "/humanizer", "/reactions", "/ui-kit"].map(path => (
-          <Route key={path} path={path} element={<ProtectedGate />} />
-        ))}
+        <Route element={<ProtectedGate />}>
+          <Route path="/console" element={<HomePage />} />
+          <Route path="/orders" element={<OrderPage />} />
+          <Route path="/humanizer" element={<HumanizerPage />} />
+          <Route path="/reactions" element={<ReactionsPage />} />
+          <Route path="/ui-kit" element={<Suspense fallback={<div className="app-panel p-6 text-sm text-[var(--app-muted)]" role="status">Loading UI Kit…</div>}><UiKitPage /></Suspense>} />
+        </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 

@@ -6,6 +6,7 @@ import ts from "typescript";
 import * as React from "react";
 import * as jsx from "react/jsx-runtime";
 import * as router from "react-router-dom";
+import { renderToStaticMarkup } from "react-dom/server";
 
 const source = fs.readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const module = { exports: {} };
@@ -21,7 +22,7 @@ const routes = router.createRoutesFromChildren(React.Children.toArray(tree.props
 const matched = path => router.matchRoutes(routes, path).at(-1).route.element;
 
 test("unknown addresses return to the public home without entering the authentication gate", () => {
-  for (const path of ["/d", "/anything", "/manage/unknown", "/admin/unknown", "/orders/unknown", "/ui-kit/unknown", "/d?tab=settings"]) {
+  for (const path of ["/d", "/anything", "/manage", "/manage?tab=settings", "/admin", "/console/unknown", "/manage/unknown", "/admin/unknown", "/orders/unknown", "/ui-kit/unknown", "/d?tab=settings"]) {
     const element = matched(path);
     assert.equal(element.type, router.Navigate, path);
     assert.equal(element.props.to, "/", path);
@@ -30,7 +31,7 @@ test("unknown addresses return to the public home without entering the authentic
 });
 
 test("only explicit management addresses enter the protected gate", () => {
-  for (const path of ["/manage", "/manage?tab=settings", "/manage/", "/admin", "/orders", "/humanizer", "/reactions", "/ui-kit"]) assert.equal(matched(path).type.name, "ProtectedGate", path);
+  for (const path of ["/console", "/console?tab=settings", "/console/", "/orders", "/humanizer", "/reactions", "/ui-kit"]) assert.ok(router.matchRoutes(routes, path).some(match => match.route.element?.type.name === "ProtectedGate"), path);
 });
 
 test("public home and monitor routes remain public, including legacy monitor redirects", () => {
@@ -39,6 +40,26 @@ test("public home and monitor routes remain public, including legacy monitor red
     assert.notEqual(matched(path).type, router.Navigate, path);
   }
   assert.equal(matched("/public/order/order-id?test=1").type.name, "LegacyPublicOrderRedirect");
+});
+
+test("authenticated admin routes render their page inside the protected shell instead of falling back home", () => {
+  const authenticated = { exports: {} };
+  const pages = { "./pages/HomePage": "Management page", "./pages/OrderPage": "Order details", "./pages/HumanizerPage": "Humanizer page", "./pages/ReactionsPage": "Reactions page" };
+  vm.runInNewContext(code, { exports: authenticated.exports, URLSearchParams, require(name) {
+    if (name === "react") return { ...React, useEffect() {}, useLayoutEffect() {}, useState: initial => [initial === "loading" ? "authenticated" : initial, () => {}] };
+    if (name === "react/jsx-runtime") return jsx;
+    if (name === "react-router-dom") return router;
+    if (name === "./components/SolarixWorkspace") return { SolarixProvider: ({ children }) => children, SolarixStockButton: () => null };
+    if (name in pages) return { default: () => React.createElement("div", null, pages[name]) };
+    return new Proxy({ default: () => null }, { get: (object, key) => object[key] ?? (() => null) });
+  } });
+  for (const [path, expected] of [["/console", "Management page"], ["/console?tab=settings", "Management page"], ["/orders", "Order details"], ["/humanizer", "Humanizer page"], ["/reactions", "Reactions page"]]) {
+    const html = renderToStaticMarkup(React.createElement(router.MemoryRouter, { initialEntries: [path] }, React.createElement(authenticated.exports.default)));
+    assert.ok(html.includes('id="main-content"'), path);
+    assert.ok(html.includes(expected), `${path} must render its protected content`);
+    assert.ok(html.includes('href="/console?tab=settings"'));
+    assert.ok(!html.includes('href="/manage'));
+  }
 });
 
 const server = ts.createSourceFile("index.mjs", fs.readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
