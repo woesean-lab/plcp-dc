@@ -13,7 +13,7 @@ Use the gallery and these source files as the reference for future UI work. Pref
 
 | UI | Source / usage | Reference |
 | --- | --- | --- |
-| Buttons | `src/components/ui/button.tsx` | `default`, `secondary`, `outline`, `ghost`, `accentGhost`, `destructive`, `dangerGhost`, `successGhost`, `link` |
+| Buttons | `src/components/ui/button.tsx` | `default`, `secondary`, `outline`, `ghost`, `accentGhost`, `destructive`, `dangerGhost`, `successGhost`, `link`. Link buttons have a transparent, shadow-free surface in normal and hover states; retain the shared keyboard focus outline. UI Kit includes the inline Refresh stock action. |
 | Row actions | `Button size="icon-sm"`; `community-member-row-actions` | Members Stock in `src/pages/HomePage.tsx`; 32px controls, standard rounded corners and shared hover |
 | On/Off switch | `src/components/ui/switch.tsx`, `switch.css`; UI Kit Fields | Shared controlled Switch uses a native button with role=switch, aria-checked and a required accessible label at usage. A borderless 52×28px theme-based track contains On/Off text and a sliding thumb. Green On, red Off; keyboard Space/Enter, focus, hover and disabled states remain. Reduced motion removes transitions. No CSS sizing overrides on row action Buttons. |
 | Rich Presence action | `community-rich-presence-action` plus existing Button variant | Members Stock star action; preserve the purple tint |

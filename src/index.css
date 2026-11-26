@@ -2934,6 +2934,7 @@
     border-color: transparent;
     color: var(--app-accent);
     background: transparent;
+    box-shadow: none;
   }
 
   .ui-button-link:hover {
