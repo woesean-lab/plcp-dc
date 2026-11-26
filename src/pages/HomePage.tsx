@@ -169,6 +169,7 @@ import { OrderReactionOption } from "../components/OrderReactionOption";
 import { BoostServiceField, type BoostServiceChoice } from "../components/BoostServiceField";
 import { BoostStockCounts } from "../components/BoostStockCounts";
 import { OrderConfirmationDialog } from "../components/OrderConfirmationDialog";
+import { copyBoostBypassInviteMessage } from "../lib/boost-invite-message";
 import { useSolarix } from "../components/SolarixWorkspace";
 import { BoostTokenFormatOption } from "../components/BoostTokenFormatOption";
 import { saveSalta7ApiKey, clearSalta7ApiKey, checkSalta7Connection } from "../lib/integration";
@@ -364,7 +365,6 @@ const EMPTY_COMMUNITY_CONFIG_DRAFT = {
 };
 
 const BOOST_MEMBERSHIP_SCREENING_MESSAGE = "Membership screening is enabled on this server. Disable the join form before boosting.";
-const BOOST_BYPASS_INVITE_MESSAGE = "Create a new invite with Bypass Join Application enabled and send us that new invite link.";
 
 const labelClass = "app-kicker";
 const fieldLabelClass = "field-label";
@@ -3175,15 +3175,6 @@ export default function HomePage() {
       notifyError(error instanceof Error ? error.message : "Order could not be created.");
     } finally {
       setCreating(false);
-    }
-  }
-
-  async function copyBoostBypassInviteMessage() {
-    try {
-      await navigator.clipboard.writeText(BOOST_BYPASS_INVITE_MESSAGE);
-      notifySuccess("Message copied.");
-    } catch {
-      notifyError("Message could not be copied.");
     }
   }
 

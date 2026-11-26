@@ -40,6 +40,10 @@
 .solarix-result-identity > div { display: grid; gap: 6px; min-width: 0; }
 .solarix-result-identity small { color: var(--app-subtle); font-size: 10px; }
 .solarix-result-identity code { color: var(--app-text-secondary); font-size: 11px; overflow-wrap: anywhere; }
+.solarix-invite-help { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; min-width: 0; padding: 14px; }
+.solarix-invite-help > div { flex: 1 1 220px; min-width: 0; }
+.solarix-invite-help strong { color: var(--app-text-secondary); font-size: 12px; font-weight: 650; }
+.solarix-invite-help p { margin: 6px 0 0; color: var(--app-muted); font-size: 11px; line-height: 1.6; }
 @container settings (max-width: 480px) {
   .solarix-result-heading { grid-template-columns: auto minmax(0, 1fr); }
   .solarix-result-heading > .status-badge { grid-column: 2; }

@@ -8,6 +8,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Skeleton } from "./ui/skeleton";
 import { SolarixSetupLink } from "./SolarixSettings";
+import { copyBoostBypassInviteMessage } from "../lib/boost-invite-message";
 import { getSolarixConfig, getSolarixDelivery, getSolarixStock, submitSolarixDelivery, SOLARIX_PREVIEW_STOCK, SolarixRequestError, type SolarixConfig, type SolarixInput, type SolarixReceipt, type SolarixStock } from "../lib/solarix-aio";
 import "./SettingsWorkspace.css";
 import "./SolarixWorkspace.css";
@@ -117,6 +118,7 @@ export function SolarixProvider({ children, preview = false, previewOutcome = "p
   const result = receipt?.result;
   const fullyDelivered = Boolean(result && receipt?.status === "completed" && result.boosted === receipt.input.amount);
   const undelivered = receipt && result ? Math.max(0, receipt.input.amount - result.boosted) : 0;
+  const showInviteHelp = receipt?.status === "failed" && !result && /invite|join application/i.test(receipt.message);
   const outcome = result ? fullyDelivered ? "Completed" : result.boosted > 0 ? "Partially delivered" : "Delivery failed" : receipt?.status === "uncertain" ? "Result not confirmed" : receipt?.status === "failed" ? "Request rejected" : "Delivering boosts";
   async function copyOrderId() { if (!result) return; try { await navigator.clipboard.writeText(result.orderId); toast.success("SolarixAIO order ID copied."); } catch { toast.error("Could not copy. Select the order ID manually."); } }
   return <SolarixContext.Provider value={{ openOrder, openStock: () => setMode("stock"), startOrder, config, stock, loading, error, refreshStock }}>{children}
@@ -130,6 +132,7 @@ export function SolarixProvider({ children, preview = false, previewOutcome = "p
         {mode === "order" && requestId ? <section className="solarix-result" data-outcome={running || !receipt ? "pending" : fullyDelivered ? "success" : "warning"} aria-live="polite" aria-label="SolarixAIO delivery result">
           <div className="solarix-result-heading"><span className="solarix-result-icon" aria-hidden="true">{running || !receipt ? <LoaderCircle className="h-6 w-6 animate-spin" /> : fullyDelivered ? <CheckCircle2 className="h-6 w-6" /> : <TriangleAlert className="h-6 w-6" />}</span><div><span className="app-kicker">SolarixAIO delivery</span><h4>{!receipt && !submitting ? "Restoring saved result" : running ? "Delivering your boosts" : fullyDelivered ? "All boosts delivered" : outcome}</h4><p>{result ? `${result.boosted} of ${receipt!.input.amount} requested boosts delivered.` : receipt?.message || (submitting ? "Sending your confirmed order." : "Checking the saved request.")}</p></div><Badge variant={running || !receipt ? "secondary" : fullyDelivered ? "success" : "destructive"}>{running || !receipt ? "Pending" : outcome}</Badge></div>
           {receipt ? <div className="app-panel-soft solarix-result-server"><span className="solarix-server-icon" aria-hidden="true"><Server className="h-5 w-5" /></span><div><strong>{result?.guildName || "Discord server"}</strong><span>{receipt.input.invite.includes("/") ? receipt.input.invite : `discord.gg/${receipt.input.invite}`}</span>{result ? <small>Server ID · {result.guildId}</small> : null}</div><Badge variant="secondary"><History className="h-3 w-3" />{receipt.input.duration === "3m" ? "3 Months" : "1 Month"}</Badge></div> : null}
+          {showInviteHelp ? <div className="app-panel-soft solarix-invite-help" role="group" aria-label="Invite help"><div><strong>Need a bypass invite?</strong><p>If the server uses a join application, request a new invite with <b>Bypass Join Application</b> enabled.</p></div><Button type="button" variant="secondary" size="sm" onClick={() => void copyBoostBypassInviteMessage()}><Copy className="h-3.5 w-3.5" aria-hidden="true" />Copy message</Button></div> : null}
           {result ? <>
             <dl className="solarix-result-counts"><div className="app-panel-soft"><dt>Requested</dt><dd>{receipt!.input.amount}<small>boosts</small></dd></div><div className="app-panel-soft" data-delivered="true"><dt>Delivered</dt><dd>{result.boosted}<small>boosts</small></dd></div><div className="app-panel-soft"><dt>Remaining</dt><dd>{undelivered}<small>boosts</small></dd></div></dl>
             <div className="solarix-delivery-total"><div><span>Delivery result</span><strong>{Math.round(result.boosted / receipt!.input.amount * 100)}%</strong></div><div className="monitor-live-progress-track" role="progressbar" aria-label="Delivered boosts" aria-valuenow={result.boosted} aria-valuemin={0} aria-valuemax={receipt!.input.amount}><span style={{ width: `${Math.min(100, result.boosted / receipt!.input.amount * 100)}%` }} /></div></div>

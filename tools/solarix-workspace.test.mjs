@@ -8,13 +8,16 @@ import * as jsx from "react/jsx-runtime";
 
 const compile = path => ts.transpileModule(fs.readFileSync(new URL(path, import.meta.url), "utf8"), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX } }).outputText;
 const code = compile("../src/components/SolarixWorkspace.tsx");
+const inviteMessageCode = compile("../src/lib/boost-invite-message.ts");
 const stock = { checkedAt: "2026-11-26T09:00:00Z", tiers: [{ duration: "1m", label: "1 Month", tokens: 60, boosts: 120 }, { duration: "3m", label: "3 Months", tokens: 20, boosts: 40 }] };
 const input = { invite: "sample", amount: 10, duration: "1m" };
 const text = node => typeof node === "string" || typeof node === "number" ? String(node) : Array.isArray(node) ? node.map(text).join("") : node?.props ? text(node.props.children) : "";
 function nodes(node, type) { return !node ? [] : Array.isArray(node) ? node.flatMap(item => nodes(item, type)) : typeof node === "object" && node.props ? [...(node.type === type ? [node] : []), ...nodes(node.props.children, type)] : []; }
 class SolarixRequestError extends Error { constructor(message, status) { super(message); this.status = status; } }
 function fixture({ restore, configured = true, unavailable = false } = {}) {
-  const slots = [], effects = [], timers = new Map(), submissions = [], reads = [], navigations = [], saved = new Map(restore ? [["solarix-aio:last-request", restore.id]] : []);
+  const slots = [], effects = [], timers = new Map(), submissions = [], reads = [], navigations = [], copied = [], saved = new Map(restore ? [["solarix-aio:last-request", restore.id]] : []);
+  const inviteMessageScope = { exports: {}, navigator: { clipboard: { writeText: async value => copied.push(value) } }, require: () => ({ default: { success() {}, error() {} } }) };
+  vm.runInNewContext(inviteMessageCode, inviteMessageScope);
   let cursor = 0, dirty = true, mounted = true, tree, counter = 0, receipt = restore;
   const dependencies = {
     react: {
@@ -27,6 +30,7 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
     },
     "react/jsx-runtime": jsx, "react-hot-toast": { default: { success() {}, error() {} } },
     "react-router-dom": { useNavigate: () => path => navigations.push(path) },
+    "../lib/boost-invite-message": inviteMessageScope.exports,
     "lucide-react": Object.fromEntries(["CheckCircle2", "Copy", "Gem", "History", "Server", "LoaderCircle", "RefreshCw", "TriangleAlert"].map(name => [name, "svg"])),
     "./OrderConfirmationDialog": { OrderConfirmationDialog: "confirmation" }, "./BotSettingsDialog": { BotSettingsDialog: "dialog" }, "./ui/badge": { Badge: "badge" }, "./ui/button": { Button: "button" }, "./ui/input": { Input: "input" }, "./ui/filter-dropdown": { FilterDropdown: "select" }, "./ui/skeleton": { Skeleton: "skeleton" }, "./SolarixSettings": { SolarixSetupLink: "setup" },
     "../lib/solarix-aio": {
@@ -41,7 +45,7 @@ function fixture({ restore, configured = true, unavailable = false } = {}) {
   vm.runInNewContext(code, scope);
   function render() { cursor = 0; dirty = false; tree = scope.exports.SolarixProvider({ children: null }); effects.splice(0).forEach(fn => fn()); }
   async function flush() { for (let i = 0; i < 10; i++) { if (dirty && mounted) render(); await new Promise(resolve => setImmediate(resolve)); if (!dirty) break; } }
-  return { flush, submissions, reads, saved, navigations, setReceipt: value => { receipt = value; }, get receipt() { return receipt; }, get tree() { return tree; },
+  return { flush, submissions, reads, saved, navigations, copied, setReceipt: value => { receipt = value; }, get receipt() { return receipt; }, get tree() { return tree; },
     async open() { tree.props.value.openOrder(); await flush(); },
     async refresh() { tree.props.value.refreshStock(); await flush(); },
     button(label) { const value = nodes(tree, "button").find(node => text(node) === label || node.props["aria-label"] === label); assert.ok(value, `Missing ${label}`); return value.props; },
@@ -80,6 +84,29 @@ test("reloading a saved request reads its receipt without making a new order", a
   assert.ok(text(f.tree).includes("Result not confirmed"));
   assert.ok(text(f.tree).includes(receipt.message));
   assert.equal(f.submissions.length, 0); assert.ok(f.reads.includes(receipt.id)); f.stop();
+});
+
+test("invite-related rejection copies the existing bypass request without resubmitting", async () => {
+  const receipt = { id: crypto.randomUUID(), input, status: "failed", message: "SolarixAIO rejected the invite, amount or available stock." };
+  const f = fixture({ restore: receipt }); await f.flush(); await f.open();
+  assert.ok(text(f.tree).includes("Need a bypass invite?"));
+  await f.button("Copy message").onClick(); await f.flush();
+  assert.deepEqual(f.copied, ["Create a new invite with Bypass Join Application enabled and send us that new invite link."]);
+  assert.equal(f.submissions.length, 0);
+  assert.equal(f.receipt.status, "failed");
+  f.stop();
+});
+
+test("license errors and unconfirmed delivery do not present invite guidance", async () => {
+  for (const receipt of [
+    { id: crypto.randomUUID(), input, status: "failed", message: "The SolarixAIO Boost Bot license is inactive." },
+    { id: crypto.randomUUID(), input, status: "uncertain", message: "SolarixAIO did not confirm the invite result." }
+  ]) {
+    const f = fixture({ restore: receipt }); await f.flush(); await f.open();
+    assert.equal(nodes(f.tree, "button").some(node => text(node) === "Copy message"), false);
+    assert.equal(f.submissions.length, 0);
+    f.stop();
+  }
 });
 
 test("Solarix always requires confirmation, cancellation sends nothing, and confirmation uses the reviewed snapshot", async () => {

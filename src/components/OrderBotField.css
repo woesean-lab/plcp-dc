@@ -2,4 +2,3 @@
 .lookup-service-name.order-bot-field strong { display: flex; align-items: center; gap: .35rem; min-width: 0; text-transform: none; }
 .order-bot-field strong > svg { flex-shrink: 0; color: var(--app-accent); }
 .order-bot-field .order-bot-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.order-bot-fruit { display: inline-flex; flex-shrink: 0; align-items: center; font-size: 14px; line-height: 1; }
