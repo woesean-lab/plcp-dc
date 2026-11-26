@@ -541,7 +541,11 @@ async function authorizeStockMemberForBot(config, member) {
   const onliner = await getDiscordOnlinerConfig({ hydrateMedia: false });
   const linked = onliner.accounts.find(account => account.botToken === accountToken);
   const proxyUrl = normalizeDiscordOnlinerProxyUrl(linked?.proxyUrl || selectDiscordOnlinerProxy(onliner));
-  if (!proxyUrl) throw new Error("Add an available authorization proxy before authorizing the order bot.");
+  if (!proxyUrl) {
+    await config.onSyncRoute?.({ mode: "unavailable", transport: "none" });
+    throw new Error("Add an available authorization proxy before authorizing the order bot.");
+  }
+  await config.onSyncRoute?.({ mode: "authorization", transport: "proxy", proxyUrl, source: linked?.proxyUrl ? "linked" : "pool" });
   const result = await authorizeCommunityStockAccount({ config, accountToken, proxyUrl, onlinerAccount: linked,
     redirectUri: config.redirectUri, gatewayBeforeAuth: config.gatewayBeforeAuth !== false }, {
     normalizeProxy: normalizeDiscordOnlinerProxyUrl, withGatewaySession: runWithHumanizerGatewaySession,
@@ -5205,6 +5209,7 @@ const communityOAuthRefreshEarlyMs = 48 * 60 * 60 * 1000;
 const communityOAuthRefreshIntervalMs = 24 * 60 * 60 * 1000;
 
 async function exchangeCommunityOAuthRefreshToken(config, refreshToken) {
+  await config.onSyncRoute?.({ mode: "refresh", transport: "server" });
   const requestRefresh = async () => {
     const response = await fetch(`${discordApiBase}/oauth2/token`, {
       method: "POST",
@@ -5284,6 +5289,7 @@ async function refreshStoredCommunityOAuthCredential(config, member, { force = f
   if (!isDiscordGuildId(discordUserId)) throw new Error("A valid Discord user is required for OAuth refresh.");
   const currentExpiry = new Date(member?.access_token_expires_at).getTime();
   if (!force && member?.encrypted_access_token && Number.isFinite(currentExpiry) && currentExpiry > Date.now() + communityOAuthRefreshEarlyMs) {
+    await config.onSyncRoute?.({ mode: "reused", transport: "none" });
     return {
       accessToken: decryptCredential(member.encrypted_access_token),
       expiresAt: new Date(currentExpiry),
@@ -5305,6 +5311,7 @@ async function refreshStoredCommunityOAuthCredential(config, member, { force = f
     const credential = current.rows[0] ?? member;
     const expiresAt = new Date(credential?.access_token_expires_at).getTime();
     if (!force && credential?.encrypted_access_token && Number.isFinite(expiresAt) && expiresAt > Date.now() + communityOAuthRefreshEarlyMs) {
+      await config.onSyncRoute?.({ mode: "reused", transport: "none" });
       return { accessToken: decryptCredential(credential.encrypted_access_token), expiresAt: new Date(expiresAt), refreshed: false };
     }
     if (!credential?.encrypted_refresh_token) {

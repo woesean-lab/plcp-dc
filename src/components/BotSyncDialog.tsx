@@ -113,7 +113,6 @@ export function BotSyncDialog({ clientId, name, onClose, onChanged, preview = fa
       else notifyBotSyncChange(next, name);
       setJob(next); setConfirmingStop(false);
       if (!botSyncActive(next)) { changed.current(); setRevision(value => value + 1); }
-      if (!preview && nextAction !== "cancel") onClose();
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update sync."); }
     finally { pending.current = false; if (mounted.current) setAction(null); }
   }

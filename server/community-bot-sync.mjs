@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { estimateBotSyncRemaining, recordBotSyncTiming } from "./community-bot-sync-timing.mjs";
+import { describeBotSyncRoute } from "./community-sync-route.mjs";
 
 export const BOT_SYNC_STORAGE_SQL = `CREATE TABLE IF NOT EXISTS community_bot_sync_jobs (
   id TEXT PRIMARY KEY, client_id TEXT NOT NULL, payload JSONB NOT NULL, status TEXT NOT NULL,
@@ -165,6 +166,15 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
       const progress = row.payload;
       const accountStartedAt = Date.now();
       const userId = progress.memberIds[progress.processed];
+      let route = null;
+      const onSyncRoute = async input => {
+        route = describeBotSyncRoute(input, userId);
+        progress.route = route;
+        // Publish before Discord work, using the same lease as the account result.
+        const saved = await pool.query(`UPDATE community_bot_sync_jobs SET payload=jsonb_set(payload,'{route}',$2::jsonb),updated_at=NOW()
+          WHERE id=$1 AND worker_token=$3 RETURNING id`, [row.id, JSON.stringify(route), owner]);
+        if (!saved.rows.length) throw Object.assign(new Error("This sync worker no longer owns the account."), { syncConfigurationInvalid: true });
+      };
       let status = "queued";
       try {
         let config;
@@ -175,7 +185,7 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
         const member = (await pool.query("SELECT * FROM community_oauth_joins WHERE guild_id=$1 AND discord_user_id=$2", [progress.guildId, userId])).rows[0];
         if (!member) throw new Error("This account is no longer in stock.");
         if (progress.categoryId && member.stock_type !== progress.categoryId) throw new Error("This account is no longer in the selected category.");
-        await synchronize({ ...config, redirectUri: progress.redirectUri }, member);
+        await synchronize({ ...config, redirectUri: progress.redirectUri, onSyncRoute }, member);
         progress.succeeded++;
       } catch (error) {
         if (error.statusCode === 429 || error.oauthRefreshTransient || error.syncConfigurationInvalid || error.statusCode >= 500) {
@@ -185,6 +195,10 @@ export function createBotSync({ pool, getConfig, loadBot, decrypt, synchronize, 
           if (progress.errors.length < 25) progress.errors.push({ userId, message: String(error.message || "Authorization failed.").slice(0, 300) });
         }
       }
+      if (route) {
+        progress.route = { ...route, status: status === "paused" ? "paused" : progress.failedIds.includes(userId) ? "failed" : "succeeded", updatedAt: new Date().toISOString() };
+        progress.routes = [progress.route, ...(progress.routes ?? [])].slice(0, 25);
+      } else delete progress.route;
       if (status !== "paused") { progress.processed++; recordBotSyncTiming(progress, accountStartedAt); }
       if (progress.processed >= progress.total) status = "completed";
       await pool.query(`UPDATE community_bot_sync_jobs SET payload=$2::jsonb,status=CASE WHEN status='cancelled' THEN status ELSE $3 END,

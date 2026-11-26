@@ -75,7 +75,10 @@ export function createOrderBotService({ pool, request, encrypt, decrypt, authori
       const stored = result.rows[0] ? JSON.parse(decrypt(result.rows[0].encrypted_value)) : null;
       if (stored && stored.clientId !== config.clientId) throw fail("Member authorization belongs to another application.");
       const reuseUntil = Date.now() + (config.oauthOnly && !stored?.refreshToken ? 0 : 48 * 60 * 60 * 1000);
-      if (!force && stored?.accessToken && Date.parse(stored.expiresAt) > reuseUntil) return stored.accessToken;
+      if (!force && stored?.accessToken && Date.parse(stored.expiresAt) > reuseUntil) {
+        await config.onSyncRoute?.({ mode: "reused", transport: "none" });
+        return stored.accessToken;
+      }
       let oauth;
       if (stored?.refreshToken) {
         try { oauth = await refresh(config, stored.refreshToken); }

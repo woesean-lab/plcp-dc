@@ -20,3 +20,14 @@ test("Stopping and paused jobs never show a running countdown", () => {
   assert.equal(stopping.includes("Est. remaining"), false);
   assert.equal(render({ status: "paused" }).includes("Est. remaining"), false);
 });
+
+test("connection details distinguish selected proxy endpoints, server refresh and unrecorded earlier jobs", () => {
+  const route = { userId: "123456789012345681", mode: "authorization", transport: "proxy", source: "pool", endpoint: "203.0.113.24:8080", status: "running", updatedAt: "2026-11-26T02:00:00Z" };
+  const html = render({ route, routes: [{ ...route, status: "succeeded" }] });
+  for (const text of ["Connection route", "Current account", route.userId, route.endpoint, "Onliner proxy pool", "public exit IP is not measured", "Copy proxy address", "Recent routes", "Sync does not add accounts to Onliner"]) assert.ok(html.includes(text), text);
+  const direct = render({ route: { ...route, mode: "refresh", transport: "server", source: "server", endpoint: null } });
+  assert.ok(direct.includes("Direct server request")); assert.ok(!direct.includes("Copy proxy address"));
+  const cached = render({ route: { ...route, mode: "reused", transport: "none", source: "none", endpoint: null } });
+  assert.ok(cached.includes("No Discord request"));
+  assert.ok(render().includes("Earlier requests were not recorded"));
+});

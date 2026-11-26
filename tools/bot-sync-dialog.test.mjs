@@ -95,7 +95,8 @@ test("completed results follow their category and Sync submits the selected scop
   f.select("online"); await f.flush(); assert.equal(f.progress, undefined);
   const click = f.button("Sync").onClick; click(); click(); await f.flush();
   assert.equal(f.commands.length, 1); assert.equal(f.commands[0].categoryId, "online"); assert.equal(f.commands[0].retry, false);
-  assert.equal(f.closes, 1); assert.equal(f.notices.length, 1);
+  assert.equal(f.closes, 0); assert.equal(f.notices.length, 1);
+  assert.equal(f.progress.status, "queued", "stay open to watch connection routes");
   f.stop();
 });
 
@@ -112,11 +113,11 @@ test("stale snapshots cannot undo terminal jobs, lower counters or conflate veri
 test("Resume and Retry failed send their distinct server commands in the saved category", async () => {
   const paused = fixture(base({ status: "paused" })); await paused.flush();
   paused.button("Resume").onClick(); await paused.flush();
-  assert.equal(paused.commands[0].action, "resume"); assert.equal(paused.closes, 1); paused.stop();
+  assert.equal(paused.commands[0].action, "resume"); assert.equal(paused.closes, 0); paused.stop();
   const failed = fixture(base({ status: "completed" })); await failed.flush();
   failed.select("online"); await failed.flush();
   failed.button("Retry failed (2)").onClick(); await failed.flush();
-  assert.equal(failed.commands[0].retry, true); assert.equal(failed.commands[0].categoryId, "online"); assert.equal(failed.closes, 1); failed.stop();
+  assert.equal(failed.commands[0].retry, true); assert.equal(failed.commands[0].categoryId, "online"); assert.equal(failed.closes, 0); failed.stop();
 });
 
 test("poll failures preserve progress and Refresh status only reads the job", async () => {

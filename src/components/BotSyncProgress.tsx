@@ -6,6 +6,7 @@ import { Badge } from "./ui/badge";
 import { Input } from "./ui/input";
 import { FilterDropdown } from "./ui/filter-dropdown";
 import { PaginatedList } from "./ListPagination";
+import { BotSyncRouteDetails } from "./BotSyncRouteDetails";
 import { BOT_SYNC_ERROR_TYPES, botSyncPolling, botSyncStatus, describeBotSyncError, formatBotSyncEta } from "../lib/bot-sync-state";
 import type { BotSyncJob } from "../lib/community";
 import "./BotSyncProgress.css";
@@ -47,6 +48,7 @@ export function BotSyncProgress({ job, categoryName }: { job: BotSyncJob; catego
     <div className="bot-sync-outcomes"><span><CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" /><strong>{job.succeeded.toLocaleString("en-US")}</strong> synced</span><span data-failed={job.failed > 0}><TriangleAlert className="h-3.5 w-3.5" aria-hidden="true" /><strong>{job.failed.toLocaleString("en-US")}</strong> failed</span><span>{Math.max(0, job.total - job.processed).toLocaleString("en-US")} remaining</span></div>
     {job.stopping ? <p className="settings-field-note" role="status">Stopping after the current account. No further accounts will start; the final result appears here.</p> : job.details ? <p className="settings-field-note" role={job.status === "paused" ? "status" : undefined}>{job.details}</p> : null}
     </div>
+    <BotSyncRouteDetails job={job} />
     {job.failed > 0 ? <details className="app-panel-soft bot-sync-errors">
       <summary><span><TriangleAlert className="h-4 w-4" aria-hidden="true" />Failed accounts<Badge variant="destructive">{job.failed.toLocaleString("en-US")}</Badge></span><ChevronDown className="h-4 w-4" aria-hidden="true" /></summary>
       <div className="bot-sync-errors-body">

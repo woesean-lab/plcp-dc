@@ -257,6 +257,54 @@ test("notification feed reports a completion missed while the browser was closed
   assert.deepEqual(await api.notifications(), []);
 }));
 
+test("connection routes are visible before Discord work and survive completion without proxy credentials", options, () => fixture(async ({ api, add, setBehavior, controller }) => {
+  await add(0, "offline"); await api.start(bot, { categoryId: "offline" });
+  let release, entered;
+  const ready = new Promise(resolve => { entered = resolve; });
+  setBehavior(async settings => {
+    await settings.onSyncRoute({ mode: "authorization", transport: "proxy", source: "pool", proxyUrl: "http://private-user:private-pass@proxy.example:8080/private-path?secret=private-value" });
+    entered(); await new Promise(resolve => { release = resolve; });
+  });
+  const work = api.tick(); await ready;
+  const current = await controller().latest(bot);
+  assert.equal(current.route.endpoint, "proxy.example:8080"); assert.equal(current.route.status, "running");
+  assert.equal(current.route.userId, ids[0]); assert.equal(current.processed, 0);
+  assert.doesNotMatch(JSON.stringify(current), /private-|proxyUrl|encrypted/);
+  release(); await work;
+  const done = await controller().latest(bot);
+  assert.equal(done.route.status, "succeeded"); assert.equal(done.routes.length, 1);
+  assert.equal(done.routes[0].source, "pool");
+  const feed = await api.notifications(); assert.equal(feed[0].route, undefined, "account diagnostics stay out of global notifications");
+}));
+
+test("route history is capped and paused refresh can finish with a different authorization route", options, () => fixture(async ({ api, add, setBehavior }) => {
+  for (let index = 0; index < 28; index++) await add(index);
+  await api.start(bot);
+  setBehavior(async settings => { await settings.onSyncRoute({ mode: "refresh", transport: "server" }); throw Object.assign(Error("Limited"), { statusCode: 429 }); });
+  await api.tick();
+  const paused = await api.latest(bot);
+  assert.equal(paused.route.mode, "refresh"); assert.equal(paused.route.status, "paused"); assert.equal(paused.processed, 0);
+  await api.resume(bot);
+  setBehavior(async settings => { await settings.onSyncRoute({ mode: "authorization", transport: "proxy", source: "linked", proxyUrl: "socks5://u:p@proxy.example:1080" }); });
+  for (let index = 0; index < 28; index++) await api.tick();
+  const done = await api.latest(bot);
+  assert.equal(done.routes.length, 25); assert.equal(done.route.endpoint, "proxy.example:1080");
+  assert.equal(done.route.status, "succeeded"); assert.equal(done.routes[0].userId, ids[27]);
+}));
+
+test("a stale worker cannot publish a route or continue its network work", options, () => fixture(async ({ api, add, setBehavior, db }) => {
+  await add(0); await api.start(bot);
+  let didNetworkWork = false;
+  setBehavior(async settings => {
+    await db.exec("UPDATE community_bot_sync_jobs SET worker_token='new-owner'");
+    await settings.onSyncRoute({ mode: "authorization", transport: "proxy", proxyUrl: "http://proxy:8080" });
+    didNetworkWork = true;
+  });
+  await api.tick();
+  assert.equal(didNetworkWork, false);
+  assert.equal((await api.latest(bot)).route, undefined);
+}));
+
 const source = fs.readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
 const ast = ts.createSourceFile("index.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 const synchronizeCode = ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "synchronizeStockMemberForBot").getText(ast);
