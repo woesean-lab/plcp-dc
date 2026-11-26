@@ -222,7 +222,7 @@ function ProtectedShell({ onSignedOut }: { onSignedOut: () => void }) {
             <Route path="/humanizer" element={<HumanizerPage />} />
             <Route path="/reactions" element={<ReactionsPage />} />
             <Route path="/ui-kit" element={<Suspense fallback={<div className="app-panel p-6 text-sm text-[var(--app-muted)]" role="status">Loading UI Kit…</div>}><UiKitPage /></Suspense>} />
-            <Route path="*" element={<Navigate to="/manage?tab=create" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </main>
 
@@ -292,7 +292,10 @@ export default function App() {
         <Route path="/monitor/:uniqid" element={<PublicOrderPage />} />
         <Route path="/monitor/*" element={<PublicOrderPage />} />
         <Route path="/public/order/:uniqid" element={<LegacyPublicOrderRedirect />} />
-        <Route path="*" element={<ProtectedGate />} />
+        {["/manage", "/admin", "/orders", "/humanizer", "/reactions", "/ui-kit"].map(path => (
+          <Route key={path} path={path} element={<ProtectedGate />} />
+        ))}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
       <Toaster
