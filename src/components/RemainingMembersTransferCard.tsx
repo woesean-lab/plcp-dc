@@ -52,7 +52,7 @@ export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
     </div>
     {receipt ? <>
       <p className="monitor-transfer-copy">Moved to {receipt.serverName}.</p>
-      <Button asChild variant="secondary"><Link to={`/monitor/${encodeURIComponent(receipt.orderId)}`}>Open new monitor<ArrowUpRight className="h-4 w-4" aria-hidden="true" /></Link></Button>
+      <Button asChild variant="secondary"><Link to={`/monitor/${encodeURIComponent(receipt.orderId)}`} target="_blank" rel="noopener noreferrer">Open new monitor<ArrowUpRight className="h-4 w-4" aria-hidden="true" /></Link></Button>
     </> : <form onSubmit={event => { event.preventDefault(); void prepare(); }}>
       <div className="monitor-transfer-fields">
         <label className="boost-order-field" htmlFor={`${inputId}-amount`}>

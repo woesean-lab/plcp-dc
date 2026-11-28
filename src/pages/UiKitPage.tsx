@@ -262,7 +262,7 @@ function RemainingMembersTransferExample() {
     }} onTransfer={async () => {
       await new Promise(resolve => setTimeout(resolve, 700));
       if (mode === 'error') throw new Error('The invite could not be resolved. Check the link and try again.');
-      toast.success('Preview: waiting members transferred; support end dates unchanged.');
+      toast.success('Preview: transferred. The new monitor opens in a separate tab.');
       setMode('transferred');
     }} /></div>
   </div>;

@@ -3,7 +3,7 @@ import { getCommunitySpeedPattern, getCommunityDeliveryEstimateSeconds, getCommu
 import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { RemainingMembersTransferCard } from "../components/RemainingMembersTransferCard";
 import { previewPublicCommunityOrderTransfer, transferPublicCommunityOrderMembers } from "../lib/integration";
 import { getCommunityDeliveryTransfer } from "../../shared/community-delivery-transfer.mjs";
@@ -24,7 +24,7 @@ import { CustomerOrderReactionPanel } from "../components/CustomerOrderReactionP
 import { MemberDeliveryAccordion, MemberDeliveryRow } from "../components/MemberDeliveryRow";
 import { MemberDeliveryPanel } from "../components/MemberDeliveryPanel";
 import { useMemberLogOrder } from "../lib/use-member-log-order";
-import type { OrderStatusResponse } from "../types";
+import type { CommunityDeliveryTransferPreview, OrderStatusResponse } from "../types";
 
 const AUTO_REFRESH_SECONDS = 10;
 const DELAY_UPDATE_COOLDOWN_SECONDS = 60;
@@ -287,6 +287,7 @@ export default function PublicOrderPage() {
   const [communityCheckNeedsBot, setCommunityCheckNeedsBot] = useState(false);
   const [delayDraft, setDelayDraft] = useState("");
   const [error, setError] = useState("");
+  const [completedTransfer, setCompletedTransfer] = useState<{ sourceId: string; monitorPath: string } | null>(null);
   const [secondsUntilRefresh, setSecondsUntilRefresh] = useState(AUTO_REFRESH_SECONDS);
   const [delayUpdateCooldown, setDelayUpdateCooldown] = useState(0);
   const [restartCooldown, setRestartCooldown] = useState(0);
@@ -873,12 +874,34 @@ export default function PublicOrderPage() {
     </div>
   ) : null;
 
+  async function handleDeliveryTransfer(invite: string, preview: CommunityDeliveryTransferPreview) {
+    if (!status) throw new Error("Order could not be found.");
+    const sourceId = status.uniqid;
+    // Open during the confirmation click, before awaiting the API response.
+    let monitorTab: Window | null = null;
+    try {
+      monitorTab = window.open("about:blank", "_blank");
+      if (monitorTab) { monitorTab.opener = null; monitorTab.document.title = "Preparing monitor…"; }
+    } catch { /* The source monitor will retain a direct link. */ }
+    const closePendingTab = () => { try { monitorTab?.close(); } catch { /* Already closed. */ } };
+    let result;
+    try { result = await transferPublicCommunityOrderMembers(sourceId, invite, preview); }
+    catch (error) { closePendingTab(); throw error; }
+    setCompletedTransfer({ sourceId, monitorPath: result.monitorPath });
+    try { if (monitorTab && !monitorTab.closed) monitorTab.location.replace(result.monitorPath); }
+    catch { closePendingTab(); }
+    // Keep the source order current without navigating away or retrying a successful transfer.
+    void getPublicOrderStatus(sourceId).then(source => {
+      setStatus(current => current?.uniqid === sourceId ? mergeOrderStatus(current, source) : current);
+    }).catch(() => {});
+  }
+
+  const transferMonitorPath = status?.remainingTransfer
+    ? `/monitor/${encodeURIComponent(status.remainingTransfer.orderId)}`
+    : completedTransfer?.sourceId === uniqid ? completedTransfer.monitorPath : null;
   const transferEligibility = getCommunityDeliveryTransfer(status, Date.now(), status?.deliveryTransferStatuses ?? []);
   const transferPanel = isCommunityOrder && status && transferEligibility.statusAllowed && (transferEligibility.count > 0 || status.remainingTransfer) ? (
-    <RemainingMembersTransferCard key={status.uniqid} order={status} onPreview={invite => previewPublicCommunityOrderTransfer(status.uniqid, invite)} onTransfer={async (invite, preview) => {
-      const result = await transferPublicCommunityOrderMembers(status.uniqid, invite, preview);
-      window.location.assign(result.monitorPath);
-    }} />
+    <RemainingMembersTransferCard key={status.uniqid} order={status} onPreview={invite => previewPublicCommunityOrderTransfer(status.uniqid, invite)} onTransfer={handleDeliveryTransfer} />
   ) : null;
 
   const boostDeliveryControl = isBoostOrder && canManageDcordTokens && !isTerminalStatus ? (
@@ -1053,6 +1076,7 @@ export default function PublicOrderPage() {
                     <p className="monitor-progress-summary">
                       {status?.remainingTransfer ? `${status.remainingTransfer.amount} members moved to another order. Support end dates are unchanged.` : isCompleted ? "Order completed." : isErrorStatus ? "Delivery failed." : "Delivery status updates automatically."}
                     </p>
+                    {transferMonitorPath ? <Button asChild variant="link" size="sm"><Link to={transferMonitorPath} target="_blank" rel="noopener noreferrer">Open new monitor<ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /></Link></Button> : null}
                   </div>
                   <div className="monitor-live-progress-value">
                     <strong>{progress === null ? "-" : `${progressPercent}%`}</strong>
