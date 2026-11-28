@@ -4,6 +4,7 @@ import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-
 import { createBotOrderSettings, registerBotOrderSettings } from "./community-bot-order-settings.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
 import { createManagedBotResolver, withoutManagedBotProfiles } from "./community-bot-management.mjs";
+import { planBotOnlinerConnection } from "./community-bot-onliner.mjs";
 import { createBotSync, registerBotSync, startBotSyncWorker, BOT_SYNC_STORAGE_SQL } from "./community-bot-sync.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
@@ -1809,7 +1810,9 @@ function normalizeDiscordOnlinerConfig(value = {}) {
       id,
       botToken: String(account?.botToken ?? "").trim().slice(0, 2000),
       proxyUrl: normalizeDiscordOnlinerProxyUrl(account?.proxyUrl),
-      richPresenceEnabled: account?.richPresenceEnabled !== false,
+      richPresenceEnabled: account?.communityBotOnlinerEnabled === true ? false : account?.richPresenceEnabled !== false,
+      ...(account?.communityBotOnlinerEnabled === true && isDiscordGuildId(String(account?.communityBotClientId ?? ""))
+        ? { communityBotClientId: String(account.communityBotClientId), communityBotOnlinerEnabled: true } : {}),
       discordUserId: isDiscordGuildId(String(account?.discordUserId ?? "")) ? String(account.discordUserId) : null
     };
   }).filter((account) => account.botToken).slice(0, discordOnlinerAccountLimit);
@@ -2685,6 +2688,13 @@ function buildDiscordOnlinerPresence(config, runtime, chooseNext = false) {
 }
 
 function buildDiscordOnlinerAccountPresence(config, account, runtime, chooseNext = false) {
+  if (account.communityBotClientId) {
+    runtime.currentStatus = "online";
+    runtime.currentActivities = [];
+    runtime.currentActivity = null;
+    runtime.currentActivityType = "none";
+    return { since: null, activities: [], status: "online", afk: false };
+  }
   if (account.richPresenceEnabled !== false) return buildDiscordOnlinerPresence(config, runtime, chooseNext);
   if (chooseNext || !runtime.currentStatus) {
     runtime.currentStatus = chooseDiscordOnlinerStatus(config, runtime);
@@ -2759,7 +2769,9 @@ function getDiscordOnlinerAgeLabel(timestamp, now = Date.now()) {
 
 async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
   try {
-    const identity = await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
+    const identity = account.communityBotClientId
+      ? await requestDiscord("users/@me", { headers: { Authorization: `Bot ${account.botToken}` } })
+      : await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
     const status = Number(identity.response.status) || 0;
     const code = Number(identity.payload?.code ?? 0);
     if (identity.response.ok) {
@@ -2782,7 +2794,7 @@ async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
 }
 
 function connectDiscordOnliner(config, account, runtime, generation) {
-  if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
+  if (generation !== runtime.generation || !config.enabled || !account.botToken || (!account.proxyUrl && !account.communityBotClientId)) return;
   runtime.startupTimer = null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   runtime.heartbeatAcknowledged = true;
@@ -2947,7 +2959,11 @@ function connectDiscordOnliner(config, account, runtime, generation) {
         appendDiscordOnlinerLog("info", `RESUME payload sent to Discord (seq ${sequence}).`, account.id);
       } else {
         const presence = buildDiscordOnlinerAccountPresence(runtime.config ?? config, account, runtime, true);
-        socket.send(JSON.stringify({ op: 2, d: {
+        socket.send(JSON.stringify({ op: 2, d: account.communityBotClientId ? {
+          token: account.botToken,
+          properties: { os: process.platform, browser: "Pulcip Onliner", device: "Pulcip Onliner" },
+          intents: 0, presence
+        } : {
           token: account.botToken, properties: createDiscordGatewayIdentityProperties(), presence,
           capabilities: 16381, compress: false, client_state: createDiscordGatewayClientState()
         } }));
@@ -3181,7 +3197,7 @@ function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0, onConn
     queueDiscordOnlinerRuntimePersist(runtime);
     return;
   }
-  if (!account.proxyUrl) {
+  if (!account.proxyUrl && !account.communityBotClientId) {
     runtime.state = "error";
     runtime.lastError = "A dedicated proxy is required before this bot can connect.";
     appendDiscordOnlinerLog("error", runtime.lastError, account.id);
@@ -10222,6 +10238,30 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
 registerCommunityBotPool(app, requireSession, communityBotPool);
 registerBotOrderSettings(app, requireSession, botOrderSettings);
 const resolveManagedCommunityBot = createManagedBotResolver({ getSharedConfig: getCommunityOAuthConfig, loadPoolConfig: communityBotPool.load });
+app.get("/api/community/bots/onliner", requireSession, async (_req, res, next) => {
+  try {
+    const config = await getDiscordOnlinerConfig({ hydrateMedia: false });
+    res.set("Cache-Control", "no-store").json({ bots: config.accounts
+      .filter(account => account.communityBotOnlinerEnabled === true)
+      .map(account => ({ clientId: account.communityBotClientId, accountId: account.id })) });
+  } catch (error) { next(error); }
+});
+
+app.post("/api/community/bots/:clientId/onliner", requireSession, async (req, res, next) => {
+  try {
+    const bot = await resolveManagedCommunityBot(String(req.params.clientId ?? ""));
+    const current = await getDiscordOnlinerConfig({ hydrateMedia: false });
+    const plan = planBotOnlinerConnection(current, bot, discordOnlinerAccountLimit);
+    const candidate = normalizeDiscordOnlinerConfig(plan.config);
+    await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
+    if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
+      await reconcileDiscordOnlinerWorkerConfig(discordOnlinerWorkerCurrentConfig ?? current, candidate);
+    }
+    res.status(plan.alreadyExisted ? 200 : 201).set("Cache-Control", "no-store").json({
+      accountId: plan.account.id, alreadyExisted: plan.alreadyExisted, onlinerEnabled: candidate.enabled
+    });
+  } catch (error) { next(error); }
+});
 registerBotAuthorizations(app, requireSession, botAuthorizations);
 registerBotSync(app, requireSession, botSync);
 

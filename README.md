@@ -235,4 +235,14 @@ Onliner hesaplari merkezi proxy havuzundan en az kullanilan saglikli proxy'yi ot
 Basarisiz proxyler gecici cooldown'a girer. Hesap bazinda Rich Presence kapatilabilir ve proxy
 manuel olarak degistirilebilir.
 
+Settings > Bots satirindaki **Connect to Onliner** aksiyonu, secilen default veya
+havuz botunu kayitli tokeniyla mevcut Onliner profillerine ekler. Rich Presence
+kapalidir; bot `online` ve bos aktiviteyle baglanir. Buton kayit sirasinda spinner,
+kayittan sonra **Added to Onliner** gosterir; bu kayit durumudur, canli baglanti
+onayi degildir. Baglanti ve hatalar mevcut Onliner ekranindan izlenir. Genel
+Onliner kapaliysa acilmasi gerekir; duraklatilmissa Continue kullanilir.
+Botlar kendiliginden topluca eklenmez. Mevcut worker ayar degisikligini bir sonraki
+poll dongusunde alir; her baglama icin restart gerekmez. Botlar proxy havuzundan
+proxy ayirmaz. Kontrol: `node --test server/community-bot-onliner.test.mjs`.
+
 Gerekli ortam degiskenleri `.env.example` dosyasinda listelenmistir.

@@ -29,6 +29,10 @@
   .bot-directory-table td:nth-child(n+2):nth-child(-n+5) { grid-row: 2; }
   .bot-directory-mobile-label { display: block; margin-bottom: 6px; color: var(--app-muted); font-size: 10px; }
 }
+@container bot-directory (max-width: 600px) {
+  .bot-directory-table td:first-child { grid-column: 1 / -1; }
+  .bot-directory-table td:last-child { grid-column: 1 / -1; grid-row: 3; }
+}
 @container bot-directory (max-width: 440px) {
   .bot-directory-table tbody tr { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding: 16px 12px; }
   .bot-directory-table td:first-child { grid-column: 1 / -1; }
