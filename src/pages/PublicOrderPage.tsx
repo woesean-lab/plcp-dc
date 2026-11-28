@@ -4,6 +4,9 @@ import { PaginatedList } from "../components/ListPagination";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
+import { RemainingMembersTransferCard } from "../components/RemainingMembersTransferCard";
+import { transferPublicCommunityOrderMembers } from "../lib/integration";
+import { getCommunityDeliveryTransfer } from "../../shared/community-delivery-transfer.mjs";
 import { Button } from "@/components/ui/button";
 import { StatusField } from "../components/ui/status-field";
 import { Input } from "@/components/ui/input";
@@ -489,7 +492,7 @@ export default function PublicOrderPage() {
     typeof status?.amount === "number" ? status.amount : typeof status?.quantity === "number" ? status.quantity : seed.amount;
   const membersAdded = typeof status?.added === "number" ? status.added : undefined;
   const membersRemaining =
-    typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded, 0) : undefined;
+    typeof totalMembers === "number" && typeof membersAdded === "number" ? Math.max(totalMembers - membersAdded - (status?.remainingTransfer?.amount || 0), 0) : undefined;
   const currentDelay = typeof status?.delay === "number" ? status.delay : parseNumber(status?.delay) ?? seed.delay;
   const speedProfile = typeof status?.speedProfile === "string" ? status.speedProfile : "custom";
   const speedPattern = getCommunitySpeedPattern(speedProfile, membersAdded);
@@ -545,6 +548,7 @@ export default function PublicOrderPage() {
   const leaveProgress = leavingAllMembers && status?.memberLeaveProgress?.startedAt === leaveAttemptBeforeStart.current
     ? { processed: 0, total: leaveAttemptTotal.current } : status?.memberLeaveProgress;
   const isOnlinerReplacementEligible = (item: CommunityMemberResult) => {
+    if (item.state.toLowerCase() === "cancelled") return false;
     if (item.onlinerLive !== false) return false;
     const allocation = getCommunityResultAllocation({ categoryAllocations, categoryId: status?.categoryId }, item);
     if ((allocation?.checkReplacementEnabled ?? status?.categoryCheckReplacementEnabled) === false) return false;
@@ -869,6 +873,14 @@ export default function PublicOrderPage() {
     </div>
   ) : null;
 
+  const transferEligibility = getCommunityDeliveryTransfer(status, Date.now(), status?.deliveryTransferStatuses ?? []);
+  const transferPanel = isCommunityOrder && status && transferEligibility.statusAllowed && (transferEligibility.count > 0 || status.remainingTransfer) ? (
+    <RemainingMembersTransferCard key={status.uniqid} order={status} onTransfer={async invite => {
+      const result = await transferPublicCommunityOrderMembers(status.uniqid, invite);
+      window.location.assign(result.monitorPath);
+    }} />
+  ) : null;
+
   const boostDeliveryControl = isBoostOrder && canManageDcordTokens && !isTerminalStatus ? (
     <div className="monitor-control-panel">
       <div className="monitor-panel-heading">
@@ -1037,9 +1049,9 @@ export default function PublicOrderPage() {
                 <div className="monitor-live-progress-heading">
                   <div>
                     <p className="app-kicker">Live delivery</p>
-                    <h2>{isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
+                    <h2>{status?.remainingTransfer ? "Waiting members transferred" : isCompleted ? "Order completed" : isErrorStatus ? "Delivery stopped" : normalizedStatus === "PARTIAL" ? "Delivery incomplete" : isRecoveringDelivery ? "Restoring delivery" : isDeliveryPaused || isDcordDeliveryPaused || isInvitesPaused ? "Delivery paused" : isWaiting ? "Waiting to start" : "Delivery in progress"}</h2>
                     <p className="monitor-progress-summary">
-                      {isCompleted ? "Order completed." : isErrorStatus ? "Delivery failed." : "Delivery status updates automatically."}
+                      {status?.remainingTransfer ? `${status.remainingTransfer.amount} members moved to another order. Support end dates are unchanged.` : isCompleted ? "Order completed." : isErrorStatus ? "Delivery failed." : "Delivery status updates automatically."}
                     </p>
                   </div>
                   <div className="monitor-live-progress-value">
@@ -1095,9 +1107,10 @@ export default function PublicOrderPage() {
 
               <div className={`monitor-workspace ${isBoostOrder ? "is-boost" : isCommunityOrder ? "is-community" : ""}`.trim()}>
                 {boostDeliveryControl}
-                {delayUpdatePanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel ? (isCommunityOrder && status?.customerReactions?.enabled ? "is-paired" : "is-delay-only") : ""}`.trim()}>
+                {delayUpdatePanel || transferPanel || (isCommunityOrder && status?.customerReactions?.enabled) ? <div className={`monitor-order-controls ${delayUpdatePanel ? (transferPanel || (isCommunityOrder && status?.customerReactions?.enabled) ? "is-paired" : "is-delay-only") : ""}`.trim()}>
                   {delayUpdatePanel}
-                  {isCommunityOrder && status?.customerReactions?.enabled ? <CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /> : null}
+                  {transferPanel}
+                  {isCommunityOrder && status?.customerReactions?.enabled ? <div className={transferPanel ? "monitor-transfer-reactions" : ""}><CustomerOrderReactionPanel key={uniqid} uniqid={uniqid} summary={status.customerReactions} onUpdate={(order) => setStatus((current) => mergeOrderStatus(current, order))} /></div> : null}
                 </div> : null}
 
                 {isCommunityOrder ? (

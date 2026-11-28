@@ -11,6 +11,7 @@ import type { CommunityBotGuild, CommunityConfig, CommunityConfigInput, Communit
 import "./SettingsWorkspace.css";
 import EldoradoIntegrationSettings from "./EldoradoIntegrationSettings";
 import AutoReplaceSettings from "./AutoReplaceSettings";
+import DeliveryTransferSettings from "./DeliveryTransferSettings";
 import SolarixSettings from "./SolarixSettings";
 
 export type SettingsWorkspaceProps = {
@@ -158,6 +159,7 @@ export default function SettingsWorkspace({ loading, error, onRefresh, members, 
             <SolarixSettings preview={integrationPreview} onConfigured={setSolarixConfigured} />
             <EldoradoIntegrationSettings preview={integrationPreview} onConfigured={setIntegrationConfigured} />
             <AutoReplaceSettings preview={integrationPreview} />
+            <DeliveryTransferSettings preview={integrationPreview} />
           </div>
         </div>
 

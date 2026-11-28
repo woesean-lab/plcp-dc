@@ -49,6 +49,14 @@ export function getAdminConfig() {
   return requestJson<{ dcordConfigured: boolean; salta7Configured?: boolean; boostStock: BoostStock }>("/api/admin/config");
 }
 
+export type DeliveryTransferSettings = { statuses: string[] };
+export function getDeliveryTransferSettings() {
+  return requestJson<DeliveryTransferSettings>("/api/settings/delivery-transfer");
+}
+export function saveDeliveryTransferSettings(settings: DeliveryTransferSettings) {
+  return requestJson<DeliveryTransferSettings>("/api/settings/delivery-transfer", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(settings) });
+}
+
 export type AutoReplaceLimits = { members: number; boosts: number };
 export function getAutoReplaceSettings() {
   return requestJson<AutoReplaceLimits>("/api/settings/auto-replace");
@@ -99,7 +107,7 @@ export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "boost-pause" | "boost-resume" | "reaction-message" | "reaction-cancel", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "boost-pause" | "boost-resume" | "reaction-message" | "reaction-cancel" | "transfer-remaining", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -133,6 +141,12 @@ export function updatePublicOrderDelay(uniqid: string, delay: number, speedProfi
 
 export function restartPublicCommunityOrder(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "community-restart", { method: "POST" });
+}
+
+export function transferPublicCommunityOrderMembers(uniqid: string, invite: string) {
+  return requestPublicOrderApi<{ order: OrderStatusResponse; monitorPath: string }>(uniqid, "transfer-remaining", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invite })
+  });
 }
 
 export function pausePublicCommunityOrder(uniqid: string) {

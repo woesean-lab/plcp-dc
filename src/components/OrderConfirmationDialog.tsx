@@ -3,8 +3,9 @@ import { createPortal } from "react-dom";
 import { Bot, Check, ExternalLink, LoaderCircle } from "lucide-react";
 import { Button } from "./ui/button";
 
-export function OrderConfirmationDialog({ service, amount, invite, description = "Creates the order and reserves its stock.", busy = false, onClose, onConfirm, children }: {
+export function OrderConfirmationDialog({ service, amount, invite, description = "Creates the order and reserves its stock.", title = "Create this order?", confirmLabel = "Confirm order", busyLabel = "Creating...", busy = false, onClose, onConfirm, children }: {
   service: string; amount: number; invite: string; description?: string; busy?: boolean;
+  title?: string; confirmLabel?: string; busyLabel?: string;
   onClose: () => void; onConfirm: () => void; children?: ReactNode;
 }) {
   const id = useId();
@@ -29,14 +30,14 @@ export function OrderConfirmationDialog({ service, amount, invite, description =
     }}>
       <span className="confirm-modal-icon is-success" aria-hidden="true"><Check className="h-5 w-5" /></span>
       <p className="app-kicker text-[var(--app-accent)]">Order confirmation</p>
-      <h2 id={`${id}-title`}>Create this order?</h2>
+      <h2 id={`${id}-title`}>{title}</h2>
       <p id={`${id}-description`}>{description}</p>
       <div className="order-confirm-summary">
         <div className="order-confirm-primary"><span className="order-confirm-service-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span><span className="order-confirm-primary-copy"><small>Service</small><strong>{service}</strong></span><span className="order-confirm-amount"><small>Amount</small><strong>{amount}</strong></span></div>
         <div className="order-confirm-target"><ExternalLink className="h-3.5 w-3.5" aria-hidden="true" /><span><small>Discord invite</small><strong>{invite}</strong></span></div>
         {children}
       </div>
-      <div className="confirm-modal-actions"><Button ref={cancel} type="button" variant="secondary" disabled={busy} onClick={onClose}>Go back</Button><Button type="button" disabled={busy} onClick={onConfirm}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}{busy ? "Creating..." : "Confirm order"}</Button></div>
+      <div className="confirm-modal-actions"><Button ref={cancel} type="button" variant="secondary" disabled={busy} onClick={onClose}>Go back</Button><Button type="button" disabled={busy} onClick={onConfirm}>{busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Check className="h-4 w-4" aria-hidden="true" />}{busy ? busyLabel : confirmLabel}</Button></div>
     </div>
   </div>, document.body);
 }

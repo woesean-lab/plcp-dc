@@ -31,6 +31,8 @@ import { OrderDetailDisclosure } from "../components/OrderDetailDisclosure";
 import { OrderDetailsLayout } from "../components/OrderDetailsLayout";
 import { OrderBotField } from "../components/OrderBotField";
 import { OrderStatusIndicator } from "../components/OrderStatusIndicator";
+import { RemainingMembersTransferCard } from "../components/RemainingMembersTransferCard";
+import DeliveryTransferSettings from "../components/DeliveryTransferSettings";
 import { HumanizerRunHeader } from "../components/HumanizerRunHeader";
 import { MemberActivityAvatar } from "../components/MemberActivityAvatar";
 import SettingsWorkspace from "../components/SettingsWorkspace";
@@ -236,6 +238,27 @@ function MemberSpeedExample() {
       </CommunitySpeedProfileOptions>
     </div>
     <div className="monitor-control-panel" style={{ width: "100%", maxWidth: Number(previewWidth) }}><div className="monitor-panel-heading"><span className="monitor-panel-icon" aria-hidden="true"><Timer className="h-4 w-4" /></span><div><p className="app-kicker">Delivery control</p><h2>Join delay</h2></div></div><CommunitySpeedProfileOptions value={profile} added={added} onChange={setProfile} /><CommunitySpeedProfileOptions value="balanced2" added={added} onChange={() => {}} disabled /></div>
+  </div>;
+}
+
+function RemainingMembersTransferExample() {
+  const [mode, setMode] = useState('ready');
+  const modes = ['ready', 'active', 'expired', 'transferred', 'error'];
+  const source = {
+    uniqid: 'preview-source', provider: 'community', categoryName: 'OAuth Offline', amount: 500, added: 139,
+    deliveryTransferStatuses: ['INVITES PAUSED'],
+    status: mode === 'active' ? 'PROCESS' : 'INVITES PAUSED', expiredAt: mode === 'expired' ? '2000-01-01' : '2099-12-28T12:00:00Z',
+    communityResults: Array.from({ length: 361 }, () => ({ state: 'queued' })),
+    ...(mode === 'transferred' ? { remainingTransfer: { orderId: 'preview-destination', amount: 361, serverName: 'New server', transferredAt: '2026-11-28' } } : {})
+  };
+  return <div className="ui-ref-stack">
+    <div className="stock-duration-filter" role="group" aria-label="Transfer preview state">{modes.map(value => <button key={value} type="button" className={mode === value ? 'is-active' : ''} aria-pressed={mode === value} onClick={() => setMode(value)}>{value}</button>)}</div>
+    <div className="monitor-order-controls is-paired"><RemainingMembersTransferCard key={mode} order={source} onTransfer={async () => {
+      await new Promise(resolve => setTimeout(resolve, 700));
+      if (mode === 'error') throw new Error('The invite could not be resolved. Check the link and try again.');
+      toast.success('Preview: waiting members transferred; support end dates unchanged.');
+      setMode('transferred');
+    }} /></div>
   </div>;
 }
 
@@ -568,7 +591,9 @@ export default function UiKitPage() {
 
     {visible("feedback") ? <Section id="feedback">
           <Example title="Inactive reaction access" source="src/components/OrderReactionAccessCard.tsx" code={'// Render the whole section only when summary.canConfigure is true.\n// The server checks current category permissions and active support.\n<OrderReactionAccessCard disabled={summary.disabled}\n  dailyLimit={summary.dailyLimit} firstDayLimit={summary.firstDayLimit}\n  onManage={openSettings} />'}><ReactionAccessExample /></Example>
-          <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// With reactions, both cards share the row equally.\n<div className="monitor-order-controls is-paired">\n  {delayPanel}{reactionPanel}\n</div>\n// Both layouts use full-width cards below 900px.'}><MonitorControlsExample /></Example>
+          <Example title="Monitor control widths" source="src/index.css · monitor-order-controls" code={'// Join delay alone uses two thirds of the row on desktop.\n<div className="monitor-order-controls is-delay-only">{delayPanel}</div>\n// Paired controls share the row equally and stack below 900px.\n<div className="monitor-order-controls is-paired">{delayPanel}{transferPanel}</div>'}><MonitorControlsExample /></Example>
+          <Example title="Transfer waiting members" source="src/components/RemainingMembersTransferCard.tsx" code={'<RemainingMembersTransferCard order={order} onTransfer={handleTransfer} />'}><RemainingMembersTransferExample /></Example>
+          <Example title="Transfer status settings" source="src/components/DeliveryTransferSettings.tsx" code={'<DeliveryTransferSettings preview />\n// Default: Invites paused only. Empty selection disables new transfers.'}><DeliveryTransferSettings preview /></Example>
           <Example title="Order reactions & reset countdown" source="src/components/ReactionPanel.tsx · CustomerOrderReactionPanel.tsx · ReactionResetCountdown.tsx" code={'// Same daily allowance on the monitor and authenticated order details.\n<CustomerOrderReactionPanel uniqid={order.uniqid}\n  summary={order.customerReactions} onUpdate={setOrder} />\n// In Orders details, add access="admin".\n// ReactionPanel renders <ReactionResetCountdown resetsAt={summary.resetsAt} />.\n// Open the emoji picker and scroll: only visible rows mount; search covers all emojis.'}><ReactionExample /></Example>
           <Example title="Locked reaction form" source="src/components/ReactionPanel.tsx · monitor-reaction-form-lock" code={'<ReactionPanel {...props} requestEnabled={false}\n  lockReason="No members are currently available to react." />\n// The lock overlay inherits the form radius; its blur stays inside the form.'}><ReactionExample locked /></Example>
           <Example title="Account sync progress & errors" source="src/components/BotSyncProgress.tsx · BotSyncDialog.tsx" code={'<BotSyncProgress job={job} categoryName="OAuth Online" />\n// Full-width overview and progress track, then one compact failure list.\n// Expand each account row for a full-width technical response; copying stays independent.\n// Hover covers the entire row, including the copy action and expanded response. Test single/capped lists and narrow widths.\n// Connection route shows the selected endpoint, source and current account; public exit IP is not measured.\n// Recent routes keeps the last 25 attempts without credentials.\n// ETA uses persisted recent account durations; stopping waits for the in-flight result.\n// Refresh status sits at the top right of the modal header.\n// Close preserves background work. Stop requires confirmation; Escape cancels it.'}><BotSyncProgressExample /></Example>

@@ -40,6 +40,8 @@ import { isCommunityDeliverySettled } from "../shared/community-delivery-state.m
 import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey, pruneStockAuthProxyPool, validateStockAuthProxy } from "./community-stock-authorization.mjs";
 import { getActiveStockHumanizerJob, getLatestStockHumanizerJob, pruneHumanizerJobs, stopHumanizerJob } from "./humanizer-job-control.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
+import { createCommunityDeliveryTransferHandler, COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL } from "./community-delivery-transfer.mjs";
+import { registerDeliveryTransferSettings } from "./community-delivery-transfer-settings.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
 import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, saveCustomerReactionSettings } from "./customer-order-reactions.mjs";
 import { CUSTOMER_REACTION_SETTINGS_GUARD_SQL } from "./customer-order-reaction-settings-guard.mjs";
@@ -4818,7 +4820,7 @@ async function copyCommunityStockCategories(queryable, sourceGuildId, targetGuil
   );
 }
 
-async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildId) {
+async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildId, memberIds = null) {
   if (!sourceGuildId || !targetGuildId || sourceGuildId === targetGuildId) return;
   await copyCommunityStockCategories(queryable, sourceGuildId, targetGuildId);
   await queryable.query(
@@ -4829,6 +4831,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
             stock_type, NULL, authorized_at, NULL, NULL, sort_position
      FROM community_oauth_joins
      WHERE guild_id = $1
+       AND ($3::text[] IS NULL OR discord_user_id = ANY($3::text[]))
        AND NOT EXISTS (
          SELECT 1
          FROM community_stock_category_tombstones AS tombstone
@@ -4852,7 +4855,7 @@ async function copyCommunityStockForGuild(queryable, sourceGuildId, targetGuildI
        joined_at = community_oauth_joins.joined_at,
        reserved_order_id = community_oauth_joins.reserved_order_id,
        sort_position = community_oauth_joins.sort_position`,
-    [sourceGuildId, targetGuildId]
+    [sourceGuildId, targetGuildId, memberIds]
   );
 }
 
@@ -4954,6 +4957,7 @@ function isCommunityOnlinerCheckEnabled(order, result) {
 }
 
 function isCommunityOnlinerReplacementEligible(order, result) {
+  if (result?.transferredOrderId) return false;
   if (isCommunityResultManagementExpired(order, result) || !isCommunityOnlinerCheckEnabled(order, result)) return false;
   if (result?.onlinerLive !== false) return false;
   const checkedAt = new Date(result?.onlinerCheckedAt).getTime();
@@ -7339,6 +7343,7 @@ async function recoverCommunityGuildRestrictionOrder(order) {
   // This is a legacy repair, not a live restriction detector. A historical
   // member failure must never undo a restart, manual pause or active delivery.
   const canRecover = (value) => value?.provider === "community"
+    && !value.remainingTransfer
     && ["ERROR", "PARTIAL"].includes(String(value.status ?? "").toUpperCase())
     && !(Number(value.amount) > 0 && Number(value.added ?? 0) >= Number(value.amount))
     && Array.isArray(value.communityResults);
@@ -7496,7 +7501,8 @@ async function runCommunityOrder(order, members, config) {
       const locked = await client.query("SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE", [order.uniqid]);
       const currentPayload = locked.rows[0]?.payload;
       const currentStatus = String(currentPayload?.status ?? "").toUpperCase();
-      if (!currentPayload || currentStatus === "CANCELLED") {
+      if (!currentPayload || currentStatus === "CANCELLED"
+        || (currentPayload.remainingTransfer && currentPayload.remainingTransfer.orderId !== order.remainingTransfer?.orderId)) {
         await client.query("ROLLBACK");
         return false;
       }
@@ -9006,6 +9012,7 @@ async function initializeDatabase() {
     )
   `);
   await pool.query(COMMUNITY_ORDER_CATEGORY_GUARD_SQL);
+  await pool.query(COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL);
   await pool.query(CUSTOMER_REACTION_SETTINGS_GUARD_SQL);
   await pool.query(AUTO_REPLACE_GUARD_SQL);
   await pool.query(ORDER_BOT_STORAGE_SQL);
@@ -10222,6 +10229,9 @@ app.delete("/api/onliner", requireSession, async (_req, res, next) => {
 
 registerCommunityBotPool(app, requireSession, communityBotPool);
 registerBotOrderSettings(app, requireSession, botOrderSettings);
+const readDeliveryTransferSettings = registerDeliveryTransferSettings(app, {
+  requireSession, load: loadEncryptedSetting, save: saveEncryptedSetting
+});
 const resolveManagedCommunityBot = createManagedBotResolver({ getSharedConfig: getCommunityOAuthConfig, loadPoolConfig: communityBotPool.load });
 const botsOnliner = createBotsOnliner({ pool, encrypt: encryptCredential, decrypt: decryptCredential,
   resolveBot: resolveManagedCommunityBot, onError: () => console.error("Bots Onliner background operation failed.") });
@@ -12311,7 +12321,7 @@ async function activateWaitingCommunityOrder(order) {
   const poolGrantUserIds = targetConfig.poolBotId && joinMethod === "create_invite" ? await communityBotPool.grantUserIds(targetConfig.poolBotId) : [];
   const shouldUseStoredGuildRecovery = joinMethod !== "directly" && targetConfig.configured && (
     activationStatus === "RECOVERING"
-    || ["server_restart_resume", "inventory_recovery_retry", "restriction_check"].includes(String(order.waitingCode ?? ""))
+    || ["server_restart_resume", "inventory_recovery_retry", "restriction_check", "delivery_transfer"].includes(String(order.waitingCode ?? ""))
     || ["discord_403", "discord_404", "discord_unknown", "discord_missing"].includes(waitingCode)
   );
   if (shouldUseStoredGuildRecovery) {
@@ -13209,6 +13219,41 @@ async function restartCommunityRestrictedOrder(req, res, next) {
 
 app.post("/api/community/orders/:uniqid/restart", requireSession, restartCommunityRestrictedOrder);
 app.post("/api/public/orders/:uniqid/community-restart", restartCommunityRestrictedOrder);
+
+const transferCommunityDelivery = createCommunityDeliveryTransferHandler({
+  pool,
+  readSettings: readDeliveryTransferSettings,
+  resolveDestination: async (order, invite) => {
+    const config = await getCommunityOAuthConfig(order);
+    const code = extractDiscordInviteCode(invite);
+    if (!code || !config.configured) throw Object.assign(new Error("Enter a valid Discord invite and configure the Members bot."), { statusCode: 400 });
+    const joinMethod = getCommunityOrderJoinMethod(order);
+    const serverInfo = await resolveDiscordInviteWithBot(code, config.botToken)
+      ?? await resolveDiscordInvite(code, { allowWebFallback: joinMethod === "create_invite" });
+    if (!serverInfo?.guildId) throw Object.assign(new Error("This Discord invite could not be resolved."), { statusCode: 400 });
+    const targetConfig = normalizeCommunityOAuthConfig({ ...config, guildId: serverInfo.guildId });
+    const access = joinMethod === "directly" ? null : await checkCommunityBotDirectGuildAccess(targetConfig, serverInfo.guildId);
+    if (access && !access.accessible && ![401, 403, 404].includes(Number(access.status))) throw Object.assign(new Error("Discord is temporarily unavailable. Try again shortly."), { statusCode: 502 });
+    if (isCommunityGuildInvitesRestricted(access?.payload)) throw Object.assign(new Error("The destination server is not accepting new members. Choose another invite."), { statusCode: 409 });
+    const waitingForBot = joinMethod !== "directly" && !access?.accessible;
+    return { config: targetConfig, serverInfo, waitingForBot,
+      waitingCode: waitingForBot ? `discord_${Number(access?.status) || "missing"}` : "delivery_transfer",
+      botInvite: waitingForBot ? createCommunityBotInvite(targetConfig, serverInfo.guildId, joinMethod) : null };
+  },
+  prepareStock: async (client, order, destination, memberIds) => {
+    await copyCommunityStockForGuild(client, order.serverId, destination.serverInfo.guildId, memberIds);
+    const targetStock = await client.query("SELECT discord_user_id, reserved_order_id FROM community_oauth_joins WHERE guild_id = $1 AND discord_user_id = ANY($2::text[]) FOR UPDATE", [destination.serverInfo.guildId, memberIds]);
+    if (targetStock.rowCount !== memberIds.length || targetStock.rows.some(row => row.reserved_order_id && row.reserved_order_id !== order.uniqid)) {
+      throw Object.assign(new Error("Some waiting members are unavailable in the destination. Refresh before transferring."), { statusCode: 409 });
+    }
+  },
+  saveBot: (client, config) => orderBotService.save(client, config),
+  sanitize: sanitizePublicCommunityOrder,
+  activate: activateWaitingCommunityOrder,
+  onActivationError: error => console.error("Transferred Members delivery will retry:", error instanceof Error ? error.message : "Activation failed.")
+});
+app.post("/api/community/orders/:uniqid/transfer-remaining", requireSession, transferCommunityDelivery);
+app.post("/api/public/orders/:uniqid/transfer-remaining", transferCommunityDelivery);
 
 app.post("/api/community/orders/:uniqid/delay", requireSession, async (req, res, next) => {
   try {
@@ -14366,6 +14411,7 @@ async function pollPublicCommunityOrderStreams() {
   if (publicCommunityStreamPollRunning || publicCommunityOrderStreams.size === 0) return;
   publicCommunityStreamPollRunning = true;
   try {
+    const transferSettings = await readDeliveryTransferSettings();
     const orderIds = [...publicCommunityOrderStreams.keys()];
     const tracked = await pool.query(
       "SELECT uniqid, payload FROM tracked_orders WHERE uniqid = ANY($1::text[]) AND payload->>'provider' = 'community'",
@@ -14385,6 +14431,7 @@ async function pollPublicCommunityOrderStreams() {
       livePayload = await hydrateCommunityOrderCategories(livePayload);
       const snapshot = {
         ...sanitizePublicCommunityOrder(livePayload),
+        deliveryTransferStatuses: transferSettings.statuses,
         canManageCommunityMembers: !isCommunityOrderManagementExpired(livePayload)
       };
       const serialized = JSON.stringify(snapshot);
@@ -14429,6 +14476,7 @@ app.get("/api/public/orders/:uniqid/stream", async (req, res, next) => {
     const hydratedPayload = await hydrateCommunityOrderCategories(tracked.rows[0].payload);
     const snapshot = {
       ...sanitizePublicCommunityOrder(hydratedPayload),
+      deliveryTransferStatuses: (await readDeliveryTransferSettings()).statuses,
       canManageCommunityMembers: !isCommunityOrderManagementExpired(hydratedPayload)
     };
     const serialized = JSON.stringify(snapshot);
@@ -14474,6 +14522,7 @@ app.get("/api/public/orders/:uniqid/status", async (req, res, next) => {
       trackedPayload = await hydrateCommunityOrderCategories(trackedPayload);
       return res.set("Cache-Control", "no-store").json({
         ...sanitizePublicCommunityOrder(trackedPayload),
+        deliveryTransferStatuses: (await readDeliveryTransferSettings()).statuses,
         liveBoostStock,
         canManageCommunityMembers: !isCommunityOrderManagementExpired(trackedPayload)
       });

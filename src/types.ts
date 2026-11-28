@@ -178,6 +178,9 @@ export interface CreateOrderResponse {
 }
 
 export interface OrderStatusResponse {
+  deliveryTransferStatuses?: string[];
+  remainingTransfer?: { orderId: string; amount: number; serverName: string; transferredAt: string };
+  transferredFrom?: { orderId: string; transferredAt: string };
   automaticBot?: boolean;
   poolBotId?: string;
   customBot?: boolean;
