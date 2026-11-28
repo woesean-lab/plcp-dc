@@ -57,7 +57,7 @@ export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
       <div className="monitor-transfer-fields">
         <label className="boost-order-field" htmlFor={`${inputId}-amount`}>
           <span className="boost-order-label">Number of Members</span>
-          <input id={`${inputId}-amount`} className="boost-number-input" type="number" min={0} value={eligibleCount} readOnly />
+          <input id={`${inputId}-amount`} className="boost-number-input disabled:cursor-not-allowed disabled:opacity-45" type="number" min={0} value={eligibleCount} disabled />
         </label>
         <label className="boost-order-field" htmlFor={`${inputId}-invite`}>
           <span className="boost-order-label">Server Invite</span>
