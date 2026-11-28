@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useParams, useSearchParams } from "react-router-dom";
 import { RemainingMembersTransferCard } from "../components/RemainingMembersTransferCard";
-import { transferPublicCommunityOrderMembers } from "../lib/integration";
+import { previewPublicCommunityOrderTransfer, transferPublicCommunityOrderMembers } from "../lib/integration";
 import { getCommunityDeliveryTransfer } from "../../shared/community-delivery-transfer.mjs";
 import { Button } from "@/components/ui/button";
 import { StatusField } from "../components/ui/status-field";
@@ -875,8 +875,8 @@ export default function PublicOrderPage() {
 
   const transferEligibility = getCommunityDeliveryTransfer(status, Date.now(), status?.deliveryTransferStatuses ?? []);
   const transferPanel = isCommunityOrder && status && transferEligibility.statusAllowed && (transferEligibility.count > 0 || status.remainingTransfer) ? (
-    <RemainingMembersTransferCard key={status.uniqid} order={status} onTransfer={async invite => {
-      const result = await transferPublicCommunityOrderMembers(status.uniqid, invite);
+    <RemainingMembersTransferCard key={status.uniqid} order={status} onPreview={invite => previewPublicCommunityOrderTransfer(status.uniqid, invite)} onTransfer={async (invite, preview) => {
+      const result = await transferPublicCommunityOrderMembers(status.uniqid, invite, preview);
       window.location.assign(result.monitorPath);
     }} />
   ) : null;

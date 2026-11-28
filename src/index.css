@@ -7702,9 +7702,9 @@
 .monitor-order-controls.is-delay-only { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
 .monitor-order-controls > * { min-width: 0; }
 .monitor-order-controls > .monitor-transfer-reactions { grid-column: 1 / -1; }
-.monitor-transfer-panel form { display: grid; gap: 12px; }
+.monitor-transfer-panel form { display: grid; gap: 12px; margin-top: 16px; }
+.monitor-transfer-count { display: grid; flex-shrink: 0; gap: 2px; text-align: right; }
 .monitor-transfer-copy { margin: 12px 0; color: var(--app-muted); font-size: 12px; line-height: 1.7; }
-.monitor-transfer-panel form .monitor-transfer-copy { margin-bottom: 0; }
 .monitor-transfer-panel .ui-input { width: 100%; min-width: 0; }
 .monitor-transfer-panel form > .ui-button { justify-self: start; max-width: 100%; white-space: normal; height: auto; min-height: 44px; }
 .monitor-transfer-error { margin: 12px 0 0; color: var(--app-danger); font-size: 12px; line-height: 1.6; }

@@ -40,7 +40,7 @@ import { isCommunityDeliverySettled } from "../shared/community-delivery-state.m
 import { authorizeCommunityStockAccount, getReusableAuthorizationGatewayUser, onlinerAuthorizationRouteKey, pruneStockAuthProxyPool, validateStockAuthProxy } from "./community-stock-authorization.mjs";
 import { getActiveStockHumanizerJob, getLatestStockHumanizerJob, pruneHumanizerJobs, stopHumanizerJob } from "./humanizer-job-control.mjs";
 import { createCommunityOrderCategoryTransferHandler } from "./community-order-category-transfer.mjs";
-import { createCommunityDeliveryTransferHandler, COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL } from "./community-delivery-transfer.mjs";
+import { createCommunityDeliveryTransferHandler, createCommunityDeliveryTransferPreviewHandler, COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL } from "./community-delivery-transfer.mjs";
 import { registerDeliveryTransferSettings } from "./community-delivery-transfer-settings.mjs";
 import { createCommunityReactionMessageHandler } from "./community-reaction-message.mjs";
 import { CUSTOMER_REACTION_SAVE_FIELDS_SQL, getCustomerReactionSummary, getCustomerReactionOverview, customerReactionMemberEligible, validateCustomerReactionLimit, saveCustomerReactionSettings } from "./customer-order-reactions.mjs";
@@ -194,6 +194,7 @@ async function resolveDiscordInviteWithBot(inviteValue, botToken) {
     return {
       guildId,
       guildName: normalizeDiscordGuildName(payload?.guild?.name),
+      guildIconUrl: payload?.guild?.icon ? `https://cdn.discordapp.com/icons/${encodeURIComponent(guildId)}/${encodeURIComponent(payload.guild.icon)}.png?size=64` : null,
       approximateMemberCount: Number.isFinite(payload?.approximate_member_count)
         ? payload.approximate_member_count
         : undefined,
@@ -13220,7 +13221,7 @@ async function restartCommunityRestrictedOrder(req, res, next) {
 app.post("/api/community/orders/:uniqid/restart", requireSession, restartCommunityRestrictedOrder);
 app.post("/api/public/orders/:uniqid/community-restart", restartCommunityRestrictedOrder);
 
-const transferCommunityDelivery = createCommunityDeliveryTransferHandler({
+const communityDeliveryTransferOptions = {
   pool,
   readSettings: readDeliveryTransferSettings,
   resolveDestination: async (order, invite) => {
@@ -13236,7 +13237,8 @@ const transferCommunityDelivery = createCommunityDeliveryTransferHandler({
     if (access && !access.accessible && ![401, 403, 404].includes(Number(access.status))) throw Object.assign(new Error("Discord is temporarily unavailable. Try again shortly."), { statusCode: 502 });
     if (isCommunityGuildInvitesRestricted(access?.payload)) throw Object.assign(new Error("The destination server is not accepting new members. Choose another invite."), { statusCode: 409 });
     const waitingForBot = joinMethod !== "directly" && !access?.accessible;
-    return { config: targetConfig, serverInfo, waitingForBot,
+    const guildIconUrl = serverInfo.guildIconUrl || (access?.payload?.icon ? `https://cdn.discordapp.com/icons/${encodeURIComponent(serverInfo.guildId)}/${encodeURIComponent(access.payload.icon)}.png?size=64` : null);
+    return { config: targetConfig, serverInfo: { ...serverInfo, guildIconUrl }, waitingForBot,
       waitingCode: waitingForBot ? `discord_${Number(access?.status) || "missing"}` : "delivery_transfer",
       botInvite: waitingForBot ? createCommunityBotInvite(targetConfig, serverInfo.guildId, joinMethod) : null };
   },
@@ -13251,7 +13253,11 @@ const transferCommunityDelivery = createCommunityDeliveryTransferHandler({
   sanitize: sanitizePublicCommunityOrder,
   activate: activateWaitingCommunityOrder,
   onActivationError: error => console.error("Transferred Members delivery will retry:", error instanceof Error ? error.message : "Activation failed.")
-});
+};
+const transferCommunityDelivery = createCommunityDeliveryTransferHandler(communityDeliveryTransferOptions);
+const previewCommunityDeliveryTransfer = createCommunityDeliveryTransferPreviewHandler(communityDeliveryTransferOptions);
+app.post("/api/community/orders/:uniqid/transfer-remaining/preview", requireSession, previewCommunityDeliveryTransfer);
+app.post("/api/public/orders/:uniqid/transfer-remaining/preview", previewCommunityDeliveryTransfer);
 app.post("/api/community/orders/:uniqid/transfer-remaining", requireSession, transferCommunityDelivery);
 app.post("/api/public/orders/:uniqid/transfer-remaining", transferCommunityDelivery);
 

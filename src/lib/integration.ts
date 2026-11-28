@@ -1,4 +1,4 @@
-import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary, RotatingBoostAccount } from "../types";
+import type { BoostStock, BoostTokenStockInput, BoostTokenStockSnapshot, CommunityDeliveryTransferPreview, CreateOrderPayload, CreateOrderResponse, OrderProvider, OrderStatusResponse, ReactionMemberCheckProgress, ReactionWorkspaceSummary, RotatingBoostAccount } from "../types";
 import { isBoostService, isCommunityService } from "./services";
 
 async function requestJson<T>(path: string, init: RequestInit = {}) {
@@ -107,7 +107,7 @@ export function restartCommunityOrder(uniqid: string) {
   return requestJson<OrderStatusResponse>(`/api/community/orders/${encodeURIComponent(uniqid)}/restart`, { method: "POST" });
 }
 
-async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "boost-pause" | "boost-resume" | "reaction-message" | "reaction-cancel" | "transfer-remaining", init?: RequestInit) {
+async function requestPublicOrderApi<T>(uniqid: string, action: "status" | "delay" | "community-restart" | "pause" | "resume" | "boost-pause" | "boost-resume" | "reaction-message" | "reaction-cancel" | "transfer-remaining" | "transfer-remaining/preview", init?: RequestInit) {
   const response = await fetch(`/api/public/orders/${encodeURIComponent(uniqid)}/${action}`, {
     cache: "no-store",
     ...init
@@ -143,9 +143,15 @@ export function restartPublicCommunityOrder(uniqid: string) {
   return requestPublicOrderApi<OrderStatusResponse>(uniqid, "community-restart", { method: "POST" });
 }
 
-export function transferPublicCommunityOrderMembers(uniqid: string, invite: string) {
-  return requestPublicOrderApi<{ order: OrderStatusResponse; monitorPath: string }>(uniqid, "transfer-remaining", {
+export function previewPublicCommunityOrderTransfer(uniqid: string, invite: string) {
+  return requestPublicOrderApi<CommunityDeliveryTransferPreview>(uniqid, "transfer-remaining/preview", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invite })
+  });
+}
+
+export function transferPublicCommunityOrderMembers(uniqid: string, invite: string, preview: Pick<CommunityDeliveryTransferPreview, 'serverId' | 'amount'>) {
+  return requestPublicOrderApi<{ order: OrderStatusResponse; monitorPath: string }>(uniqid, "transfer-remaining", {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ invite, expectedServerId: preview.serverId, expectedAmount: preview.amount })
   });
 }
 

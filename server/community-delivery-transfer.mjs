@@ -58,6 +58,34 @@ export function planCommunityDeliveryTransfer(order, destination, id, now = Date
   return { source, order: next, memberIds: ids };
 }
 
+export function createCommunityDeliveryTransferPreviewHandler({ pool, resolveDestination,
+  readSettings = async () => ({ statuses: [...COMMUNITY_DELIVERY_TRANSFER_DEFAULT_STATUSES] }) }) {
+  return async (req, res, next) => {
+    try {
+      const id = String(req.params.uniqid || '').trim();
+      const invite = String(req.body?.invite || '').trim();
+      if (!id || id.length > 160 || !invite || invite.length > 512) throw fail('Enter a valid Discord invite link.', 400);
+      const load = async () => (await pool.query('SELECT payload FROM tracked_orders WHERE uniqid = $1', [id])).rows[0]?.payload;
+      const initial = await load();
+      if (!initial || initial.provider !== 'community') throw fail('Members order could not be found.', 404);
+      const initialEligibility = getCommunityDeliveryTransfer(initial, Date.now(), (await readSettings()).statuses);
+      if (!initialEligibility.allowed) throw fail(initialEligibility.reason);
+      const destination = await resolveDestination(initial, invite);
+      const current = await load();
+      if (current?.botApplicationId !== initial.botApplicationId || current?.serverId !== initial.serverId) throw fail('The order changed. Review the transfer again.');
+      const plan = planCommunityDeliveryTransfer(current, { ...destination, inviteValue: invite }, 'preview', Date.now(), (await readSettings()).statuses);
+      const count = destination.serverInfo.approximateMemberCount;
+      // Return public server metadata only. Preview never reserves stock or creates an order.
+      return res.set('Cache-Control', 'no-store').json({
+        amount: plan.order.amount, serverId: plan.order.serverId, serverName: plan.order.serverName || 'Discord server',
+        serverIconUrl: destination.serverInfo.guildIconUrl || null,
+        serverMemberCount: Number.isFinite(count) && count >= 0 ? count : null,
+        waitingForBot: destination.waitingForBot === true
+      });
+    } catch (error) { next(error); }
+  };
+}
+
 export function createCommunityDeliveryTransferHandler({ pool, resolveDestination, prepareStock, saveBot, sanitize, activate,
   readSettings = async () => ({ statuses: [...COMMUNITY_DELIVERY_TRANSFER_DEFAULT_STATUSES] }),
   makeId = () => crypto.randomBytes(16).toString('hex'), onActivationError = console.error }) {
@@ -81,6 +109,7 @@ export function createCommunityDeliveryTransferHandler({ pool, resolveDestinatio
       if (!eligibility.allowed) throw fail(eligibility.reason);
       // Discord reads occur before the short database transaction; no joins here.
       const destination = await resolveDestination(initial, invite);
+      if (req.body?.expectedServerId !== undefined && req.body.expectedServerId !== destination.serverInfo.guildId) throw fail('The invite destination changed. Review the transfer again.');
       client = await pool.connect();
       await client.query('BEGIN');
       const current = (await client.query('SELECT payload FROM tracked_orders WHERE uniqid = $1 FOR UPDATE', [id])).rows[0]?.payload;
@@ -98,6 +127,7 @@ export function createCommunityDeliveryTransferHandler({ pool, resolveDestinatio
       // Re-read after Discord resolution and the order lock: settings may have changed meanwhile.
       const settings = await readSettings();
       const plan = planCommunityDeliveryTransfer(current, { ...destination, inviteValue: invite }, makeId(), Date.now(), settings.statuses);
+      if (req.body?.expectedAmount !== undefined && req.body.expectedAmount !== plan.order.amount) throw fail('The waiting member count changed. Review the transfer again.');
       await prepareStock(client, current, destination, plan.memberIds);
       await client.query('INSERT INTO tracked_orders (uniqid, payload, created_at, updated_at) VALUES ($1, $2::jsonb, NOW(), NOW())', [plan.order.uniqid, JSON.stringify(plan.order)]);
       if (current.customBot) {

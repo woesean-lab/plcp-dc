@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import ts from 'typescript';
-import { planCommunityDeliveryTransfer, createCommunityDeliveryTransferHandler, COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL } from './community-delivery-transfer.mjs';
+import { planCommunityDeliveryTransfer, createCommunityDeliveryTransferHandler, createCommunityDeliveryTransferPreviewHandler, COMMUNITY_DELIVERY_TRANSFER_GUARD_SQL } from './community-delivery-transfer.mjs';
 import { getCommunityDeliveryTransfer } from '../shared/community-delivery-transfer.mjs';
 import { COMMUNITY_ORDER_CATEGORY_GUARD_SQL } from './community-order-category-guard.mjs';
 
@@ -24,6 +24,38 @@ const original = (overrides = {}) => ({
   ], ...overrides
 });
 const destination = { serverInfo: { guildId: '987654321098765432', guildName: 'New server' }, inviteValue: 'https://discord.gg/new', config: { clientId: 'bot', botToken: 'test-secret', orderBotId: 'source' } };
+
+test('server preview returns only public metadata and never writes or activates an order', async () => {
+  let order = original({ expiredAt: '2099-12-01', categoryAllocations: [] });
+  let statuses = ['INVITES PAUSED'];
+  let afterResolve = () => {};
+  let reads = 0;
+  const handler = createCommunityDeliveryTransferPreviewHandler({
+    pool: { query: async (sql, args) => {
+      assert.equal(sql, 'SELECT payload FROM tracked_orders WHERE uniqid = $1');
+      assert.deepEqual(args, ['source']); reads++;
+      return { rows: [{ payload: order }] };
+    } },
+    readSettings: async () => ({ statuses }),
+    resolveDestination: async () => { afterResolve(); return { ...destination, waitingForBot: true, serverInfo: { ...destination.serverInfo, approximateMemberCount: 1234, guildIconUrl: 'https://cdn.discordapp.com/icons/example.png' } }; }
+  });
+  async function invoke() {
+    let body, error;
+    const res = { set(key, value) { assert.equal(key, 'Cache-Control'); assert.equal(value, 'no-store'); return this; }, json(value) { body = value; } };
+    await handler({ params: { uniqid: 'source' }, body: { invite: destination.inviteValue } }, res, err => { error = err; });
+    return { body, error };
+  }
+  const result = await invoke();
+  assert.equal(result.error, undefined); assert.equal(reads, 2);
+  assert.deepEqual(result.body, { amount: 2, serverId: destination.serverInfo.guildId, serverName: 'New server', serverIconUrl: 'https://cdn.discordapp.com/icons/example.png', serverMemberCount: 1234, waitingForBot: true });
+  assert.equal(JSON.stringify(result.body).includes('test-secret'), false);
+  assert.equal(order.communityResults[1].state, 'queued');
+  afterResolve = () => { statuses = []; };
+  assert.match((await invoke()).error.message, /not enabled/);
+  statuses = ['INVITES PAUSED'];
+  afterResolve = () => { order = { ...order, serverId: '222222222222222222' }; };
+  assert.match((await invoke()).error.message, /order changed/);
+});
 
 test('only queued members move; original dates and separate purchased portions survive chained transfers', () => {
   const source = original();
@@ -99,10 +131,10 @@ test('real database transaction preserves grants, returns the same order on retr
     saveBot: (client, config) => client.query('INSERT INTO app_settings VALUES ($1,$2)', [config.orderBotId, JSON.stringify(config)]),
     sanitize: order => { assert.equal(order.botToken, undefined); return order; }, activate: async () => { activationCount++; }
   });
-  async function invoke(id = 'source') {
+  async function invoke(id = 'source', expected = {}) {
     const res = { set() { return this; }, json(body) { this.body = body; return this; } };
     let error;
-    await handler({ params: { uniqid: id }, body: { invite: destination.inviteValue } }, res, err => { error = err; });
+    await handler({ params: { uniqid: id }, body: { invite: destination.inviteValue, ...expected } }, res, err => { error = err; });
     return { body: res.body, error };
   }
   // An in-flight worker must prevent a split even if the status already says paused.
@@ -117,6 +149,10 @@ test('real database transaction preserves grants, returns the same order on retr
   assert.equal((await db.query('SELECT count(*)::int AS count FROM tracked_orders')).rows[0].count, 1);
   assert.equal((await db.query('SELECT count(*)::int AS count FROM community_oauth_joins')).rows[0].count, 0);
   transferSettings = { statuses: ['INVITES PAUSED'] }; disableDuringResolve = false;
+  assert.match((await invoke('source', { expectedServerId: initial.serverId, expectedAmount: 2 })).error.message, /destination changed/);
+  assert.match((await invoke('source', { expectedServerId: destination.serverInfo.guildId, expectedAmount: 1 })).error.message, /count changed/);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM tracked_orders')).rows[0].count, 1);
+  assert.equal((await db.query('SELECT count(*)::int AS count FROM community_oauth_joins')).rows[0].count, 0);
   const result = await invoke(); assert.equal(result.error, undefined); assert.equal(result.body.monitorPath, '/monitor/next');
   // Disabling new transfers must still allow a lost response to recover its receipt.
   transferSettings = { statuses: [] };

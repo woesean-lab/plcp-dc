@@ -177,6 +177,15 @@ export interface CreateOrderResponse {
   expiredAt?: string | null;
 }
 
+export interface CommunityDeliveryTransferPreview {
+  amount: number;
+  serverId: string;
+  serverName: string;
+  serverIconUrl: string | null;
+  serverMemberCount: number | null;
+  waitingForBot: boolean;
+}
+
 export interface OrderStatusResponse {
   deliveryTransferStatuses?: string[];
   remainingTransfer?: { orderId: string; amount: number; serverName: string; transferredAt: string };

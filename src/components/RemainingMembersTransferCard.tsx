@@ -1,31 +1,44 @@
 import { useId, useRef, useState } from 'react';
-import { ArrowRightLeft, ArrowUpRight, CalendarDays, LoaderCircle } from 'lucide-react';
+import { ArrowRightLeft, ArrowUpRight, CalendarDays, LoaderCircle, Server, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { OrderConfirmationDialog } from './OrderConfirmationDialog';
+import { MemberActivityAvatar } from './MemberActivityAvatar';
 import { getCommunityDeliveryTransfer } from '../../shared/community-delivery-transfer.mjs';
 import { getOrderSupportExpiration } from '../lib/order-status';
-import type { OrderStatusResponse } from '../types';
+import type { CommunityDeliveryTransferPreview, OrderStatusResponse } from '../types';
 
-export function RemainingMembersTransferCard({ order, onTransfer }: {
+export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
   order: OrderStatusResponse;
-  onTransfer: (invite: string) => Promise<void>;
+  onPreview: (invite: string) => Promise<CommunityDeliveryTransferPreview>;
+  onTransfer: (invite: string, preview: CommunityDeliveryTransferPreview) => Promise<void>;
 }) {
   const inputId = useId();
   const [invite, setInvite] = useState('');
-  const [reviewInvite, setReviewInvite] = useState<string | null>(null);
+  const [review, setReview] = useState<{ invite: string; server: CommunityDeliveryTransferPreview } | null>(null);
+  const [checking, setChecking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef(false);
   const eligibility = getCommunityDeliveryTransfer(order, Date.now(), order.deliveryTransferStatuses ?? []);
   const expiration = getOrderSupportExpiration(order);
-  const supportText = expiration ? new Date(expiration).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'Original support terms';
+  const supportText = expiration ? new Date(expiration).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : null;
   const receipt = order.remainingTransfer;
+  const eligibleCount = eligibility.allowed ? eligibility.count : 0;
+  const reviewValid = eligibility.allowed && review?.server.amount === eligibility.count;
+  async function prepare() {
+    if (pending.current || !eligibility.allowed || !invite.trim()) return;
+    pending.current = true; setChecking(true); setError('');
+    const value = invite.trim();
+    try { setReview({ invite: value, server: await onPreview(value) }); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Could not check this server. Try again.'); }
+    finally { pending.current = false; setChecking(false); }
+  }
   async function confirm() {
-    if (pending.current || !reviewInvite || !eligibility.allowed) return;
+    if (pending.current || !review || !reviewValid) return;
     pending.current = true; setBusy(true); setError('');
-    try { await onTransfer(reviewInvite); setReviewInvite(null); }
+    try { await onTransfer(review.invite, review.server); setReview(null); }
     catch (err) { setError(err instanceof Error ? err.message : 'Members could not be transferred. Try again.'); }
     finally { pending.current = false; setBusy(false); }
   }
@@ -33,26 +46,34 @@ export function RemainingMembersTransferCard({ order, onTransfer }: {
     <div className="monitor-panel-heading">
       <span className="monitor-panel-icon" aria-hidden="true"><ArrowRightLeft className="h-4 w-4" /></span>
       <div><p className="app-kicker">Delivery transfer</p><h2>{receipt ? 'Waiting members transferred' : 'Transfer waiting members'}</h2></div>
+      <span className="monitor-transfer-count" aria-live="polite" aria-atomic="true"><span className="app-kicker">{receipt ? 'Transferred' : 'Eligible'}</span><strong className="monitor-current-delay">{(receipt?.amount ?? eligibleCount).toLocaleString('en-US')}</strong></span>
     </div>
     {receipt ? <>
-      <p className="monitor-transfer-copy">{receipt.amount} waiting members moved to {receipt.serverName}. Delivered members stay on this order.</p>
+      <p className="monitor-transfer-copy">Moved to {receipt.serverName}.</p>
       <Button asChild variant="secondary"><Link to={`/monitor/${encodeURIComponent(receipt.orderId)}`}>Open new monitor<ArrowUpRight className="h-4 w-4" aria-hidden="true" /></Link></Button>
-    </> : <form onSubmit={event => { event.preventDefault(); setError(''); if (eligibility.allowed && invite.trim()) setReviewInvite(invite.trim()); }}>
-      <p className="monitor-transfer-copy">Move {eligibility.count} waiting members to a new order for another server. Delivered members stay here.</p>
+    </> : <form onSubmit={event => { event.preventDefault(); void prepare(); }}>
       <label className="field-label" htmlFor={inputId}>New Discord invite</label>
-      <Input id={inputId} value={invite} onChange={event => setInvite(event.target.value)} placeholder="https://discord.gg/your-server" required maxLength={512} disabled={busy || !eligibility.allowed} autoComplete="off" />
-      <Button type="submit" variant="secondary" disabled={busy || !eligibility.allowed || !invite.trim()}>
-        {busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />}
-        {busy ? 'Transferring...' : 'Transfer to another server'}
+      <Input id={inputId} value={invite} onChange={event => setInvite(event.target.value)} placeholder="https://discord.gg/your-server" required maxLength={512} disabled={checking || busy || !eligibility.allowed} autoComplete="off" />
+      <Button type="submit" variant="secondary" disabled={checking || busy || !eligibility.allowed || !invite.trim()}>
+        {checking || busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />}
+        {checking ? 'Checking server…' : busy ? 'Transferring…' : 'Transfer members'}
       </Button>
       {!eligibility.allowed ? <p className="monitor-transfer-copy" role="status">{eligibility.reason}</p> : null}
     </form>}
-    <div className="monitor-safety-note"><CalendarDays className="h-4 w-4" aria-hidden="true" /><p>Support stays unchanged: {supportText}. Each category keeps its original end date.</p></div>
-    {error ? <p className="monitor-transfer-error" role="alert">{error}</p> : null}
-    {reviewInvite ? <OrderConfirmationDialog title="Transfer waiting members?" confirmLabel="Confirm transfer" busyLabel="Transferring..." service={String(order.categoryName || 'Members')} amount={eligibility.count} invite={reviewInvite}
-      description="Waiting deliveries will be cancelled on this order and moved to a new order. Delivered members stay here. Support end dates do not change."
-      busy={busy} onClose={() => { if (!busy) { setReviewInvite(null); setError(''); } }} onConfirm={() => void confirm()}>
-      <div className="order-confirm-target"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /><span><small>Original support end</small><strong>{supportText}</strong></span></div>
+    {error && !review ? <p className="monitor-transfer-error" role="alert">{error}</p> : null}
+    {review ? <OrderConfirmationDialog title="Transfer waiting members?" confirmLabel="Confirm transfer" busyLabel="Transferring…" service={String(order.categoryName || 'Members')} amount={review.server.amount} invite={review.invite}
+      description="Waiting members move to this server. Delivered members stay here. Support dates stay unchanged."
+      busy={busy} confirmDisabled={!reviewValid} onClose={() => { if (!busy) { setReview(null); setError(''); } }} onConfirm={() => void confirm()}>
+      <div className="order-confirm-primary">
+        <MemberActivityAvatar className="order-confirm-service-icon" src={review.server.serverIconUrl} fallback={<Server className="h-4 w-4" />} />
+        <span className="order-confirm-primary-copy"><small>Destination server</small><strong className="break-words">{review.server.serverName}</strong></span>
+      </div>
+      <div className="order-confirm-meta"><span><Server className="h-3.5 w-3.5" aria-hidden="true" />{review.server.serverId}</span>
+        {review.server.serverMemberCount !== null ? <span><Users className="h-3.5 w-3.5" aria-hidden="true" />~{review.server.serverMemberCount.toLocaleString('en-US')} members</span> : null}
+      </div>
+      {supportText ? <div className="order-confirm-target"><CalendarDays className="h-3.5 w-3.5" aria-hidden="true" /><span><small>Original support end</small><strong>{supportText}</strong></span></div> : null}
+      {review.server.waitingForBot ? <p className="monitor-transfer-copy">Add the assigned bot to start delivery.</p> : null}
+      {!reviewValid ? <p role="status" className="monitor-transfer-error">Member availability changed. Go back and review again.</p> : null}
       {error ? <p role="alert" className="monitor-transfer-error">{error}</p> : null}
     </OrderConfirmationDialog> : null}
   </div>;
