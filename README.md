@@ -246,7 +246,9 @@ islemidir. Disconnect mevcut Onliner profil silme API'sini kullanir; yalnizca
 secilen botun baglantisini kaldirir ve yeniden Connect kullanilabilir. Genel
 Onliner kapaliysa acilmasi gerekir; duraklatilmissa Continue kullanilir.
 Botlar kendiliginden topluca eklenmez. Mevcut worker ayar degisikligini bir sonraki
-poll dongusunde alir; her baglama icin restart gerekmez. Botlar proxy havuzundan
-proxy ayirmaz. Kontrol: `node --test server/community-bot-onliner.test.mjs`.
+poll dongusunde alir; her baglama icin restart gerekmez. Botlara da mevcut Onliner havuz secicisiyle proxy atanir;
+atanmis proxy korunur. Eski proxy'siz bot profilleri worker baslangicinda veya
+sonraki ayar kontrolunde havuzdan tamamlanip kaydedilir. Havuz bossa yeni
+baglanti kaydedilmez; kullanilabilir proxy eklenmesi istenir. Kontrol: `node --test server/community-bot-onliner.test.mjs`.
 
 Gerekli ortam degiskenleri `.env.example` dosyasinda listelenmistir.

@@ -4,24 +4,26 @@ import fs from "node:fs";
 import vm from "node:vm";
 import { EventEmitter } from "node:events";
 import ts from "typescript";
-import { planBotOnlinerConnection } from "./community-bot-onliner.mjs";
+import { planBotOnlinerConnection, assignMissingBotOnlinerProxies } from "./community-bot-onliner.mjs";
 import { withoutManagedBotProfiles } from "./community-bot-management.mjs";
 
 const sharedId = "111111111111111111", poolId = "222222222222222222";
+const proxyUrl = "http://pool-proxy:8080";
+const selectProxy = () => proxyUrl;
 const bot = (id = sharedId, token = "bot-token") => ({ id: `community-bot-${id}`,
-  communityBotClientId: id, botToken: token, proxyUrl: "", richPresenceEnabled: false, discordUserId: id });
+  communityBotClientId: id, botToken: token, proxyUrl, richPresenceEnabled: false, discordUserId: id });
 
 test("connect adds only the selected bot to existing profiles with Rich Presence off", () => {
   const member = { id: "member", botToken: "member-token", proxyUrl: "http://member-proxy", richPresenceEnabled: true };
   const current = { enabled: true, accounts: [member], statuses: ["idle"], games: ["Member game"] };
   const original = structuredClone(current);
   for (const id of [sharedId, poolId]) {
-    const plan = planBotOnlinerConnection(current, { clientId: id, botToken: "selected-token" }, 3000);
+    const plan = planBotOnlinerConnection(current, { clientId: id, botToken: "selected-token" }, 3000, selectProxy);
     assert.equal(plan.config.accounts.length, 2);
     assert.equal(plan.config.accounts[0], member);
     assert.equal(plan.account.communityBotClientId, id);
     assert.equal(plan.account.richPresenceEnabled, false);
-    assert.equal(plan.account.proxyUrl, "");
+    assert.equal(plan.account.proxyUrl, proxyUrl);
     assert.equal(plan.alreadyExisted, false);
     assert.deepEqual(withoutManagedBotProfiles(plan.config), plan.config);
   }
@@ -31,20 +33,92 @@ test("connect adds only the selected bot to existing profiles with Rich Presence
 test("connect is idempotent, reuses existing token profiles and enforces capacity only for additions", () => {
   const previous = { id: "existing", botToken: "selected-token", richPresenceEnabled: true };
   const current = { enabled: false, accounts: [previous] };
-  const plan = planBotOnlinerConnection(current, { clientId: sharedId, botToken: previous.botToken }, 1);
+  const plan = planBotOnlinerConnection(current, { clientId: sharedId, botToken: previous.botToken }, 1, selectProxy);
   assert.equal(plan.alreadyExisted, true);
   assert.equal(plan.account.id, previous.id);
   assert.equal(plan.account.richPresenceEnabled, false);
   assert.equal(plan.config.enabled, false);
-  const again = planBotOnlinerConnection(plan.config, { clientId: sharedId, botToken: "updated-token" }, 1);
+  const again = planBotOnlinerConnection(plan.config, { clientId: sharedId, botToken: "updated-token" }, 1, () => assert.fail("Keep the assigned proxy"));
   assert.equal(again.config.accounts.length, 1);
   assert.equal(again.account.botToken, "updated-token");
-  assert.throws(() => planBotOnlinerConnection(current, { clientId: poolId, botToken: "other" }, 1), error => error.statusCode === 409);
+  assert.throws(() => planBotOnlinerConnection(current, { clientId: poolId, botToken: "other" }, 1, selectProxy), error => error.statusCode === 409);
+  assert.throws(() => planBotOnlinerConnection({ accounts: [] }, { clientId: poolId, botToken: "other" }, 1, () => ""), error => error.statusCode === 409 && /proxy pool/.test(error.message));
 });
 
 const source = fs.readFileSync(new URL("./index.mjs", import.meta.url), "utf8");
 const ast = ts.createSourceFile("index.mjs", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
 const code = name => ast.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name).getText(ast);
+test("proxy repair uses the existing pool balancer and leaves member and assigned bot routes intact", () => {
+  const p1 = "http://pool-one:8080", p2 = "http://pool-two:8080", reserved = "http://stock-auth:8080";
+  const member = { id: "member", proxyUrl: p1, richPresenceEnabled: true };
+  const assigned = { ...bot("333333333333333333"), communityBotOnlinerEnabled: true, proxyUrl: p1 };
+  const missing = [sharedId, poolId].map(id => ({ ...bot(id), communityBotOnlinerEnabled: true, proxyUrl: "" }));
+  const current = { enabled: true, proxyPool: [p1, p2, reserved], stockAuthProxyPool: [reserved], accounts: [member, assigned, ...missing] };
+  const original = structuredClone(current);
+  const scope = { discordOnlinerProxyHealth: new Map(), discordOnlinerProxySelectionSequence: 0 };
+  vm.runInNewContext(code("selectDiscordOnlinerProxy"), scope);
+  const result = assignMissingBotOnlinerProxies(current, scope.selectDiscordOnlinerProxy);
+  assert.deepEqual(result.assignedIds, missing.map(account => account.id));
+  assert.equal(result.config.accounts[0], member);
+  assert.equal(result.config.accounts[1], assigned);
+  assert.deepEqual(result.config.accounts.slice(2).map(account => account.proxyUrl), [p2, p2]);
+  assert.deepEqual(current, original);
+  assert.equal(assignMissingBotOnlinerProxies(result.config, () => assert.fail("Do not rotate existing assignments")).config, result.config);
+  assert.equal(assignMissingBotOnlinerProxies(current, () => "").config, current);
+});
+
+function repairFixture({ removed = false, failWrite = false } = {}) {
+  const missing = { ...bot(), communityBotOnlinerEnabled: true, proxyUrl: "" };
+  const member = { id: "member", botToken: "member-token", proxyUrl: "http://member-proxy", richPresenceEnabled: true };
+  const original = { enabled: true, proxyPool: [proxyUrl], accounts: [member, missing] };
+  let stored = { ...original, accounts: removed ? [member] : original.accounts, activityText: "Latest saved settings" };
+  const calls = [];
+  let released = 0;
+  const client = { query: async (sql, args) => {
+    calls.push(sql);
+    if (sql.startsWith("SELECT")) return { rows: [{ encrypted_value: JSON.stringify(stored) }] };
+    if (sql.startsWith("UPDATE")) {
+      if (failWrite) throw Error("Database write failed");
+      stored = JSON.parse(args[1]);
+    }
+    return { rows: [] };
+  }, release: () => { released++; } };
+  const scope = {
+    getDiscordOnlinerConfig: async options => { assert.equal(options.hydrateMedia, false); return original; },
+    pool: { connect: async () => client }, discordOnlinerSettingKey: "onliner",
+    encryptCredential: value => value, decryptCredential: value => value,
+    normalizeDiscordOnlinerConfig: value => value, withoutManagedBotProfiles,
+    assignMissingBotOnlinerProxies, selectDiscordOnlinerProxy: selectProxy,
+    hydrateDiscordOnlinerSpotifyPlaylist: async value => value
+  };
+  vm.runInNewContext(code("getDiscordOnlinerWorkerConfig"), scope);
+  return { scope, calls, stored: () => stored, released: () => released };
+}
+
+test("worker repairs saved proxyless bots under the settings row lock before connecting", async () => {
+  const f = repairFixture();
+  const config = await f.scope.getDiscordOnlinerWorkerConfig();
+  assert.equal(config.accounts[1].proxyUrl, proxyUrl);
+  assert.equal(f.stored().accounts[1].proxyUrl, proxyUrl);
+  assert.equal(config.accounts[0].proxyUrl, "http://member-proxy");
+  assert.equal(config.activityText, "Latest saved settings");
+  assert.match(f.calls[1], /FOR UPDATE/);
+  assert.equal(f.calls.at(-1), "COMMIT");
+  assert.equal(f.released(), 1);
+});
+
+test("proxy repair respects a concurrent disconnect and rolls back failed writes", async () => {
+  const removed = repairFixture({ removed: true });
+  const config = await removed.scope.getDiscordOnlinerWorkerConfig();
+  assert.equal(config.accounts.length, 1);
+  assert.equal(removed.calls.some(sql => sql.startsWith("UPDATE")), false);
+  const failing = repairFixture({ failWrite: true });
+  await assert.rejects(failing.scope.getDiscordOnlinerWorkerConfig(), /Database write failed/);
+  assert.equal(failing.calls.at(-1), "ROLLBACK");
+  assert.equal(failing.released(), 1);
+  assert.equal(failing.stored().accounts[1].proxyUrl, "");
+});
+
 function gatewayFixture() {
   const sockets = [], timers = [], reconnects = [];
   class Socket extends EventEmitter {
@@ -82,7 +156,7 @@ test("real transport sends bot IDENTIFY with online/empty activities and reuses 
   vm.runInNewContext(code("scheduleDiscordOnlinerAccountStart"), scope);
   scope.scheduleDiscordOnlinerAccountStart(config, account);
   const socket = sockets[0];
-  assert.equal(socket.options.agent, undefined);
+  assert.equal(socket.options.agent, "member-agent");
   socket.emit("message", JSON.stringify({ op: 10, d: { heartbeat_interval: 45000 } }));
   const identify = socket.sent[0];
   assert.equal(identify.op, 2);
@@ -117,12 +191,13 @@ test("member IDENTIFY and dedicated proxy requirements stay intact", () => {
   assert.deepEqual(sockets[0].sent[0].d.presence.activities, [{ name: "Member game" }]);
 });
 
-test("rejected bot tokens are checked with Bot authorization through the bot REST API", async () => {
+test("rejected bot tokens are checked with Bot authorization through the assigned proxy", async () => {
   const { scope } = gatewayFixture();
   let called = false;
-  scope.requestDiscord = async (path, init) => {
+  scope.requestDiscordThroughProxy = async (path, route, init) => {
     called = true;
     assert.equal(path, "users/@me");
+    assert.equal(route, proxyUrl);
     assert.equal(init.headers.Authorization, "Bot bot-token");
     return { response: { status: 401, ok: false }, payload: {} };
   };
@@ -140,6 +215,7 @@ test("Bots action resolves stored credentials and saves through the existing wor
   const scope = {
     resolveManagedCommunityBot: async id => { assert.equal(id, poolId); return { clientId: id, botToken: "stored-token" }; },
     getDiscordOnlinerConfig: async () => config, planBotOnlinerConnection, discordOnlinerAccountLimit: 3000,
+    selectDiscordOnlinerProxy: selectProxy,
     normalizeDiscordOnlinerConfig: value => value, discordOnlinerSettingKey: "onliner",
     saveEncryptedSetting: async (key, value) => { assert.equal(key, "onliner"); config = JSON.parse(value); writes.push(config); },
     serviceRunsOnliner: false, discordOnlinerWorkerLockClient: null,
@@ -152,6 +228,7 @@ test("Bots action resolves stored credentials and saves through the existing wor
   assert.equal(first.statusCode, 201);
   assert.equal(config.accounts[1].botToken, "stored-token");
   assert.equal(config.accounts[1].richPresenceEnabled, false);
+  assert.equal(config.accounts[1].proxyUrl, proxyUrl);
   assert.equal(first.body.connected, undefined);
   assert.equal(JSON.stringify(first.body).includes("stored-token"), false);
   assert.equal(reconciled.length, 0);

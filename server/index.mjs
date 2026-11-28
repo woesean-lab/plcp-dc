@@ -4,7 +4,7 @@ import { createOrderBotService, ORDER_BOT_STORAGE_SQL } from "./community-order-
 import { createBotOrderSettings, registerBotOrderSettings } from "./community-bot-order-settings.mjs";
 import { createCommunityBotPool, registerCommunityBotPool, loadBotDeliveryMetrics, BOT_POOL_STORAGE_SQL } from "./community-bot-pool.mjs";
 import { createManagedBotResolver, withoutManagedBotProfiles } from "./community-bot-management.mjs";
-import { planBotOnlinerConnection } from "./community-bot-onliner.mjs";
+import { planBotOnlinerConnection, assignMissingBotOnlinerProxies } from "./community-bot-onliner.mjs";
 import { createBotSync, registerBotSync, startBotSyncWorker, BOT_SYNC_STORAGE_SQL } from "./community-bot-sync.mjs";
 import { createBotAuthorizations, registerBotAuthorizations, BOT_AUTHORIZATION_STORAGE_SQL } from "./community-bot-authorizations.mjs";
 import { captureCommunityInviteRestriction } from "../shared/community-invite-restriction.mjs";
@@ -2276,6 +2276,31 @@ async function getDiscordOnlinerConfig({ hydrateMedia = true } = {}) {
   return hydrateMedia ? hydrateDiscordOnlinerSpotifyPlaylist(config) : config;
 }
 
+async function getDiscordOnlinerWorkerConfig() {
+  let config = await getDiscordOnlinerConfig({ hydrateMedia: false });
+  if (config.proxyPool.length && config.accounts.some(account => account.communityBotOnlinerEnabled === true && !account.proxyUrl)) {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const stored = await client.query("SELECT encrypted_value FROM app_settings WHERE setting_key = $1 FOR UPDATE", [discordOnlinerSettingKey]);
+      if (stored.rows[0]) {
+        const current = normalizeDiscordOnlinerConfig(withoutManagedBotProfiles(JSON.parse(decryptCredential(stored.rows[0].encrypted_value))));
+        const plan = assignMissingBotOnlinerProxies(current, selectDiscordOnlinerProxy);
+        if (plan.assignedIds.length) {
+          await client.query("UPDATE app_settings SET encrypted_value = $2, updated_at = NOW() WHERE setting_key = $1",
+            [discordOnlinerSettingKey, encryptCredential(JSON.stringify(plan.config))]);
+        }
+        config = plan.config;
+      } else config = normalizeDiscordOnlinerConfig({ enabled: false });
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => {});
+      throw error;
+    } finally { client.release(); }
+  }
+  return hydrateDiscordOnlinerSpotifyPlaylist(config);
+}
+
 function buildDiscordOnlinerSnapshot(config, accounts, logs, worker) {
   const connectedAccounts = accounts.filter((account) => account.connectionState === "connected");
   const firstAccount = accounts[0] ?? null;
@@ -2770,7 +2795,7 @@ function getDiscordOnlinerAgeLabel(timestamp, now = Date.now()) {
 async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
   try {
     const identity = account.communityBotClientId
-      ? await requestDiscord("users/@me", { headers: { Authorization: `Bot ${account.botToken}` } })
+      ? await requestDiscordThroughProxy("users/@me", account.proxyUrl, { headers: { Authorization: `Bot ${account.botToken}` } })
       : await sendHumanizerDiscordRequest("users/@me", account.proxyUrl, account.botToken, "GET", undefined);
     const status = Number(identity.response.status) || 0;
     const code = Number(identity.payload?.code ?? 0);
@@ -2794,7 +2819,7 @@ async function verifyDiscordOnlinerRejectedToken(account, expectedUserId) {
 }
 
 function connectDiscordOnliner(config, account, runtime, generation) {
-  if (generation !== runtime.generation || !config.enabled || !account.botToken || (!account.proxyUrl && !account.communityBotClientId)) return;
+  if (generation !== runtime.generation || !config.enabled || !account.botToken || !account.proxyUrl) return;
   runtime.startupTimer = null;
   runtime.state = runtime.reconnectAttempt ? "reconnecting" : "connecting";
   runtime.heartbeatAcknowledged = true;
@@ -3197,7 +3222,7 @@ function scheduleDiscordOnlinerAccountStart(config, account, delayMs = 0, onConn
     queueDiscordOnlinerRuntimePersist(runtime);
     return;
   }
-  if (!account.proxyUrl && !account.communityBotClientId) {
+  if (!account.proxyUrl) {
     runtime.state = "error";
     runtime.lastError = "A dedicated proxy is required before this bot can connect.";
     appendDiscordOnlinerLog("error", runtime.lastError, account.id);
@@ -3851,7 +3876,7 @@ async function pollDiscordOnlinerWorker() {
   if (discordOnlinerWorkerPollActive || !discordOnlinerWorkerLockClient) return;
   discordOnlinerWorkerPollActive = true;
   try {
-    const candidate = await getDiscordOnlinerConfig();
+    const candidate = await getDiscordOnlinerWorkerConfig();
     if (!discordOnlinerWorkerCurrentConfig) {
       discordOnlinerWorkerCurrentConfig = candidate;
       startDiscordOnliner(candidate);
@@ -3874,7 +3899,7 @@ async function pollDiscordOnlinerWorker() {
 
 async function activateDiscordOnlinerWorker(lockClient) {
   discordOnlinerWorkerLockClient = lockClient;
-  discordOnlinerWorkerCurrentConfig = await getDiscordOnlinerConfig();
+  discordOnlinerWorkerCurrentConfig = await getDiscordOnlinerWorkerConfig();
   const controlResult = await pool.query("SELECT connection_paused FROM discord_onliner_worker_state WHERE singleton = TRUE LIMIT 1");
   discordOnlinerConnectionsPaused = controlResult.rows[0]?.connection_paused === true;
   await pool.query(`
@@ -10257,7 +10282,7 @@ app.post("/api/community/bots/:clientId/onliner", requireSession, async (req, re
   try {
     const bot = await resolveManagedCommunityBot(String(req.params.clientId ?? ""));
     const current = await getDiscordOnlinerConfig({ hydrateMedia: false });
-    const plan = planBotOnlinerConnection(current, bot, discordOnlinerAccountLimit);
+    const plan = planBotOnlinerConnection(current, bot, discordOnlinerAccountLimit, selectDiscordOnlinerProxy);
     const candidate = normalizeDiscordOnlinerConfig(plan.config);
     await saveEncryptedSetting(discordOnlinerSettingKey, JSON.stringify(candidate));
     if (serviceRunsOnliner && discordOnlinerWorkerLockClient) {
