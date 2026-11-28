@@ -9,8 +9,9 @@ import "./BotDirectory.css";
 export type DirectoryBot = PoolBot & { isDefault?: boolean; serverCount?: string };
 const count = (value = 0) => value.toLocaleString("en-US");
 
-export function BotDirectory({ bots, loading = false, actions, accountActions }: {
+export function BotDirectory({ bots, loading = false, actions, accountActions, status }: {
   bots: DirectoryBot[]; loading?: boolean; actions: (bot: DirectoryBot) => ReactNode; accountActions?: (bot: DirectoryBot) => ReactNode;
+  status?: (bot: DirectoryBot) => ReactNode;
 }) {
   return <div className="bot-directory app-panel-soft" aria-busy={loading}>
     <PaginatedList items={loading ? [] : bots} label="Bot pages">{items => <table className="bot-directory-table" aria-label="Members bots">
@@ -25,6 +26,7 @@ export function BotDirectory({ bots, loading = false, actions, accountActions }:
           <div className="bot-directory-name"><strong>{bot.name}</strong>{bot.isDefault ? <Badge variant="secondary">Default</Badge> : null}<Badge variant={bot.enabled ? "success" : "secondary"}>{bot.isDefault ? bot.enabled ? "Configured" : "Not configured" : bot.enabled ? "Enabled" : "Disabled"}</Badge></div>
           <span className="bot-directory-id">{bot.clientId === "default" ? "Set up the default bot" : bot.clientId}</span>
           {bot.serverCount ? <span className="bot-directory-detail">{bot.serverCount} servers</span> : null}
+          {status ? <div className="flex flex-wrap gap-2">{status(bot)}</div> : null}
         </div></div></td>
         <td><span className="bot-directory-mobile-label">Accounts</span><strong className="bot-directory-number">{count(bot.authorizedAccounts)}</strong><span className="bot-directory-detail">{count(bot.activeAccounts)} unexpired</span>{accountAction ? <div className="bot-directory-account-actions">{accountAction}</div> : null}</td>
         <td><span className="bot-directory-mobile-label">Delivered</span><strong className="bot-directory-number" data-tone="success">{count(bot.deliveredMembers)}</strong><span className="bot-directory-detail">members</span></td>

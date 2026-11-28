@@ -237,9 +237,13 @@ manuel olarak degistirilebilir.
 
 Settings > Bots satirindaki **Connect to Onliner** aksiyonu, secilen default veya
 havuz botunu kayitli tokeniyla mevcut Onliner profillerine ekler. Rich Presence
-kapalidir; bot `online` ve bos aktiviteyle baglanir. Buton kayit sirasinda spinner,
-kayittan sonra **Added to Onliner** gosterir; bu kayit durumudur, canli baglanti
-onayi degildir. Baglanti ve hatalar mevcut Onliner ekranindan izlenir. Genel
+kapalidir; bot `online` ve bos aktiviteyle baglanir. Bot satirinda Members ile ayni
+**Onliner Live / Starting / Retrying / Failed / Offline** durumu ve hata tooltipi
+gosterilir; ayni worker durum kaynagindan uc saniyede bir yenilenir. Durum
+okunamiyorsa **Unknown** gosterilir. Kayitli profildeki kirmizi Power aksiyonu
+**Disconnect from Onliner**, kayitsiz profildeki anten **Connect to Onliner**
+islemidir. Disconnect mevcut Onliner profil silme API'sini kullanir; yalnizca
+secilen botun baglantisini kaldirir ve yeniden Connect kullanilabilir. Genel
 Onliner kapaliysa acilmasi gerekir; duraklatilmissa Continue kullanilir.
 Botlar kendiliginden topluca eklenmez. Mevcut worker ayar degisikligini bir sonraki
 poll dongusunde alir; her baglama icin restart gerekmez. Botlar proxy havuzundan

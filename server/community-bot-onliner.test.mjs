@@ -175,13 +175,58 @@ test("Bots action resolves stored credentials and saves through the existing wor
   assert.equal(writes.length, before);
 });
 
-test("Bots registration list returns only IDs of explicitly connected bots without credentials or member profiles", async () => {
-  const scope = { getDiscordOnlinerConfig: async () => ({ accounts: [
+test("Bots reads the same live worker states as Members, including failures and an offline worker, without credentials", async () => {
+  const config = { enabled: true, accounts: [
     { id: "member", botToken: "member-token" },
-    { id: "selected-bot", communityBotClientId: sharedId, communityBotOnlinerEnabled: true, botToken: "secret" }
-  ] }) };
+    { id: "selected-bot", discordUserId: sharedId, communityBotClientId: sharedId, communityBotOnlinerEnabled: true, botToken: "secret" }
+  ] };
+  let state = "connected", failure = null, workerOnline = true;
+  const scope = {
+    getDiscordOnlinerConfig: async () => config,
+    isDiscordGuildId: value => /^\d{18}$/.test(value), serviceRunsOnliner: false,
+    discordOnlinerWorkerHeartbeatMs: 10000, normalizeDiscordOnlinerConnectionState: value => value,
+    pool: { query: async sql => ({ rows: sql.includes("FROM discord_onliner_runtime")
+      ? [{ account_id: "selected-bot", discord_user_id: sharedId, payload: { connectionState: state, lastError: failure } }]
+      : [{ status: workerOnline ? "online" : "offline", heartbeat_at: new Date().toISOString() }] }) }
+  };
+  vm.runInNewContext(code("loadCommunityStockOnlinerStates"), scope);
   vm.runInNewContext("this.route = " + routeCode("get", "/api/community/bots/onliner"), scope);
   const res = response();
   await scope.route({}, res, error => { throw error; });
-  assert.deepEqual(JSON.parse(JSON.stringify(res.body)), { bots: [{ clientId: sharedId, accountId: "selected-bot" }] });
+  assert.deepEqual(JSON.parse(JSON.stringify(res.body)), { bots: [{ clientId: sharedId, accountId: "selected-bot", connectionState: "connected", lastError: null }] });
+  state = "error"; failure = "Discord rejected the token.";
+  await scope.route({}, res, error => { throw error; });
+  assert.equal(res.body.bots[0].connectionState, "error");
+  assert.equal(res.body.bots[0].lastError, failure);
+  state = "connected"; workerOnline = false;
+  await scope.route({}, res, error => { throw error; });
+  assert.equal(res.body.bots[0].connectionState, "disconnected");
+  assert.equal(res.body.bots[0].lastError, "Onliner worker is offline.");
+  config.enabled = false; workerOnline = true;
+  await scope.route({}, res, error => { throw error; });
+  assert.equal(res.body.bots[0].connectionState, "disconnected");
+  assert.equal(res.body.bots[0].lastError, "Onliner is disabled.");
+});
+
+test("existing profile removal disconnects only the selected bot and clears its runtime", async () => {
+  let config = { enabled: true, accounts: [bot(), bot(poolId), { id: "member", botToken: "member-token" }] };
+  const stopped = [], queries = [];
+  const scope = {
+    getDiscordOnlinerConfig: async () => config, normalizeDiscordOnlinerConfig: value => value,
+    discordOnlinerSettingKey: "onliner", saveEncryptedSetting: async (_key, value) => { config = JSON.parse(value); },
+    serviceRunsOnliner: true, discordOnlinerWorkerLockClient: {},
+    discordOnlinerRuntimes: new Map(config.accounts.map(account => [account.id, { accountId: account.id }])),
+    discordOnlinerPendingRuntimeWrites: new Map(config.accounts.map(account => [account.id, {}])),
+    stopDiscordOnlinerRuntime: runtime => stopped.push(runtime.accountId), appendDiscordOnlinerLog() {},
+    pool: { query: async (sql, args) => { queries.push({ sql, args }); return { rows: [] }; } },
+    getDiscordOnlinerSnapshotForApi: async value => ({ accounts: value.accounts.map(account => ({ id: account.id })) })
+  };
+  vm.runInNewContext("this.route = " + routeCode("delete", "/api/onliner/accounts/:accountId"), scope);
+  await scope.route({ params: { accountId: bot().id } }, response(), error => { throw error; });
+  assert.deepEqual(stopped, [bot().id]);
+  assert.deepEqual(config.accounts.map(account => account.id), [bot(poolId).id, "member"]);
+  assert.equal(scope.discordOnlinerRuntimes.has(bot().id), false);
+  assert.equal(scope.discordOnlinerPendingRuntimeWrites.has(bot().id), false);
+  assert.equal(queries[0].args[0], bot().id);
+  assert.deepEqual(JSON.parse(JSON.stringify(scope.discordOnlinerWorkerCurrentConfig)), config);
 });

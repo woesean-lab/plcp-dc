@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
-import { CheckCircle2, ChevronDown, Copy, Eye, EyeOff, FileJson, KeyRound, LoaderCircle, RadioTower, Server, Shield, ShieldCheck, Star, TriangleAlert, Users } from "lucide-react";
+import { CheckCircle2, ChevronDown, Copy, Eye, EyeOff, FileJson, KeyRound, LoaderCircle, Server, Shield, ShieldCheck, Star, TriangleAlert, Users } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { StatusField } from "./ui/status-field";
+import { OnlinerStatusField } from "./OnlinerStatusField";
 import { Skeleton } from "./ui/skeleton";
 import { MemberActivityAvatar } from "./MemberActivityAvatar";
 import type { CommunityJoinRecord, CommunityStockCategory } from "../lib/community";
@@ -75,12 +76,8 @@ export function MembersStockRow({ record, selected, onSelect, badges, actions, o
 }
 
 export function MembersStockBadges({ record }: { record: CommunityJoinRecord }) {
-  const onlinerValue = record.onlinerConnectionState === "connected" ? "Live"
-    : record.onlinerConnectionState === "connecting" ? "Starting"
-    : record.onlinerConnectionState === "reconnecting" ? "Retrying"
-    : record.onlinerConnectionState === "error" ? "Failed" : "Offline";
   return <>
-    {record.onlinerConnected ? <StatusField label="Onliner" state={record.onlinerConnectionState === "disconnected" || !record.onlinerConnectionState ? "inactive" : record.onlinerConnectionState} value={onlinerValue} details={record.onlinerLastError || undefined} icon={<RadioTower aria-hidden="true" />} /> : null}
+    {record.onlinerConnected ? <OnlinerStatusField state={record.onlinerConnectionState} details={record.onlinerLastError} /> : null}
     {record.onlinerConnected ? <StatusField label="Rich Presence" variant={record.onlinerRichPresenceEnabled ? "default" : "secondary"} value={record.onlinerRichPresenceEnabled ? "On" : "Off"} icon={<Star aria-hidden="true" />} /> : null}
     <StatusField label="Servers" value={String(record.joinedServerCount ?? 0)} details="Unique servers joined through delivered orders" icon={<Server aria-hidden="true" />} />
     <StatusField label="OAuth" state={record.status === "failed" ? "inactive" : "active"} value={record.status === "failed" ? "Inactive" : "Active"} icon={<ShieldCheck aria-hidden="true" />} />

@@ -38,9 +38,13 @@ export function controlBotSync(clientId: string, action: "resume" | "cancel") {
 export function getCommunityBotPool(signal?: AbortSignal) {
   return fetch("/api/community/bot-pool", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<{ bots: PoolBot[] }>);
 }
+export type BotOnlinerProfile = {
+  clientId: string; accountId: string;
+  connectionState: CommunityJoinRecord["onlinerConnectionState"]; lastError: string | null;
+};
 export function getBotOnlinerProfiles(signal?: AbortSignal) {
   return fetch("/api/community/bots/onliner", { credentials: "same-origin", cache: "no-store", signal })
-    .then(parseResponse<{ bots: Array<{ clientId: string; accountId: string }> }>);
+    .then(parseResponse<{ bots: BotOnlinerProfile[] }>);
 }
 export function connectBotToOnliner(clientId: string) {
   return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/onliner`, { method: "POST", credentials: "same-origin", cache: "no-store" })

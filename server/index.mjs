@@ -10241,9 +10241,15 @@ const resolveManagedCommunityBot = createManagedBotResolver({ getSharedConfig: g
 app.get("/api/community/bots/onliner", requireSession, async (_req, res, next) => {
   try {
     const config = await getDiscordOnlinerConfig({ hydrateMedia: false });
+    const states = await loadCommunityStockOnlinerStates(config);
     res.set("Cache-Control", "no-store").json({ bots: config.accounts
       .filter(account => account.communityBotOnlinerEnabled === true)
-      .map(account => ({ clientId: account.communityBotClientId, accountId: account.id })) });
+      .map(account => {
+        const runtime = states.get(account.discordUserId);
+        return { clientId: account.communityBotClientId, accountId: account.id,
+          connectionState: config.enabled === false ? "disconnected" : runtime?.connectionState ?? "disconnected",
+          lastError: config.enabled === false ? "Onliner is disabled." : runtime?.lastError ?? null };
+      }) });
   } catch (error) { next(error); }
 });
 
@@ -11054,8 +11060,8 @@ app.get("/api/community/create-status", requireSession, async (_req, res, next) 
 });
 
 // Stock views need saved connection state, never external media/catalog requests.
-async function loadCommunityStockOnlinerStates() {
-  const onlinerConfig = await getDiscordOnlinerConfig({ hydrateMedia: false });
+async function loadCommunityStockOnlinerStates(savedConfig) {
+  const onlinerConfig = savedConfig ?? await getDiscordOnlinerConfig({ hydrateMedia: false });
   const onlinerAccountByUserId = new Map(
     onlinerConfig.accounts
       .filter((account) => isDiscordGuildId(account.discordUserId))
