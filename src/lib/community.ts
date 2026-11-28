@@ -50,6 +50,18 @@ export function connectBotToOnliner(clientId: string) {
   return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/onliner`, { method: "POST", credentials: "same-origin", cache: "no-store" })
     .then(parseResponse<{ accountId: string; alreadyExisted: boolean; onlinerEnabled: boolean }>);
 }
+export function disconnectBotFromOnliner(clientId: string) {
+  return fetch(`/api/community/bots/${encodeURIComponent(clientId)}/onliner`, { method: "DELETE", credentials: "same-origin", cache: "no-store" })
+    .then(parseResponse<{ removed: boolean }>);
+}
+export function getBotOnlinerProxies(signal?: AbortSignal) {
+  return fetch("/api/community/bots/onliner/proxies", { credentials: "same-origin", cache: "no-store", signal })
+    .then(parseResponse<{ proxies: string[] }>);
+}
+export function saveBotOnlinerProxies(proxies: string) {
+  return fetch("/api/community/bots/onliner/proxies", { method: "PUT", credentials: "same-origin", cache: "no-store",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ proxies }) }).then(parseResponse<{ proxies: string[] }>);
+}
 export type BotOrderSettings = { defaultClientId: string; defaultUseForNewOrders: boolean };
 export function getBotOrderSettings(signal?: AbortSignal) {
   return fetch("/api/community/bots/order-settings", { credentials: "same-origin", cache: "no-store", signal }).then(parseResponse<BotOrderSettings>);

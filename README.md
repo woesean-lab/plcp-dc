@@ -235,20 +235,28 @@ Onliner hesaplari merkezi proxy havuzundan en az kullanilan saglikli proxy'yi ot
 Basarisiz proxyler gecici cooldown'a girer. Hesap bazinda Rich Presence kapatilabilir ve proxy
 manuel olarak degistirilebilir.
 
-Settings > Bots satirindaki **Connect to Onliner** aksiyonu, secilen default veya
-havuz botunu kayitli tokeniyla mevcut Onliner profillerine ekler. Rich Presence
-kapalidir; bot `online` ve bos aktiviteyle baglanir. Bot satirinda Members ile ayni
-**Onliner Live / Starting / Retrying / Failed / Offline** durumu ve hata tooltipi
-gosterilir; ayni worker durum kaynagindan uc saniyede bir yenilenir. Durum
-okunamiyorsa **Unknown** gosterilir. Kayitli profildeki kirmizi Power aksiyonu
-**Disconnect from Onliner**, kayitsiz profildeki anten **Connect to Onliner**
-islemidir. Disconnect mevcut Onliner profil silme API'sini kullanir; yalnizca
-secilen botun baglantisini kaldirir ve yeniden Connect kullanilabilir. Genel
-Onliner kapaliysa acilmasi gerekir; duraklatilmissa Continue kullanilir.
-Botlar kendiliginden topluca eklenmez. Mevcut worker ayar degisikligini bir sonraki
-poll dongusunde alir; her baglama icin restart gerekmez. Botlara da mevcut Onliner havuz secicisiyle proxy atanir;
-atanmis proxy korunur. Eski proxy'siz bot profilleri worker baslangicinda veya
-sonraki ayar kontrolunde havuzdan tamamlanip kaydedilir. Havuz bossa yeni
-baglanti kaydedilmez; kullanilabilir proxy eklenmesi istenir. Kontrol: `node --test server/community-bot-onliner.test.mjs`.
+## Bots Onliner
+
+Settings > Bots altindaki **Bot proxies**, yalnizca teslimat botlarinin kullandigi
+ayri proxy havuzunu duzenler. Satirdaki anten botu baglar; kirmizi Power butonu
+Disconnect yapar. Botlar online ve bos aktiviteyle baglanir; Rich Presence yoktur.
+Live / Starting / Retrying / Failed / Offline durumu uc saniyede bir yenilenir.
+Bot hatalari durum etiketinin tooltipinde gosterilir; durum okunamazsa Unknown gorunur.
+
+Bot Gateway motoru panel servisinde (SERVICE_ROLE=web veya all) calisir. Uye
+Onliner worker'ini, uyelerin Gateway payload'ini, profil ayarlarini veya proxy
+havuzunu okumaz/degistirmez. Uye Onliner'ini redeploy/restart etmek gerekmez;
+yalnizca panel servisinin guncellenmesi Bots motorunu devreye alir. Yeni servis
+ve ortam degiskeni gerekmez. Mevcut Onliner'daki eski bot profilleri otomatik
+tasinmaz veya silinmez; bu motorun kendi listesi baslangicta bostur.
+
+Bot hesaplari bots_onliner_accounts, durumlari bots_onliner_runtime tablosunda;
+proxy havuzu bots_onliner_proxies ayarinda sifreli saklanir. Ayri PostgreSQL
+advisory lock, birden fazla panel instance'inin ayni botlari baglamasini engeller.
+Kayitli proxy korunur; havuzdan cikarilirsa yalnizca ilgili bot baska bir bot
+proxy'sine gecirilir. Botlar bagliyken havuz tamamen temizlenemez. Disconnect
+botun kendi profilini kaldirir; uye stoklari ve siparis atamalari korunur.
+
+Kontroller: `node --test server/bots-onliner.test.mjs tools/bot-onliner-controls.test.mjs`.
 
 Gerekli ortam degiskenleri `.env.example` dosyasinda listelenmistir.

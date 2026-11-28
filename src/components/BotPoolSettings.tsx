@@ -1,6 +1,6 @@
 import toast from "react-hot-toast";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw, Search } from "lucide-react";
+import { Bot, Check, Globe2, LoaderCircle, Pencil, Plus, Power, RadioTower, RefreshCw, Search, Network } from "lucide-react";
 import { Button } from "./ui/button";
 import { Switch } from "./ui/switch";
 import { Input } from "./ui/input";
@@ -10,8 +10,7 @@ import { BotSettingsDialog } from "./BotSettingsDialog";
 import { BotServersDialog } from "./BotServersDialog";
 import { BotSyncDialog } from "./BotSyncDialog";
 import { OnlinerStatusField } from "./OnlinerStatusField";
-import { removeDiscordOnlinerAccount } from "../lib/onliner";
-import { connectBotToOnliner, getBotOnlinerProfiles, getCommunityBotPool, getBotOrderSettings, saveBotOrderSetting, saveCommunityPoolBot, type BotOnlinerProfile, type CommunityConfig, type PoolBot } from "../lib/community";
+import { connectBotToOnliner, disconnectBotFromOnliner, getBotOnlinerProfiles, getBotOnlinerProxies, saveBotOnlinerProxies, getCommunityBotPool, getBotOrderSettings, saveBotOrderSetting, saveCommunityPoolBot, type BotOnlinerProfile, type CommunityConfig, type PoolBot } from "../lib/community";
 
 export const PREVIEW_POOL_BOTS: PoolBot[] = [
   { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, totalOrders: 6, deliveredMembers: 1200, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
@@ -37,6 +36,11 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const [onlinerError, setOnlinerError] = useState("");
   const [onlinerAvailable, setOnlinerAvailable] = useState(preview);
   const [connectingBotId, setConnectingBotId] = useState<string | null>(null);
+  const [proxyEditor, setProxyEditor] = useState(false);
+  const [proxyDraft, setProxyDraft] = useState("");
+  const [proxyLoading, setProxyLoading] = useState(false);
+  const [proxyError, setProxyError] = useState("");
+  const [proxyLoadFailed, setProxyLoadFailed] = useState(false);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState<PoolBot | null>(null);
   const [editor, setEditor] = useState<"default" | "pool" | null>(null);
@@ -118,7 +122,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     pending.current = true; setBusy(true); setConnectingBotId(bot.clientId); setError("");
     try {
       if (profile) {
-        if (!preview) await removeDiscordOnlinerAccount(profile.accountId);
+        if (!preview) await disconnectBotFromOnliner(bot.clientId);
         if (mounted.current) {
           setOnlinerProfiles(current => current.filter(item => item.clientId !== bot.clientId));
           toast.success(`${bot.name} removed from Onliner.`);
@@ -135,6 +139,24 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : "Could not update the Onliner connection."); }
     finally { pending.current = false; if (mounted.current) { setBusy(false); setConnectingBotId(null); } }
   }
+  async function openProxies() {
+    if (pending.current || disabled) return;
+    pending.current = true; setProxyEditor(true); setProxyLoading(true); setProxyError(""); setProxyLoadFailed(true);
+    try {
+      const result = preview ? { proxies: proxyDraft ? proxyDraft.split("\n") : [] } : await getBotOnlinerProxies();
+      if (mounted.current) { setProxyDraft(result.proxies.join("\n")); setProxyLoadFailed(false); }
+    } catch (reason) { if (mounted.current) setProxyError(reason instanceof Error ? reason.message : "Could not load bot proxies."); }
+    finally { pending.current = false; if (mounted.current) setProxyLoading(false); }
+  }
+  async function saveProxies() {
+    if (pending.current || disabled || proxyLoading || proxyLoadFailed) return;
+    pending.current = true; setBusy(true); setProxyError("");
+    try {
+      if (!preview) await saveBotOnlinerProxies(proxyDraft);
+      if (mounted.current) { setProxyEditor(false); toast.success("Bot Onliner proxies saved."); }
+    } catch (reason) { if (mounted.current) setProxyError(reason instanceof Error ? reason.message : "Could not save bot proxies."); }
+    finally { pending.current = false; if (mounted.current) setBusy(false); }
+  }
   const config = defaultConfig;
   const rows: DirectoryBot[] = [
     ...(defaultEditor ? [{ clientId: config?.clientId || "default", name: config?.botName || "Default bot", avatarUrl: config?.botAvatarUrl,
@@ -149,7 +171,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   return <section className="app-panel settings-card" aria-labelledby={`${id}-title`} aria-busy={loading || busy}>
     <header className="settings-card-heading"><span className="monitor-panel-icon" aria-hidden="true"><Bot className="h-4 w-4" /></span>
       <div className="settings-card-title"><span className="app-kicker">Members delivery</span><h3 id={`${id}-title`}>Bots</h3></div>
-      <div className="settings-heading-actions"><Button type="button" size="sm" variant="secondary" disabled={locked} onClick={() => { void load(); onRefreshDefault?.(); }}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} />Refresh</Button>
+      <div className="settings-heading-actions"><Button type="button" size="sm" variant="secondary" aria-haspopup="dialog" disabled={locked || proxyLoading} onClick={() => void openProxies()}><Network className="h-3.5 w-3.5" />Bot proxies</Button><Button type="button" size="sm" variant="secondary" disabled={locked} onClick={() => { void load(); onRefreshDefault?.(); }}><RefreshCw className={`h-3.5 w-3.5${loading ? " animate-spin" : ""}`} />Refresh</Button>
       <Button type="button" size="sm" disabled={locked} onClick={() => { reset(); setEditor("pool"); }}><Plus className="h-3.5 w-3.5" />Add bot</Button></div>
     </header>
     <div className="settings-card-body bot-pool-body">
@@ -183,6 +205,18 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
     </BotSettingsDialog> : null}
     {servers ? <BotServersDialog {...servers} preview={preview} onClose={() => setServers(null)} onChanged={() => { void load(); onRefreshDefault?.(); }} /> : null}
     {syncing ? <BotSyncDialog clientId={syncing.clientId} name={syncing.name} preview={preview} onClose={() => setSyncing(null)} onChanged={() => void load()} /> : null}
+    {proxyEditor ? <BotSettingsDialog title="Bot Onliner proxies" busy={busy || proxyLoading || disabled} onClose={() => setProxyEditor(false)}>
+      <form onSubmit={event => { event.preventDefault(); void saveProxies(); }}>
+        <div className="settings-card-body settings-field-grid">
+          <p className="settings-field-note bot-pool-full-width">A separate proxy pool for delivery bots. One proxy per line.</p>
+          {proxyError ? <div className="settings-load-error bot-pool-full-width" role="alert">{proxyError}<Button type="button" size="xs" variant="secondary" disabled={busy || proxyLoading} onClick={() => void openProxies()}>Reload</Button></div> : null}
+          <label className="settings-field bot-pool-full-width"><span className="field-label">Bot proxies</span>
+            <textarea className="dcord-proxy-textarea" aria-label="Bot Onliner proxy pool" rows={8} value={proxyDraft} disabled={busy || proxyLoading} placeholder={proxyLoading ? "Loading bot proxies…" : "socks5://user:password@host:port"} spellCheck={false} onChange={event => setProxyDraft(event.target.value)} />
+          </label>
+        </div>
+        <footer className="settings-card-footer"><div><Button type="button" size="sm" variant="secondary" disabled={busy || proxyLoading} onClick={() => setProxyEditor(false)}>Cancel</Button><Button type="submit" size="sm" disabled={busy || proxyLoading || proxyLoadFailed}>{busy ? <LoaderCircle className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}Save proxies</Button></div></footer>
+      </form>
+    </BotSettingsDialog> : null}
 
   </section>;
 }

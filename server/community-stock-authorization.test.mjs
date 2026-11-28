@@ -179,7 +179,7 @@ const normalizerContext = {
 };
 vm.runInNewContext(functionCode("normalizeDiscordOnlinerConfig")+";this.normalize=normalizeDiscordOnlinerConfig;",normalizerContext);
 const normalizeConfig=normalizerContext.normalize;
-test("explicit Bots connections retain bot authentication metadata and force Rich Presence off on reload", async () => {
+test("normal Onliner excludes legacy bot profiles even when the old enabled marker is present", async () => {
   const account = { id: "selected-bot", communityBotClientId: "111111111111111111", communityBotOnlinerEnabled: true,
     botToken: "saved-bot-token", richPresenceEnabled: true };
   const scope = { loadEncryptedSetting: async () => JSON.stringify({ enabled: true, accounts: [account] }),
@@ -187,10 +187,7 @@ test("explicit Bots connections retain bot authentication metadata and force Ric
     hydrateDiscordOnlinerSpotifyPlaylist: async value => value, withoutManagedBotProfiles };
   vm.runInNewContext(functionCode("getDiscordOnlinerConfig") + ";this.load=getDiscordOnlinerConfig;", scope);
   const loaded = await scope.load();
-  assert.equal(loaded.accounts.length, 1);
-  assert.equal(loaded.accounts[0].communityBotClientId, account.communityBotClientId);
-  assert.equal(loaded.accounts[0].communityBotOnlinerEnabled, true);
-  assert.equal(loaded.accounts[0].richPresenceEnabled, false);
+  assert.equal(loaded.accounts.length, 0);
 });
 test("removed bot profiles are excluded before Gateway startup while Members Onliner settings remain unchanged", async () => {
   let raw = JSON.stringify({ enabled: true, accounts: [

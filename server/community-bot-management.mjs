@@ -11,6 +11,5 @@ export function createManagedBotResolver({ getSharedConfig, loadPoolConfig }) {
 
 export function withoutManagedBotProfiles(config) {
   if (!Array.isArray(config?.accounts)) return config;
-  return { ...config, accounts: config.accounts.filter(account => account?.communityBotOnlinerEnabled === true
-    || !/^\d{16,22}$/.test(String(account?.communityBotClientId || ""))) };
+  return { ...config, accounts: config.accounts.filter(account => !/^\d{16,22}$/.test(String(account?.communityBotClientId || ""))) };
 }

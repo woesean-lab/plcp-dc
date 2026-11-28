@@ -6,9 +6,11 @@ import ts from "typescript";
 
 const source = fs.readFileSync(new URL("../src/components/BotPoolSettings.tsx", import.meta.url), "utf8");
 const ast = ts.createSourceFile("BotPoolSettings.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-let action, pollEffect;
+let action, pollEffect, proxyOpen, proxySave;
 function visit(node) {
   if (ts.isFunctionDeclaration(node) && node.name?.text === "connectOnliner") action = node.getText(ast);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "openProxies") proxyOpen = node.getText(ast);
+  if (ts.isFunctionDeclaration(node) && node.name?.text === "saveProxies") proxySave = node.getText(ast);
   if (ts.isCallExpression(node) && node.expression.getText(ast) === "useEffect" && node.arguments[0]?.getText(ast).includes("getBotOnlinerProfiles")) pollEffect = node.arguments[0].getText(ast);
   ts.forEachChild(node, visit);
 }
@@ -28,10 +30,16 @@ function fixture(profiles = []) {
     setOnlinerError: value => { scope.onlinerError = value; }, setOnlinerAvailable: value => { scope.available = value; },
     toast: { success: value => notices.push(value) },
     connectBotToOnliner: async id => { calls.push(["connect", id]); return { accountId: profile.accountId, onlinerEnabled: true }; },
-    removeDiscordOnlinerAccount: async id => { calls.push(["disconnect", id]); },
+    disconnectBotFromOnliner: async id => { calls.push(["disconnect", id]); },
+    proxyDraft: "", proxyLoading: false, proxyLoadFailed: false,
+    setProxyEditor: value => { scope.proxyEditor = value; }, setProxyLoading: value => { scope.proxyLoading = value; },
+    setProxyError: value => { scope.proxyError = value; }, setProxyLoadFailed: value => { scope.proxyLoadFailed = value; },
+    setProxyDraft: value => { scope.proxyDraft = value; },
+    getBotOnlinerProxies: async () => ({ proxies: [] }), saveBotOnlinerProxies: async value => { calls.push(["save-proxies", value]); },
     AbortController, window: { setInterval: (callback, interval) => { scope.tick = callback; assert.equal(interval, 3000); return 1; }, clearInterval() {} }
   };
   vm.runInNewContext(js(action), scope);
+  vm.runInNewContext(js(proxyOpen + "\n" + proxySave), scope);
   vm.runInNewContext(js("this.startPolling = " + pollEffect), scope);
   return { scope, calls, notices };
 }
@@ -49,12 +57,29 @@ test("connect requests only the selected bot, stays Starting until polling and r
   assert.equal(f.scope.pending.current, false);
 });
 
-test("power action uses the existing removal API, preserves other profiles and permits reconnect", async () => {
+test("bot proxy load failures cannot overwrite the pool; failed saves preserve editable values", async () => {
+  const f = fixture();
+  f.scope.getBotOnlinerProxies = async () => { throw Error("Cannot load proxies"); };
+  await f.scope.openProxies();
+  assert.equal(f.scope.proxyLoadFailed, true);
+  await f.scope.saveProxies(); assert.equal(f.calls.length, 0);
+  f.scope.getBotOnlinerProxies = async () => ({ proxies: ["http://one:8080/"] });
+  await f.scope.openProxies(); assert.equal(f.scope.proxyDraft, "http://one:8080/");
+  f.scope.saveBotOnlinerProxies = async () => { throw Error("Invalid proxy on line 1"); };
+  await f.scope.saveProxies();
+  assert.equal(f.scope.proxyEditor, true); assert.equal(f.scope.proxyDraft, "http://one:8080/");
+  f.scope.proxyDraft = "http://corrected:8080/";
+  f.scope.saveBotOnlinerProxies = async value => { f.calls.push(["saved", value]); };
+  await f.scope.saveProxies(); assert.equal(f.scope.proxyEditor, false);
+  assert.deepEqual(f.calls, [["saved", "http://corrected:8080/"]]);
+});
+
+test("power action uses the bot-only removal API, preserves other profiles and permits reconnect", async () => {
   const other = { ...profile, clientId: "other", accountId: "other-profile" };
   const f = fixture([profile, other]);
   // Removing an already saved profile does not require current bot credentials.
   await f.scope.connectOnliner({ ...bot, hasBotToken: false });
-  assert.deepEqual(f.calls, [["disconnect", profile.accountId]]);
+  assert.deepEqual(f.calls, [["disconnect", bot.clientId]]);
   assert.deepEqual(Array.from(f.scope.onlinerProfiles), [other]);
   await f.scope.connectOnliner(bot);
   assert.deepEqual(f.calls[1], ["connect", bot.clientId]);
@@ -62,7 +87,7 @@ test("power action uses the existing removal API, preserves other profiles and p
 
 test("failed disconnect keeps the power action and saved profile available for retry", async () => {
   const f = fixture([profile]);
-  f.scope.removeDiscordOnlinerAccount = async () => { throw Error("Connection unavailable"); };
+  f.scope.disconnectBotFromOnliner = async () => { throw Error("Connection unavailable"); };
   await f.scope.connectOnliner(bot);
   assert.equal(f.scope.error, "Connection unavailable");
   assert.equal(f.scope.onlinerProfiles[0], profile);
