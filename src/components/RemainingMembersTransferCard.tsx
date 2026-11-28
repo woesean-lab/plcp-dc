@@ -2,11 +2,11 @@ import { useId, useRef, useState } from 'react';
 import { ArrowRightLeft, ArrowUpRight, CalendarDays, LoaderCircle, Server, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from './ui/button';
-import { Input } from './ui/input';
 import { OrderConfirmationDialog } from './OrderConfirmationDialog';
 import { MemberActivityAvatar } from './MemberActivityAvatar';
 import { getCommunityDeliveryTransfer } from '../../shared/community-delivery-transfer.mjs';
 import { getOrderSupportExpiration } from '../lib/order-status';
+import { extractDiscordInviteCode } from '../lib/discord';
 import type { CommunityDeliveryTransferPreview, OrderStatusResponse } from '../types';
 
 export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
@@ -29,8 +29,10 @@ export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
   const reviewValid = eligibility.allowed && review?.server.amount === eligibility.count;
   async function prepare() {
     if (pending.current || !eligibility.allowed || !invite.trim()) return;
+    const code = extractDiscordInviteCode(invite);
+    if (!code) { setError('Enter a valid Discord invite.'); return; }
     pending.current = true; setChecking(true); setError('');
-    const value = invite.trim();
+    const value = `https://discord.gg/${code}`;
     try { setReview({ invite: value, server: await onPreview(value) }); }
     catch (err) { setError(err instanceof Error ? err.message : 'Could not check this server. Try again.'); }
     finally { pending.current = false; setChecking(false); }
@@ -46,14 +48,26 @@ export function RemainingMembersTransferCard({ order, onPreview, onTransfer }: {
     <div className="monitor-panel-heading">
       <span className="monitor-panel-icon" aria-hidden="true"><ArrowRightLeft className="h-4 w-4" /></span>
       <div><p className="app-kicker">Delivery transfer</p><h2>{receipt ? 'Waiting members transferred' : 'Transfer waiting members'}</h2></div>
-      <span className="monitor-transfer-count" aria-live="polite" aria-atomic="true"><span className="app-kicker">{receipt ? 'Transferred' : 'Eligible'}</span><strong className="monitor-current-delay">{(receipt?.amount ?? eligibleCount).toLocaleString('en-US')}</strong></span>
+      {receipt ? <span className="monitor-transfer-count"><span className="app-kicker">Transferred</span><strong className="monitor-current-delay">{receipt.amount.toLocaleString('en-US')}</strong></span> : null}
     </div>
     {receipt ? <>
       <p className="monitor-transfer-copy">Moved to {receipt.serverName}.</p>
       <Button asChild variant="secondary"><Link to={`/monitor/${encodeURIComponent(receipt.orderId)}`}>Open new monitor<ArrowUpRight className="h-4 w-4" aria-hidden="true" /></Link></Button>
     </> : <form onSubmit={event => { event.preventDefault(); void prepare(); }}>
-      <label className="field-label" htmlFor={inputId}>New Discord invite</label>
-      <Input id={inputId} value={invite} onChange={event => setInvite(event.target.value)} placeholder="https://discord.gg/your-server" required maxLength={512} disabled={checking || busy || !eligibility.allowed} autoComplete="off" />
+      <div className="monitor-transfer-fields">
+        <label className="boost-order-field" htmlFor={`${inputId}-amount`}>
+          <span className="boost-order-label">Number of Members</span>
+          <input id={`${inputId}-amount`} className="boost-number-input" type="number" min={0} value={eligibleCount} readOnly />
+        </label>
+        <label className="boost-order-field" htmlFor={`${inputId}-invite`}>
+          <span className="boost-order-label">Server Invite</span>
+          <div className="boost-invite-control">
+            <span aria-hidden="true">discord.gg/</span>
+            <input id={`${inputId}-invite`} value={invite} onChange={event => setInvite(extractDiscordInviteCode(event.target.value) ?? event.target.value)}
+              placeholder="yourcode" required maxLength={512} disabled={checking || busy || !eligibility.allowed} autoComplete="off" spellCheck={false} autoCapitalize="none" />
+          </div>
+        </label>
+      </div>
       <Button type="submit" variant="secondary" disabled={checking || busy || !eligibility.allowed || !invite.trim()}>
         {checking || busy ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden="true" /> : <ArrowRightLeft className="h-4 w-4" aria-hidden="true" />}
         {checking ? 'Checking server…' : busy ? 'Transferring…' : 'Transfer members'}
