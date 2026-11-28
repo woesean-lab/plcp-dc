@@ -13,9 +13,9 @@ import { OnlinerStatusField } from "./OnlinerStatusField";
 import { connectBotToOnliner, disconnectBotFromOnliner, getBotOnlinerProfiles, getBotOnlinerProxies, saveBotOnlinerProxies, getCommunityBotPool, getBotOrderSettings, saveBotOrderSetting, saveCommunityPoolBot, type BotOnlinerProfile, type CommunityConfig, type PoolBot } from "../lib/community";
 
 export const PREVIEW_POOL_BOTS: PoolBot[] = [
-  { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, totalOrders: 6, deliveredMembers: 1200, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
-  { clientId: "1544546102458720277", name: "Members 02", avatarUrl: "https://cdn.discordapp.com/embed/avatars/2.png", enabled: true, activeOrders: 1, pendingMembers: 50, totalOrders: 3, deliveredMembers: 900, authorizedAccounts: 300, activeAccounts: 300, expiredAccounts: 0, hasBotToken: true, hasClientSecret: true },
-  { clientId: "1544546102458720278", name: "Members 03", enabled: false, activeOrders: 0, pendingMembers: 0, totalOrders: 1, deliveredMembers: 100, hasBotToken: true, hasClientSecret: true }
+  { clientId: "1544546102458720276", name: "Members 01", avatarUrl: "https://cdn.discordapp.com/embed/avatars/1.png", enabled: true, activeOrders: 2, pendingMembers: 250, processOrders: 1, processMembers: 80, totalOrders: 6, deliveredMembers: 1200, authorizedAccounts: 750, activeAccounts: 700, expiredAccounts: 50, hasBotToken: true, hasClientSecret: true },
+  { clientId: "1544546102458720277", name: "Members 02", avatarUrl: "https://cdn.discordapp.com/embed/avatars/2.png", enabled: true, activeOrders: 1, pendingMembers: 50, processOrders: 1, processMembers: 50, totalOrders: 3, deliveredMembers: 900, authorizedAccounts: 300, activeAccounts: 300, expiredAccounts: 0, hasBotToken: true, hasClientSecret: true },
+  { clientId: "1544546102458720278", name: "Members 03", enabled: false, activeOrders: 0, pendingMembers: 0, processOrders: 0, processMembers: 0, totalOrders: 1, deliveredMembers: 100, hasBotToken: true, hasClientSecret: true }
 ];
 const EMPTY = { name: "", botToken: "", clientSecret: "" };
 
@@ -160,7 +160,7 @@ export default function BotPoolSettings({ preview = false, defaultConfig, defaul
   const config = defaultConfig;
   const rows: DirectoryBot[] = [
     ...(defaultEditor ? [{ clientId: config?.clientId || "default", name: config?.botName || "Default bot", avatarUrl: config?.botAvatarUrl,
-      enabled: Boolean(config?.configured), isDefault: true, activeOrders: config?.activeOrders || 0, pendingMembers: config?.pendingMembers || 0, totalOrders: config?.totalOrders || 0, deliveredMembers: config?.deliveredMembers || 0,
+      enabled: Boolean(config?.configured), isDefault: true, activeOrders: config?.activeOrders || 0, pendingMembers: config?.pendingMembers || 0, processOrders: config?.processOrders || 0, processMembers: config?.processMembers || 0, totalOrders: config?.totalOrders || 0, deliveredMembers: config?.deliveredMembers || 0,
       authorizedAccounts: config?.authorizedAccounts, activeAccounts: config?.activeAccounts,
       serverCount: config?.activeGuildCount == null ? undefined : `${config.activeGuildCountExact ? "" : "≥ "}${config.activeGuildCount}${config.serverLimit ? ` / ${config.serverLimit}` : ""}`,
       hasBotToken: Boolean(config?.hasBotToken), hasClientSecret: Boolean(config?.hasClientSecret) }] : []),

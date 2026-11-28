@@ -15,10 +15,10 @@ export function BotDirectory({ bots, loading = false, actions, accountActions, s
 }) {
   return <div className="bot-directory app-panel-soft" aria-busy={loading}>
     <PaginatedList items={loading ? [] : bots} label="Bot pages">{items => <table className="bot-directory-table" aria-label="Members bots">
-      <thead><tr><th scope="col">Bot</th><th scope="col">Accounts</th><th scope="col">Delivered</th><th scope="col">Orders</th><th scope="col">Remaining</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+      <thead><tr><th scope="col">Bot</th><th scope="col">Accounts</th><th scope="col">Delivered</th><th scope="col">Orders</th><th scope="col">Remaining</th><th scope="col">Process members</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
       <tbody>{loading ? [0, 1, 2].map(index => <tr key={index} className="bot-directory-skeleton">
         <td><div className="bot-directory-identity"><Skeleton className="h-9 w-9 shrink-0 rounded-lg" /><div className="bot-directory-copy"><Skeleton className="h-4 w-24" /><Skeleton className="h-3 w-36 max-w-full" /></div></div></td>
-        {[0, 1, 2, 3].map(metric => <td key={metric}><Skeleton className="h-4 w-12" /><Skeleton className="mt-2 h-3 w-14" /></td>)}<td><Skeleton className="h-8 w-24" /></td>
+        {[0, 1, 2, 3, 4].map(metric => <td key={metric}><Skeleton className="h-4 w-12" /><Skeleton className="mt-2 h-3 w-14" /></td>)}<td><Skeleton className="h-8 w-24" /></td>
       </tr>) : items.map(bot => {
         const accountAction = accountActions?.(bot);
         return <tr key={bot.isDefault ? "default" : bot.clientId}>
@@ -32,6 +32,7 @@ export function BotDirectory({ bots, loading = false, actions, accountActions, s
         <td><span className="bot-directory-mobile-label">Delivered</span><strong className="bot-directory-number" data-tone="success">{count(bot.deliveredMembers)}</strong><span className="bot-directory-detail">members</span></td>
         <td><span className="bot-directory-mobile-label">Orders</span><strong className="bot-directory-number">{count(bot.totalOrders)}</strong><span className="bot-directory-detail">{count(bot.activeOrders)} active</span></td>
         <td><span className="bot-directory-mobile-label">Remaining</span><strong className="bot-directory-number">{count(bot.pendingMembers)}</strong><span className="bot-directory-detail">members</span></td>
+        <td><span className="bot-directory-mobile-label">Process members</span><strong className="bot-directory-number">{count(bot.processMembers)}</strong><span className="bot-directory-detail">{count(bot.processOrders)} in progress</span></td>
         <td><span className="community-member-row-actions">{actions(bot)}</span></td>
       </tr>; })}</tbody>
     </table>}</PaginatedList>

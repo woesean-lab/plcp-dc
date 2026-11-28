@@ -32,12 +32,19 @@ CREATE TABLE IF NOT EXISTS community_bot_pool_credential_leases (
 ALTER TABLE community_bot_pool_reservations DROP CONSTRAINT IF EXISTS community_bot_pool_reservations_client_id_fkey;`;
 
 const ACTIVE = "('NEW','WAITING','PROCESS','RECOVERING','PAUSED','INVITES PAUSED')";
+// Historical/outstanding totals remain visible; assignment load is PROCESS-only.
 const ORDER_METRICS = `COUNT(*) FILTER (WHERE UPPER(payload->>'status') IN ${ACTIVE}) AS active_orders,
     SUM(CASE WHEN UPPER(payload->>'status') IN ${ACTIVE} THEN
-      GREATEST(COALESCE((payload->>'amount')::int,0) - COALESCE((payload->>'added')::int,0),0) ELSE 0 END) AS pending_members,
+      GREATEST(COALESCE((payload->>'amount')::int,0) - COALESCE((payload->>'added')::int,0)
+        - COALESCE((payload->'remainingTransfer'->>'amount')::int,0),0) ELSE 0 END) AS pending_members,
+    COUNT(*) FILTER (WHERE UPPER(payload->>'status') = 'PROCESS') AS process_orders,
+    SUM(CASE WHEN UPPER(payload->>'status') = 'PROCESS' THEN
+      GREATEST(COALESCE((payload->>'amount')::int,0) - COALESCE((payload->>'added')::int,0)
+        - COALESCE((payload->'remainingTransfer'->>'amount')::int,0),0) ELSE 0 END) AS process_members,
     COUNT(*) AS total_orders,
     SUM(GREATEST(COALESCE((payload->>'added')::int,0),0)) AS delivered_members`;
 const metrics = row => ({ activeOrders: Number(row?.active_orders) || 0, pendingMembers: Number(row?.pending_members) || 0,
+  processOrders: Number(row?.process_orders) || 0, processMembers: Number(row?.process_members) || 0,
   totalOrders: Number(row?.total_orders) || 0, deliveredMembers: Number(row?.delivered_members) || 0 });
 
 export async function loadBotDeliveryMetrics(pool, clientId, { includeLegacy = false } = {}) {
@@ -50,6 +57,8 @@ export async function loadBotDeliveryMetrics(pool, clientId, { includeLegacy = f
 export const BOT_POOL_LOAD_SQL = `SELECT b.*,
   COALESCE(work.active_orders, 0)::int AS active_orders,
   COALESCE(work.pending_members, 0)::int AS pending_members,
+  COALESCE(work.process_orders, 0)::int AS process_orders,
+  COALESCE(work.process_members, 0)::int AS process_members,
   COALESCE(work.total_orders, 0)::int AS total_orders,
   COALESCE(work.delivered_members, 0)::bigint AS delivered_members,
   COALESCE(leases.reservations, 0)::int AS reservations,
@@ -169,16 +178,20 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
       await client.query("DELETE FROM community_bot_pool_reservations WHERE expires_at <= NOW()");
       const result = await client.query(`${BOT_POOL_LOAD_SQL}
         WHERE b.enabled = TRUE AND b.client_id <> $1
-        ORDER BY COALESCE(work.pending_members,0) + COALESCE(leases.pending_members,0),
-          COALESCE(work.active_orders,0) + COALESCE(leases.reservations,0),
-          COALESCE(work.total_orders,0), b.last_assigned_at NULLS FIRST, b.created_at, b.client_id
+        ORDER BY COALESCE(work.process_members,0) + COALESCE(leases.pending_members,0),
+          COALESCE(work.process_orders,0) + COALESCE(leases.reservations,0),
+          b.last_assigned_at NULLS FIRST, b.created_at, b.client_id
         ${stockAllocations || includeDefault ? "" : "LIMIT 1"} FOR UPDATE OF b`, [base.clientId]);
       const candidates = result.rows;
       if (includeDefault) {
         const work = await loadBotDeliveryMetrics(client, base.clientId, { includeLegacy: true });
         const leases = (await client.query("SELECT COUNT(*)::int AS reservations,COALESCE(SUM(amount),0)::int AS reserved_members FROM community_bot_pool_reservations WHERE client_id=$1 AND expires_at>NOW()", [base.clientId])).rows[0];
-        candidates.push({ client_id: base.clientId, is_default: true, pending_members: work.pendingMembers, active_orders: work.activeOrders, total_orders: work.totalOrders, ...leases });
-        const load = row => [Number(row.pending_members || 0) + Number(row.reserved_members || 0), Number(row.active_orders || 0) + Number(row.reservations || 0), Number(row.total_orders || 0), Date.parse(row.last_assigned_at) || 0, Date.parse(row.created_at) || 0];
+        const lastAssignment = (await client.query(`SELECT GREATEST(
+          (SELECT last_assigned_at FROM community_bot_pool WHERE client_id=$1),
+          (SELECT updated_at FROM app_settings WHERE setting_key=$2)) AS last_assigned_at`,
+        [base.clientId, `community_bot_last_assigned:${base.clientId}`])).rows[0]?.last_assigned_at;
+        candidates.push({ client_id: base.clientId, is_default: true, process_members: work.processMembers, process_orders: work.processOrders, last_assigned_at: lastAssignment, ...leases });
+        const load = row => [Number(row.process_members || 0) + Number(row.reserved_members || 0), Number(row.process_orders || 0) + Number(row.reservations || 0), new Date(row.last_assigned_at ?? 0).getTime() || 0, new Date(row.created_at ?? 0).getTime() || 0];
         candidates.sort((left, right) => {
           const a = load(left), b = load(right);
           for (let index = 0; index < a.length; index++) if (a[index] !== b[index]) return a[index] - b[index];
@@ -202,7 +215,10 @@ export function createCommunityBotPool({ pool, encrypt, decrypt, verify, getShar
       if (credentials.clientId !== bot.client_id) throw fail("Pool credentials belong to another application.");
       await client.query(`INSERT INTO community_bot_pool_reservations (order_id, client_id, amount, expires_at)
         VALUES ($1,$2,$3,NOW() + INTERVAL '10 minutes')`, [orderId, bot.client_id, amount]);
-      if (!bot.is_default) await client.query("UPDATE community_bot_pool SET last_assigned_at = NOW() WHERE client_id = $1", [bot.client_id]);
+      if (bot.is_default) await client.query(`INSERT INTO app_settings (setting_key,encrypted_value,updated_at) VALUES ($1,$2,NOW())
+        ON CONFLICT (setting_key) DO UPDATE SET encrypted_value=EXCLUDED.encrypted_value,updated_at=NOW()`,
+      [`community_bot_last_assigned:${bot.client_id}`, encrypt(JSON.stringify({ clientId: bot.client_id }))]);
+      await client.query("UPDATE community_bot_pool SET last_assigned_at = NOW() WHERE client_id = $1", [bot.client_id]);
       await client.query("COMMIT");
       if (bot.is_default) return { ...base, isDefault: true, assignmentReserved: true, botName: base.botName || "Default bot" };
       return { ...credentials, botName: bot.name, poolBotId: bot.client_id, orderBotId: orderId,

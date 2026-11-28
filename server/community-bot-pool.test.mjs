@@ -128,8 +128,80 @@ test("delivery metrics isolate each bot, include partial/completed deliveries an
   assert.equal(first.activeOrders, 1);
   assert.equal(first.pendingMembers, 65);
   assert.equal(bots.find(bot => bot.clientId === b).deliveredMembers, 200);
-  assert.deepEqual(await loadBotDeliveryMetrics(pool, a), { deliveredMembers: 545, totalOrders: 3, activeOrders: 1, pendingMembers: 65 });
-  assert.deepEqual(await loadBotDeliveryMetrics(pool, sharedId, { includeLegacy: true }), { deliveredMembers: 50, totalOrders: 2, activeOrders: 0, pendingMembers: 0 });
+  assert.deepEqual(await loadBotDeliveryMetrics(pool, a), { deliveredMembers: 545, totalOrders: 3, activeOrders: 1, pendingMembers: 65, processOrders: 1, processMembers: 65 });
+  assert.deepEqual(await loadBotDeliveryMetrics(pool, sharedId, { includeLegacy: true }), { deliveredMembers: 50, totalOrders: 2, activeOrders: 0, pendingMembers: 0, processOrders: 0, processMembers: 0 });
+}));
+
+test("PROCESS metrics exclude every paused/waiting/terminal status and transferred slots", options, () => fixture(async ({ service, add, write, pool }) => {
+  await add(a);
+  const inactive = ['NEW', 'WAITING', 'RECOVERING', 'PAUSED', 'INVITES PAUSED', 'COMPLETED', 'PARTIAL', 'ERROR', 'CANCELLED', 'STOPPED'];
+  for (const status of inactive) await write({ uniqid: `inactive-${status}`, botApplicationId: a, status, amount: 1000, added: 10 });
+  await write({ uniqid: 'running', botApplicationId: a, status: 'process', amount: 100, added: 35 });
+  await write({ uniqid: 'transferred', botApplicationId: a, status: 'PROCESS', amount: 250, added: 200, remainingTransfer: { amount: 50 } });
+  await write({ uniqid: 'over-completed', botApplicationId: a, status: 'PROCESS', amount: 10, added: 20 });
+  await write({ uniqid: 'legacy-paused', status: 'PAUSED', amount: 10000, added: 0 });
+  const value = await loadBotDeliveryMetrics(pool, a);
+  assert.equal(value.processOrders, 3); assert.equal(value.processMembers, 65);
+  assert.equal(value.totalOrders, inactive.length + 3);
+  assert.equal(value.deliveredMembers, inactive.length * 10 + 255);
+  const listed = (await service.list()).find(bot => bot.clientId === a);
+  assert.equal(listed.processOrders, 3); assert.equal(listed.processMembers, 65);
+  assert.ok(listed.pendingMembers > listed.processMembers, 'outstanding totals are separate from PROCESS load');
+  const legacy = await loadBotDeliveryMetrics(pool, sharedId, { includeLegacy: true });
+  assert.equal(legacy.activeOrders, 1); assert.equal(legacy.processOrders, 0); assert.equal(legacy.processMembers, 0);
+}));
+
+test("many paused orders do not outweigh a running order, in pool-only and default-inclusive assignment", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b); await syncStock(db, [a, b]);
+  const stopped = ['PAUSED', 'INVITES PAUSED', 'WAITING', 'RECOVERING', 'NEW'];
+  for (let index = 0; index < 20; index++) await write({ uniqid: `stopped-${index}`, botApplicationId: a, status: stopped[index % stopped.length], amount: 5000, added: 0 });
+  await write({ uniqid: 'running-b', botApplicationId: b, status: 'PROCESS', amount: 100, added: 90 });
+  await write({ uniqid: 'running-default', status: 'PROCESS', amount: 1000, added: 0 });
+  for (const includeDefault of [false, true]) {
+    const id = `paused-does-not-count-${includeDefault}`;
+    assert.equal((await service.acquire({ ...autoArgs(id), includeDefault })).poolBotId, a);
+    await service.release(id);
+  }
+  await db.query("UPDATE tracked_orders SET payload=jsonb_set(payload,'{status}','\"PROCESS\"') WHERE uniqid='stopped-0'");
+  assert.equal((await service.acquire(autoArgs('after-resume'))).poolBotId, b, 'resumed PROCESS work contributes immediately');
+}));
+
+test("equal PROCESS load uses PROCESS order count then oldest assignment, regardless of historical totals", options, () => fixture(async ({ db, service, add, write }) => {
+  await automaticStock(db); await add(a); await add(b); await syncStock(db, [a, b]);
+  await write({ uniqid: 'a-running', botApplicationId: a, status: 'PROCESS', amount: 50, added: 0 });
+  await write({ uniqid: 'b-running', botApplicationId: b, status: 'PROCESS', amount: 50, added: 0 });
+  await write({ uniqid: 'default-running', status: 'PROCESS', amount: 1000, added: 0 });
+  for (let index = 0; index < 20; index++) await write({ uniqid: `a-history-${index}`, botApplicationId: a, status: 'COMPLETED', amount: 100, added: 100 });
+  for (const includeDefault of [false, true]) {
+    await db.query("UPDATE community_bot_pool SET last_assigned_at=CASE WHEN client_id=$1 THEN '2020-01-01'::timestamptz ELSE '2025-01-01'::timestamptz END", [a]);
+    const id = `history-ignored-${includeDefault}`;
+    assert.equal((await service.acquire({ ...autoArgs(id), includeDefault })).poolBotId, a, 'older assignment wins despite more completed orders');
+    await service.release(id);
+  }
+  await db.query("UPDATE tracked_orders SET payload=jsonb_set(payload,'{amount}','25') WHERE uniqid='a-running'");
+  await write({ uniqid: 'a-running-two', botApplicationId: a, status: 'PROCESS', amount: 25, added: 0 });
+  await db.query("UPDATE community_bot_pool SET last_assigned_at=CASE WHEN client_id=$1 THEN '2020-01-01'::timestamptz ELSE '2025-01-01'::timestamptz END", [a]);
+  for (const includeDefault of [false, true]) {
+    const id = `fewer-process-orders-${includeDefault}`;
+    assert.equal((await service.acquire({ ...autoArgs(id), includeDefault })).poolBotId, b, 'one PROCESS order wins over two, even with a newer assignment');
+    await service.release(id);
+  }
+}));
+
+test("default bot assignment time persists across workers and prevents it winning every idle tie", options, () => fixture(async ({ db, pool, service, add }) => {
+  await automaticStock(db); await add(a); await syncStock(db, [a]);
+  await db.query("UPDATE community_bot_pool SET last_assigned_at='2020-01-01'");
+  const savedConfig = encrypt(JSON.stringify({ clientId: sharedId, botToken: 'keep-default-token' }));
+  await db.query("INSERT INTO app_settings VALUES ('community_oauth_config',$1,NOW())", [savedConfig]);
+  const first = await service.acquire({ ...autoArgs('default-idle-first'), includeDefault: true });
+  assert.equal(first.isDefault, true);
+  await service.release('default-idle-first');
+  const assignment = (await db.query("SELECT updated_at,encrypted_value FROM app_settings WHERE setting_key=$1", [`community_bot_last_assigned:${sharedId}`])).rows[0];
+  assert.ok(assignment.updated_at);
+  assert.equal(JSON.parse(decrypt(assignment.encrypted_value)).clientId, sharedId);
+  const otherWorker = createCommunityBotPool({ pool, encrypt, decrypt });
+  assert.equal((await otherWorker.acquire({ ...autoArgs('pool-idle-next'), includeDefault: true })).poolBotId, a);
+  assert.equal((await db.query("SELECT encrypted_value FROM app_settings WHERE setting_key='community_oauth_config'")).rows[0].encrypted_value, savedConfig);
 }));
 
 test("selection uses remaining members before order count, ignores completed work and keeps sticky bindings", options, () => fixture(async ({ service, add, write, acquire }) => {
@@ -262,9 +334,9 @@ test("automatic assignment balances enabled pool bots and ignores historical del
   await write({ uniqid: "a-history", botApplicationId: a, status: "COMPLETED", amount: 100000, added: 100000 });
   await write({ uniqid: "a-current", botApplicationId: a, status: "PROCESS", amount: 100, added: 70 });
   await write({ uniqid: "b-current", botApplicationId: b, status: "WAITING", amount: 50, added: 0 });
-  assert.equal((await service.acquire(autoArgs("least-pending"))).poolBotId, a);
-  await service.setEnabled(a, false);
-  assert.equal((await service.acquire(autoArgs("disabled-skipped"))).poolBotId, b);
+  assert.equal((await service.acquire(autoArgs("least-pending"))).poolBotId, b, "WAITING work does not contribute to assignment load");
+  await service.setEnabled(b, false);
+  assert.equal((await service.acquire(autoArgs("disabled-skipped"))).poolBotId, a);
 }));
 
 test("raw account tokens and shared default OAuth cannot supply pool eligibility before Sync", options, () => fixture(async ({ db, service, add }) => {
@@ -380,7 +452,7 @@ test("participating bots with equal pending members keep the active-order tie br
   await automaticStock(db); await add(a); await add(b); await syncStock(db, [a, b]);
   await write({ uniqid: "default-one", status: "PROCESS", amount: 50, added: 0 });
   await write({ uniqid: "pool-a-one", botApplicationId: a, status: "PROCESS", amount: 25, added: 0 });
-  await write({ uniqid: "pool-a-two", botApplicationId: a, status: "WAITING", amount: 25, added: 0 });
+  await write({ uniqid: "pool-a-two", botApplicationId: a, status: "PROCESS", amount: 25, added: 0 });
   await write({ uniqid: "pool-b-one", botApplicationId: b, status: "PROCESS", amount: 80, added: 0 });
   assert.equal((await service.acquire({ ...autoArgs("equal-pending"), includeDefault: true })).isDefault, true);
   await service.release("equal-pending");
